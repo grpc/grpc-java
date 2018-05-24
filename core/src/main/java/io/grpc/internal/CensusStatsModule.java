@@ -326,10 +326,11 @@ public final class CensusStatsModule {
         boolean recordFinishedRpcs) {
       this.module = module;
       this.parentCtx = checkNotNull(parentCtx);
+      TagValue methodTag = TagValue.create(fullMethodName);
       this.startCtx =
           module.tagger.toBuilder(parentCtx)
-          .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
-          .put(RpcMeasureConstants.GRPC_CLIENT_METHOD, TagValue.create(fullMethodName))
+          .put(RpcMeasureConstants.RPC_METHOD, methodTag)
+          .put(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
           .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
       this.recordFinishedRpcs = recordFinishedRpcs;
@@ -417,14 +418,13 @@ public final class CensusStatsModule {
       if (!status.isOk()) {
         measureMap.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
+      TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
           module
               .tagger
               .toBuilder(startCtx)
-              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-              .put(
-                  RpcMeasureConstants.GRPC_CLIENT_STATUS,
-                  TagValue.create(status.getCode().toString()))
+              .put(RpcMeasureConstants.RPC_STATUS, statusTag)
+              .put(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
               .build());
     }
   }
@@ -624,14 +624,13 @@ public final class CensusStatsModule {
       if (!status.isOk()) {
         measureMap.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
+      TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
           module
               .tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
-              .put(
-                  RpcMeasureConstants.GRPC_SERVER_STATUS,
-                  TagValue.create(status.getCode().toString()))
+              .put(RpcMeasureConstants.RPC_STATUS, statusTag)
+              .put(RpcMeasureConstants.GRPC_SERVER_STATUS, statusTag)
               .build());
     }
 
@@ -660,11 +659,12 @@ public final class CensusStatsModule {
       if (parentCtx == null) {
         parentCtx = tagger.empty();
       }
+      TagValue methodTag = TagValue.create(fullMethodName);
       parentCtx =
           tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
-              .put(RpcMeasureConstants.GRPC_SERVER_METHOD, TagValue.create(fullMethodName))
+              .put(RpcMeasureConstants.RPC_METHOD, methodTag)
+              .put(RpcMeasureConstants.GRPC_SERVER_METHOD, methodTag)
               .build();
       return new ServerTracer(
           CensusStatsModule.this,
