@@ -290,18 +290,18 @@ def io_netty_transport():
     )
 
 def io_opencensus_api():
-    native.maven_jar(
-        name = "io_opencensus_opencensus_api",
-        artifact = "io.opencensus:opencensus-api:0.12.3",
-        sha1 = "743f074095f29aa985517299545e72cc99c87de0",
-    )
+  native.maven_jar(
+      name = "io_opencensus_opencensus_api",
+      artifact = "io.opencensus:opencensus-api:0.13.2",
+      sha1 = "dbdce105ac7c01ce09cfbbe6546dcf5905a1d5c7",
+  )
 
 def io_opencensus_grpc_metrics():
-    native.maven_jar(
-        name = "io_opencensus_opencensus_contrib_grpc_metrics",
-        artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.12.3",
-        sha1 = "a4c7ff238a91b901c8b459889b6d0d7a9d889b4d",
-    )
+  native.maven_jar(
+      name = "io_opencensus_opencensus_contrib_grpc_metrics",
+      artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.13.2",
+      sha1 = "1e36a084d6900e312835fbbeb5853a6ff776bda7",
+  )
 
 def javax_annotation():
     # Use //stub:javax_annotation for neverlink=1 support.
