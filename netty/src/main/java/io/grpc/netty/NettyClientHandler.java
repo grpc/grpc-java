@@ -460,6 +460,8 @@ class NettyClientHandler extends AbstractNettyHandler {
           throws Exception {
     if (lifecycleManager.getShutdownThrowable() != null) {
       // The connection is going away, just terminate the stream now.
+      command.stream().transportReportStatus(
+          lifecycleManager.getShutdownStatus(), RpcProgress.REFUSED, true, new Metadata());
       promise.setFailure(lifecycleManager.getShutdownThrowable());
       return;
     }
