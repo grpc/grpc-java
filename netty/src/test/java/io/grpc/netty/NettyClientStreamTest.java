@@ -451,7 +451,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
-    verify(writeQueue).enqueue(cmdCap.capture(), eq(false));
+    verify(writeQueue).enqueue(cmdCap.capture(), any(ChannelPromise.class), eq(false));
     assertThat(ImmutableListMultimap.copyOf(cmdCap.getValue().headers()))
         .containsEntry(Utils.USER_AGENT, AsciiString.of("good agent"));
   }
@@ -485,10 +485,9 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     stream.writeMessage(new ByteArrayInputStream(msg));
     stream.flush();
     stream.halfClose();
-    verify(writeQueue, never()).enqueue(any(SendGrpcFrameCommand.class), any(ChannelPromise.class),
-        any(Boolean.class));
+    verify(writeQueue, never()).enqueue(any(SendGrpcFrameCommand.class), any(Boolean.class));
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
-    verify(writeQueue).enqueue(cmdCap.capture(), eq(true));
+    verify(writeQueue).enqueue(cmdCap.capture(), any(ChannelPromise.class), eq(true));
     ImmutableListMultimap<CharSequence, CharSequence> headers =
         ImmutableListMultimap.copyOf(cmdCap.getValue().headers());
     assertThat(headers).containsEntry(AsciiString.of(":method"), Utils.HTTP_GET_METHOD);
@@ -504,13 +503,12 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     doAnswer(new Answer<Object>() {
       @Override
       public Object answer(InvocationOnMock invocation) throws Throwable {
-        if (future.isDone()) {
+        if (!(invocation.getArguments()[0] instanceof CreateStreamCommand) && future.isDone()) {
           ((ChannelPromise) invocation.getArguments()[1]).trySuccess();
         }
-        return null;
+        return invocation.getArguments()[1];
       }
     }).when(writeQueue).enqueue(any(QueuedCommand.class), any(ChannelPromise.class), anyBoolean());
-    when(writeQueue.enqueue(any(QueuedCommand.class), anyBoolean())).thenReturn(future);
     NettyClientStream stream = new NettyClientStream(
         new TransportStateImpl(handler, DEFAULT_MAX_MESSAGE_SIZE),
         methodDescriptor,
