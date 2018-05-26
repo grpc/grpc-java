@@ -58,6 +58,9 @@ model {
       }
     }
     gcc(Gcc) {
+      target("linux_arm-v7"){
+	cppCompiler.executable = "/usr/bin/gcc"
+      }
       target("ppcle_64")
       target("aarch_64")
     }
@@ -72,6 +75,10 @@ model {
     x86_64 {
       architecture "x86_64"
     }
+   'linux_arm-v7' {
+      architecture "arm32"
+      operatingSystem "linux"
+    }
     ppcle_64 {
       architecture "ppcle_64"
     }
@@ -82,7 +89,7 @@ model {
 
   components {
     java_plugin(NativeExecutableSpec) {
-      if (arch in ['x86_32', 'x86_64', 'ppcle_64', 'aarch_64']) {
+      if (arch in ['x86_32', 'x86_64', 'arm32', 'ppcle_64', 'aarch_64']) {
         // If arch is not within the defined platforms, we do not specify the
         // targetPlatform so that Gradle will choose what is appropriate.
         targetPlatform arch
@@ -174,12 +181,18 @@ compileTestNanoJava {
   options.compilerArgs = compileTestJava.options.compilerArgs
 }
 
+def USE_CUSTOM_PROTOC = 0
 protobuf {
   protoc {
-    if (project.hasProperty('protoc')) {
-      path = project.protoc
-    } else {
-      artifact = "com.google.protobuf:protoc:${protocVersion}"
+    if(USE_CUSTOM_PROTOC){
+	path = '/usr/bin/protoc'
+    }
+    else {	 
+    	 if (project.hasProperty('protoc')) {
+      	    path = project.protoc
+    	 } else {
+      	 artifact = "com.google.protobuf:protoc:${protocVersion}"
+    	 }
     }
   }
   plugins {
