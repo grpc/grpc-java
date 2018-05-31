@@ -596,12 +596,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     maxTraceEvents = builder.maxTraceEvents;
     if (maxTraceEvents > 0) {
       long currentTimeNanos = timeProvider.currentTimeNanos();
-      channelTracer = new ChannelTracer(builder.maxTraceEvents, currentTimeNanos);
-      channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-          .setDescription("Channel created")
-          .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-          .setTimestampNanos(currentTimeNanos)
-          .build());
+      channelTracer = new ChannelTracer(builder.maxTraceEvents, currentTimeNanos, "Channel");
     } else {
       channelTracer = null;
     }
@@ -998,12 +993,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       ChannelTracer subchannelTracer = null;
       long subchannelCreationTime = timeProvider.currentTimeNanos();
       if (maxTraceEvents > 0) {
-        subchannelTracer = new ChannelTracer(maxTraceEvents, subchannelCreationTime);
-        subchannelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Subchannel created")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(subchannelCreationTime)
-            .build());
+        subchannelTracer = new ChannelTracer(maxTraceEvents, subchannelCreationTime, "Subchannel");
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup,
@@ -1117,12 +1107,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       ChannelTracer oobChannelTracer = null;
       ChannelTracer subchannelTracer = null;
       if (channelTracer != null) {
-        oobChannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime);
-        oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("OobChannel created")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(oobChannelCreationTime)
-            .build());
+        oobChannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "OobChannel");
       }
       final OobChannel oobChannel = new OobChannel(
           authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
@@ -1134,12 +1119,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             .setTimestampNanos(oobChannelCreationTime)
             .setChannelRef(oobChannel)
             .build());
-        subchannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime);
-        subchannelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Subchannel created")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(oobChannelCreationTime)
-            .build());
+        subchannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "Subchannel");
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
           addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
