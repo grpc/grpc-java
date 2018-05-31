@@ -16,13 +16,12 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import com.google.common.base.Preconditions;
 import io.grpc.ConnectivityState;
 import java.net.SocketAddress;
 import java.security.cert.Certificate;
@@ -377,7 +376,7 @@ public final class Channelz {
         long lastCallStartedNanos,
         List<WithLogId> subchannels,
         List<WithLogId> sockets) {
-      Preconditions.checkState(
+      checkState(
           subchannels.isEmpty() || sockets.isEmpty(),
           "channels can have subchannels only, subchannels can have either sockets OR subchannels, "
               + "neither can have both");
@@ -440,14 +439,14 @@ public final class Channelz {
 
       /** Sets the subchannels. */
       public Builder setSubchannels(List<WithLogId> subchannels) {
-        Preconditions.checkState(sockets.isEmpty());
+        checkState(sockets.isEmpty());
         this.subchannels = Collections.unmodifiableList(checkNotNull(subchannels));
         return this;
       }
 
       /** Sets the sockets. */
       public Builder setSockets(List<WithLogId> sockets) {
-        Preconditions.checkState(subchannels.isEmpty());
+        checkState(subchannels.isEmpty());
         this.sockets = Collections.unmodifiableList(checkNotNull(sockets));
         return this;
       }
@@ -527,9 +526,6 @@ public final class Channelz {
       private Event(
           String description, Severity severity, long timestampNanos,
           @Nullable WithLogId channelRef, @Nullable WithLogId subchannelRef) {
-        checkArgument(
-            channelRef == null || subchannelRef == null,
-            "at least one of channelRef and subchannelRef must be null");
         this.description = description;
         this.severity = checkNotNull(severity, "severity");
         this.timestampNanos = timestampNanos;
@@ -603,6 +599,9 @@ public final class Channelz {
           checkNotNull(description, "description");
           checkNotNull(severity, "severity");
           checkNotNull(timestampNanos, "timestampNanos");
+          checkState(
+              channelRef == null || subchannelRef == null,
+              "at least one of channelRef and subchannelRef must be null");
           return new Event(description, severity, timestampNanos, channelRef, subchannelRef);
         }
       }
@@ -638,7 +637,7 @@ public final class Channelz {
      */
     public OtherSecurity(String name, @Nullable Object any) {
       this.name = checkNotNull(name);
-      Preconditions.checkState(
+      checkState(
           any == null || any.getClass().getName().endsWith("com.google.protobuf.Any"),
           "the 'any' object must be of type com.google.protobuf.Any");
       this.any = any;
