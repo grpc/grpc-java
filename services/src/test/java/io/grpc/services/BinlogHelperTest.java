@@ -265,6 +265,14 @@ public final class BinlogHelperTest {
   }
 
   @Test
+  public void configBinLog_blacklist() {
+    assertNull(makeLog("*,-p.s/method", "p.s/method"));
+    assertNull(makeLog("-p.s/method,*", "p.s/method"));
+    assertNull(makeLog("p.s/*,-p.s/method", "p.s/method"));
+    assertNull(makeLog("-p.s/method,p.s/*", "p.s/method"));
+  }
+
+  @Test
   public void configBinLog_ignoreDuplicates_global() throws Exception {
     String configStr = "*{h},p.s/m,*{h:256}";
     // The duplicate

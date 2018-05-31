@@ -59,7 +59,9 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -375,6 +377,7 @@ final class BinlogHelper {
     private final BinlogHelper globalLog;
     private final Map<String, BinlogHelper> perServiceLogs;
     private final Map<String, BinlogHelper> perMethodLogs;
+    private final Set<String> blacklistedMethods;
 
     /**
      * Accepts a string in the format specified by the binary log spec.
@@ -385,6 +388,7 @@ final class BinlogHelper {
       BinlogHelper globalLog = null;
       Map<String, BinlogHelper> perServiceLogs = new HashMap<String, BinlogHelper>();
       Map<String, BinlogHelper> perMethodLogs = new HashMap<String, BinlogHelper>();
+      Set<String> blacklistedMethods = new HashSet<String>();
       if (configurationString != null && configurationString.length() > 0) {
         for (String configuration : Splitter.on(',').split(configurationString)) {
           Matcher configMatcher = configRe.matcher(configuration);
@@ -415,6 +419,14 @@ final class BinlogHelper {
                 Level.INFO,
                 "Service binlog: service={0} config={1}",
                 new Object[] {service, binlogOptionStr});
+          } else if (methodOrSvc.startsWith("-")) {
+            String blacklistedMethod = methodOrSvc.substring(1);
+            if (blacklistedMethod.length() == 0) {
+              continue;
+            }
+            if (!blacklistedMethods.add(blacklistedMethod)) {
+              logger.log(Level.SEVERE, "Ignoring duplicate entry: {0}", configuration);
+            }
           } else {
             // assume fully qualified method name
             if (perMethodLogs.containsKey(methodOrSvc)) {
@@ -432,6 +444,7 @@ final class BinlogHelper {
       this.globalLog = globalLog;
       this.perServiceLogs = Collections.unmodifiableMap(perServiceLogs);
       this.perMethodLogs = Collections.unmodifiableMap(perMethodLogs);
+      this.blacklistedMethods = Collections.unmodifiableSet(blacklistedMethods);
     }
 
     /**
@@ -439,6 +452,9 @@ final class BinlogHelper {
      */
     @Override
     public BinlogHelper getLog(String fullMethodName) {
+      if (blacklistedMethods.contains(fullMethodName)) {
+        return null;
+      }
       BinlogHelper methodLog = perMethodLogs.get(fullMethodName);
       if (methodLog != null) {
         return methodLog;
