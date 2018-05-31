@@ -102,6 +102,7 @@ final class GrpclbState {
 
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
+  private final BackoffPolicy.Provider backoffPolicyProvider = null;
 
   // Scheduled only once.  Never reset.
   @Nullable
@@ -111,6 +112,11 @@ final class GrpclbState {
   // True if the current balancer has returned a serverlist.  Will be reset to false when lost
   // connection to a balancer.
   private boolean balancerWorking;
+  // Null if balancerWorking == true
+  @Nullable
+  private BackoffPolicy lbRpcRetryPolicy;
+  @Nullable
+  private LbRpcRetryTask lbRpcRetryTimer;
 
   @Nullable
   private ManagedChannel lbCommChannel;
@@ -280,6 +286,12 @@ final class GrpclbState {
     }
   }
 
+  private void cancelLbRpcRetryTimer() {
+    if (lbRpcRetryTimer != null) {
+      lbRpcRetryTimer.cancel();
+    }
+  }
+
   void shutdown() {
     shutdownLbComm();
     // We close the subchannels through subchannelPool instead of helper just for convenience of
@@ -290,6 +302,7 @@ final class GrpclbState {
     subchannels = Collections.emptyMap();
     subchannelPool.clear();
     cancelFallbackTimer();
+    cancelLbRpcRetryTimer();
   }
 
   void propagateError(Status status) {
@@ -385,6 +398,35 @@ final class GrpclbState {
     void schedule() {
       checkState(scheduledFuture == null, "FallbackModeTask already scheduled");
       scheduledFuture = timerService.schedule(this, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    }
+  }
+
+  @VisibleForTesting
+  class LbRpcRetryTask implements Runnable {
+    private ScheduledFuture<?> scheduledFuture;
+    private boolean discarded;
+
+    @Override
+    public void run() {
+      helper.runSerialized(new Runnable() {
+          @Override
+          public void run() {
+            checkState(
+                lbRpcRetryTimer == LbRpcRetryTask.this, "LbRpc retry timer mismatch");
+            discarded = true;
+            startLbRpc();
+          }
+        });
+    }
+
+    void cancel() {
+      discarded = true;
+      scheduledFuture.cancel(false);
+    }
+
+    void schedule(long delayNanos) {
+      checkState(scheduledFuture == null, "LbRpcRetryTask already scheduled");
+      scheduledFuture = timerService.schedule(this, delayNanos, TimeUnit.NANOSECONDS);
     }
   }
 
@@ -514,6 +556,7 @@ final class GrpclbState {
       }
 
       balancerWorking = true;
+      lbRpcRetryPolicy = null;
       // TODO(zhangkun83): handle delegate from initialResponse
       ServerList serverList = response.getServerList();
       List<DropEntry> newDropList = new ArrayList<DropEntry>();
@@ -558,7 +601,19 @@ final class GrpclbState {
       balancerWorking = false;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
-      startLbRpc();
+
+      if (lbRpcRetryPolicy == null) {
+        // balancerWorking was true, will not backoff this time, but will initialize the backoff
+        // policy
+        lbRpcRetryPolicy = backoffPolicyProvider.get();
+        startLbRpc();
+      } else {
+        long delayNanos = lbRpcRetryPolicy.nextBackoffNanos();
+        // TODO(zhangkun83): do we need to deduct the time spent in the previous try, just like
+        // subchannel does? 
+        lbRpcRetryTimer = new LbRpcRetryTask();
+        lbRpcRetryTimer.schedule(delayNanos);
+      }
     }
 
     void close(@Nullable Exception error) {
