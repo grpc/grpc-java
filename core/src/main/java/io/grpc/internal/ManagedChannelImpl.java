@@ -600,7 +600,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Channel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-          .setTimestampNaonos(currentTimeNanos)
+          .setTimestampNanos(currentTimeNanos)
           .build());
     } else {
       channelTracer = null;
@@ -1002,7 +1002,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         subchannelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Subchannel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(subchannelCreationTime)
+            .setTimestampNanos(subchannelCreationTime)
             .build());
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
@@ -1049,7 +1049,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Child channel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(subchannelCreationTime)
+            .setTimestampNanos(subchannelCreationTime)
             .setSubchannelRef(internalSubchannel)
             .build());
       }
@@ -1121,7 +1121,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("OobChannel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(oobChannelCreationTime)
+            .setTimestampNanos(oobChannelCreationTime)
             .build());
       }
       final OobChannel oobChannel = new OobChannel(
@@ -1131,14 +1131,14 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Child channel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(oobChannelCreationTime)
+            .setTimestampNanos(oobChannelCreationTime)
             .setChannelRef(oobChannel)
             .build());
         subchannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime);
         subchannelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Subchannel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(oobChannelCreationTime)
+            .setTimestampNanos(oobChannelCreationTime)
             .build());
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
@@ -1167,7 +1167,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Child channel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(oobChannelCreationTime)
+            .setTimestampNanos(oobChannelCreationTime)
             .setSubchannelRef(internalSubchannel)
             .build());
       }
@@ -1235,7 +1235,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Address resolved: " + servers)
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(timeProvider.currentTimeNanos())
+            .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
       }
 
@@ -1281,7 +1281,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name")
             .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
-            .setTimestampNaonos(timeProvider.currentTimeNanos())
+            .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
       }
       channelExecutor

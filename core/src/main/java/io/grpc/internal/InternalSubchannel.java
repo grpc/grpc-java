@@ -476,14 +476,14 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     ChannelStats.Builder builder = new ChannelStats.Builder();
 
     EquivalentAddressGroup addressGroupSnapshot;
-    List<WithLogId> transportsSnappshot;
+    List<WithLogId> transportsSnapshot;
     synchronized (lock) {
       addressGroupSnapshot = addressGroup;
-      transportsSnappshot = new ArrayList<WithLogId>(transports);
+      transportsSnapshot = new ArrayList<WithLogId>(transports);
     }
 
     builder.setTarget(addressGroupSnapshot.toString()).setState(getState());
-    builder.setSockets(transportsSnappshot);
+    builder.setSockets(transportsSnapshot);
     callsTracer.updateBuilder(builder);
     if (channelTracer != null) {
       channelTracer.updateBuilder(builder);

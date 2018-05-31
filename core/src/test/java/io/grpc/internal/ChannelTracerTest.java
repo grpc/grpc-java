@@ -49,13 +49,13 @@ public class ChannelTracerTest {
         new ChannelTracer(/* maxEvents= */ 2, /* channelCreationTimeNanos= */ 3L);
     ChannelStats.Builder builder = new ChannelStats.Builder();
     Event e1 = new Event.Builder()
-        .setDescription("e1").setSeverity(Severity.CT_ERROR).setTimestampNaonos(1001).build();
+        .setDescription("e1").setSeverity(Severity.CT_ERROR).setTimestampNanos(1001).build();
     Event e2 = new Event.Builder()
-        .setDescription("e2").setSeverity(Severity.CT_INFO).setTimestampNaonos(1002).build();
+        .setDescription("e2").setSeverity(Severity.CT_INFO).setTimestampNanos(1002).build();
     Event e3 = new Event.Builder()
-        .setDescription("e3").setSeverity(Severity.CT_WARNING).setTimestampNaonos(1003).build();
+        .setDescription("e3").setSeverity(Severity.CT_WARNING).setTimestampNanos(1003).build();
     Event e4 = new Event.Builder()
-        .setDescription("e4").setSeverity(Severity.CT_UNKNOWN).setTimestampNaonos(1004).build();
+        .setDescription("e4").setSeverity(Severity.CT_UNKNOWN).setTimestampNanos(1004).build();
 
     channelTracer.reportEvent(e1);
     channelTracer.updateBuilder(builder);

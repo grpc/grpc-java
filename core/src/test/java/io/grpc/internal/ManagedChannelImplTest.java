@@ -2075,7 +2075,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Channel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .build());
   }
 
@@ -2089,13 +2089,13 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Child channel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .setSubchannelRef(subchannel.getInternalSubchannel())
         .build());
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Subchannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .build());
   }
 
@@ -2107,7 +2107,7 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Failed to resolve name")
         .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .build());
   }
 
@@ -2125,7 +2125,7 @@ public class ManagedChannelImplTest {
         .setDescription("Address resolved: "
             + Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .build());
   }
 
@@ -2138,19 +2138,19 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Child channel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .setChannelRef(oobChannel)
         .build());
     assertThat(getStats(oobChannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("OobChannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-        .setTimestampNaonos(timer.getTicker().read())
+        .setTimestampNanos(timer.getTicker().read())
         .build());
     assertThat(getStats(oobChannel.getInternalSubchannel()).channelTrace.events).contains(
         new ChannelTrace.Event.Builder()
             .setDescription("Subchannel created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNaonos(timer.getTicker().read())
+            .setTimestampNanos(timer.getTicker().read())
             .build());
   }
 

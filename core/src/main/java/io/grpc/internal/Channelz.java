@@ -578,7 +578,7 @@ public final class Channelz {
           return this;
         }
 
-        public Builder setTimestampNaonos(long timestampNanos) {
+        public Builder setTimestampNanos(long timestampNanos) {
           this.timestampNanos = timestampNanos;
           return this;
         }
