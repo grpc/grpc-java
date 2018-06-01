@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
  * <p>TODO(carl-mastrangelo): add unit tests for this class
  */
 public final class ExponentialBackoffPolicy implements BackoffPolicy {
-  static final class Provider implements BackoffPolicy.Provider {
+  public static final class Provider implements BackoffPolicy.Provider {
     @Override
     public BackoffPolicy get() {
       return new ExponentialBackoffPolicy();

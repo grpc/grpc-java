@@ -70,6 +70,7 @@ import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
@@ -119,6 +120,13 @@ public class GrpclbLoadBalancerTest {
           return command instanceof GrpclbState.FallbackModeTask;
         }
       };
+  private static final FakeClock.TaskFilter LB_RPC_RETRY_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command instanceof GrpclbState.LbRpcRetryTask;
+        }
+      };
 
   @Mock
   private Helper helper;
@@ -157,6 +165,13 @@ public class GrpclbLoadBalancerTest {
   private LoadBalancer roundRobinBalancer;
   @Mock
   private ObjectPool<ScheduledExecutorService> timerServicePool;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
+  @Mock
+  private BackoffPolicy backoffPolicy1;
+  // TODO(zhangkun83): how many mock policies do we need?
+  @Mock
+  private BackoffPolicy backoffPolicy2;
   private GrpclbLoadBalancer balancer;
 
   @SuppressWarnings("unchecked")
@@ -238,10 +253,13 @@ public class GrpclbLoadBalancerTest {
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
     ScheduledExecutorService timerService = fakeClock.getScheduledExecutorService();
     when(timerServicePool.getObject()).thenReturn(timerService);
+    when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
+    when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
+    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(
         helper, subchannelPool, pickFirstBalancerFactory, roundRobinBalancerFactory,
         timerServicePool,
-        timeProvider);
+        timeProvider, backoffPolicyProvider);
     verify(subchannelPool).init(same(helper), same(timerService));
   }
 
@@ -1581,6 +1599,116 @@ public class GrpclbLoadBalancerTest {
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
     verify(helper).createOobChannel(goldenOobChannelEag, "fake-authority-1");
+  }
+
+  @Test
+  public void grpclbBalancerStreamRetry() throws Exception {
+    LoadBalanceRequest expectedInitialRequest =
+        LoadBalanceRequest.newBuilder()
+            .setInitialRequest(
+                InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
+            .build();
+    InOrder inOrder =
+        inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.ATTR_LB_POLICY, LbPolicy.GRPCLB).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+
+    assertEquals(1, fakeOobChannels.size());
+    ManagedChannel oobChannel = fakeOobChannels.poll();
+
+    // First balancer RPC
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Balancer closes it immediately (erroneously)
+    lbResponseObserver.onCompleted();
+    // Will start backoff sequence 1 (10ns)
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Fast-forward to a moment before the retry
+    fakeClock.forwardNanos(9);
+    verifyNoMoreInteractions(mockLbService);
+    // Then time for retry
+    fakeClock.forwardNanos(1);
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Balancer sends initial response.  It's not counted as "working", thus will not reset the
+    // backoff sequence.
+    lbResponseObserver.onNext(buildInitialResponse());
+    // Balancer closes it with an error, after spending 19ns
+    fakeClock.forwardNanos(19);
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    // Will continue the backoff sequence 1 (100ns)
+    verifyNoMoreInteractions(backoffPolicyProvider);
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Fast-forward to a moment before the retry. The time spent in the last try is deducted.
+    fakeClock.forwardNanos(100 - 19 - 1);
+    verifyNoMoreInteractions(mockLbService);
+    // Then time for retry
+    fakeClock.forwardNanos(1);
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Balancer responds with server list this time
+    List<ServerEntry> backends1 = Arrays.asList(
+        new ServerEntry("127.0.0.1", 2000, "token0001"),
+        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+
+    // Then breaks the RPC
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+
+    // Will reset the retry sequence and retry immediately, because balancer was previously working
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+
+    // Fail the retry
+    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    
+    // Will be on the first retry (10ns) of backoff sequence 2
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Fast-forward to a moment before the retry
+    fakeClock.forwardNanos(9);
+    verifyNoMoreInteractions(mockLbService);
+    // Then time for retry
+    fakeClock.forwardNanos(1);
+    inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+    assertEquals(1, lbRequestObservers.size());
+    lbRequestObserver = lbRequestObservers.poll();
+    verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+
+    // Wrapping up
+    verify(backoffPolicyProvider, times(2)).get();
+    verify(backoffPolicy1, times(2)).nextBackoffNanos();
+    verify(backoffPolicy2, times(1)).nextBackoffNanos();
   }
 
   private void deliverSubchannelState(

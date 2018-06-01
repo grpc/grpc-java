@@ -113,7 +113,6 @@ final class GrpclbState {
   // True if the current balancer has returned a serverlist.  Will be reset to false when lost
   // connection to a balancer.
   private boolean balancerWorking;
-  // Null if balancerWorking == true
   @Nullable
   private BackoffPolicy lbRpcRetryPolicy;
   @Nullable
@@ -272,7 +271,7 @@ final class GrpclbState {
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
     lbStream.start();
-    prevLbRpcStartNanos = timeProvider.currentTimeNanos();
+    prevLbRpcStartNanos = time.currentTimeNanos();
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -561,7 +560,6 @@ final class GrpclbState {
       }
 
       balancerWorking = true;
-      lbRpcRetryPolicy = null;
       // TODO(zhangkun83): handle delegate from initialResponse
       ServerList serverList = response.getServerList();
       List<DropEntry> newDropList = new ArrayList<DropEntry>();
@@ -603,23 +601,24 @@ final class GrpclbState {
       closed = true;
       cleanUp();
       propagateError(error);
+      boolean balancerWasWorking = balancerWorking;
       balancerWorking = false;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
 
       long delayNanos = 0;
-      if (lbRpcRetryPolicy == null) {
-        // balancerWorking was true, will not backoff this time, but will initialize the backoff
-        // policy
+      if (balancerWasWorking || lbRpcRetryPolicy == null) {
+        // Reset the backoff sequence if balancer was working previously, or backoff sequence has
+        // never been initialized.
         lbRpcRetryPolicy = backoffPolicyProvider.get();
-        delayNanos = 0;
-      } else {
+      }
+      // Backoff only when balancer wasn't working previously.
+      if (!balancerWasWorking) {
         // The back-off policy determines the interval between consecutive RPC upstarts, thus the
         // actual delay may be smaller than the value from the back-off policy, or even negative,
         // depending how much time was spent in the previous RPC.
         delayNanos =
-            prevLbRpcStartNanos + lbRpcRetryPolicy.nextBackoffNanos()
-            - timeProvider.currentTimeNanos();
+            prevLbRpcStartNanos + lbRpcRetryPolicy.nextBackoffNanos() - time.currentTimeNanos();
       }
       if (delayNanos <= 0) {
         startLbRpc();
