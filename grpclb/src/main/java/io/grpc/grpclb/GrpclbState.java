@@ -118,6 +118,7 @@ final class GrpclbState {
   private BackoffPolicy lbRpcRetryPolicy;
   @Nullable
   private LbRpcRetryTask lbRpcRetryTimer;
+  private long prevLbRpcStartNanos;
 
   @Nullable
   private ManagedChannel lbCommChannel;
@@ -271,7 +272,7 @@ final class GrpclbState {
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
     lbStream.start();
-    prevLbStreamStartNanos = 
+    prevLbRpcStartNanos = timeProvider.currentTimeNanos();
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -606,18 +607,24 @@ final class GrpclbState {
       maybeUseFallbackBackends();
       maybeUpdatePicker();
 
+      long delayNanos = 0;
       if (lbRpcRetryPolicy == null) {
         // balancerWorking was true, will not backoff this time, but will initialize the backoff
         // policy
         lbRpcRetryPolicy = backoffPolicyProvider.get();
+        delayNanos = 0;
+      } else {
+        // The back-off policy determines the interval between consecutive RPC upstarts, thus the
+        // actual delay may be smaller than the value from the back-off policy, or even negative,
+        // depending how much time was spent in the previous RPC.
+        delayNanos =
+            prevLbRpcStartNanos + lbRpcRetryPolicy.nextBackoffNanos()
+            - timeProvider.currentTimeNanos();
+      }
+      if (delayNanos <= 0) {
         startLbRpc();
       } else {
-        long delayNanos = lbRpcRetryPolicy.nextBackoffNanos();
-        // TODO(zhangkun83): do we need to deduct the time spent in the previous try, just like
-        // subchannel does? 
-        lbRpcRetryTimer = new LbRpcRet
-
-            ryTask();
+        lbRpcRetryTimer = new LbRpcRetryTask();
         lbRpcRetryTimer.schedule(delayNanos);
       }
     }
