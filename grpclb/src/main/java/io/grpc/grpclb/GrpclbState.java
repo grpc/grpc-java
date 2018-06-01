@@ -42,6 +42,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.grpclb.LoadBalanceResponse.LoadBalanceResponseTypeCase;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.LogId;
 import io.grpc.internal.TimeProvider;
 import io.grpc.stub.StreamObserver;
@@ -102,7 +103,7 @@ final class GrpclbState {
 
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
-  private final BackoffPolicy.Provider backoffPolicyProvider = null;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   // Scheduled only once.  Never reset.
   @Nullable
@@ -139,11 +140,13 @@ final class GrpclbState {
       SubchannelPool subchannelPool,
       TimeProvider time,
       ScheduledExecutorService timerService,
+      BackoffPolicy.Provider backoffPolicyProvider,
       LogId logId) {
     this.helper = checkNotNull(helper, "helper");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.time = checkNotNull(time, "time provider");
     this.timerService = checkNotNull(timerService, "timerService");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.logId = checkNotNull(logId, "logId");
   }
@@ -268,6 +271,7 @@ final class GrpclbState {
     LoadBalancerGrpc.LoadBalancerStub stub = LoadBalancerGrpc.newStub(lbCommChannel);
     lbStream = new LbStream(stub);
     lbStream.start();
+    prevLbStreamStartNanos = 
 
     LoadBalanceRequest initRequest = LoadBalanceRequest.newBuilder()
         .setInitialRequest(InitialLoadBalanceRequest.newBuilder()
@@ -611,7 +615,9 @@ final class GrpclbState {
         long delayNanos = lbRpcRetryPolicy.nextBackoffNanos();
         // TODO(zhangkun83): do we need to deduct the time spent in the previous try, just like
         // subchannel does? 
-        lbRpcRetryTimer = new LbRpcRetryTask();
+        lbRpcRetryTimer = new LbRpcRet
+
+            ryTask();
         lbRpcRetryTimer.schedule(delayNanos);
       }
     }
