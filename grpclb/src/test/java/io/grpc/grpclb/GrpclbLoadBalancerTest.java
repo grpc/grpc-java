@@ -169,7 +169,6 @@ public class GrpclbLoadBalancerTest {
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
   private BackoffPolicy backoffPolicy1;
-  // TODO(zhangkun83): how many mock policies do we need?
   @Mock
   private BackoffPolicy backoffPolicy2;
   private GrpclbLoadBalancer balancer;
