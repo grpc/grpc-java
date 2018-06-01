@@ -47,7 +47,6 @@ import io.grpc.binarylog.GrpcLogEntry;
 import io.grpc.binarylog.GrpcLogEntry.Type;
 import io.grpc.binarylog.Message;
 import io.grpc.binarylog.Metadata.Builder;
-import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
@@ -108,7 +107,7 @@ final class BinlogHelper {
           .setType(Type.SEND_INITIAL_METADATA)
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId));
-      metadataToProto(entryBuilder, metadata, maxHeaderBytes);
+      addMetadataToProto(entryBuilder, metadata, maxHeaderBytes);
       sink.write(entryBuilder.build());
     }
 
@@ -120,7 +119,7 @@ final class BinlogHelper {
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId))
           .setPeer(socketToProto(peerSocket));
-      metadataToProto(entryBuilder, metadata, maxHeaderBytes);
+      addMetadataToProto(entryBuilder, metadata, maxHeaderBytes);
       sink.write(entryBuilder.build());
     }
 
@@ -130,7 +129,7 @@ final class BinlogHelper {
           .setType(isServer ? Type.SEND_TRAILING_METADATA : Type.RECV_TRAILING_METADATA)
           .setLogger(isServer ? GrpcLogEntry.Logger.SERVER : GrpcLogEntry.Logger.CLIENT)
           .setCallId(callIdToProto(callId));
-      metadataToProto(entryBuilder, metadata, maxHeaderBytes);
+      addMetadataToProto(entryBuilder, metadata, maxHeaderBytes);
       sink.write(entryBuilder.build());
     }
 
@@ -538,7 +537,7 @@ final class BinlogHelper {
   }
 
   @VisibleForTesting
-  static void metadataToProto(
+  static void addMetadataToProto(
       GrpcLogEntry.Builder entryBuilder, Metadata metadata, int maxHeaderBytes) {
     checkNotNull(entryBuilder, "entryBuilder");
     checkNotNull(metadata, "metadata");
@@ -552,12 +551,9 @@ final class BinlogHelper {
         byte[] key = serialized[i];
         byte[] value = serialized[i + 1];
         if (written + key.length + value.length <= maxHeaderBytes) {
-          metaBuilder.addEntry(
-              MetadataEntry
-                  .newBuilder()
+          metaBuilder.addEntryBuilder()
                   .setKey(ByteString.copyFrom(key))
-                  .setValue(ByteString.copyFrom(value))
-                  .build());
+                  .setValue(ByteString.copyFrom(value));
           written += key.length;
           written += value.length;
         }
@@ -566,7 +562,7 @@ final class BinlogHelper {
     // This check must be updated when we add filtering
     entryBuilder.setTruncated(maxHeaderBytes == 0
         || (serialized != null && metaBuilder.getEntryCount() < (serialized.length / 2)));
-    entryBuilder.setMetadata(metaBuilder.build());
+    entryBuilder.setMetadata(metaBuilder);
   }
 
   @VisibleForTesting
@@ -582,7 +578,7 @@ final class BinlogHelper {
       int desiredBytes = Math.min(maxMessageBytes, message.length);
       msgBuilder.setData(ByteString.copyFrom(message, 0, desiredBytes));
     }
-    entryBuilder.setMessage(msgBuilder.build());
+    entryBuilder.setMessage(msgBuilder);
     entryBuilder.setTruncated(maxMessageBytes < message.length);
   }
 

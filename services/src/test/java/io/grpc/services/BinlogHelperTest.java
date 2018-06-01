@@ -981,7 +981,7 @@ public final class BinlogHelperTest {
   private static GrpcLogEntry metadataToProtoTestHelper(
       Metadata metadata, int maxHeaderBytes) {
     GrpcLogEntry.Builder builder = GrpcLogEntry.newBuilder();
-    BinlogHelper.metadataToProto(builder, metadata, maxHeaderBytes);
+    BinlogHelper.addMetadataToProto(builder, metadata, maxHeaderBytes);
     return builder.build();
   }
 
