@@ -20,6 +20,7 @@ import static io.grpc.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 import static io.grpc.services.BinlogHelper.DUMMY_SOCKET;
 import static io.grpc.services.BinlogHelper.getPeerSocket;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.mockito.Matchers.eq;
@@ -266,10 +267,13 @@ public final class BinlogHelperTest {
 
   @Test
   public void configBinLog_blacklist() {
-    assertNull(makeLog("*,-p.s/method", "p.s/method"));
-    assertNull(makeLog("-p.s/method,*", "p.s/method"));
-    assertNull(makeLog("p.s/*,-p.s/method", "p.s/method"));
-    assertNull(makeLog("-p.s/method,p.s/*", "p.s/method"));
+    assertNull(makeLog("*,-p.s/blacklisted", "p.s/blacklisted"));
+    assertNull(makeLog("-p.s/blacklisted,*", "p.s/blacklisted"));
+    assertNotNull(makeLog("-p.s/method,*", "p.s/allowed"));
+
+    assertNull(makeLog("p.s/*,-p.s/blacklisted", "p.s/blacklisted"));
+    assertNull(makeLog("-p.s/blacklisted,p.s/*", "p.s/blacklisted"));
+    assertNotNull(makeLog("-p.s/blacklisted,p.s/*", "p.s/allowed"));
   }
 
   @Test
