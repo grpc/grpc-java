@@ -586,7 +586,11 @@ final class DnsNameResolver extends NameResolver {
           NamingEnumeration<?> rrValues = rrEntry.getAll();
           try {
             while (rrValues.hasMore()) {
-              records.add(unquote(String.valueOf(rrValues.next())));
+              String normalized = String.valueOf(rrValues.next());
+              if (recordType.equals("TXT")) {
+                normalized = unquote(normalized);
+              }
+              records.add(normalized);
             }
           } finally {
             rrValues.close();
