@@ -586,11 +586,7 @@ final class DnsNameResolver extends NameResolver {
           NamingEnumeration<?> rrValues = rrEntry.getAll();
           try {
             while (rrValues.hasMore()) {
-              String normalized = String.valueOf(rrValues.next());
-              if (recordType.equals("TXT")) {
-                normalized = unquote(normalized);
-              }
-              records.add(normalized);
+              records.add(normalizeData(recordType, String.valueOf(rrValues.next())));
             }
           } finally {
             rrValues.close();
@@ -604,9 +600,20 @@ final class DnsNameResolver extends NameResolver {
   }
 
   /**
-   * Undo the quoting done in {@link com.sun.jndi.dns.ResourceRecord#decodeTxt}.
+   * Convert returned RR data to a form that's consumable by the grpc library.
    */
   @VisibleForTesting
+  static String normalizeData(String recordType, String rrData) {
+    String normalized = rrData;
+    if (recordType.equals("TXT")) {
+      normalized = unquote(normalized);
+    }
+    return normalized;
+  }
+
+  /**
+   * Undo the quoting done in {@link com.sun.jndi.dns.ResourceRecord#decodeTxt}.
+   */
   static String unquote(String txtRecord) {
     StringBuilder sb = new StringBuilder(txtRecord.length());
     boolean inquote = false;
