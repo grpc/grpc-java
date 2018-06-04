@@ -9,7 +9,7 @@ delays and interrupted RPCs that may otherwise occur.
 By default, gRPC uses exponential backoff to recover from connection failures.
 Depending on the scheduled backoff delay when the device regains connectivity,
 this could result in a  one minute or longer delay before gRPC re-establishes
-the connection. This delay is removed the `AndroidChannelBuilder` is provided
+the connection. This delay is removed when `AndroidChannelBuilder` is provided
 with the app's Android Context.  Notifications from the network listener will
 cause the channel to immediately reconnect upon network recovery.
 
@@ -25,9 +25,10 @@ already established cellular connection would fail when the device terminates
 cellular connections.
 
 ***Note:*** *Currently, `AndroidChannelBuilder` is only compatible with gRPC
-OkHttp. We plan to support the gRPC Cronet transport in the future, but the
-network listener mechanism is only necessary with OkHttp; the Cronet library
-internally handles connection management on Android devices.*
+OkHttp. We plan to offer additional Android-specific features compatible with
+both the OkHttp and Cronet transports in the future, but the network listener
+mechanism is only necessary with OkHttp; the Cronet library internally handles
+connection management on Android devices.*
 
 ## Example usage:
 
