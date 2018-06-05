@@ -375,6 +375,7 @@ public class CensusModulesTest {
       TagValue methodTagOld = record.tags.get(RpcMeasureConstants.RPC_METHOD);
       assertEquals(method.getFullMethodName(), methodTagOld.asString());
       assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT));
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
       TagValue methodTagNew = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
       assertEquals(method.getFullMethodName(), methodTagNew.asString());
     } else {
@@ -523,6 +524,7 @@ public class CensusModulesTest {
     TagValue methodTagOld = record.tags.get(RpcMeasureConstants.RPC_METHOD);
     assertEquals(method.getFullMethodName(), methodTagOld.asString());
     assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT));
+    assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS));
     TagValue methodTagNew = record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD);
     assertEquals(method.getFullMethodName(), methodTagNew.asString());
 
@@ -880,6 +882,7 @@ public class CensusModulesTest {
       TagValue methodTagOld = record.tags.get(RpcMeasureConstants.RPC_METHOD);
       assertEquals(method.getFullMethodName(), methodTagOld.asString());
       assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT));
+      assertEquals(1, record.getMetricAsLongOrFail(RpcMeasureConstants.GRPC_SERVER_STARTED_RPCS));
       TagValue methodTagNew = record.tags.get(RpcMeasureConstants.GRPC_SERVER_METHOD);
       assertEquals(method.getFullMethodName(), methodTagNew.asString());
     } else {

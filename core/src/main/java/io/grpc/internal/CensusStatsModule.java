@@ -335,7 +335,9 @@ public final class CensusStatsModule {
       this.stopwatch = module.stopwatchSupplier.get().start();
       this.recordFinishedRpcs = recordFinishedRpcs;
       if (recordStartedRpcs) {
-        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT, 1)
+        module.statsRecorder.newMeasureMap()
+            .put(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT, 1)
+            .put(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS, 1)
             .record(startCtx);
       }
     }
@@ -515,7 +517,9 @@ public final class CensusStatsModule {
       this.tagger = tagger;
       this.recordFinishedRpcs = recordFinishedRpcs;
       if (recordStartedRpcs) {
-        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT, 1)
+        module.statsRecorder.newMeasureMap()
+            .put(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT, 1)
+            .put(RpcMeasureConstants.GRPC_SERVER_STARTED_RPCS, 1)
             .record(parentCtx);
       }
     }
