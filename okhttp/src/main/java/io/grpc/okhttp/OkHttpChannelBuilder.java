@@ -209,7 +209,7 @@ public class OkHttpChannelBuilder extends
         negotiationType = NegotiationType.PLAINTEXT;
         break;
       default:
-        throw new RuntimeException("Unknown negotiation type: " + type);
+        throw new AssertionError("Unknown negotiation type: " + type);
     }
     return this;
   }
