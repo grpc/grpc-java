@@ -39,11 +39,7 @@ import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
-import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpClientUpgradeHandler;
-import io.netty.handler.codec.http.HttpMethod;
-import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.*;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
 import io.netty.handler.proxy.HttpProxyHandler;
 import io.netty.handler.proxy.ProxyConnectionEvent;
@@ -335,7 +331,7 @@ public final class ProtocolNegotiators {
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       final HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-      return new BufferingHttp2UpgradeHandler(upgrader, handler);
+      return new BufferingHttp2UpgradeHandler(httpClientCodec, upgrader, handler);
     }
   }
 
@@ -710,8 +706,8 @@ public final class ProtocolNegotiators {
 
     private final GrpcHttp2ConnectionHandler grpcHandler;
 
-    BufferingHttp2UpgradeHandler(ChannelHandler handler, GrpcHttp2ConnectionHandler grpcHandler) {
-      super(handler);
+    BufferingHttp2UpgradeHandler(ChannelHandler handler, ChannelHandler upgradeHandler, GrpcHttp2ConnectionHandler grpcHandler) {
+      super(handler, upgradeHandler);
       this.grpcHandler = grpcHandler;
     }
 
@@ -726,6 +722,7 @@ public final class ProtocolNegotiators {
       // which causes the upgrade headers to be added
       DefaultHttpRequest upgradeTrigger =
           new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+      upgradeTrigger.headers().add(HttpHeaderNames.HOST, "");
       ctx.writeAndFlush(upgradeTrigger);
       super.channelActive(ctx);
     }

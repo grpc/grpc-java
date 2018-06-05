@@ -77,6 +77,7 @@ public class TestServiceClient {
   private int serverPort = 8080;
   private String testCase = "empty_unary";
   private boolean useTls = true;
+  private boolean usePlaintextUpgrade = false;
   private boolean useAlts = false;
   private boolean useTestCa;
   private boolean useOkHttp;
@@ -160,8 +161,10 @@ public class TestServiceClient {
           + "\n    Valid options:"
           + validTestCasesHelpText()
           + "\n  --use_tls=true|false        Whether to use TLS. Default " + c.useTls
+          + "\n  --use_upgrade=true|false    Whether to use the h2c upgrade mechanism when not using TLS."
+          + "\n                              Default " + c.usePlaintextUpgrade
           + "\n  --use_alts=true|false       Whether to use ALTS. Enable ALTS will disable TLS."
-          + "\n                              Default " + c.useTls
+          + "\n                              Default " + c.useAlts
           + "\n  --use_test_ca=true|false    Whether to trust our fake CA. Requires --use_tls=true "
           + "\n                              to have effect. Default " + c.useTestCa
           + "\n  --use_okhttp=true|false     Whether to use OkHttp instead of Netty. Default "
@@ -351,7 +354,8 @@ public class TestServiceClient {
         NettyChannelBuilder nettyBuilder =
             NettyChannelBuilder.forAddress(serverHost, serverPort)
                 .flowControlWindow(65 * 1024)
-                .negotiationType(useTls ? NegotiationType.TLS : NegotiationType.PLAINTEXT)
+                .negotiationType(useTls ? NegotiationType.TLS :
+                  (usePlaintextUpgrade ? NegotiationType.PLAINTEXT_UPGRADE : NegotiationType.PLAINTEXT))
                 .sslContext(sslContext);
         if (serverHostOverride != null) {
           nettyBuilder.overrideAuthority(serverHostOverride);
