@@ -408,7 +408,6 @@ final class GrpclbState {
   @VisibleForTesting
   class LbRpcRetryTask implements Runnable {
     private ScheduledFuture<?> scheduledFuture;
-    private boolean discarded;
 
     @Override
     public void run() {
@@ -417,14 +416,12 @@ final class GrpclbState {
           public void run() {
             checkState(
                 lbRpcRetryTimer == LbRpcRetryTask.this, "LbRpc retry timer mismatch");
-            discarded = true;
             startLbRpc();
           }
         });
     }
 
     void cancel() {
-      discarded = true;
       scheduledFuture.cancel(false);
     }
 
