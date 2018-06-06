@@ -78,7 +78,6 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.internal.testing.TestClientStreamTracer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.internal.testing.TestStreamTracer;
-import io.grpc.protobuf.ProtoUtils;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.MetadataUtils;
@@ -146,8 +145,6 @@ public abstract class AbstractInteropTest {
 
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
-  public static final Metadata.Key<Messages.SimpleContext> METADATA_KEY =
-      ProtoUtils.keyForProto(Messages.SimpleContext.getDefaultInstance());
 
   private static final FakeTagger tagger = new FakeTagger();
   private static final FakeTagContextBinarySerializer tagContextBinarySerializer =
@@ -287,6 +284,13 @@ public abstract class AbstractInteropTest {
     blockingStub =
         TestServiceGrpc.newBlockingStub(channel).withInterceptors(tracerSetupInterceptor);
     asyncStub = TestServiceGrpc.newStub(channel).withInterceptors(tracerSetupInterceptor);
+
+    ClientInterceptor[] additionalInterceptors = getAdditionalInterceptors();
+    if (additionalInterceptors != null) {
+      blockingStub = blockingStub.withInterceptors(additionalInterceptors);
+      asyncStub = asyncStub.withInterceptors(additionalInterceptors);
+    }
+
     requestHeadersCapture.set(null);
   }
 
@@ -300,6 +304,10 @@ public abstract class AbstractInteropTest {
   }
 
   protected abstract ManagedChannel createChannel();
+
+  protected ClientInterceptor[] getAdditionalInterceptors() {
+    return null;
+  }
 
   /**
    * Returns the server builder used to create server for each test run.  Return {@code null} if
@@ -788,7 +796,8 @@ public abstract class AbstractInteropTest {
         StreamingOutputCallRequest.newBuilder();
     streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
-      streamingOutputBuilder.addResponseParametersBuilder().setSize(size).setIntervalUs(0);
+      streamingOutputBuilder.addResponseParameters(
+          ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
     }
     final StreamingOutputCallRequest request = streamingOutputBuilder.build();
 
@@ -827,7 +836,8 @@ public abstract class AbstractInteropTest {
         StreamingOutputCallRequest.newBuilder();
     streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
-      streamingOutputBuilder.addResponseParametersBuilder().setSize(size).setIntervalUs(0);
+      streamingOutputBuilder.addResponseParameters(
+          ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
     }
     final StreamingOutputCallRequest request = streamingOutputBuilder.build();
 
@@ -957,7 +967,7 @@ public abstract class AbstractInteropTest {
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(METADATA_KEY, contextValue);
+    fixedHeaders.put(Util.METADATA_KEY, contextValue);
     stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<Metadata>();
@@ -967,8 +977,8 @@ public abstract class AbstractInteropTest {
     assertNotNull(stub.emptyCall(EMPTY));
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(METADATA_KEY));
+    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
@@ -980,7 +990,7 @@ public abstract class AbstractInteropTest {
     // Send a context proto (as it's in the default extension registry)
     Messages.SimpleContext contextValue =
         Messages.SimpleContext.newBuilder().setValue("dog").build();
-    fixedHeaders.put(METADATA_KEY, contextValue);
+    fixedHeaders.put(Util.METADATA_KEY, contextValue);
     stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
     AtomicReference<Metadata> trailersCapture = new AtomicReference<Metadata>();
@@ -992,7 +1002,8 @@ public abstract class AbstractInteropTest {
         Messages.StreamingOutputCallRequest.newBuilder();
     streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
-      streamingOutputBuilder.addResponseParametersBuilder().setSize(size).setIntervalUs(0);
+      streamingOutputBuilder.addResponseParameters(
+          ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
     }
     final Messages.StreamingOutputCallRequest request = streamingOutputBuilder.build();
 
@@ -1014,8 +1025,8 @@ public abstract class AbstractInteropTest {
     org.junit.Assert.assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
 
     // Assert that our side channel object is echoed back in both headers and trailers
-    Assert.assertEquals(contextValue, headersCapture.get().get(METADATA_KEY));
-    Assert.assertEquals(contextValue, trailersCapture.get().get(METADATA_KEY));
+    Assert.assertEquals(contextValue, headersCapture.get().get(Util.METADATA_KEY));
+    Assert.assertEquals(contextValue, trailersCapture.get().get(Util.METADATA_KEY));
   }
 
   @Test
@@ -1769,7 +1780,14 @@ public abstract class AbstractInteropTest {
     } catch (AssertionError e) {
       String msg = e.getMessage();
       if (msg.length() >= 256) {
-        throw new AssertionError(msg.substring(0, 256), e);
+        try {
+          // AssertionError(String, Throwable) only present in Android API 19+
+          throw AssertionError.class
+              .getConstructor(String.class, Throwable.class)
+              .newInstance(msg.substring(0, 256), e);
+        } catch (Exception reflectionError) {
+          throw e;
+        }
       }
       throw e;
     }
@@ -1784,7 +1802,14 @@ public abstract class AbstractInteropTest {
     } catch (AssertionError e) {
       String msg = e.getMessage();
       if (msg.length() >= 256) {
-        throw new AssertionError(msg.substring(0, 256), e);
+        try {
+          // AssertionError(String, Throwable) only present in Android API 19+
+          throw AssertionError.class
+              .getConstructor(String.class, Throwable.class)
+              .newInstance(msg.substring(0, 256), e);
+        } catch (Exception reflectionError) {
+          throw e;
+        }
       }
       throw e;
     }
