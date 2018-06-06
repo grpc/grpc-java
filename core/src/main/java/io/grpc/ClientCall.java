@@ -38,7 +38,8 @@ import javax.annotation.Nullable;
  * Applications are expected to utilize normal payload messages for such signals, as a response
  * naturally acknowledges its request.
  *
- * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe.
+ * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe
+ * except for {@link #request} and {@link #cancel}, which may be called from any thread.
  *
  * <p>There is no interaction between the states on the {@link Listener Listener} and {@link
  * ClientCall}, i.e., if {@link Listener#onClose Listener.onClose()} is called, it has no bearing on
@@ -190,6 +191,8 @@ public abstract class ClientCall<ReqT, RespT> {
    *
    * @param numMessages the requested number of messages to be delivered to the listener. Must be
    *                    non-negative.
+   * @throws IllegalStateException if call is not {@code start()}ed
+   * @throws IllegalArgumentException if numMessages is negative
    */
   public abstract void request(int numMessages);
 
@@ -204,6 +207,8 @@ public abstract class ClientCall<ReqT, RespT> {
    * <p>It is recommended that at least one of the arguments to be non-{@code null}, to provide
    * useful debug information. Both argument being null may log warnings and result in suboptimal
    * performance. Also note that the provided information will not be sent to the server.
+   *
+   * <p>This method is safe to call from multiple threads without external synchronization.
    *
    * @param message if not {@code null}, will appear as the description of the CANCELLED status
    * @param cause if not {@code null}, will appear as the cause of the CANCELLED status
