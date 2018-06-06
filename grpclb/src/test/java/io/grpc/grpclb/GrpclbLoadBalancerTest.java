@@ -1645,19 +1645,15 @@ public class GrpclbLoadBalancerTest {
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
-    // Balancer sends initial response.  It's not counted as "working", thus will not reset the
-    // backoff sequence.
-    lbResponseObserver.onNext(buildInitialResponse());
-    // Balancer closes it with an error, after spending 19ns
-    fakeClock.forwardNanos(19);
+    // Balancer closes it with an error.
     lbResponseObserver.onError(Status.UNAVAILABLE.asException());
     // Will continue the backoff sequence 1 (100ns)
     verifyNoMoreInteractions(backoffPolicyProvider);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
-    // Fast-forward to a moment before the retry. The time spent in the last try is deducted.
-    fakeClock.forwardNanos(100 - 19 - 1);
+    // Fast-forward to a moment before the retry
+    fakeClock.forwardNanos(100 - 1);
     verifyNoMoreInteractions(mockLbService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -1668,17 +1664,13 @@ public class GrpclbLoadBalancerTest {
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
-    // Balancer responds with server list this time
-    List<ServerEntry> backends1 = Arrays.asList(
-        new ServerEntry("127.0.0.1", 2000, "token0001"),
-        new ServerEntry("127.0.0.1", 2010, "token0002"));
+    // Balancer sends initial response.
     lbResponseObserver.onNext(buildInitialResponse());
-    lbResponseObserver.onNext(buildLbResponse(backends1));
 
     // Then breaks the RPC
     lbResponseObserver.onError(Status.UNAVAILABLE.asException());
 
-    // Will reset the retry sequence and retry immediately, because balancer was previously working
+    // Will reset the retry sequence and retry immediately, because balancer has responded.
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
     lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -1686,15 +1678,16 @@ public class GrpclbLoadBalancerTest {
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
 
-    // Fail the retry
+    // Fail the retry after spending 4ns
+    fakeClock.forwardNanos(4);
     lbResponseObserver.onError(Status.UNAVAILABLE.asException());
     
-    // Will be on the first retry (10ns) of backoff sequence 2
+    // Will be on the first retry (10ns) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
-    // Fast-forward to a moment before the retry
-    fakeClock.forwardNanos(9);
+    // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
+    fakeClock.forwardNanos(10 - 4 - 1);
     verifyNoMoreInteractions(mockLbService);
     // Then time for retry
     fakeClock.forwardNanos(1);

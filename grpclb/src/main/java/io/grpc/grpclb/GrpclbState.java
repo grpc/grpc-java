@@ -601,19 +601,18 @@ final class GrpclbState {
       closed = true;
       cleanUp();
       propagateError(error);
-      boolean balancerWasWorking = balancerWorking;
       balancerWorking = false;
       maybeUseFallbackBackends();
       maybeUpdatePicker();
 
       long delayNanos = 0;
-      if (balancerWasWorking || lbRpcRetryPolicy == null) {
-        // Reset the backoff sequence if balancer was working previously, or backoff sequence has
-        // never been initialized.
+      if (initialResponseReceived || lbRpcRetryPolicy == null) {
+        // Reset the backoff sequence if balancer has sent the initial response, or backoff sequence
+        // has never been initialized.
         lbRpcRetryPolicy = backoffPolicyProvider.get();
       }
       // Backoff only when balancer wasn't working previously.
-      if (!balancerWasWorking) {
+      if (!initialResponseReceived) {
         // The back-off policy determines the interval between consecutive RPC upstarts, thus the
         // actual delay may be smaller than the value from the back-off policy, or even negative,
         // depending how much time was spent in the previous RPC.
