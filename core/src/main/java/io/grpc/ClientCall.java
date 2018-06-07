@@ -38,8 +38,8 @@ import javax.annotation.Nullable;
  * Applications are expected to utilize normal payload messages for such signals, as a response
  * naturally acknowledges its request.
  *
- * <p>Methods are guaranteed to be non-blocking. Implementations are not required to be thread-safe
- * except for {@link #request}, which may be called from any thread.
+ * <p>Methods are guaranteed to be non-blocking. Not thread-safe except for {@link #request}, which
+ * may be called from any thread.
  *
  * <p>There is no interaction between the states on the {@link Listener Listener} and {@link
  * ClientCall}, i.e., if {@link Listener#onClose Listener.onClose()} is called, it has no bearing on
