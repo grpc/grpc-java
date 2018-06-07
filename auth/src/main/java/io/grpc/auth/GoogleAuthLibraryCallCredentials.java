@@ -90,11 +90,17 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
   @Override
   public void applyRequestMetadata(MethodDescriptor<?, ?> method, Attributes attrs,
       Executor appExecutor, final MetadataApplier applier) {
-    SecurityLevel security = checkNotNull(attrs.get(ATTR_SECURITY_LEVEL), "securityLevel");
+    SecurityLevel security = attrs.get(ATTR_SECURITY_LEVEL);
+    if (security == null) {
+      // Although the API says ATTR_SECURITY_LEVEL is required, no one was really looking at it thus
+      // there may be transports that got away without setting it.  Now we start to check it, it'd
+      // be less disruptive to tolerate nulls.
+      security = SecurityLevel.NONE;
+    }
     if (requirePrivacy && security != SecurityLevel.PRIVACY_AND_INTEGRITY) {
       applier.fail(Status.UNAUTHENTICATED
           .withDescription("Credentials require channel with PRIVACY_AND_INTEGRITY security level. "
-            + "Observed security level: " + security));
+              + "Observed security level: " + security));
       return;
     }
 
