@@ -17,6 +17,7 @@
 package io.grpc;
 
 import com.google.errorprone.annotations.DoNotMock;
+import io.grpc.internal.ServerStream;
 import javax.annotation.Nullable;
 
 /**
@@ -196,6 +197,10 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
    * the underlying network.
+   *
+   * <p>The {@link ServerStream#flush()} is being deferred until all opened corks are closed.
+   *
+   * @since 1.14.0
    */
   @ExperimentalApi
   public Cork cork() {

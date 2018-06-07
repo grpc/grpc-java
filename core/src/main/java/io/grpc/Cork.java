@@ -28,6 +28,7 @@ import java.io.Closeable;
  * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
  * the underlying network.
  */
+@ExperimentalApi
 public interface Cork extends Closeable {
 
   /**
@@ -40,4 +41,7 @@ public interface Cork extends Closeable {
       // noop
     }
   }
+
+  @Override
+  void close();
 }

@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -39,7 +38,8 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import java.io.InputStream;
-import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,7 +66,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean closeCalled;
   private Compressor compressor;
   private boolean messageSent;
-  private final Set<Cork> corks = Sets.newConcurrentHashSet();
+  private final AtomicInteger numCorks = new AtomicInteger(0);
 
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
@@ -142,7 +142,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
-      if (corks.size() == 0) {
+      if (numCorks.get() == 0) {
         stream.flush();
       }
     } catch (RuntimeException e) {
@@ -202,18 +202,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public Cork cork() {
-    final Cork cork = new Cork() {
+    numCorks.getAndIncrement();
+    return new Cork() {
+
+      private final AtomicBoolean closed = new AtomicBoolean(false);
 
       @Override
       public void close() {
-        checkState(corks.remove(this), "cork already closed");
-        if (corks.size() == 0) {
+        if (!closed.getAndSet(true) && numCorks.decrementAndGet() == 0) {
           stream.flush();
         }
       }
     };
-    checkState(corks.add(cork), "unable to add cork");
-    return cork;
   }
 
   @Override

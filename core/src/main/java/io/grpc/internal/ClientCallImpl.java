@@ -30,7 +30,6 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.Sets;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -50,12 +49,13 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -87,7 +87,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
-  private final Set<Cork> corks = Sets.newConcurrentHashSet();
+  private final AtomicInteger numCorks = new AtomicInteger(0);
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
@@ -435,7 +435,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // For unary requests, we don't flush since we know that halfClose should be coming soon. This
     // allows us to piggy-back the END_STREAM=true on the last message frame without opening the
     // possibility of broken applications forgetting to call halfClose without noticing.
-    if (!unaryRequest && corks.size() == 0) {
+    if (!unaryRequest && numCorks.get() == 0) {
       stream.flush();
     }
   }
@@ -448,18 +448,18 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public Cork cork() {
-    final Cork cork = new Cork() {
+    numCorks.getAndIncrement();
+    return new Cork() {
+
+      private final AtomicBoolean closed = new AtomicBoolean(false);
 
       @Override
       public void close() {
-        checkState(corks.remove(this), "cork already closed");
-        if (corks.size() == 0) {
+        if (!closed.getAndSet(true) && numCorks.decrementAndGet() == 0) {
           stream.flush();
         }
       }
     };
-    checkState(corks.add(cork), "unable to add cork");
-    return cork;
   }
 
   @Override
