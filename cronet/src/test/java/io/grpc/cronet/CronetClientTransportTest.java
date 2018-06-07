@@ -50,6 +50,8 @@ import org.robolectric.RobolectricTestRunner;
 @RunWith(RobolectricTestRunner.class)
 public final class CronetClientTransportTest {
 
+  private static final String AUTHORITY = "test.example.com";
+
   private CronetClientTransport transport;
   @Mock private StreamBuilderFactory streamFactory;
   @Mock private Executor executor;
@@ -65,7 +67,7 @@ public final class CronetClientTransportTest {
         new CronetClientTransport(
             streamFactory,
             new InetSocketAddress("localhost", 443),
-            "test.example.com",
+            AUTHORITY,
             null,
             executor,
             5000,
@@ -80,7 +82,7 @@ public final class CronetClientTransportTest {
   @Test
   public void transportAttributes() {
     Attributes attrs = transport.getAttributes();
-    assertEquals("test.example.com", attrs.get(CallCredentials.ATTR_AUTHORITY));
+    assertEquals(AUTHORITY, attrs.get(CallCredentials.ATTR_AUTHORITY));
     assertEquals(
         SecurityLevel.PRIVACY_AND_INTEGRITY, attrs.get(CallCredentials.ATTR_SECURITY_LEVEL));
   }
