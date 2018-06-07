@@ -74,12 +74,9 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class BinlogHelper {
   private static final Logger logger = Logger.getLogger(BinlogHelper.class.getName());
-  private static final Metadata EMPTY_METADATA = new Metadata();
   private static final boolean SERVER = true;
   private static final boolean CLIENT = false;
 
-  @VisibleForTesting
-  static final CallId emptyCallId = new CallId(0, 0);
   @VisibleForTesting
   static final SocketAddress DUMMY_SOCKET = new DummySocketAddress();
   @VisibleForTesting
