@@ -50,6 +50,11 @@ abstract class PartialForwardingClientCall<ReqT, RespT> extends ClientCall<ReqT,
   }
 
   @Override
+  public Cork cork() {
+    return delegate().cork();
+  }
+
+  @Override
   public boolean isReady() {
     return delegate().isReady();
   }

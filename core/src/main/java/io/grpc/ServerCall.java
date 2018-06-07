@@ -189,6 +189,20 @@ public abstract class ServerCall<ReqT, RespT> {
   }
 
   /**
+   * Defers flushing the messages written using {@link #sendMessage(Object)} to the
+   * transport until the write buffer is full. The amount of data buffered while corked is
+   * dependent on the transport implementation so users of this API should not make strong
+   * assumptions about how long data is buffered while corked.
+   *
+   * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
+   * the underlying network.
+   */
+  @ExperimentalApi
+  public Cork cork() {
+    return new Cork.NoopCork();
+  }
+
+  /**
    * Returns properties of a single call.
    *
    * <p>Attributes originate from the transport and can be altered by {@link ServerTransportFilter}.

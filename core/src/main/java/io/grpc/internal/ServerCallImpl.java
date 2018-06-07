@@ -24,12 +24,14 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Cork;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.Metadata;
@@ -37,6 +39,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
 import java.io.InputStream;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -63,6 +66,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private boolean closeCalled;
   private Compressor compressor;
   private boolean messageSent;
+  private final Set<Cork> corks = Sets.newConcurrentHashSet();
+
 
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
@@ -137,7 +142,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       InputStream resp = method.streamResponse(message);
       stream.writeMessage(resp);
-      stream.flush();
+      if (corks.size() == 0) {
+        stream.flush();
+      }
     } catch (RuntimeException e) {
       close(Status.fromThrowable(e), new Metadata());
     } catch (Error e) {
@@ -191,6 +198,22 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   ServerStreamListener newServerStreamListener(ServerCall.Listener<ReqT> listener) {
     return new ServerStreamListenerImpl<ReqT>(this, listener, context);
+  }
+
+  @Override
+  public Cork cork() {
+    final Cork cork = new Cork() {
+
+      @Override
+      public void close() {
+        checkState(corks.remove(this), "cork already closed");
+        if (corks.size() == 0) {
+          stream.flush();
+        }
+      }
+    };
+    checkState(corks.add(cork), "unable to add cork");
+    return cork;
   }
 
   @Override
