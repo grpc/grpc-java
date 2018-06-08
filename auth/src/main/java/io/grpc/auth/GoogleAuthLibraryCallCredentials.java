@@ -249,6 +249,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       // this reference. Unfortunately this will initialize the class.
       rawGoogleCredentialsClass = Class.forName("com.google.auth.oauth2.GoogleCredentials");
     } catch (ClassNotFoundException ex) {
+      log.log(Level.FINE, "Failed to load GoogleCredentials", ex);
       return null;
     }
     return rawGoogleCredentialsClass.asSubclass(Credentials.class);
