@@ -64,7 +64,7 @@ echo Generate CA key:
 openssl genrsa -passout pass:1111 -des3 -out ca.key 4096
 echo Generate CA certificate:
 # Generates ca.crt which is the trustCertCollectionFile
-openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${SERVER_CN}"
+openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${CLIENT_CN}"
 echo Generate server key:
 openssl genrsa -passout pass:1111 -des3 -out server.key 4096
 echo Generate server signing request:
