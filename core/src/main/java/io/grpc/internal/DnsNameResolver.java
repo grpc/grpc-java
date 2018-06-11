@@ -500,6 +500,33 @@ final class DnsNameResolver extends NameResolver {
     }
   }
 
+
+  @VisibleForTesting
+  static abstract class DnsClient {
+    EquivalentAddressGroup getBackends(String hostname) {
+      throw new UnsupportedOperationException();
+    }
+    List<String> getServiceConfigs(String hostname) {
+      throw new UnsupportedOperationException();
+    }
+    List<EquivalentAddressGroup> getBalancers(String hostname) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  @VisibleForTesting
+  static final class JndiDnsClient extends DnsClient {
+    List<String> getServiceConfigs(String hostname) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+
+
+
+
+
+
   /**
    * A resolver that uses JNDI.  This class is capable of looking up both addresses
    * and text records, but does not provide ordering guarantees.  It is currently not used for
@@ -522,7 +549,6 @@ final class DnsNameResolver extends NameResolver {
       try {
         serviceConfigTxtRecords = getAllRecords("TXT", "dns:///" + serviceConfigHostname);
       } catch (NamingException e) {
-
         if (logger.isLoggable(Level.FINE)) {
           logger.log(Level.FINE, "Unable to look up " + serviceConfigHostname, e);
         }
