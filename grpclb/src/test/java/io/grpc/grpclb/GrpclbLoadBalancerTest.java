@@ -1691,7 +1691,6 @@ public class GrpclbLoadBalancerTest {
     // Then time for retry
     fakeClock.forwardNanos(1);
     inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
-    lbResponseObserver = lbResponseObserverCaptor.getValue();
     assertEquals(1, lbRequestObservers.size());
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
