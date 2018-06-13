@@ -18,8 +18,6 @@
 -dontwarn sun.reflect.**
 # Ignores: can't find referenced class javax.lang.model.element.Modifier
 -dontwarn com.google.errorprone.annotations.**
--dontwarn org.apache.commons.logging.**
 
 # Ignores: can't find referenced method from grpc-testing's compileOnly dependency on Truth
 -dontwarn io.grpc.testing.DeadlineSubject
-

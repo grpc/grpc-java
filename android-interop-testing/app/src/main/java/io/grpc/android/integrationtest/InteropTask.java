@@ -27,7 +27,7 @@ import java.lang.ref.WeakReference;
 import java.util.List;
 import org.junit.AssumptionViolatedException;
 
-/** Javadoc. */
+/** AsyncTask for interop test cases. */
 final class InteropTask extends AsyncTask<Void, Void, String> {
   private static final String LOG_TAG = "GrpcInteropTask";
 

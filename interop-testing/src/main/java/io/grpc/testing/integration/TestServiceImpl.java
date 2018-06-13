@@ -113,8 +113,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       responseBuilder.setPayload(
           Payload.newBuilder()
               .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
-              .setBody(payload)
-              .build());
+              .setBody(payload));
     }
 
     if (req.hasResponseStatus()) {
@@ -427,8 +426,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       responseBuilder.setPayload(
           Payload.newBuilder()
               .setType(compressable ? PayloadType.COMPRESSABLE : PayloadType.UNCOMPRESSABLE)
-              .setBody(payload)
-              .build());
+              .setBody(payload));
       return responseBuilder.build();
     }
   }

@@ -305,6 +305,7 @@ public abstract class AbstractInteropTest {
 
   protected abstract ManagedChannel createChannel();
 
+  @Nullable
   protected ClientInterceptor[] getAdditionalInterceptors() {
     return null;
   }
@@ -1777,17 +1778,16 @@ public abstract class AbstractInteropTest {
   private static <T> T verify(T mock, VerificationMode mode) {
     try {
       return Mockito.verify(mock, mode);
-    } catch (AssertionError e) {
+    } catch (final AssertionError e) {
       String msg = e.getMessage();
       if (msg.length() >= 256) {
-        try {
-          // AssertionError(String, Throwable) only present in Android API 19+
-          throw AssertionError.class
-              .getConstructor(String.class, Throwable.class)
-              .newInstance(msg.substring(0, 256), e);
-        } catch (Exception reflectionError) {
-          throw e;
-        }
+        // AssertionError(String, Throwable) only present in Android API 19+
+        throw new AssertionError(msg.substring(0, 256)) {
+          @Override
+          public synchronized Throwable getCause() {
+            return e;
+          }
+        };
       }
       throw e;
     }
@@ -1799,17 +1799,16 @@ public abstract class AbstractInteropTest {
   private static void verifyNoMoreInteractions(Object... mocks) {
     try {
       Mockito.verifyNoMoreInteractions(mocks);
-    } catch (AssertionError e) {
+    } catch (final AssertionError e) {
       String msg = e.getMessage();
       if (msg.length() >= 256) {
-        try {
-          // AssertionError(String, Throwable) only present in Android API 19+
-          throw AssertionError.class
-              .getConstructor(String.class, Throwable.class)
-              .newInstance(msg.substring(0, 256), e);
-        } catch (Exception reflectionError) {
-          throw e;
-        }
+        // AssertionError(String, Throwable) only present in Android API 19+
+        throw new AssertionError(msg.substring(0, 256)) {
+          @Override
+          public synchronized Throwable getCause() {
+            return e;
+          }
+        };
       }
       throw e;
     }

@@ -22,7 +22,6 @@ import android.os.Build;
 import android.support.annotation.Nullable;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.okhttp.NegotiationType;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.InputStream;
 import java.lang.reflect.Method;
@@ -53,7 +52,7 @@ class TesterOkHttpChannelBuilder {
     }
     if (useTls) {
       try {
-        ((OkHttpChannelBuilder) channelBuilder).negotiationType(NegotiationType.TLS);
+        ((OkHttpChannelBuilder) channelBuilder).useTransportSecurity();
         ((OkHttpChannelBuilder) channelBuilder).sslSocketFactory(getSslSocketFactory(testCa));
       } catch (Exception e) {
         throw new RuntimeException(e);
