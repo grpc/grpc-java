@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.services.BinaryLogProvider.BYTEARRAY_MARSHALLER;
 import static io.grpc.services.BinlogHelper.DUMMY_SOCKET;
 import static io.grpc.services.BinlogHelper.getPeerSocket;
@@ -23,18 +24,25 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
+import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog.CallId;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -48,6 +56,7 @@ import io.grpc.binarylog.MetadataEntry;
 import io.grpc.binarylog.Peer;
 import io.grpc.binarylog.Peer.PeerType;
 import io.grpc.binarylog.Uint128;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
 import io.grpc.services.BinlogHelper.FactoryImpl;
@@ -58,11 +67,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.charset.Charset;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 /** Tests for {@link BinlogHelper}. */
 @RunWith(JUnit4.class)
@@ -535,9 +547,16 @@ public final class BinlogHelperTest {
 
   @Test
   public void logSendInitialMetadata_server() throws Exception {
-    sinkWriterImpl.logSendInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logSendInitialMetadata(
+        /*seq=*/ 1,
+        /*methodName=*/ null,
+        /*timeout=*/ null,
+        nonEmptyMetadata,
+        IS_SERVER,
+        CALL_ID);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -546,9 +565,34 @@ public final class BinlogHelperTest {
 
   @Test
   public void logSendInitialMetadata_client() throws Exception {
-    sinkWriterImpl.logSendInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logSendInitialMetadata(
+        /*seq=*/ 1,
+        "service/method",
+        Durations.fromMillis(1234),
+        nonEmptyMetadata,
+        IS_CLIENT,
+        CALL_ID);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
+            .setMethodName("service/method")
+            .setTimeout(Durations.fromMillis(1234))
+            .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
+            .setLogger(GrpcLogEntry.Logger.CLIENT)
+            .setCallId(BinlogHelper.callIdToProto(CALL_ID))
+            .build());
+
+    sinkWriterImpl.logSendInitialMetadata(
+        /*seq=*/ 1,
+        "service/method",
+        /*timeout=*/ null,
+        nonEmptyMetadata,
+        IS_CLIENT,
+        CALL_ID);
+    verify(sink).write(
+        metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
+            .setMethodName("service/method")
             .setType(GrpcLogEntry.Type.SEND_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -560,9 +604,37 @@ public final class BinlogHelperTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    sinkWriterImpl.logRecvInitialMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID, socketAddress);
+    sinkWriterImpl.logRecvInitialMetadata(
+        /*seq=*/ 1,
+        "service/method",
+        Durations.fromMillis(1234),
+        nonEmptyMetadata,
+        IS_SERVER,
+        CALL_ID,
+        socketAddress);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
+            .setMethodName("service/method")
+            .setTimeout(Durations.fromMillis(1234))
+            .setType(GrpcLogEntry.Type.RECV_INITIAL_METADATA)
+            .setLogger(GrpcLogEntry.Logger.SERVER)
+            .setCallId(BinlogHelper.callIdToProto(CALL_ID))
+            .setPeer(BinlogHelper.socketToProto(socketAddress))
+            .build());
+
+    sinkWriterImpl.logRecvInitialMetadata(
+        /*seq=*/ 1,
+        "service/method",
+        /*timeout=*/ null,
+        nonEmptyMetadata,
+        IS_SERVER,
+        CALL_ID,
+        socketAddress);
+    verify(sink).write(
+        metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
+            .setMethodName("service/method")
             .setType(GrpcLogEntry.Type.RECV_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -575,9 +647,17 @@ public final class BinlogHelperTest {
     InetAddress address = InetAddress.getByName("127.0.0.1");
     int port = 12345;
     InetSocketAddress socketAddress = new InetSocketAddress(address, port);
-    sinkWriterImpl.logRecvInitialMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID, socketAddress);
+    sinkWriterImpl.logRecvInitialMetadata(
+        /*seq=*/ 1,
+        /*methodName=*/ null,
+        /*timeout=*/ null,
+        nonEmptyMetadata,
+        IS_CLIENT,
+        CALL_ID,
+        socketAddress);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_INITIAL_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -587,9 +667,10 @@ public final class BinlogHelperTest {
 
   @Test
   public void logTrailingMetadata_server() throws Exception {
-    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_SERVER, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(/*seq=*/ 1, nonEmptyMetadata, IS_SERVER, CALL_ID);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -598,9 +679,10 @@ public final class BinlogHelperTest {
 
   @Test
   public void logTrailingMetadata_client() throws Exception {
-    sinkWriterImpl.logTrailingMetadata(nonEmptyMetadata, IS_CLIENT, CALL_ID);
+    sinkWriterImpl.logTrailingMetadata(/*seq=*/ 1, nonEmptyMetadata, IS_CLIENT, CALL_ID);
     verify(sink).write(
         metadataToProtoTestHelper(nonEmptyMetadata, 10).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_TRAILING_METADATA)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -610,18 +692,20 @@ public final class BinlogHelperTest {
   @Test
   public void logOutboundMessage_server() throws Exception {
     sinkWriterImpl.logOutboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_COMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
             .build());
 
     sinkWriterImpl.logOutboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_UNCOMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -632,18 +716,20 @@ public final class BinlogHelperTest {
   @Test
   public void logOutboundMessage_client() throws Exception {
     sinkWriterImpl.logOutboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_COMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
             .build());
 
     sinkWriterImpl.logOutboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_UNCOMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.SEND_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -654,18 +740,20 @@ public final class BinlogHelperTest {
   @Test
   public void logInboundMessage_server() throws Exception {
     sinkWriterImpl.logInboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_SERVER, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_COMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
             .build());
 
     sinkWriterImpl.logInboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_SERVER, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_UNCOMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.SERVER)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -676,18 +764,20 @@ public final class BinlogHelperTest {
   @Test
   public void logInboundMessage_client() throws Exception {
     sinkWriterImpl.logInboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_COMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_COMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
             .build());
 
     sinkWriterImpl.logInboundMessage(
-        BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
+        /*seq=*/ 1, BYTEARRAY_MARSHALLER, message, IS_UNCOMPRESSED, IS_CLIENT, CALL_ID);
     verify(sink).write(
         messageToProtoTestHelper(message, IS_UNCOMPRESSED, MESSAGE_LIMIT).toBuilder()
+            .setSequenceIdWithinCall(1)
             .setType(GrpcLogEntry.Type.RECV_MESSAGE)
             .setLogger(GrpcLogEntry.Logger.CLIENT)
             .setCallId(BinlogHelper.callIdToProto(CALL_ID))
@@ -701,6 +791,107 @@ public final class BinlogHelperTest {
     assertSame(
         peer,
         getPeerSocket(Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, peer).build()));
+  }
+
+  @Test
+  @SuppressWarnings({"unchecked"})
+  public void clientDeadlineLogged_deadlineSetViaCallOption() {
+    MethodDescriptor<byte[], byte[]> method =
+        MethodDescriptor.<byte[], byte[]>newBuilder()
+            .setType(MethodType.UNKNOWN)
+            .setFullMethodName("service/method")
+            .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+            .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+            .build();
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+
+    ClientCall<byte[], byte[]> call =
+        new BinlogHelper(mockSinkWriter)
+            .getClientInterceptor(CALL_ID)
+            .interceptCall(
+                method,
+                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
+                new Channel() {
+                  @Override
+                  public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                      MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+                      CallOptions callOptions) {
+                    return new NoopClientCall<RequestT, ResponseT>();
+                  }
+
+                  @Override
+                  public String authority() {
+                    return null;
+                  }
+                });
+    call.start(mockListener, new Metadata());
+    ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
+    verify(mockSinkWriter).logSendInitialMetadata(
+        any(Integer.class),
+        any(String.class),
+        callOptTimeoutCaptor.capture(),
+        any(Metadata.class),
+        any(Boolean.class),
+        any(CallId.class));
+    Duration timeout = callOptTimeoutCaptor.getValue();
+    assertThat(TimeUnit.SECONDS.toNanos(1) - timeout.getNanos())
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
+  }
+
+  @Test
+  @SuppressWarnings({"unchecked"})
+  public void clientDeadlineLogged_deadlineSetViaContext() throws Exception {
+    // important: deadline is read from the ctx where call was created
+    final SettableFuture<ClientCall<byte[], byte[]>> callFuture = SettableFuture.create();
+    Context.current()
+        .withDeadline(
+            Deadline.after(1, TimeUnit.SECONDS), Executors.newSingleThreadScheduledExecutor())
+        .run(new Runnable() {
+          @Override
+          public void run() {
+            MethodDescriptor<byte[], byte[]> method =
+                MethodDescriptor.<byte[], byte[]>newBuilder()
+                    .setType(MethodType.UNKNOWN)
+                    .setFullMethodName("service/method")
+                    .setRequestMarshaller(BYTEARRAY_MARSHALLER)
+                    .setResponseMarshaller(BYTEARRAY_MARSHALLER)
+                    .build();
+
+            callFuture.set(new BinlogHelper(mockSinkWriter)
+                .getClientInterceptor(CALL_ID)
+                .interceptCall(
+                    method,
+                    CallOptions.DEFAULT.withOption(
+                        BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID)
+                        .withDeadlineAfter(1, TimeUnit.SECONDS),
+                    new Channel() {
+                      @Override
+                      public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
+                          MethodDescriptor<RequestT, ResponseT> methodDescriptor,
+                          CallOptions callOptions) {
+                        return new NoopClientCall<RequestT, ResponseT>();
+                      }
+
+                      @Override
+                      public String authority() {
+                        return null;
+                      }
+                    }));
+          }
+        });
+    ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
+    callFuture.get().start(mockListener, new Metadata());
+    ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
+    verify(mockSinkWriter).logSendInitialMetadata(
+        any(Integer.class),
+        any(String.class),
+        callOptTimeoutCaptor.capture(),
+        any(Metadata.class),
+        any(Boolean.class),
+        any(CallId.class));
+    Duration timeout = callOptTimeoutCaptor.getValue();
+    assertThat(TimeUnit.SECONDS.toNanos(1) - timeout.getNanos())
+        .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
   }
 
   @Test
@@ -755,19 +946,25 @@ public final class BinlogHelperTest {
             .getClientInterceptor(CALL_ID)
             .interceptCall(
                 method,
-                CallOptions.DEFAULT.withOption(
-                    BinaryLogProvider.CLIENT_CALL_ID_CALLOPTION_KEY, CALL_ID),
+                CallOptions.DEFAULT.withDeadlineAfter(1, TimeUnit.SECONDS),
                 channel);
 
     // send initial metadata
     {
       Metadata clientInitial = new Metadata();
       interceptedCall.start(mockListener, clientInitial);
+      ArgumentCaptor<Duration> timeoutCaptor = ArgumentCaptor.forClass(Duration.class);
       verify(mockSinkWriter).logSendInitialMetadata(
+          /*seq=*/ eq(1),
+          eq("service/method"),
+          timeoutCaptor.capture(),
           same(clientInitial),
           eq(IS_CLIENT),
           same(CALL_ID));
       verifyNoMoreInteractions(mockSinkWriter);
+      Duration timeout = timeoutCaptor.getValue();
+      assertThat(TimeUnit.SECONDS.toNanos(1) - timeout.getNanos())
+          .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
       assertSame(clientInitial, actualClientInitial.get());
     }
 
@@ -775,7 +972,11 @@ public final class BinlogHelperTest {
     {
       Metadata serverInitial = new Metadata();
       interceptedListener.get().onHeaders(serverInitial);
-      verify(mockSinkWriter).logRecvInitialMetadata(same(serverInitial),
+      verify(mockSinkWriter).logRecvInitialMetadata(
+          /*seq=*/ eq(2),
+          isNull(String.class),
+          isNull(Duration.class),
+          same(serverInitial),
           eq(IS_CLIENT),
           same(CALL_ID),
           same(peer));
@@ -788,6 +989,7 @@ public final class BinlogHelperTest {
       byte[] request = "this is a request".getBytes(US_ASCII);
       interceptedCall.sendMessage(request);
       verify(mockSinkWriter).logOutboundMessage(
+          /*seq=*/ eq(3),
           same(BYTEARRAY_MARSHALLER),
           same(request),
           eq(BinlogHelper.DUMMY_IS_COMPRESSED),
@@ -802,6 +1004,7 @@ public final class BinlogHelperTest {
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedListener.get().onMessage(response);
       verify(mockSinkWriter).logInboundMessage(
+          /*seq=*/ eq(4),
           same(BYTEARRAY_MARSHALLER),
           eq(response),
           eq(BinlogHelper.DUMMY_IS_COMPRESSED),
@@ -818,6 +1021,7 @@ public final class BinlogHelperTest {
 
       interceptedListener.get().onClose(status, trailers);
       verify(mockSinkWriter).logTrailingMetadata(
+          /*seq=*/ eq(5),
           same(trailers),
           eq(IS_CLIENT),
           same(CALL_ID));
@@ -842,6 +1046,7 @@ public final class BinlogHelperTest {
     // begin call and receive initial metadata
     {
       Metadata clientInitial = new Metadata();
+      clientInitial.put(GrpcUtil.TIMEOUT_KEY, TimeUnit.MILLISECONDS.toNanos(1234));
       final MethodDescriptor<byte[], byte[]> method =
           MethodDescriptor.<byte[], byte[]>newBuilder()
               .setType(MethodType.UNKNOWN)
@@ -894,6 +1099,9 @@ public final class BinlogHelperTest {
                     }
                   });
       verify(mockSinkWriter).logRecvInitialMetadata(
+          /*seq=*/ eq(1),
+          eq("service/method"),
+          eq(Durations.fromMillis(1234)),
           same(clientInitial),
           eq(IS_SERVER),
           same(CALL_ID),
@@ -906,6 +1114,9 @@ public final class BinlogHelperTest {
       Metadata serverInital = new Metadata();
       interceptedCall.get().sendHeaders(serverInital);
       verify(mockSinkWriter).logSendInitialMetadata(
+          /*seq=*/ eq(2),
+          isNull(String.class),
+          isNull(Duration.class),
           same(serverInital),
           eq(IS_SERVER),
           same(CALL_ID));
@@ -918,6 +1129,7 @@ public final class BinlogHelperTest {
       byte[] request = "this is a request".getBytes(US_ASCII);
       capturedListener.onMessage(request);
       verify(mockSinkWriter).logInboundMessage(
+          /*seq=*/ eq(3),
           same(BYTEARRAY_MARSHALLER),
           same(request),
           eq(BinlogHelper.DUMMY_IS_COMPRESSED),
@@ -932,6 +1144,7 @@ public final class BinlogHelperTest {
       byte[] response = "this is a response".getBytes(US_ASCII);
       interceptedCall.get().sendMessage(response);
       verify(mockSinkWriter).logOutboundMessage(
+          /*seq=*/ eq(4),
           same(BYTEARRAY_MARSHALLER),
           same(response),
           eq(BinlogHelper.DUMMY_IS_COMPRESSED),
@@ -947,6 +1160,7 @@ public final class BinlogHelperTest {
       Metadata trailers = new Metadata();
       interceptedCall.get().close(status, trailers);
       verify(mockSinkWriter).logTrailingMetadata(
+          /*seq=*/ eq(5),
           same(trailers),
           eq(IS_SERVER),
           same(CALL_ID));

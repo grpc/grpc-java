@@ -2,20 +2,20 @@ apply plugin: 'com.android.application'
 apply plugin: 'com.google.protobuf'
 
 android {
-sourceSets {
-    main {
-        java {
-            srcDirs += "${projectDir}/../../interop-testing/src/main/java/"
-            setIncludes(["io/grpc/android/integrationtest/**",
-                         "io/grpc/testing/integration/AbstractInteropTest.java",
-                         "io/grpc/testing/integration/TestServiceImpl.java",
-                         "io/grpc/testing/integration/Util.java"])
-        }
-        proto {
-            srcDirs += "${projectDir}/../../interop-testing/src/main/proto/"
+    sourceSets {
+        main {
+            java {
+                srcDirs += "${projectDir}/../../interop-testing/src/main/java/"
+                setIncludes(["io/grpc/android/integrationtest/**",
+                             "io/grpc/testing/integration/AbstractInteropTest.java",
+                             "io/grpc/testing/integration/TestServiceImpl.java",
+                             "io/grpc/testing/integration/Util.java"])
+            }
+            proto {
+                srcDirs += "${projectDir}/../../interop-testing/src/main/proto/"
+            }
         }
     }
-}
     compileSdkVersion 26
 
     defaultConfig {
@@ -29,29 +29,20 @@ sourceSets {
         multiDexEnabled true
     }
     buildTypes {
-        debug {
-            minifyEnabled false
-        }
+        debug { minifyEnabled false }
         release {
             minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
-    lintOptions {
-        disable 'InvalidPackage', 'HardcodedText'
-    }
+    lintOptions { disable 'InvalidPackage', 'HardcodedText' }
 }
 
 protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.5.1-1'
-    }
+    protoc { artifact = 'com.google.protobuf:protoc:3.5.1-1' }
     plugins {
-        javalite {
-            artifact = "com.google.protobuf:protoc-gen-javalite:3.0.0"
-        }
-        grpc {
-            artifact = 'io.grpc:protoc-gen-grpc-java:1.14.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+        javalite { artifact = "com.google.protobuf:protoc-gen-javalite:3.0.0" }
+        grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.14.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
@@ -91,4 +82,8 @@ dependencies {
 
     androidTestImplementation 'com.android.support.test:rules:1.0.1'
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
+}
+
+gradle.projectsEvaluated {
+    tasks.withType(JavaCompile) { options.compilerArgs << "-Xlint:deprecation" }
 }
