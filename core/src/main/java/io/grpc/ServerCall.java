@@ -17,7 +17,6 @@
 package io.grpc;
 
 import com.google.errorprone.annotations.DoNotMock;
-import io.grpc.internal.ServerStream;
 import javax.annotation.Nullable;
 
 /**
@@ -190,15 +189,16 @@ public abstract class ServerCall<ReqT, RespT> {
   }
 
   /**
-   * Defers flushing the messages written using {@link #sendMessage(Object)} to the
-   * transport until the write buffer is full. The amount of data buffered while corked is
-   * dependent on the transport implementation so users of this API should not make strong
-   * assumptions about how long data is buffered while corked.
+   * Defers flushing the messages written using {@link #sendMessage(Object)} until the cork is
+   * closed or as necessary to prevent excessive buffering. The amount of data buffered while
+   * corked is dependent on the transport implementation so users of this API should not make
+   * strong assumptions about how long data is buffered while corked.
    *
    * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
    * the underlying network.
    *
-   * <p>The {@link ServerStream#flush()} is being deferred until all opened corks are closed.
+   * <p>In case of multiple {@link Cork}s being open, all of them need to be closed in order to
+   * trigger flushing.
    *
    * @since 1.14.0
    */
