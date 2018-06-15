@@ -74,14 +74,6 @@ public final class ProtoLiteUtils {
     globalRegistry = checkNotNull(newRegistry, "newRegistry");
   }
 
-  private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<Reference<byte[]>>() {
-
-    @Override
-    protected Reference<byte[]> initialValue() {
-      return new WeakReference<byte[]>(new byte[4096]); // Picked at random.
-    }
-  };
-
   /**
    * Creates a {@link Marshaller} for protos of the same type as {@code defaultInstance}.
    *
@@ -99,7 +91,7 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Metadata.BinaryMarshaller<T> metadataMarshaller(
       T defaultInstance) {
-    return new ProtobufLiteMetadataMarshaller(defaultInstance);
+    return new ProtobufLiteMetadataMarshaller<T>(defaultInstance);
   }
 
   /** Copies the data from input stream to output stream. */
@@ -125,6 +117,7 @@ public final class ProtoLiteUtils {
 
   private static final class ProtobufLiteMessageMarshaller<T extends MessageLite>
       implements PrototypeMarshaller<T> {
+    private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<Reference<byte[]>>();
 
     private final Parser<T> parser;
     private final T defaultInstance;
@@ -181,9 +174,10 @@ public final class ProtoLiteUtils {
         if (stream instanceof KnownLength) {
           int size = stream.available();
           if (size > 0 && size <= DEFAULT_MAX_MESSAGE_SIZE) {
+            Reference<byte[]> ref;
             // buf should not be used after this method has returned.
-            byte[] buf = bufs.get().get();
-            if (buf == null || buf.length < size) {
+            byte[] buf;
+            if ((ref = bufs.get()) == null || (buf = ref.get()) == null || buf.length < size) {
               buf = new byte[size];
               bufs.set(new WeakReference<byte[]>(buf));
             }
