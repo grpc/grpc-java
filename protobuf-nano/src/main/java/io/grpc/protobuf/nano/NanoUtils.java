@@ -30,13 +30,17 @@ import java.io.OutputStream;
 /**
  * Utility methods for using nano proto with grpc.
  */
-public class NanoUtils {
+public final class NanoUtils {
 
   private static final int BUF_SIZE = 8192;
 
   private NanoUtils() {}
 
-  /** Adapt {@code parser} to a {@code Marshaller}. */
+  /**
+   * Adapt {@code parser} to a {@link Marshaller}.
+   *
+   * @since 1.0.0
+   */
   public static <T extends MessageNano> Marshaller<T> marshaller(
       final MessageNanoFactory<T> factory) {
     return new Marshaller<T>() {
