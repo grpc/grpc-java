@@ -39,7 +39,7 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public class InteropInstrumentationTest {
   private static final int TIMEOUT_SECONDS = 10;
-  private static String LOG_TAG = "GrpcInteropInstrumentationTest";
+  private static final String LOG_TAG = "GrpcInteropInstrumentationTest";
 
   private String host;
   private int port;
@@ -52,7 +52,7 @@ public class InteropInstrumentationTest {
   // AsyncTask throws an exception.
   @Rule
   public ActivityTestRule<TesterActivity> activityRule =
-      new ActivityTestRule(TesterActivity.class);
+      new ActivityTestRule<TesterActivity>(TesterActivity.class);
 
   @Before
   public void setUp() throws Exception {
