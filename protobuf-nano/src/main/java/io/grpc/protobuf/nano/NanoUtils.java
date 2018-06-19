@@ -40,16 +40,15 @@ public final class NanoUtils {
    * @since 1.0.0
    */
   public static <T extends MessageNano> Marshaller<T> marshaller(MessageNanoFactory<T> factory) {
-    return new ProtobufNanoMessageMarshaller<T>(factory);
+    return new MessageMarshaller<T>(factory);
   }
 
-  private static final class ProtobufNanoMessageMarshaller<T extends MessageNano>
-      implements Marshaller<T> {
+  private static final class MessageMarshaller<T extends MessageNano> implements Marshaller<T> {
     private static final int BUF_SIZE = 8192;
 
     private final MessageNanoFactory<T> factory;
 
-    ProtobufNanoMessageMarshaller(MessageNanoFactory<T> factory) {
+    MessageMarshaller(MessageNanoFactory<T> factory) {
       this.factory = factory;
     }
 

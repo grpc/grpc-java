@@ -81,7 +81,7 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Marshaller<T> marshaller(T defaultInstance) {
     // TODO(ejona): consider changing return type to PrototypeMarshaller (assuming ABI safe)
-    return new ProtobufLiteMessageMarshaller<T>(defaultInstance);
+    return new MessageMarshaller<T>(defaultInstance);
   }
 
   /**
@@ -91,7 +91,7 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Metadata.BinaryMarshaller<T> metadataMarshaller(
       T defaultInstance) {
-    return new ProtobufLiteMetadataMarshaller<T>(defaultInstance);
+    return new MetadataMarshaller<T>(defaultInstance);
   }
 
   /** Copies the data from input stream to output stream. */
@@ -115,7 +115,7 @@ public final class ProtoLiteUtils {
   private ProtoLiteUtils() {
   }
 
-  private static final class ProtobufLiteMessageMarshaller<T extends MessageLite>
+  private static final class MessageMarshaller<T extends MessageLite>
       implements PrototypeMarshaller<T> {
     private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<Reference<byte[]>>();
 
@@ -123,7 +123,7 @@ public final class ProtoLiteUtils {
     private final T defaultInstance;
 
     @SuppressWarnings("unchecked")
-    ProtobufLiteMessageMarshaller(T defaultInstance) {
+    MessageMarshaller(T defaultInstance) {
       this.defaultInstance = defaultInstance;
       parser = (Parser<T>) defaultInstance.getParserForType();
     }
@@ -231,12 +231,12 @@ public final class ProtoLiteUtils {
     }
   }
 
-  private static final class ProtobufLiteMetadataMarshaller<T extends MessageLite>
+  private static final class MetadataMarshaller<T extends MessageLite>
       implements Metadata.BinaryMarshaller<T> {
 
     private final T defaultInstance;
 
-    ProtobufLiteMetadataMarshaller(T defaultInstance) {
+    MetadataMarshaller(T defaultInstance) {
       this.defaultInstance = defaultInstance;
     }
 
