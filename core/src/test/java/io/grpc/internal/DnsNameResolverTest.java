@@ -238,11 +238,6 @@ public class DnsNameResolverTest {
         assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
         return Collections.singletonList(balancerAddr);
       }
-
-      @Override
-      public Throwable unavailabilityCause() {
-        throw new AssertionError();
-      }
     };
 
     ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
@@ -275,11 +270,6 @@ public class DnsNameResolverTest {
           throws Exception {
         assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
         return Collections.singletonList(balancerAddr);
-      }
-
-      @Override
-      public Throwable unavailabilityCause() {
-        throw new AssertionError();
       }
     };
 
@@ -316,11 +306,6 @@ public class DnsNameResolverTest {
         assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
         throw new Exception("something like javax.naming.NamingException");
       }
-
-      @Override
-      public Throwable unavailabilityCause() {
-        throw new AssertionError();
-      }
     };
 
     ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
@@ -334,17 +319,16 @@ public class DnsNameResolverTest {
     ClassLoader cl = new ClassLoader() {
       @Override
       protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if ("io.grpc.internal.JndiResourceResolver".equals(name)) {
+        if ("io.grpc.internal.JndiResourceResolverFactory".equals(name)) {
           throw new ClassNotFoundException();
         }
         return super.loadClass(name, resolve);
       }
     };
 
-    ResourceResolverFactory factory = new ResourceResolverFactory(cl);
-    ResourceResolver resolver = factory.newResourceResolver();
+    ResourceResolverFactory factory = DnsNameResolver.getResourceResolverFactory(cl);
 
-    assertThat(resolver).isNull();
+    assertThat(factory).isNull();
   }
 
   @Test

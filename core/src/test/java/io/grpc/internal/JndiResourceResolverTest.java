@@ -21,7 +21,8 @@ import static org.junit.Assert.assertEquals;
 
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
-import io.grpc.internal.JndiResourceResolver.SrvRecord;
+import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
+import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver.SrvRecord;
 import java.net.InetAddress;
 import java.util.List;
 import org.junit.Assume;
@@ -30,7 +31,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link JndiResourceResolver}.
+ * Unit tests for {@link JndiResourceResolverFactory}.
  */
 @RunWith(JUnit4.class)
 public class JndiResourceResolverTest {
@@ -48,7 +49,7 @@ public class JndiResourceResolverTest {
 
   @Test
   public void jndiResolverWorks() throws Exception {
-    Assume.assumeNoException(new JndiResourceResolver().unavailabilityCause());
+    Assume.assumeNoException(new JndiResourceResolverFactory().unavailabilityCause());
 
     AddressResolver addressResolver = new AddressResolver() {
       @Override

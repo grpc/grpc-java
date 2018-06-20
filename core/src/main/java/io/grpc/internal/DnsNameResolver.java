@@ -87,8 +87,9 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
 
-  private static ResourceResolverFactory resourceResolverFactory =
-      new ResourceResolverFactory(DnsNameResolver.class.getClassLoader());
+  private static final AtomicReference<ResourceResolverFactory> resourceResolverFactory =
+      new AtomicReference<ResourceResolverFactory>(
+          getResourceResolverFactory(DnsNameResolver.class.getClassLoader()));
 
   @VisibleForTesting
   final ProxyDetector proxyDetector;
@@ -193,12 +194,14 @@ final class DnsNameResolver extends NameResolver {
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
           }
-          if (enableJndi && resourceResolver.get() == null) {
-            resourceResolver.compareAndSet(null, resourceResolverFactory.newResourceResolver());
-          }
+
           ResolutionResults resolutionResults;
           try {
-            resolutionResults = resolveAll(addressResolver, resourceResolver.get(), host);
+            ResourceResolver resourceResolver = null;
+            if (enableJndi) {
+              resourceResolver = getResourceResolver();
+            }
+            resolutionResults = resolveAll(addressResolver, resourceResolver, host);
           } catch (Exception e) {
             savedListener.onError(
                 Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
@@ -266,74 +269,6 @@ final class DnsNameResolver extends NameResolver {
 
   final int getPort() {
     return port;
-  }
-
-  @VisibleForTesting
-  void setAddressResolver(AddressResolver addressResolver) {
-    this.addressResolver = addressResolver;
-  }
-
-  @VisibleForTesting
-  static final class ResourceResolverFactory {
-    private final Constructor<? extends ResourceResolver> jndiCtor;
-    private final Throwable jndiUnavailabilityCause;
-
-    @SuppressWarnings("unchecked")
-    ResourceResolverFactory(ClassLoader loader) {
-      Class<? extends ResourceResolver> jndiClazz;
-      Constructor<? extends ResourceResolver> jndiCtor = null;
-      Throwable jndiUnavailabilityCause = null;
-      try {
-        try {
-          jndiClazz =
-              (Class<? extends ResourceResolver>)
-                  Class.forName("io.grpc.internal.JndiResourceResolver", true, loader);
-          assert ResourceResolver.class.isAssignableFrom(jndiClazz);
-        } catch (ClassNotFoundException e) {
-          logger.log(Level.FINE, "Unable to find JndiResourceResolver, skipping.", e);
-          jndiUnavailabilityCause = e;
-          return;
-        }
-        try {
-          jndiCtor = jndiClazz.getConstructor();
-        } catch (Exception e) {
-          logger.log(Level.FINE, "Can't find JndiResourceResolver ctor, skipping.", e);
-          jndiUnavailabilityCause = e;
-          return;
-        }
-        ResourceResolver resourceResolver;
-        try {
-          resourceResolver = jndiCtor.newInstance();
-        } catch (Exception e) {
-          logger.log(Level.FINE, "Can't construct JndiResourceResolver, skipping.", e);
-          jndiUnavailabilityCause = e;
-          return;
-        }
-        if (resourceResolver.unavailabilityCause() != null) {
-          logger.log(
-              Level.FINE,
-              "JndiResourceResolver not available, skipping.",
-              resourceResolver.unavailabilityCause());
-          jndiUnavailabilityCause = resourceResolver.unavailabilityCause();
-          return;
-        }
-      } finally {
-        this.jndiCtor = jndiCtor;
-        this.jndiUnavailabilityCause = jndiUnavailabilityCause;
-      }
-    }
-
-    @Nullable
-    ResourceResolver newResourceResolver() {
-      if (jndiUnavailabilityCause != null) {
-        return null;
-      }
-      try {
-        return jndiCtor.newInstance();
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
   }
 
   @VisibleForTesting
@@ -518,6 +453,17 @@ final class DnsNameResolver extends NameResolver {
     }
   }
 
+  @VisibleForTesting
+  void setAddressResolver(AddressResolver addressResolver) {
+    this.addressResolver = addressResolver;
+  }
+
+  interface ResourceResolverFactory {
+    @Nullable ResourceResolver newResourceResolver();
+
+    @Nullable Throwable unavailabilityCause();
+  }
+
   /**
    * AddressResolver resolves a hostname into a list of addresses.
    */
@@ -542,8 +488,55 @@ final class DnsNameResolver extends NameResolver {
 
     List<EquivalentAddressGroup> resolveSrv(
         AddressResolver addressResolver, String host) throws Exception;
+  }
 
-    Throwable unavailabilityCause();
+  private ResourceResolver getResourceResolver() {
+    ResourceResolver rr;
+    if ((rr = resourceResolver.get()) == null) {
+      ResourceResolverFactory rrf = resourceResolverFactory.get();
+      if (rrf != null) {
+        assert rrf.unavailabilityCause() == null;
+        rr = rrf.newResourceResolver();
+      }
+    }
+    return rr;
+  }
+
+  @Nullable
+  @SuppressWarnings("unchecked")
+  @VisibleForTesting
+  static ResourceResolverFactory getResourceResolverFactory(ClassLoader loader) {
+    Class<? extends ResourceResolverFactory> jndiClazz;
+    try {
+      jndiClazz =
+          (Class<? extends ResourceResolverFactory>)
+              Class.forName("io.grpc.internal.JndiResourceResolverFactory", true, loader);
+      assert ResourceResolverFactory.class.isAssignableFrom(jndiClazz);
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find JndiResourceResolverFactory, skipping.", e);
+      return null;
+    }
+    Constructor<? extends ResourceResolverFactory> jndiCtor;
+    try {
+      jndiCtor = jndiClazz.getConstructor();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Can't find JndiResourceResolverFactory ctor, skipping.", e);
+      return null;
+    }
+    ResourceResolverFactory rrf;
+    try {
+      rrf = jndiCtor.newInstance();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Can't construct JndiResourceResolverFactory, skipping.", e);
+      return null;
+    }
+    if (rrf.unavailabilityCause() != null) {
+      logger.log(
+          Level.FINE,
+          "JndiResourceResolverFactory not available, skipping.",
+          rrf.unavailabilityCause());
+    }
+    return rrf;
   }
 
   private static String getLocalHostname() {
