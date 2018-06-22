@@ -126,8 +126,8 @@ def com_google_code_findbugs_jsr305():
 def com_google_code_gson():
   native.maven_jar(
       name = "com_google_code_gson_gson",
-      artifact = "com.google.code.gson:gson:jar:2.7",
-      sha1 = "751f548c85fa49f330cecbb1875893f971b33c4e",
+      artifact = "com.google.code.gson:gson:jar:2.8.5",
+      sha1 = "f645ed69d595b24d4cf8b3fbb64cc505bede8829",
   )
 
 def com_google_errorprone_error_prone_annotations():
