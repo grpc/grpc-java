@@ -79,6 +79,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1031,6 +1032,11 @@ public class ServerImplTest {
   public void getPort() throws Exception {
     transportServer = new SimpleServer() {
       @Override
+      public InetSocketAddress mainAddress() {
+        return new InetSocketAddress("localhost", 65535);
+      }
+
+      @Override
       public int getPort() {
         return 65535;
       }
@@ -1353,6 +1359,11 @@ public class ServerImplTest {
     @Override
     public void start(ServerListener listener) throws IOException {
       this.listener = listener;
+    }
+
+    @Override
+    public InetSocketAddress mainAddress() {
+      return null;
     }
 
     @Override

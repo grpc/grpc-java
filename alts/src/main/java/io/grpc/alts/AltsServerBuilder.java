@@ -203,6 +203,11 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
     }
 
     @Override
+    public InetSocketAddress mainAddress() {
+      return delegate.mainAddress();
+    }
+
+    @Override
     public int getPort() {
       return delegate.getPort();
     }
