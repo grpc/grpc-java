@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -37,6 +38,16 @@ public abstract class Server {
    * @since 1.0.0
    */
   public abstract Server start() throws IOException;
+
+  /**
+   * Returns the address the server is listening on.  This can return null if there is no actual
+   * address or the result otherwise does not make sense.  Result is undefined after the server is
+   * terminated.
+   *
+   * @throws IllegalStateException if the server has not yet been started.
+   * @since 1.0.0
+   */
+  public abstract InetSocketAddress mainAddress();
 
   /**
    * Returns the port number the server is listening on.  This can return -1 if there is no actual

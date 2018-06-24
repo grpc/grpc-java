@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.internal.Channelz.SocketStats;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.List;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -43,6 +44,12 @@ public interface InternalServer {
    * method may only be called once.
    */
   void shutdown();
+
+  /**
+   * Returns what underlying address the server is listening on, or null if the address is not
+   * available or does not make sense.
+   */
+  InetSocketAddress mainAddress();
 
   /**
    * Returns what underlying port the server is listening on, or -1 if the port number is not

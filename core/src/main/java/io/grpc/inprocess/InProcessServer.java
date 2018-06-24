@@ -27,6 +27,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,6 +73,11 @@ final class InProcessServer implements InternalServer {
     if (registry.putIfAbsent(name, this) != null) {
       throw new IOException("name already registered: " + name);
     }
+  }
+
+  @Override
+  public InetSocketAddress mainAddress() {
+    return null;
   }
 
   @Override

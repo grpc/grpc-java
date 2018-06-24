@@ -135,15 +135,21 @@ class NettyServer implements InternalServer, WithLogId {
   }
 
   @Override
-  public int getPort() {
+  public InetSocketAddress mainAddress() {
     if (channel == null) {
-      return -1;
+      return null;
     }
     SocketAddress localAddr = channel.localAddress();
     if (!(localAddr instanceof InetSocketAddress)) {
-      return -1;
+      return null;
     }
-    return ((InetSocketAddress) localAddr).getPort();
+    return (InetSocketAddress) localAddr;
+  }
+
+  @Override
+  public int getPort() {
+    InetSocketAddress mainAddress = mainAddress();
+    return mainAddress != null ? mainAddress.getPort() : -1;
   }
 
   @Override

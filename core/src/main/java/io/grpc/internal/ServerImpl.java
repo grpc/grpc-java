@@ -48,6 +48,7 @@ import io.grpc.Status;
 import io.grpc.internal.Channelz.ServerStats;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -168,12 +169,18 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
   }
 
   @Override
-  public int getPort() {
+  public InetSocketAddress mainAddress() {
     synchronized (lock) {
       checkState(started, "Not started");
       checkState(!terminated, "Already terminated");
-      return transportServer.getPort();
+      return transportServer.mainAddress();
     }
+  }
+
+  @Override
+  public int getPort() {
+    InetSocketAddress mainAddress = mainAddress();
+    return mainAddress != null ? mainAddress.getPort() : -1;
   }
 
   @Override
