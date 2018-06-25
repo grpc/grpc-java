@@ -83,9 +83,10 @@ final class BinlogHelper {
   private static final Logger logger = Logger.getLogger(BinlogHelper.class.getName());
   private static final boolean SERVER = true;
   private static final boolean CLIENT = false;
-  // This is a special key that is set from above the application API,
-  // despite having a 'grpc-' prefix. Normally 'grpc-' metadata keys are set from within
-  // gRPC.
+  // Normally 'grpc-' metadata keys are set from within gRPC, and applications are not allowed
+  // to set them. This key is a special well known key that set from the application layer, but
+  // represents a com.google.rpc.Status and is given special first class treatment.
+  // See StatusProto.java
   static final Metadata.Key<byte[]> STATUS_DETAILS_KEY =
       Metadata.Key.of(
           "grpc-status-details-bin",
