@@ -53,7 +53,7 @@ public class JndiResourceResolverTest {
 
     AddressResolver addressResolver = new AddressResolver() {
       @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
+      public List<InetAddress> resolveAddress(String host) throws Exception {
         return null;
       }
     };

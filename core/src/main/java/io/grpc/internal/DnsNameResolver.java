@@ -87,9 +87,8 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
 
-  private static final AtomicReference<ResourceResolverFactory> resourceResolverFactory =
-      new AtomicReference<ResourceResolverFactory>(
-          getResourceResolverFactory(DnsNameResolver.class.getClassLoader()));
+  private static final ResourceResolverFactory resourceResolverFactory =
+      getResourceResolverFactory(DnsNameResolver.class.getClassLoader());
 
   @VisibleForTesting
   final ProxyDetector proxyDetector;
@@ -458,9 +457,22 @@ final class DnsNameResolver extends NameResolver {
     this.addressResolver = addressResolver;
   }
 
+  /**
+   * {@link ResourceResolverFactory} is a factory for making resource resolvers.  It supports
+   * optionally checking if the factory is available.
+   */
   interface ResourceResolverFactory {
+
+    /**
+     * Creates a new resource resolver.  The return value is {@code null} iff
+     * {@link #unavailabilityCause()} is not null;
+     */
     @Nullable ResourceResolver newResourceResolver();
 
+    /**
+     * Returns the reason why the resource resolver cannot be created.  The return value is
+     * {@code null} if {@link #newResourceResolver()} is suitable for use.
+     */
     @Nullable Throwable unavailabilityCause();
   }
 
@@ -468,20 +480,20 @@ final class DnsNameResolver extends NameResolver {
    * AddressResolver resolves a hostname into a list of addresses.
    */
   interface AddressResolver {
-    List<? extends InetAddress> resolveAddress(String host) throws Exception;
+    List<InetAddress> resolveAddress(String host) throws Exception;
   }
 
   private enum JdkAddressResolver implements AddressResolver {
     INSTANCE;
 
     @Override
-    public List<? extends InetAddress> resolveAddress(String host) throws UnknownHostException {
+    public List<InetAddress> resolveAddress(String host) throws UnknownHostException {
       return Collections.unmodifiableList(Arrays.asList(InetAddress.getAllByName(host)));
     }
   }
 
   /**
-   * RRResolver is a Dns ResourceRecord resolver.
+   * {@link ResourceResolver} is a Dns ResourceRecord resolver.
    */
   interface ResourceResolver {
     List<String> resolveTxt(String host) throws Exception;
@@ -490,13 +502,13 @@ final class DnsNameResolver extends NameResolver {
         AddressResolver addressResolver, String host) throws Exception;
   }
 
+  @Nullable
   private ResourceResolver getResourceResolver() {
     ResourceResolver rr;
     if ((rr = resourceResolver.get()) == null) {
-      ResourceResolverFactory rrf = resourceResolverFactory.get();
-      if (rrf != null) {
-        assert rrf.unavailabilityCause() == null;
-        rr = rrf.newResourceResolver();
+      if (resourceResolverFactory != null) {
+        assert resourceResolverFactory.unavailabilityCause() == null;
+        rr = resourceResolverFactory.newResourceResolver();
       }
     }
     return rr;

@@ -64,6 +64,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -161,20 +162,10 @@ public class DnsNameResolverTest {
     String name = "foo.googleapis.com";
 
     DnsNameResolver resolver = newResolver(name, 81);
-    resolver.setAddressResolver(new AddressResolver() {
-      int invocation;
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
+    resolver.setAddressResolver(mockResolver);
 
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        invocation++;
-        if (invocation == 1) {
-          return answer1;
-        } else if (invocation == 2) {
-          return answer2;
-        }
-        throw new AssertionError();
-      }
-    });
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
@@ -188,130 +179,97 @@ public class DnsNameResolverTest {
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.shutdown();
+
+    verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
   }
 
   @Test
-  public void resolveAll_nullResourceResolver() {
+  public void resolveAll_nullResourceResolver() throws Exception {
     final String hostname = "addr.fake";
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
-    AddressResolver addressResolver = new AddressResolver() {
 
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        assertThat(host).isEqualTo(hostname);
-        return Collections.singletonList(backendAddr);
-      }
-    };
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString()))
+        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
     ResourceResolver resourceResolver = null;
 
-    ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
+    ResolutionResults res = DnsNameResolver.resolveAll(mockResolver, resourceResolver, hostname);
     assertThat(res.addresses).containsExactly(backendAddr);
     assertThat(res.balancerAddresses).isEmpty();
     assertThat(res.txtRecords).isEmpty();
+    verify(mockResolver).resolveAddress(hostname);
   }
 
   @Test
-  public void resolveAll_presentResourceResolver() {
+  public void resolveAll_presentResourceResolver() throws Exception {
     final String hostname = "addr.fake";
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
     final EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
-    final AddressResolver addressResolver = new AddressResolver() {
 
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        assertThat(host).isEqualTo(hostname);
-        return Collections.singletonList(backendAddr);
-      }
-    };
-    ResourceResolver resourceResolver = new ResourceResolver() {
-      @Override
-      public List<String> resolveTxt(String host) throws Exception {
-        // Not using the constant to make sure the correct prefix is used.
-        assertThat(host).isEqualTo("_grpc_config." + hostname);
-        return Collections.singletonList("service config");
-      }
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+        .thenReturn(Collections.singletonList("service config"));
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+        .thenReturn(Collections.singletonList(balancerAddr));
 
-      @Override
-      public List<EquivalentAddressGroup> resolveSrv(AddressResolver addressResolver, String host)
-          throws Exception {
-        // Not using the constant to make sure the correct prefix is used.
-        assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
-        return Collections.singletonList(balancerAddr);
-      }
-    };
-
-    ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
+    ResolutionResults res =
+        DnsNameResolver.resolveAll(mockAddressResolver, mockResourceResolver, hostname);
     assertThat(res.addresses).containsExactly(backendAddr);
     assertThat(res.balancerAddresses).containsExactly(balancerAddr);
     assertThat(res.txtRecords).containsExactly("service config");
+    verify(mockAddressResolver).resolveAddress(hostname);
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
+    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
   }
 
   @Test
-  public void resolveAll_onlyBalancers() {
-    final String hostname = "addr.fake";
-    final EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
-    final AddressResolver addressResolver = new AddressResolver() {
+  public void resolveAll_onlyBalancers() throws Exception {
+    String hostname = "addr.fake";
+    EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
 
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        assertThat(host).isEqualTo(hostname);
-        throw new UnknownHostException("I really tried");
-      }
-    };
-    ResourceResolver resourceResolver = new ResourceResolver() {
-      @Override
-      public List<String> resolveTxt(String host) {
-        assertThat(host).isEqualTo("_grpc_config." + hostname);
-        return Collections.emptyList();
-      }
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+        .thenThrow(new UnknownHostException("I really tried"));
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+        .thenReturn(Collections.<String>emptyList());
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+        .thenReturn(Collections.singletonList(balancerAddr));
 
-      @Override
-      public List<EquivalentAddressGroup> resolveSrv(AddressResolver addressResolver, String host)
-          throws Exception {
-        assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
-        return Collections.singletonList(balancerAddr);
-      }
-    };
-
-    ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
+    ResolutionResults res =
+        DnsNameResolver.resolveAll(mockAddressResolver, mockResourceResolver, hostname);
     assertThat(res.addresses).isEmpty();
     assertThat(res.balancerAddresses).containsExactly(balancerAddr);
     assertThat(res.txtRecords).isEmpty();
+    verify(mockAddressResolver).resolveAddress(hostname);
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
+    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
   }
 
   @Test
-  public void resolveAll_balancerLookupFails() {
+  public void resolveAll_balancerLookupFails() throws Exception {
     final String hostname = "addr.fake";
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
-    final AddressResolver addressResolver = new AddressResolver() {
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+        .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
+    ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
+    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+        .thenReturn(Collections.singletonList("service config"));
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+        .thenThrow(new Exception("something like javax.naming.NamingException"));
 
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        assertThat(host).isEqualTo(hostname);
-        return Collections.singletonList(backendAddr);
-      }
-    };
-    ResourceResolver resourceResolver = new ResourceResolver() {
-      @Override
-      public List<String> resolveTxt(String host) throws Exception {
-        // Not using the constant to make sure the correct prefix is used.
-        assertThat(host).isEqualTo("_grpc_config." + hostname);
-        return Collections.singletonList("service config");
-      }
-
-      @Override
-      public List<EquivalentAddressGroup> resolveSrv(AddressResolver addressResolver, String host)
-          throws Exception {
-        // Not using the constant to make sure the correct prefix is used.
-        assertThat(host).isEqualTo("_grpclb._tcp." + hostname);
-        throw new Exception("something like javax.naming.NamingException");
-      }
-    };
-
-    ResolutionResults res = DnsNameResolver.resolveAll(addressResolver, resourceResolver, hostname);
+    ResolutionResults res =
+        DnsNameResolver.resolveAll(mockAddressResolver, mockResourceResolver, hostname);
     assertThat(res.addresses).containsExactly(backendAddr);
     assertThat(res.balancerAddresses).isEmpty();
     assertThat(res.txtRecords).containsExactly("service config");
+    verify(mockAddressResolver).resolveAddress(hostname);
+    verify(mockResourceResolver).resolveTxt("_grpc_config." + hostname);
+    verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
   }
 
   @Test
@@ -343,12 +301,9 @@ public class DnsNameResolverTest {
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
         .thenReturn(proxyParameters);
     DnsNameResolver resolver = newResolver(name, port, alwaysDetectProxy);
-    resolver.setAddressResolver(new AddressResolver() {
-      @Override
-      public List<? extends InetAddress> resolveAddress(String host) throws Exception {
-        throw new AssertionError();
-      }
-    });
+    AddressResolver mockAddressResolver = mock(AddressResolver.class);
+    when(mockAddressResolver.resolveAddress(Matchers.anyString())).thenThrow(new AssertionError());
+    resolver.setAddressResolver(mockAddressResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
 
