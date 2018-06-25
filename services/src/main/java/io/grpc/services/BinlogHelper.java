@@ -119,7 +119,7 @@ final class BinlogHelper {
         CallId callId) {
       Preconditions.checkArgument(methodName == null || !isServer);
       Preconditions.checkArgument(timeout == null || !isServer);
-      // In java, we strip the leading '/'. To be consistent with the rest of gRPC we must
+      // Java does not include the leading '/'. To be consistent with the rest of gRPC we must
       // include the '/' in the fully qualified name for binlogs.
       Preconditions.checkArgument(methodName == null || !methodName.startsWith("/"));
       GrpcLogEntry.Builder entryBuilder = GrpcLogEntry.newBuilder()
@@ -148,7 +148,7 @@ final class BinlogHelper {
         SocketAddress peerSocket) {
       Preconditions.checkArgument(methodName == null || isServer);
       Preconditions.checkArgument(timeout == null || isServer);
-      // In java, we strip the leading '/'. To be consistent with the rest of gRPC we must
+      // Java does not include the leading '/'. To be consistent with the rest of gRPC we must
       // include the '/' in the fully qualified name for binlogs.
       Preconditions.checkArgument(methodName == null || !methodName.startsWith("/"));
       GrpcLogEntry.Builder entryBuilder = GrpcLogEntry.newBuilder()
