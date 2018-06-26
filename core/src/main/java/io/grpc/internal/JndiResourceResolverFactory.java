@@ -100,8 +100,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
 
     private static final Pattern whitespace = Pattern.compile("\\s+");
 
-    JndiResourceResolver() {}
-
     @Override
     public List<String> resolveTxt(String serviceConfigHostname) throws NamingException {
       checkAvailable();
