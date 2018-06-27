@@ -459,7 +459,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void createStream(CreateStreamCommand command, final ChannelPromise promise)
           throws Exception {
     if (lifecycleManager.getShutdownThrowable() != null) {
-      // The connection is going away (it is really the GO_AWAY case)
+      // The connection is going away (it is really the GOAWAY case),
       // just terminate the stream now.
       command.stream().transportReportStatus(
           lifecycleManager.getShutdownStatus(), RpcProgress.REFUSED, true, new Metadata());
