@@ -40,16 +40,21 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
+import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NoSuchElementException;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -99,6 +104,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     @VisibleForTesting
     static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.create("state-info");
+    static final Attributes.Key<Ref<PickResult>> PICK_RESULT = Attributes.Key.create("pick-result");
+    static final Attributes.Key<Ref<Subchannel>> STICKY_REF = Attributes.Key.create("sticky-ref");
 
     private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
 
@@ -141,19 +148,28 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
       // Create new subchannels for new addresses.
       for (EquivalentAddressGroup addressGroup : addedAddrs) {
+        Ref<PickResult> pickResultRef = new Ref<PickResult>(null);
         // NB(lukaszx0): we don't merge `attributes` with `subchannelAttr` because subchannel
         // doesn't need them. They're describing the resolved server list but we're not taking
         // any action based on this information.
-        Attributes subchannelAttrs = Attributes.newBuilder()
+        Attributes.Builder subchannelAttrs = Attributes.newBuilder().set(PICK_RESULT, pickResultRef)
             // NB(lukaszx0): because attributes are immutable we can't set new value for the key
-            // after creation but since we can mutate the values we leverge that and set
+            // after creation but since we can mutate the values we leverage that and set
             // AtomicReference which will allow mutating state info for given channel.
-            .set(
-                STATE_INFO, new Ref<ConnectivityStateInfo>(ConnectivityStateInfo.forNonError(IDLE)))
-            .build();
+            .set(STATE_INFO,
+                    new Ref<ConnectivityStateInfo>(ConnectivityStateInfo.forNonError(IDLE)));
 
-        Subchannel subchannel =
-            checkNotNull(helper.createSubchannel(addressGroup, subchannelAttrs), "subchannel");
+        Ref<Subchannel> stickyRef = null;
+        if (stickinessState != null) {
+          subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<Subchannel>(null));
+        }
+
+        Subchannel subchannel = checkNotNull(
+                helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
+        pickResultRef.value = PickResult.withSubchannel(subchannel);
+        if (stickyRef != null) {
+          stickyRef.value = subchannel;
+        }
         subchannels.put(addressGroup, subchannel);
         subchannel.requestConnection();
       }
@@ -275,6 +291,10 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
     }
 
+    static PickResult getSubchannelPickResult(Subchannel subchannel) {
+      return subchannel.getAttributes().get(PICK_RESULT).value;
+    }
+
     private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
       Set<T> aCopy = new HashSet<T>(a);
       aCopy.removeAll(b);
@@ -296,58 +316,69 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       static final int MAX_ENTRIES = 1000;
 
       final Key<String> key;
-      final Map<String, Ref<Subchannel>> stickinessMap =
-          new LinkedHashMap<String, Ref<Subchannel>>() {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<String,Ref<Subchannel>> eldest) {
-              return size() > MAX_ENTRIES;
-            }
-          };
+      final ConcurrentMap<String, Ref<Subchannel>> stickinessMap =
+          new ConcurrentHashMap<String, Ref<Subchannel>>();
 
-      final Map<Subchannel, Ref<Subchannel>> subchannelRefs =
-          new HashMap<Subchannel, Ref<Subchannel>>();
+      final Queue<Entry<String,Ref<Subchannel>>> lruQueue =
+              new ConcurrentLinkedQueue<Entry<String,Ref<Subchannel>>>();
 
       StickinessState(@Nonnull String stickinessKey) {
         this.key = Key.of(stickinessKey, Metadata.ASCII_STRING_MARSHALLER);
       }
 
       /**
-       * Returns the subchannel asscoicated to the stickiness value if available in both the
+       * Returns the subchannel associated to the stickiness value if available in both the
        * registry and the round robin list, otherwise associates the given subchannel with the
        * stickiness key in the registry and returns the given subchannel.
        */
       @Nonnull
-      synchronized Subchannel maybeRegister(
+      Subchannel maybeRegister(
           String stickinessValue, @Nonnull Subchannel subchannel, List<Subchannel> rrList) {
-        Subchannel existingSubchannel = getSubchannel(stickinessValue);
-        if (existingSubchannel != null && rrList.contains(existingSubchannel)) {
-          return existingSubchannel;
+        final Ref<Subchannel> newSubchannelRef = subchannel.getAttributes().get(STICKY_REF);
+        Ref<Subchannel> existingSubchannelRef = null;
+        while (true) {
+          if (existingSubchannelRef != null) {
+            if (stickinessMap.replace(stickinessValue, existingSubchannelRef, newSubchannelRef)) {
+              addToLruQueue(stickinessValue, newSubchannelRef, false);
+              return subchannel;
+            }
+            existingSubchannelRef = stickinessMap.get(stickinessValue);
+          } else if ((existingSubchannelRef =
+                  stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
+            addToLruQueue(stickinessValue, newSubchannelRef, true);
+            return subchannel;
+          }
+          if (existingSubchannelRef != null) {
+            Subchannel existingSubchannel = existingSubchannelRef.value;
+            if (existingSubchannel != null && rrList.contains(existingSubchannel)) {
+              return existingSubchannel;
+            }
+          }
         }
+      }
 
-        Ref<Subchannel> subchannelRef = subchannelRefs.get(subchannel);
-        if (subchannelRef == null) {
-          subchannelRef = new Ref<Subchannel>(subchannel);
-          subchannelRefs.put(subchannel, subchannelRef);
+      private void addToLruQueue(String value, Ref<Subchannel> subchannelRef, boolean pruneFirst) {
+        if (pruneFirst) {
+          Entry<String,Ref<Subchannel>> oldEntry;
+          while (stickinessMap.size() >= MAX_ENTRIES && (oldEntry = lruQueue.poll()) != null) {
+            stickinessMap.remove(oldEntry.getKey(), oldEntry.getValue());
+          }
         }
-        stickinessMap.put(stickinessValue, subchannelRef);
-        return subchannel;
+        lruQueue.add(new SimpleImmutableEntry<String,Ref<Subchannel>>(value, subchannelRef));
       }
 
       /**
        * Unregister the subchannel from StickinessState.
        */
-      synchronized void remove(Subchannel subchannel) {
-        if (subchannelRefs.containsKey(subchannel)) {
-          subchannelRefs.get(subchannel).value = null;
-          subchannelRefs.remove(subchannel);
-        }
+      void remove(Subchannel subchannel) {
+        subchannel.getAttributes().get(STICKY_REF).value = null;
       }
 
       /**
        * Gets the subchannel associated with the stickiness value if there is.
        */
       @Nullable
-      synchronized Subchannel getSubchannel(String stickinessValue) {
+      Subchannel getSubchannel(String stickinessValue) {
         Ref<Subchannel> subchannelRef = stickinessMap.get(stickinessValue);
         if (subchannelRef != null) {
           return subchannelRef.value;
@@ -381,16 +412,21 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       if (list.size() > 0) {
-        if (stickinessState != null && args.getHeaders().containsKey(stickinessState.key)) {
+        Subchannel subchannel = null;
+        if (stickinessState != null) {
           String stickinessValue = args.getHeaders().get(stickinessState.key);
-          Subchannel subchannel = stickinessState.getSubchannel(stickinessValue);
-          if (subchannel == null || !list.contains(subchannel)) {
-            subchannel = stickinessState.maybeRegister(stickinessValue, nextSubchannel(), list);
+          if (stickinessValue != null) {
+            subchannel = stickinessState.getSubchannel(stickinessValue);
+            if (subchannel == null || !list.contains(subchannel)) {
+              subchannel = stickinessState.maybeRegister(stickinessValue, nextSubchannel(), list);
+            }
           }
-          return PickResult.withSubchannel(subchannel);
+        }
+        if (subchannel == null) {
+          subchannel = nextSubchannel();
         }
 
-        return PickResult.withSubchannel(nextSubchannel());
+        return RoundRobinLoadBalancer.getSubchannelPickResult(subchannel);
       }
 
       if (status != null) {
@@ -401,10 +437,10 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     }
 
     private Subchannel nextSubchannel() {
-      if (list.isEmpty()) {
+      int size = list.size();
+      if (size == 0) {
         throw new NoSuchElementException();
       }
-      int size = list.size();
 
       int i = indexUpdater.incrementAndGet(this);
       if (i >= size) {
