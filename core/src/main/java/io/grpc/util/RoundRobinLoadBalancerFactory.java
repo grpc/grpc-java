@@ -40,7 +40,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
-import java.util.AbstractMap.SimpleImmutableEntry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -48,7 +47,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Queue;
 import java.util.Set;
@@ -104,7 +102,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     @VisibleForTesting
     static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.create("state-info");
-    static final Attributes.Key<Ref<PickResult>> PICK_RESULT = Attributes.Key.create("pick-result");
+    // package-private to avoid synthetic access
     static final Attributes.Key<Ref<Subchannel>> STICKY_REF = Attributes.Key.create("sticky-ref");
 
     private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
@@ -148,16 +146,15 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
       // Create new subchannels for new addresses.
       for (EquivalentAddressGroup addressGroup : addedAddrs) {
-        Ref<PickResult> pickResultRef = new Ref<PickResult>(null);
         // NB(lukaszx0): we don't merge `attributes` with `subchannelAttr` because subchannel
         // doesn't need them. They're describing the resolved server list but we're not taking
         // any action based on this information.
-        Attributes.Builder subchannelAttrs = Attributes.newBuilder().set(PICK_RESULT, pickResultRef)
+        Attributes.Builder subchannelAttrs = Attributes.newBuilder()
             // NB(lukaszx0): because attributes are immutable we can't set new value for the key
             // after creation but since we can mutate the values we leverage that and set
             // AtomicReference which will allow mutating state info for given channel.
             .set(STATE_INFO,
-                    new Ref<ConnectivityStateInfo>(ConnectivityStateInfo.forNonError(IDLE)));
+                new Ref<ConnectivityStateInfo>(ConnectivityStateInfo.forNonError(IDLE)));
 
         Ref<Subchannel> stickyRef = null;
         if (stickinessState != null) {
@@ -165,8 +162,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         }
 
         Subchannel subchannel = checkNotNull(
-                helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
-        pickResultRef.value = PickResult.withSubchannel(subchannel);
+            helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
         if (stickyRef != null) {
           stickyRef.value = subchannel;
         }
@@ -291,10 +287,6 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       return checkNotNull(subchannel.getAttributes().get(STATE_INFO), "STATE_INFO");
     }
 
-    static PickResult getSubchannelPickResult(Subchannel subchannel) {
-      return subchannel.getAttributes().get(PICK_RESULT).value;
-    }
-
     private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
       Set<T> aCopy = new HashSet<T>(a);
       aCopy.removeAll(b);
@@ -319,8 +311,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       final ConcurrentMap<String, Ref<Subchannel>> stickinessMap =
           new ConcurrentHashMap<String, Ref<Subchannel>>();
 
-      final Queue<Entry<String,Ref<Subchannel>>> lruQueue =
-              new ConcurrentLinkedQueue<Entry<String,Ref<Subchannel>>>();
+      final Queue<String> evictionQueue = new ConcurrentLinkedQueue<String>();
 
       StickinessState(@Nonnull String stickinessKey) {
         this.key = Key.of(stickinessKey, Metadata.ASCII_STRING_MARSHALLER);
@@ -339,13 +330,12 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         while (true) {
           if (existingSubchannelRef != null) {
             if (stickinessMap.replace(stickinessValue, existingSubchannelRef, newSubchannelRef)) {
-              addToLruQueue(stickinessValue, newSubchannelRef, false);
               return subchannel;
             }
             existingSubchannelRef = stickinessMap.get(stickinessValue);
           } else if ((existingSubchannelRef =
-                  stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
-            addToLruQueue(stickinessValue, newSubchannelRef, true);
+                stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
+            addToEvictionQueue(stickinessValue);
             return subchannel;
           }
           if (existingSubchannelRef != null) {
@@ -357,14 +347,12 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         }
       }
 
-      private void addToLruQueue(String value, Ref<Subchannel> subchannelRef, boolean pruneFirst) {
-        if (pruneFirst) {
-          Entry<String,Ref<Subchannel>> oldEntry;
-          while (stickinessMap.size() >= MAX_ENTRIES && (oldEntry = lruQueue.poll()) != null) {
-            stickinessMap.remove(oldEntry.getKey(), oldEntry.getValue());
-          }
+      private void addToEvictionQueue(String value) {
+        String oldValue;
+        while (stickinessMap.size() >= MAX_ENTRIES && (oldValue = evictionQueue.poll()) != null) {
+          stickinessMap.remove(oldValue);
         }
-        lruQueue.add(new SimpleImmutableEntry<String,Ref<Subchannel>>(value, subchannelRef));
+        evictionQueue.add(value);
       }
 
       /**
@@ -422,11 +410,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
             }
           }
         }
-        if (subchannel == null) {
-          subchannel = nextSubchannel();
-        }
 
-        return RoundRobinLoadBalancer.getSubchannelPickResult(subchannel);
+        return PickResult.withSubchannel(subchannel != null ? subchannel : nextSubchannel());
       }
 
       if (status != null) {

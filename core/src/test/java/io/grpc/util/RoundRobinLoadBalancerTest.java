@@ -49,7 +49,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
@@ -275,9 +274,9 @@ public class RoundRobinLoadBalancerTest {
 
   @Test
   public void pickerRoundRobin() throws Exception {
-    Subchannel subchannel = mockChannelWithPickResult();
-    Subchannel subchannel1 = mockChannelWithPickResult();
-    Subchannel subchannel2 = mockChannelWithPickResult();
+    Subchannel subchannel = mock(Subchannel.class);
+    Subchannel subchannel1 = mock(Subchannel.class);
+    Subchannel subchannel2 = mock(Subchannel.class);
 
     Picker picker = new Picker(Collections.unmodifiableList(Lists.<Subchannel>newArrayList(
         subchannel, subchannel1, subchannel2)), null /* status */, null /* stickinessState */);
@@ -288,15 +287,6 @@ public class RoundRobinLoadBalancerTest {
     assertEquals(subchannel1, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(subchannel2, picker.pickSubchannel(mockArgs).getSubchannel());
     assertEquals(subchannel, picker.pickSubchannel(mockArgs).getSubchannel());
-  }
-
-  private Subchannel mockChannelWithPickResult() {
-    Subchannel subchannel = mock(Subchannel.class);
-    when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder()
-        .set(RoundRobinLoadBalancer.PICK_RESULT,
-            new Ref<PickResult>(PickResult.withSubchannel(subchannel)))
-        .build());
-    return subchannel;
   }
 
   @Test
