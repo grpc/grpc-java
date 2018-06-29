@@ -326,10 +326,10 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       Subchannel maybeRegister(
           String stickinessValue, @Nonnull Subchannel subchannel, List<Subchannel> rrList) {
         final Ref<Subchannel> newSubchannelRef = subchannel.getAttributes().get(STICKY_REF);
-        Ref<Subchannel> existingSubchannelRef;
         while (true) {
-          if ((existingSubchannelRef =
-              stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
+          Ref<Subchannel> existingSubchannelRef =
+              stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef);
+          if (existingSubchannelRef == null) {
             // new entry
             addToEvictionQueue(stickinessValue);
             return subchannel;
