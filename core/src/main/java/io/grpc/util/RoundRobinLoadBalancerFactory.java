@@ -326,24 +326,25 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       Subchannel maybeRegister(
           String stickinessValue, @Nonnull Subchannel subchannel, List<Subchannel> rrList) {
         final Ref<Subchannel> newSubchannelRef = subchannel.getAttributes().get(STICKY_REF);
-        Ref<Subchannel> existingSubchannelRef = null;
+        Ref<Subchannel> existingSubchannelRef;
         while (true) {
-          if (existingSubchannelRef != null) {
-            if (stickinessMap.replace(stickinessValue, existingSubchannelRef, newSubchannelRef)) {
-              return subchannel;
-            }
-            existingSubchannelRef = stickinessMap.get(stickinessValue);
-          } else if ((existingSubchannelRef =
-                stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
+          if ((existingSubchannelRef =
+              stickinessMap.putIfAbsent(stickinessValue, newSubchannelRef)) == null) {
+            // new entry
             addToEvictionQueue(stickinessValue);
             return subchannel;
-          }
-          if (existingSubchannelRef != null) {
+          } else {
+            // existing entry
             Subchannel existingSubchannel = existingSubchannelRef.value;
             if (existingSubchannel != null && rrList.contains(existingSubchannel)) {
               return existingSubchannel;
             }
           }
+          // existingSubchannelRef is not null but no longer valid, replace it
+          if (stickinessMap.replace(stickinessValue, existingSubchannelRef, newSubchannelRef)) {
+            return subchannel;
+          }
+          // another thread concurrently removed or updated the entry, try again
         }
       }
 
