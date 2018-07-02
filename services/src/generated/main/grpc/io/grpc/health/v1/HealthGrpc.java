@@ -30,6 +30,10 @@ public final class HealthGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
       io.grpc.health.v1.HealthCheckResponse> getCheckMethod;
 
+  @io.grpc.stub.RpcMethod(
+      inputType = io.grpc.health.v1.HealthCheckRequest.class,
+      outputType = io.grpc.health.v1.HealthCheckResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
       io.grpc.health.v1.HealthCheckResponse> getCheckMethod() {
     io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse> getCheckMethod;

@@ -30,6 +30,10 @@ public final class LoadBalancerGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.grpclb.LoadBalanceRequest,
       io.grpc.grpclb.LoadBalanceResponse> getBalanceLoadMethod;
 
+  @io.grpc.stub.RpcMethod(
+      inputType = io.grpc.grpclb.LoadBalanceRequest.class,
+      outputType = io.grpc.grpclb.LoadBalanceResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.grpclb.LoadBalanceRequest,
       io.grpc.grpclb.LoadBalanceResponse> getBalanceLoadMethod() {
     io.grpc.MethodDescriptor<io.grpc.grpclb.LoadBalanceRequest, io.grpc.grpclb.LoadBalanceResponse> getBalanceLoadMethod;
