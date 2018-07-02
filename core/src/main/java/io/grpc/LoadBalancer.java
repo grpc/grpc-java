@@ -475,7 +475,7 @@ public abstract class LoadBalancer {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      *
-     * @throws IllegalArgumentException if {@code attrs} is empty
+     * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
      */
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
