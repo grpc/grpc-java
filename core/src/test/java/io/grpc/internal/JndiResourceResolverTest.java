@@ -58,16 +58,15 @@ public class JndiResourceResolverTest {
       }
     };
     JndiResourceResolver resolver = new JndiResourceResolver();
-    List<EquivalentAddressGroup> results = null;
     try {
-      results = resolver.resolveSrv(addressResolver, "localhost");
+      resolver.resolveSrv(addressResolver, "localhost");
     } catch (javax.naming.CommunicationException e) {
       Assume.assumeNoException(e);
     } catch (javax.naming.NameNotFoundException e) {
       Assume.assumeNoException(e);
     }
   }
-  
+
   @Test
   public void parseSrvRecord() {
     SrvRecord record = JndiResourceResolver.parseSrvRecord("0 0 1234 foo.bar.com");
