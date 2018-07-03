@@ -261,7 +261,7 @@ public class CensusModulesTest {
         ctx.detach(origCtx);
       }
     } else {
-      assertEquals(Tags.getTagger().empty(), TAG_CONTEXT_KEY.get());
+      assertEquals(Tags.getTagger().getCurrentTagContext(), TAG_CONTEXT_KEY.get());
       assertNull(ContextUtils.CONTEXT_SPAN_KEY.get());
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
