@@ -70,7 +70,6 @@ import io.grpc.testing.TestMethodDescriptors;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
-import io.opencensus.tags.Tags;
 import io.opencensus.trace.EndSpanOptions;
 import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.MessageEvent.Type;
