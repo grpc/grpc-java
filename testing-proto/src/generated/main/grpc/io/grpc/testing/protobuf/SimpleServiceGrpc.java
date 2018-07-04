@@ -33,7 +33,9 @@ public final class SimpleServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
       io.grpc.testing.protobuf.SimpleResponse> getUnaryRpcMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.testing.SimpleService",
+      methodName = "UnaryRpc",
       inputType = io.grpc.testing.protobuf.SimpleRequest.class,
       outputType = io.grpc.testing.protobuf.SimpleResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
@@ -64,7 +66,9 @@ public final class SimpleServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
       io.grpc.testing.protobuf.SimpleResponse> getClientStreamingRpcMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.testing.SimpleService",
+      methodName = "ClientStreamingRpc",
       inputType = io.grpc.testing.protobuf.SimpleRequest.class,
       outputType = io.grpc.testing.protobuf.SimpleResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
@@ -95,7 +99,9 @@ public final class SimpleServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
       io.grpc.testing.protobuf.SimpleResponse> getServerStreamingRpcMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.testing.SimpleService",
+      methodName = "ServerStreamingRpc",
       inputType = io.grpc.testing.protobuf.SimpleRequest.class,
       outputType = io.grpc.testing.protobuf.SimpleResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
@@ -126,7 +132,9 @@ public final class SimpleServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
       io.grpc.testing.protobuf.SimpleResponse> getBidiStreamingRpcMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.testing.SimpleService",
+      methodName = "BidiStreamingRpc",
       inputType = io.grpc.testing.protobuf.SimpleRequest.class,
       outputType = io.grpc.testing.protobuf.SimpleResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)

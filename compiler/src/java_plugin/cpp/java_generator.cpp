@@ -478,6 +478,8 @@ static void PrintMethodFields(
           "    $output_type$> $method_new_field_name$;\n"
           "\n"
           "@$RpcMethod$(\n"
+          "    fullServiceName = \"$Package$$service_name$\",\n"
+          "    methodName = \"$method_name$\",\n"
           "    inputType = $input_type$.class,\n"
           "    outputType = $output_type$.class,\n"
           "    methodType = $MethodType$.$method_type$)\n"
@@ -1279,7 +1281,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["ProtoMethodDescriptorSupplier"] =
       "io.grpc.protobuf.ProtoMethodDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
-  vars["RpcMethod"] = "io.grpc.stub.RpcMethod";
+  vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";

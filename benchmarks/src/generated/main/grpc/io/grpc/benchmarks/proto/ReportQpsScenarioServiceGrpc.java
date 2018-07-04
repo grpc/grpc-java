@@ -30,7 +30,9 @@ public final class ReportQpsScenarioServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Control.ScenarioResult,
       io.grpc.benchmarks.proto.Control.Void> getReportScenarioMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.testing.ReportQpsScenarioService",
+      methodName = "ReportScenario",
       inputType = io.grpc.benchmarks.proto.Control.ScenarioResult.class,
       outputType = io.grpc.benchmarks.proto.Control.Void.class,
       methodType = io.grpc.MethodDescriptor.MethodType.UNARY)

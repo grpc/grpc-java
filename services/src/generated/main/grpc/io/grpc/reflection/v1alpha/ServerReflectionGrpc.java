@@ -30,7 +30,9 @@ public final class ServerReflectionGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.v1alpha.ServerReflectionRequest,
       io.grpc.reflection.v1alpha.ServerReflectionResponse> getServerReflectionInfoMethod;
 
-  @io.grpc.stub.RpcMethod(
+  @io.grpc.stub.annotations.RpcMethod(
+      fullServiceName = "grpc.reflection.v1alpha.ServerReflection",
+      methodName = "ServerReflectionInfo",
       inputType = io.grpc.reflection.v1alpha.ServerReflectionRequest.class,
       outputType = io.grpc.reflection.v1alpha.ServerReflectionResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)

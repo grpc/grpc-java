@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.stub;
+package io.grpc.stub.annotations;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor.MethodType;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -27,7 +28,18 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.METHOD)
+@ExperimentalApi
 public @interface RpcMethod {
+
+  /**
+   * The full service name for the method
+   */
+  String fullServiceName();
+
+  /**
+   * The method name for the method
+   */
+  String methodName();
 
   /**
    * The input type of the method
