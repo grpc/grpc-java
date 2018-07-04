@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
 import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver.SrvRecord;
