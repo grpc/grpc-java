@@ -16,7 +16,6 @@
 
 package io.grpc.stub.annotations;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.MethodDescriptor.MethodType;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -28,7 +27,6 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.CLASS)
 @Target(ElementType.METHOD)
-@ExperimentalApi
 public @interface RpcMethod {
 
   /**
