@@ -111,7 +111,28 @@ public class UtilServerInterceptorsTest {
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
-    assertEquals(5, call.numCloses);
+    ServerCall.Listener<Void> callDoubleSreListener =
+        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    callDoubleSreListener.onMessage(null);
+    callDoubleSreListener.onHalfClose(); // should not trigger a close
+
+    // a more subdued listener
+    listener = new ServerCall.Listener<Void>() {
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+    };
+
+    ServerCall.Listener<Void> callCancelListener =
+        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    callCancelListener.onCancel(); // successful call close
+    callCancelListener.onHalfClose(); // should not trigger a close
+    ServerCall.Listener<Void> callCompleteListener =
+        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
+    callCompleteListener.onComplete(); // successful call close
+    callCompleteListener.onHalfClose(); // should not trigger a close
+    assertEquals(6, call.numCloses);
   }
 
   private static class FakeServerCall<ReqT, RespT> extends NoopServerCall<ReqT, RespT> {
@@ -119,6 +140,7 @@ public class UtilServerInterceptorsTest {
     final Metadata expectedMetadata;
 
     int numCloses;
+    int numMismatchedCloses;
 
     FakeServerCall(Status expectedStatus, Metadata expectedMetadata) {
       this.expectedStatus = expectedStatus;
@@ -130,6 +152,8 @@ public class UtilServerInterceptorsTest {
     public void close(Status status, Metadata trailers) {
       if (status == expectedStatus && trailers == expectedMetadata) {
         numCloses++;
+      } else {
+        numMismatchedCloses++;
       }
     }
   }
