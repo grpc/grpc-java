@@ -140,7 +140,6 @@ public class UtilServerInterceptorsTest {
     final Metadata expectedMetadata;
 
     int numCloses;
-    int numMismatchedCloses;
 
     FakeServerCall(Status expectedStatus, Metadata expectedMetadata) {
       this.expectedStatus = expectedStatus;
@@ -152,8 +151,6 @@ public class UtilServerInterceptorsTest {
     public void close(Status status, Metadata trailers) {
       if (status == expectedStatus && trailers == expectedMetadata) {
         numCloses++;
-      } else {
-        numMismatchedCloses++;
       }
     }
   }
