@@ -80,7 +80,7 @@ final class RequireDoubleSubmitCookieInterceptor implements ServerInterceptor {
     if (cookieHeaders == null) {
       return failCall(call);
     }
-    for (String cookieHeader: cookieHeaders) {
+    for (String cookieHeader : cookieHeaders) {
       try {
         for (HttpCookie cookie : HttpCookie.parse(cookieHeader)) {
           if (cookie.getName().equals(tokenName)) {
