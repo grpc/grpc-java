@@ -42,12 +42,17 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class UtilServerInterceptorsTest {
+  private static class VoidCallListener extends ServerCall.Listener<Void> {
+    public void onCall(ServerCall<Void, Void> call, Metadata headers) { }
+  }
+
   private MethodDescriptor<Void, Void> flowMethod = TestMethodDescriptors.voidMethod();
   private final Metadata headers = new Metadata();
   private ServerCallHandler<Void, Void> handler = new ServerCallHandler<Void, Void>() {
       @Override
       public ServerCall.Listener<Void> startCall(
           ServerCall<Void, Void> call, Metadata headers) {
+        listener.onCall(call, headers);
         return listener;
       }
   };
@@ -55,7 +60,7 @@ public class UtilServerInterceptorsTest {
       ServerServiceDefinition.builder(new ServiceDescriptor("service_foo", flowMethod))
           .addMethod(flowMethod, handler)
           .build();
-  private ServerCall.Listener<Void> listener;
+  private VoidCallListener listener;
 
   @SuppressWarnings("unchecked")
   private static ServerMethodDefinition<Void, Void> getSoleMethod(
@@ -74,7 +79,7 @@ public class UtilServerInterceptorsTest {
         new FakeServerCall<Void, Void>(expectedStatus, expectedMetadata);
     final StatusRuntimeException exception =
         new StatusRuntimeException(expectedStatus, expectedMetadata);
-    listener = new ServerCall.Listener<Void>() {
+    listener = new VoidCallListener() {
       @Override
       public void onMessage(Void message) {
         throw exception;
@@ -116,22 +121,23 @@ public class UtilServerInterceptorsTest {
     callDoubleSreListener.onMessage(null);
     callDoubleSreListener.onHalfClose(); // should not trigger a close
 
-    // a more subdued listener
-    listener = new ServerCall.Listener<Void>() {
+    // a more subdued listener that closes onCall
+    listener = new VoidCallListener() {
+      @Override
+      public void onCall(ServerCall<Void, Void> call, Metadata headers) {
+        call.close(Status.CANCELLED, headers);
+      }
+
       @Override
       public void onHalfClose() {
         throw exception;
       }
     };
 
-    ServerCall.Listener<Void> callCancelListener =
+    ServerCall.Listener<Void> callClosedListener =
         getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
-    callCancelListener.onCancel(); // successful call close
-    callCancelListener.onHalfClose(); // should not trigger a close
-    ServerCall.Listener<Void> callCompleteListener =
-        getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
-    callCompleteListener.onComplete(); // successful call close
-    callCompleteListener.onHalfClose(); // should not trigger a close
+    // call is already closed
+    callClosedListener.onHalfClose(); // should not trigger a close
     assertEquals(6, call.numCloses);
   }
 

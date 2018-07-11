@@ -59,8 +59,6 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     final ServerCall<ReqT, RespT> serverCall = new SerializingServerCall<ReqT, RespT>(call);
     ServerCall.Listener<ReqT> listener = next.startCall(serverCall, headers);
     return new ForwardingServerCallListener.SimpleForwardingServerCallListener<ReqT>(listener) {
-      boolean closeCalled = false;
-
       @Override
       public void onMessage(ReqT message) {
         try {
@@ -83,7 +81,6 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       public void onCancel() {
         try {
           super.onCancel();
-          closeCalled = true;
         } catch (StatusRuntimeException e) {
           closeWithException(e);
         }
@@ -93,7 +90,6 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       public void onComplete() {
         try {
           super.onComplete();
-          closeCalled = true;
         } catch (StatusRuntimeException e) {
           closeWithException(e);
         }
@@ -109,15 +105,11 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
       }
 
       private void closeWithException(StatusRuntimeException t) {
-        if (!closeCalled) {
-          closeCalled = true;
-
-          Metadata metadata = t.getTrailers();
-          if (metadata == null) {
-            metadata = new Metadata();
-          }
-          serverCall.close(t.getStatus(), metadata);
+        Metadata metadata = t.getTrailers();
+        if (metadata == null) {
+          metadata = new Metadata();
         }
+        serverCall.close(t.getStatus(), metadata);
       }
     };
   }
@@ -131,6 +123,7 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
     private static final String ERROR_MSG = "Encountered error during serialized access";
     private final SerializingExecutor serializingExecutor =
         new SerializingExecutor(MoreExecutors.directExecutor());
+    private boolean closeCalled = false;
 
     SerializingServerCall(ServerCall<ReqT, RespT> delegate) {
       super(delegate);
@@ -168,12 +161,16 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void close(final Status status, final Metadata trailers) {
-      serializingExecutor.execute(new Runnable() {
-        @Override
-        public void run() {
-          SerializingServerCall.super.close(status, trailers);
-        }
-      });
+      if (!closeCalled) {
+        closeCalled = true;
+
+        serializingExecutor.execute(new Runnable() {
+          @Override
+          public void run() {
+            SerializingServerCall.super.close(status, trailers);
+          }
+        });
+      }
     }
 
     @Override
