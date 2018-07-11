@@ -161,16 +161,16 @@ public final class TransmitStatusRuntimeExceptionInterceptor implements ServerIn
 
     @Override
     public void close(final Status status, final Metadata trailers) {
-      if (!closeCalled) {
-        closeCalled = true;
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (!closeCalled) {
+            closeCalled = true;
 
-        serializingExecutor.execute(new Runnable() {
-          @Override
-          public void run() {
             SerializingServerCall.super.close(status, trailers);
           }
-        });
-      }
+        }
+      });
     }
 
     @Override
