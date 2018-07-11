@@ -116,16 +116,45 @@ public class UtilServerInterceptorsTest {
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onComplete();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onHalfClose();
     getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers).onReady();
+    assertEquals(5, call.numCloses);
+  }
+
+  @Test
+  public void statusRuntimeExceptionTransmitterIgnoresClosedCalls() {
+    final Status expectedStatus = Status.UNAVAILABLE;
+    final Status unexpectedStatus = Status.CANCELLED;
+    final Metadata expectedMetadata = new Metadata();
+
+    FakeServerCall<Void, Void> call =
+        new FakeServerCall<Void, Void>(expectedStatus, expectedMetadata);
+    final StatusRuntimeException exception =
+        new StatusRuntimeException(expectedStatus, expectedMetadata);
+
+    listener = new VoidCallListener() {
+      @Override
+      public void onMessage(Void message) {
+        throw exception;
+      }
+
+      @Override
+      public void onHalfClose() {
+        throw exception;
+      }
+    };
+
+    ServerServiceDefinition intercepted = ServerInterceptors.intercept(
+        serviceDefinition,
+        Arrays.asList(TransmitStatusRuntimeExceptionInterceptor.instance()));
     ServerCall.Listener<Void> callDoubleSreListener =
         getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
-    callDoubleSreListener.onMessage(null);
+    callDoubleSreListener.onMessage(null); // the only close with our exception
     callDoubleSreListener.onHalfClose(); // should not trigger a close
 
-    // a more subdued listener that closes onCall
+    // this listener closes the call when it is initialized with startCall
     listener = new VoidCallListener() {
       @Override
       public void onCall(ServerCall<Void, Void> call, Metadata headers) {
-        call.close(Status.CANCELLED, headers);
+        call.close(unexpectedStatus, headers);
       }
 
       @Override
@@ -136,9 +165,9 @@ public class UtilServerInterceptorsTest {
 
     ServerCall.Listener<Void> callClosedListener =
         getSoleMethod(intercepted).getServerCallHandler().startCall(call, headers);
-    // call is already closed
+    // call is already closed, does not match exception
     callClosedListener.onHalfClose(); // should not trigger a close
-    assertEquals(6, call.numCloses);
+    assertEquals(1, call.numCloses);
   }
 
   private static class FakeServerCall<ReqT, RespT> extends NoopServerCall<ReqT, RespT> {
