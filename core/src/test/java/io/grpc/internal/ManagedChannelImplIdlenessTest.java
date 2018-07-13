@@ -49,6 +49,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -82,7 +83,6 @@ public class ManagedChannelImplIdlenessTest {
   private final FakeClock oobExecutor = new FakeClock();
   private static final String AUTHORITY = "fakeauthority";
   private static final String USER_AGENT = "fakeagent";
-  private static final ProxyParameters NO_PROXY = null;
   private static final long IDLE_TIMEOUT_SECONDS = 30;
   private ManagedChannelImpl channel;
 
@@ -159,7 +159,7 @@ public class ManagedChannelImplIdlenessTest {
     // Verify the initial idleness
     verify(mockLoadBalancerFactory, never()).newLoadBalancer(any(Helper.class));
     verify(mockTransportFactory, never()).newClientTransport(
-        any(SocketAddress.class),
+        any(ProxySocketAddress.class),
         any(ClientTransportFactory.ClientTransportOptions.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
   }
@@ -327,9 +327,11 @@ public class ManagedChannelImplIdlenessTest {
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
-    List<SocketAddress> changedList = new ArrayList<SocketAddress>(servers.get(0).getAddresses());
-    changedList.add(new FakeSocketAddress("aDifferentServer"));
-    helper.updateSubchannelAddresses(subchannel, new EquivalentAddressGroup(changedList));
+    List<ProxySocketAddress> changedList
+        = new ArrayList<ProxySocketAddress>(servers.get(0).getProxySocketAddresses());
+    changedList.add(ProxySocketAddress.withoutProxy(new FakeSocketAddress("aDifferentServer")));
+    helper.updateSubchannelAddresses(
+        subchannel, EquivalentAddressGroup.createFromList(changedList));
 
     subchannel.requestConnection();
     assertNull(newTransports.poll());
@@ -361,7 +363,7 @@ public class ManagedChannelImplIdlenessTest {
     ManagedChannel oob = helper.createOobChannel(servers.get(0), "oobauthority");
     verify(mockTransportFactory, never())
         .newClientTransport(
-            any(SocketAddress.class),
+            any(ProxySocketAddress.class),
             eq(new ClientTransportFactory.ClientTransportOptions()
               .setAuthority("oobauthority")
               .setUserAgent(USER_AGENT)));
@@ -369,7 +371,7 @@ public class ManagedChannelImplIdlenessTest {
     oobCall.start(mockCallListener2, new Metadata());
     verify(mockTransportFactory)
         .newClientTransport(
-            any(SocketAddress.class),
+            any(ProxySocketAddress.class),
             eq(new ClientTransportFactory.ClientTransportOptions()
               .setAuthority("oobauthority")
               .setUserAgent(USER_AGENT)));
@@ -417,9 +419,11 @@ public class ManagedChannelImplIdlenessTest {
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
-    List<SocketAddress> changedList = new ArrayList<SocketAddress>(servers.get(0).getAddresses());
-    changedList.add(new FakeSocketAddress("aDifferentServer"));
-    helper.updateOobChannelAddresses(oobChannel, new EquivalentAddressGroup(changedList));
+    List<ProxySocketAddress> changedList
+        = new ArrayList<ProxySocketAddress>(servers.get(0).getProxySocketAddresses());
+    changedList.add(ProxySocketAddress.withoutProxy(new FakeSocketAddress("aDifferentServer")));
+    helper.updateOobChannelAddresses(
+        oobChannel, EquivalentAddressGroup.createFromList(changedList));
 
     oobChannel.newCall(method, CallOptions.DEFAULT).start(mockCallListener, new Metadata());
     assertNull(newTransports.poll());

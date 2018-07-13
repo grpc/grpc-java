@@ -24,7 +24,7 @@ import static org.mockito.Mockito.when;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
-import java.net.SocketAddress;
+import io.grpc.ProxySocketAddress;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.annotation.Nullable;
@@ -91,7 +91,7 @@ final class TestUtils {
       }
     }).when(mockTransportFactory)
         .newClientTransport(
-            any(SocketAddress.class),
+            any(ProxySocketAddress.class),
             any(ClientTransportFactory.ClientTransportOptions.class));
 
     return captor;

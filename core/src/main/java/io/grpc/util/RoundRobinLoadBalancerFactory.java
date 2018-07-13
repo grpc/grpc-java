@@ -235,7 +235,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private static Set<EquivalentAddressGroup> stripAttrs(List<EquivalentAddressGroup> groupList) {
       Set<EquivalentAddressGroup> addrs = new HashSet<EquivalentAddressGroup>(groupList.size());
       for (EquivalentAddressGroup group : groupList) {
-        addrs.add(new EquivalentAddressGroup(group.getAddresses()));
+        addrs.add(EquivalentAddressGroup.createFromList(group.getProxySocketAddresses()));
       }
       return addrs;
     }

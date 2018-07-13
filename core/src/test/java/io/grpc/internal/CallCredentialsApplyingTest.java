@@ -35,6 +35,7 @@ import io.grpc.CallOptions;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxySocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
@@ -71,8 +72,7 @@ public class CallCredentialsApplyingTest {
   @Mock
   private Executor mockExecutor;
 
-  @Mock
-  private SocketAddress address;
+  private ProxySocketAddress address = ProxySocketAddress.withoutProxy(new SocketAddress() {});
 
   private static final String AUTHORITY = "testauthority";
   private static final String USER_AGENT = "testuseragent";

@@ -27,6 +27,7 @@ import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxySocketAddress;
 import io.grpc.alts.internal.AltsClientOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.AltsTsiHandshaker;
@@ -35,13 +36,11 @@ import io.grpc.alts.internal.RpcProtocolVersionsUtil;
 import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
 import io.grpc.netty.NettyChannelBuilder;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -155,19 +154,18 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
 
     @Override
     public TransportCreationParamsFilter create(
-        final SocketAddress serverAddress,
+        final ProxySocketAddress serverAddress,
         final String authority,
-        final String userAgent,
-        final ProxyParameters proxy) {
+        final String userAgent) {
       checkArgument(
-          serverAddress instanceof InetSocketAddress,
+          serverAddress.getAddress() instanceof InetSocketAddress,
           "%s must be a InetSocketAddress",
           serverAddress);
       final AltsProtocolNegotiator negotiator =
           AltsProtocolNegotiator.create(altsHandshakerFactory);
       return new TransportCreationParamsFilter() {
         @Override
-        public SocketAddress getTargetServerAddress() {
+        public ProxySocketAddress getProxySocketAddress() {
           return serverAddress;
         }
 

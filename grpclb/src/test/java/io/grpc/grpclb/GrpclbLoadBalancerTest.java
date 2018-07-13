@@ -922,10 +922,10 @@ public class GrpclbLoadBalancerTest {
 
     assertSame(LbPolicy.GRPCLB, balancer.getLbPolicy());
     assertNull(balancer.getDelegate());
-    EquivalentAddressGroup combinedEag = new EquivalentAddressGroup(
+    EquivalentAddressGroup combinedEag = EquivalentAddressGroup.createFromList(
         Arrays.asList(
-            grpclbResolutionList.get(0).getAddresses().get(0),
-            grpclbResolutionList.get(2).getAddresses().get(0)),
+            grpclbResolutionList.get(0).getProxySocketAddresses().get(0),
+            grpclbResolutionList.get(2).getProxySocketAddresses().get(0)),
         lbAttributes(lbAuthority(0)));
     verify(helper).createOobChannel(eq(combinedEag), eq(lbAuthority(0)));
     assertEquals(1, fakeOobChannels.size());
@@ -1021,9 +1021,9 @@ public class GrpclbLoadBalancerTest {
 
     List<EquivalentAddressGroup> grpclbResolutionList2 =
         createResolvedServerAddresses(true, false, true);
-    EquivalentAddressGroup combinedEag = new EquivalentAddressGroup(Arrays.asList(
-        grpclbResolutionList2.get(0).getAddresses().get(0),
-        grpclbResolutionList2.get(2).getAddresses().get(0)),
+    EquivalentAddressGroup combinedEag = EquivalentAddressGroup.createFromList(Arrays.asList(
+        grpclbResolutionList2.get(0).getProxySocketAddresses().get(0),
+        grpclbResolutionList2.get(2).getProxySocketAddresses().get(0)),
         lbAttributes(lbAuthority(0)));
     deliverResolvedAddresses(grpclbResolutionList2, grpclbResolutionAttrs);
     verify(helper).updateOobChannelAddresses(eq(oobChannel), eq(combinedEag));
@@ -1349,10 +1349,10 @@ public class GrpclbLoadBalancerTest {
     // New addresses are updated to the OobChannel
     inOrder.verify(helper).updateOobChannelAddresses(
         same(oobChannel),
-        eq(new EquivalentAddressGroup(
+        eq(EquivalentAddressGroup.createFromList(
                 Arrays.asList(
-                    resolutionList.get(0).getAddresses().get(0),
-                    resolutionList.get(1).getAddresses().get(0)),
+                    resolutionList.get(0).getProxySocketAddresses().get(0),
+                    resolutionList.get(1).getProxySocketAddresses().get(0)),
                 lbAttributes(lbAuthority(0)))));
 
     if (timerExpires) {
