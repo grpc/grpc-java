@@ -112,7 +112,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private final Map<EquivalentAddressGroup, Subchannel> subchannels =
         new HashMap<EquivalentAddressGroup, Subchannel>();
     // true when map contains at least one Subchannel in READY state
-    private boolean ready = false;
+    private boolean ready;
 
     @Nullable
     private StickinessState stickinessState;
