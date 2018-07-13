@@ -20,12 +20,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
+import io.grpc.ProxySocketAddress;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
-import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -170,7 +170,7 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, ClientTransportOptions options) {
+        ProxySocketAddress addr, ClientTransportOptions options) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }

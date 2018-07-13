@@ -16,6 +16,7 @@
 
 package io.grpc.okhttp;
 
+import io.grpc.ProxySocketAddress;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
@@ -81,7 +82,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     int port = server.getPort();
     return clientFactory.newClientTransport(
-        new InetSocketAddress("localhost", port),
+        ProxySocketAddress.withoutProxy(new InetSocketAddress("localhost", port)),
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(testAuthority(server)));
   }

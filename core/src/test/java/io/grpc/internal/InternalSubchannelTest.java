@@ -30,7 +30,6 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.same;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,6 +40,7 @@ import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
 import io.grpc.internal.InternalSubchannel.Index;
@@ -145,9 +145,9 @@ public class InternalSubchannelTest {
   }
 
   @Test public void eagAttribute_propagatesToTransport() {
-    SocketAddress addr = new SocketAddress() {};
+    ProxySocketAddress addr = makeProxySocketAddress();
     Attributes attr = Attributes.newBuilder().set(Attributes.Key.create("some-key"), "1").build();
-    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
+    createInternalSubchannel(EquivalentAddressGroup.createFromList(Arrays.asList(addr), attr));
 
     // First attempt
     assertNull(internalSubchannel.obtainActiveTransport());
@@ -157,7 +157,7 @@ public class InternalSubchannelTest {
   }
 
   @Test public void singleAddressReconnect() {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -253,8 +253,8 @@ public class InternalSubchannelTest {
   }
 
   @Test public void twoAddressesReconnect() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     assertEquals(IDLE, internalSubchannel.getState());
     // Invocation counters
@@ -404,22 +404,22 @@ public class InternalSubchannelTest {
 
   @Test(expected = IllegalArgumentException.class)
   public void updateAddresses_emptyEagList_throws() {
-    SocketAddress addr = new FakeSocketAddress();
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
     internalSubchannel.updateAddresses(Arrays.<EquivalentAddressGroup>asList());
   }
 
   @Test(expected = NullPointerException.class)
   public void updateAddresses_eagListWithNull_throws() {
-    SocketAddress addr = new FakeSocketAddress();
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
     internalSubchannel.updateAddresses(Arrays.asList((EquivalentAddressGroup) null));
   }
 
   @Test public void updateAddresses_intersecting_ready() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
-    SocketAddress addr3 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -438,7 +438,7 @@ public class InternalSubchannelTest {
 
     // Update addresses
     internalSubchannel.updateAddresses(
-        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+        Arrays.asList(EquivalentAddressGroup.createFromList(Arrays.asList(addr2, addr3))));
     assertNoCallbackInvoke();
     assertEquals(READY, internalSubchannel.getState());
     verify(transports.peek().transport, never()).shutdown(any(Status.class));
@@ -461,9 +461,9 @@ public class InternalSubchannelTest {
   }
 
   @Test public void updateAddresses_intersecting_connecting() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
-    SocketAddress addr3 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -481,7 +481,7 @@ public class InternalSubchannelTest {
 
     // Update addresses
     internalSubchannel.updateAddresses(
-        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+        Arrays.asList(EquivalentAddressGroup.createFromList(Arrays.asList(addr2, addr3))));
     assertNoCallbackInvoke();
     assertEquals(CONNECTING, internalSubchannel.getState());
     verify(transports.peek().transport, never()).shutdown(any(Status.class));
@@ -506,8 +506,8 @@ public class InternalSubchannelTest {
   }
 
   @Test public void updateAddresses_disjoint_idle() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
 
     createInternalSubchannel(addr1);
     internalSubchannel.updateAddresses(Arrays.asList(new EquivalentAddressGroup(addr2)));
@@ -537,10 +537,10 @@ public class InternalSubchannelTest {
   }
 
   @Test public void updateAddresses_disjoint_ready() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
-    SocketAddress addr3 = mock(SocketAddress.class);
-    SocketAddress addr4 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
+    ProxySocketAddress addr4 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -559,7 +559,7 @@ public class InternalSubchannelTest {
 
     // Update addresses
     internalSubchannel.updateAddresses(
-        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr3, addr4))));
+        Arrays.asList(EquivalentAddressGroup.createFromList(Arrays.asList(addr3, addr4))));
     assertExactCallbackInvokes("onStateChange:IDLE");
     assertEquals(IDLE, internalSubchannel.getState());
     verify(transports.peek().transport).shutdown(any(Status.class));
@@ -581,10 +581,10 @@ public class InternalSubchannelTest {
   }
 
   @Test public void updateAddresses_disjoint_connecting() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
-    SocketAddress addr3 = mock(SocketAddress.class);
-    SocketAddress addr4 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
+    ProxySocketAddress addr4 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -602,7 +602,7 @@ public class InternalSubchannelTest {
 
     // Update addresses
     internalSubchannel.updateAddresses(
-        Arrays.asList(new EquivalentAddressGroup(Arrays.asList(addr3, addr4))));
+        Arrays.asList(EquivalentAddressGroup.createFromList(Arrays.asList(addr3, addr4))));
     assertNoCallbackInvoke();
     assertEquals(CONNECTING, internalSubchannel.getState());
 
@@ -624,7 +624,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void connectIsLazy() {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     // Invocation counters
@@ -670,7 +670,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void shutdownWhenReady() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.obtainActiveTransport();
@@ -689,7 +689,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void shutdownBeforeTransportCreated() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     // First transport is created immediately
@@ -741,7 +741,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void shutdownBeforeTransportReady() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.obtainActiveTransport();
@@ -764,7 +764,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void shutdownNow() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.obtainActiveTransport();
@@ -788,7 +788,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void obtainTransportAfterShutdown() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.shutdown(SHUTDOWN_REASON);
@@ -803,14 +803,14 @@ public class InternalSubchannelTest {
 
   @Test
   public void logId() {
-    createInternalSubchannel(mock(SocketAddress.class));
+    createInternalSubchannel(makeProxySocketAddress());
 
     assertNotNull(internalSubchannel.getLogId());
   }
 
   @Test
   public void inUseState() {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.obtainActiveTransport();
@@ -848,7 +848,7 @@ public class InternalSubchannelTest {
   public void transportTerminateWithoutExitingInUse() {
     // An imperfect transport that terminates without going out of in-use. InternalSubchannel will
     // clear the in-use bit for it.
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     internalSubchannel.obtainActiveTransport();
@@ -866,8 +866,8 @@ public class InternalSubchannelTest {
 
   @Test
   public void transportStartReturnsRunnable() {
-    SocketAddress addr1 = mock(SocketAddress.class);
-    SocketAddress addr2 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
     createInternalSubchannel(addr1, addr2);
     final AtomicInteger runnableInvokes = new AtomicInteger(0);
     Runnable startRunnable = new Runnable() {
@@ -906,7 +906,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void resetConnectBackoff() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
 
     // Move into TRANSIENT_FAILURE to schedule reconnect
@@ -953,7 +953,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void resetConnectBackoff_noopOnIdleTransport() throws Exception {
-    SocketAddress addr = mock(SocketAddress.class);
+    ProxySocketAddress addr = makeProxySocketAddress();
     createInternalSubchannel(addr);
     assertEquals(IDLE, internalSubchannel.getState());
 
@@ -964,7 +964,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void channelzMembership() throws Exception {
-    SocketAddress addr1 = mock(SocketAddress.class);
+    ProxySocketAddress addr1 = makeProxySocketAddress();
     createInternalSubchannel(addr1);
     internalSubchannel.obtainActiveTransport();
 
@@ -976,7 +976,7 @@ public class InternalSubchannelTest {
 
   @Test
   public void channelzStatContainsTransport() throws Exception {
-    SocketAddress addr = new SocketAddress() {};
+    ProxySocketAddress addr = makeProxySocketAddress();
     assertThat(transports).isEmpty();
     createInternalSubchannel(addr);
     internalSubchannel.obtainActiveTransport();
@@ -992,15 +992,15 @@ public class InternalSubchannelTest {
     Attributes attr1 = Attributes.newBuilder().set(key, "1").build();
     Attributes attr2 = Attributes.newBuilder().set(key, "2").build();
     Attributes attr3 = Attributes.newBuilder().set(key, "3").build();
-    SocketAddress addr1 = new FakeSocketAddress();
-    SocketAddress addr2 = new FakeSocketAddress();
-    SocketAddress addr3 = new FakeSocketAddress();
-    SocketAddress addr4 = new FakeSocketAddress();
-    SocketAddress addr5 = new FakeSocketAddress();
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
+    ProxySocketAddress addr4 = makeProxySocketAddress();
+    ProxySocketAddress addr5 = makeProxySocketAddress();
     Index index = new Index(Arrays.asList(
-        new EquivalentAddressGroup(Arrays.asList(addr1, addr2), attr1),
-        new EquivalentAddressGroup(Arrays.asList(addr3), attr2),
-        new EquivalentAddressGroup(Arrays.asList(addr4, addr5), attr3)));
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr1, addr2), attr1),
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr3), attr2),
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr4, addr5), attr3)));
     assertThat(index.getCurrentAddress()).isSameAs(addr1);
     assertThat(index.getCurrentEagAttributes()).isSameAs(attr1);
     assertThat(index.isAtBeginning()).isTrue();
@@ -1053,35 +1053,35 @@ public class InternalSubchannelTest {
   }
 
   @Test public void index_updateGroups_resets() {
-    SocketAddress addr1 = new FakeSocketAddress();
-    SocketAddress addr2 = new FakeSocketAddress();
-    SocketAddress addr3 = new FakeSocketAddress();
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
     Index index = new Index(Arrays.asList(
-        new EquivalentAddressGroup(Arrays.asList(addr1)),
-        new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr1)),
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr2, addr3))));
     index.increment();
     index.increment();
     // We want to make sure both groupIndex and addressIndex are reset
     index.updateGroups(Arrays.asList(
-        new EquivalentAddressGroup(Arrays.asList(addr1)),
-        new EquivalentAddressGroup(Arrays.asList(addr2, addr3))));
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr1)),
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr2, addr3))));
     assertThat(index.getCurrentAddress()).isSameAs(addr1);
   }
 
   @Test public void index_seekTo() {
-    SocketAddress addr1 = new FakeSocketAddress();
-    SocketAddress addr2 = new FakeSocketAddress();
-    SocketAddress addr3 = new FakeSocketAddress();
+    ProxySocketAddress addr1 = makeProxySocketAddress();
+    ProxySocketAddress addr2 = makeProxySocketAddress();
+    ProxySocketAddress addr3 = makeProxySocketAddress();
     Index index = new Index(Arrays.asList(
-        new EquivalentAddressGroup(Arrays.asList(addr1, addr2)),
-        new EquivalentAddressGroup(Arrays.asList(addr3))));
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr1, addr2)),
+        EquivalentAddressGroup.createFromList(Arrays.asList(addr3))));
     assertThat(index.seekTo(addr3)).isTrue();
     assertThat(index.getCurrentAddress()).isSameAs(addr3);
     assertThat(index.seekTo(addr1)).isTrue();
     assertThat(index.getCurrentAddress()).isSameAs(addr1);
     assertThat(index.seekTo(addr2)).isTrue();
     assertThat(index.getCurrentAddress()).isSameAs(addr2);
-    index.seekTo(new FakeSocketAddress());
+    index.seekTo(makeProxySocketAddress());
     // Failed seekTo doesn't change the index
     assertThat(index.getCurrentAddress()).isSameAs(addr2);
   }
@@ -1093,8 +1093,8 @@ public class InternalSubchannelTest {
         .setUserAgent(USER_AGENT);
   }
 
-  private void createInternalSubchannel(SocketAddress ... addrs) {
-    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addrs)));
+  private void createInternalSubchannel(ProxySocketAddress ... addrs) {
+    createInternalSubchannel(EquivalentAddressGroup.createFromList(Arrays.asList(addrs)));
   }
 
   private void createInternalSubchannel(EquivalentAddressGroup ... addrs) {
@@ -1123,4 +1123,8 @@ public class InternalSubchannelTest {
   }
 
   private static class FakeSocketAddress extends SocketAddress {}
+
+  private static ProxySocketAddress makeProxySocketAddress() {
+    return ProxySocketAddress.withoutProxy(new FakeSocketAddress());
+  }
 }

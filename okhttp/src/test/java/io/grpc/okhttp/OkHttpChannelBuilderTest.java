@@ -24,6 +24,7 @@ import static org.junit.Assert.assertSame;
 
 import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
@@ -113,7 +114,8 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void usePlaintext_newClientTransportAllowed() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234).usePlaintext();
-    builder.buildTransportFactory().newClientTransport(new InetSocketAddress(5678),
+    builder.buildTransportFactory().newClientTransport(
+        ProxySocketAddress.withoutProxy(new InetSocketAddress(5678)),
         new ClientTransportFactory.ClientTransportOptions());
   }
 

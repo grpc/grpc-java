@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import io.grpc.ProxySocketAddress;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
@@ -95,7 +96,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     int port = server.getPort();
     return clientFactory.newClientTransport(
-        new InetSocketAddress("localhost", port),
+        ProxySocketAddress.withoutProxy(new InetSocketAddress("localhost", port)),
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(testAuthority(server)));
   }

@@ -17,8 +17,7 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
-import io.grpc.internal.ProxyParameters;
-import java.net.SocketAddress;
+import io.grpc.ProxySocketAddress;
 
 /**
  * Internal {@link NettyChannelBuilder} accessor.  This is intended for usage internal to the gRPC
@@ -45,8 +44,7 @@ public final class InternalNettyChannelBuilder {
       extends NettyChannelBuilder.TransportCreationParamsFilterFactory {
     @Override
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress, String authority, String userAgent,
-        ProxyParameters proxy);
+        ProxySocketAddress targetServerAddress, String authority, String userAgent);
   }
 
   /**

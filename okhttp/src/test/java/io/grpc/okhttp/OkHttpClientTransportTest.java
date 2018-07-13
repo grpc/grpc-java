@@ -59,6 +59,7 @@ import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
@@ -70,7 +71,6 @@ import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Instrumented;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -128,7 +128,6 @@ public class OkHttpClientTransportTest {
   // The gRPC header length, which includes 1 byte compression flag and 4 bytes message length.
   private static final int HEADER_LENGTH = 5;
   private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
-  private static final ProxyParameters NO_PROXY = null;
   private static final String NO_USER = null;
   private static final String NO_PW = null;
   private static final int DEFAULT_START_STREAM_ID = 3;
@@ -221,9 +220,9 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void testToString() throws Exception {
-    InetSocketAddress address = InetSocketAddress.createUnresolved("hostname", 31415);
+    InetSocketAddress address = new InetSocketAddress("localhost", 31415);
     clientTransport = new OkHttpClientTransport(
-        address,
+        ProxySocketAddress.withoutProxy(address),
         "hostname",
         /*agent=*/ null,
         executor,
@@ -231,7 +230,6 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         OkHttpChannelBuilder.INTERNAL_DEFAULT_CONNECTION_SPEC,
         DEFAULT_MAX_MESSAGE_SIZE,
-        NO_PROXY,
         tooManyPingsRunnable,
         transportTracer);
     String s = clientTransport.toString();
@@ -1446,7 +1444,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void invalidAuthorityPropagates() {
     clientTransport = new OkHttpClientTransport(
-        new InetSocketAddress("host", 1234),
+        ProxySocketAddress.withoutProxy(new InetSocketAddress("localhost", 1234)),
         "invalid_authority",
         "userAgent",
         executor,
@@ -1454,7 +1452,6 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        NO_PROXY,
         tooManyPingsRunnable,
         transportTracer);
 
@@ -1468,7 +1465,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void unreachableServer() throws Exception {
     clientTransport = new OkHttpClientTransport(
-        new InetSocketAddress("localhost", 0),
+        ProxySocketAddress.withoutProxy(new InetSocketAddress("localhost", 0)),
         "authority",
         "userAgent",
         executor,
@@ -1476,7 +1473,6 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        NO_PROXY,
         tooManyPingsRunnable,
         new TransportTracer());
 
@@ -1498,7 +1494,11 @@ public class OkHttpClientTransportTest {
   public void proxy_200() throws Exception {
     ServerSocket serverSocket = new ServerSocket(0);
     clientTransport = new OkHttpClientTransport(
-        InetSocketAddress.createUnresolved("theservice", 80),
+        ProxySocketAddress.withProxy(
+            InetSocketAddress.createUnresolved("theservice", 80),
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(),
+            NO_USER,
+            NO_PW),
         "authority",
         "userAgent",
         executor,
@@ -1506,8 +1506,6 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);
@@ -1548,7 +1546,11 @@ public class OkHttpClientTransportTest {
   public void proxy_500() throws Exception {
     ServerSocket serverSocket = new ServerSocket(0);
     clientTransport = new OkHttpClientTransport(
-        InetSocketAddress.createUnresolved("theservice", 80),
+        ProxySocketAddress.withProxy(
+            InetSocketAddress.createUnresolved("theservice", 80),
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(),
+            NO_USER,
+            NO_PW),
         "authority",
         "userAgent",
         executor,
@@ -1556,8 +1558,7 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);
@@ -1597,7 +1598,11 @@ public class OkHttpClientTransportTest {
   public void proxy_immediateServerClose() throws Exception {
     ServerSocket serverSocket = new ServerSocket(0);
     clientTransport = new OkHttpClientTransport(
-        InetSocketAddress.createUnresolved("theservice", 80),
+        ProxySocketAddress.withProxy(
+            InetSocketAddress.createUnresolved("theservice", 80),
+            (InetSocketAddress) serverSocket.getLocalSocketAddress(),
+            NO_USER,
+            NO_PW),
         "authority",
         "userAgent",
         executor,
@@ -1605,8 +1610,6 @@ public class OkHttpClientTransportTest {
         hostnameVerifier,
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
         tooManyPingsRunnable,
         transportTracer);
     clientTransport.start(transportListener);

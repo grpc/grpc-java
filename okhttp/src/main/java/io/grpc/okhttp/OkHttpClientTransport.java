@@ -37,6 +37,7 @@ import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ProxySocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -50,7 +51,6 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.LogId;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
@@ -132,7 +132,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     return Collections.unmodifiableMap(errorToStatus);
   }
 
-  private final InetSocketAddress address;
+  private final ProxySocketAddress proxySocketAddress;
   private final String defaultAuthority;
   private final String userAgent;
   private final Random random = new Random();
@@ -193,21 +193,18 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   @GuardedBy("lock")
   private Channelz.Security securityInfo;
 
-  @VisibleForTesting
-  @Nullable
-  final ProxyParameters proxy;
-
   // The following fields should only be used for test.
   Runnable connectingCallback;
   SettableFuture<Void> connectedFuture;
 
 
-  OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
+  OkHttpClientTransport(ProxySocketAddress proxySocketAddress, String authority,
+      @Nullable String userAgent,
       Executor executor, @Nullable SSLSocketFactory sslSocketFactory,
       @Nullable HostnameVerifier hostnameVerifier, ConnectionSpec connectionSpec,
-      int maxMessageSize, @Nullable ProxyParameters proxy, Runnable tooManyPingsRunnable,
+      int maxMessageSize, Runnable tooManyPingsRunnable,
       TransportTracer transportTracer) {
-    this.address = Preconditions.checkNotNull(address, "address");
+    this.proxySocketAddress = Preconditions.checkNotNull(proxySocketAddress, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
     this.executor = Preconditions.checkNotNull(executor, "executor");
@@ -220,7 +217,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
     this.stopwatchFactory = GrpcUtil.STOPWATCH_SUPPLIER;
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
-    this.proxy = proxy;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
@@ -244,7 +240,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       int maxMessageSize,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer) {
-    address = null;
+    proxySocketAddress = null;
     this.maxMessageSize = maxMessageSize;
     defaultAuthority = "notarealauthority:80";
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
@@ -258,7 +254,6 @@ class OkHttpClientTransport implements ConnectionClientTransport {
     this.connectionSpec = null;
     this.connectingCallback = connectingCallback;
     this.connectedFuture = Preconditions.checkNotNull(connectedFuture, "connectedFuture");
-    this.proxy = null;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
@@ -292,7 +287,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   }
 
   private boolean isForTest() {
-    return address == null;
+    return proxySocketAddress == null;
   }
 
   @Override
@@ -461,12 +456,16 @@ class OkHttpClientTransport implements ConnectionClientTransport {
         BufferedSink sink;
         Socket sock;
         SSLSession sslSession = null;
+        InetSocketAddress target = (InetSocketAddress) proxySocketAddress.getAddress();
         try {
-          if (proxy == null) {
-            sock = new Socket(address.getAddress(), address.getPort());
+          if (proxySocketAddress.getProxyAddress() == null) {
+            sock = new Socket(target.getAddress(), target.getPort());
           } else {
             sock = createHttpProxySocket(
-                address, proxy.proxyAddress, proxy.username, proxy.password);
+                target,
+                proxySocketAddress.getProxyAddress(),
+                proxySocketAddress.getUsername(),
+                proxySocketAddress.getPassword());
           }
 
           if (sslSocketFactory != null) {
@@ -623,7 +622,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("logId", logId.getId())
-        .add("address", address)
+        .add("address", proxySocketAddress)
         .toString();
   }
 
@@ -662,7 +661,7 @@ class OkHttpClientTransport implements ConnectionClientTransport {
       return uri.getPort();
     }
 
-    return address.getPort();
+    return ((InetSocketAddress) proxySocketAddress.getAddress()).getPort();
   }
 
   @Override

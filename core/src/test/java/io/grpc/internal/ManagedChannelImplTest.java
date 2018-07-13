@@ -77,6 +77,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
@@ -144,8 +145,10 @@ public class ManagedChannelImplTest {
           .setUserAgent(USER_AGENT);
   private static final String TARGET = "fake://" + SERVICE_NAME;
   private URI expectedUri;
-  private final SocketAddress socketAddress = new SocketAddress() {};
-  private final EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
+  private final ProxySocketAddress proxySocketAddress
+      = ProxySocketAddress.withoutProxy(new SocketAddress() {});
+  private final EquivalentAddressGroup addressGroup
+      = new EquivalentAddressGroup(proxySocketAddress);
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock oobExecutor = new FakeClock();
@@ -276,7 +279,7 @@ public class ManagedChannelImplTest {
   public void idleModeDisabled() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build());
     createChannel();
 
@@ -303,7 +306,7 @@ public class ManagedChannelImplTest {
   public void shutdownWithNoTransportsEverCreated() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build());
     createChannel();
     verify(executorPool).getObject();
@@ -428,7 +431,7 @@ public class ManagedChannelImplTest {
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     verify(mockTransport).start(any(ManagedClientTransport.Listener.class));
@@ -449,7 +452,7 @@ public class ManagedChannelImplTest {
     // First RPC, will be pending
     ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
     verify(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     call.start(mockCallListener, headers);
 
     verify(mockTransport, never())
@@ -537,7 +540,7 @@ public class ManagedChannelImplTest {
     verifyNoMoreInteractions(oobExecutorPool);
 
     verify(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     verify(mockTransportFactory).close();
     verify(mockTransport, atLeast(0)).getLogId();
     verifyNoMoreInteractions(mockTransport);
@@ -547,7 +550,7 @@ public class ManagedChannelImplTest {
   public void noMoreCallbackAfterLoadBalancerShutdown() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     Status resolutionError = Status.UNAVAILABLE.withDescription("Resolution failed");
@@ -563,7 +566,7 @@ public class ManagedChannelImplTest {
     subchannel1.requestConnection();
     subchannel2.requestConnection();
     verify(mockTransportFactory, times(2))
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     MockClientTransportInfo transportInfo1 = transports.poll();
     MockClientTransportInfo transportInfo2 = transports.poll();
 
@@ -626,10 +629,10 @@ public class ManagedChannelImplTest {
     // Make the transport available
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     subchannel.requestConnection();
     verify(mockTransportFactory)
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
     ManagedClientTransport.Listener transportListener = transportInfo.listener;
@@ -670,7 +673,7 @@ public class ManagedChannelImplTest {
     Status error = Status.UNAVAILABLE.withCause(new Throwable("fake name resolution error"));
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .setError(error)
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
@@ -769,7 +772,7 @@ public class ManagedChannelImplTest {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setResolvedAtStart(false)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -810,22 +813,23 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void firstResolvedServerFailedToConnect() throws Exception {
-    final SocketAddress goodAddress = new SocketAddress() {
+    final ProxySocketAddress goodAddress = ProxySocketAddress.withoutProxy(new SocketAddress() {
         @Override public String toString() {
           return "goodAddress";
         }
-      };
-    final SocketAddress badAddress = new SocketAddress() {
+      });
+    final ProxySocketAddress badAddress = ProxySocketAddress.withoutProxy(new SocketAddress() {
         @Override public String toString() {
           return "badAddress";
         }
-      };
+      });
     InOrder inOrder = inOrder(mockLoadBalancer);
 
-    List<SocketAddress> resolvedAddrs = Arrays.asList(badAddress, goodAddress);
+    List<ProxySocketAddress> resolvedAddrs = Arrays.asList(badAddress, goodAddress);
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
+            .setServers(Collections.singletonList(
+                EquivalentAddressGroup.createFromList(resolvedAddrs)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -837,7 +841,7 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
 
     // Simulate name resolution results
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
+    EquivalentAddressGroup addressGroup = EquivalentAddressGroup.createFromList(resolvedAddrs);
     inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
@@ -949,23 +953,24 @@ public class ManagedChannelImplTest {
    */
   @Test
   public void allServersFailedToConnect() throws Exception {
-    final SocketAddress addr1 = new SocketAddress() {
+    final ProxySocketAddress addr1 = ProxySocketAddress.withoutProxy(new SocketAddress() {
         @Override public String toString() {
           return "addr1";
         }
-      };
-    final SocketAddress addr2 = new SocketAddress() {
+      });
+    final ProxySocketAddress addr2 = ProxySocketAddress.withoutProxy(new SocketAddress() {
         @Override public String toString() {
           return "addr2";
         }
-      };
+      });
     InOrder inOrder = inOrder(mockLoadBalancer);
 
-    List<SocketAddress> resolvedAddrs = Arrays.asList(addr1, addr2);
+    List<ProxySocketAddress> resolvedAddrs = Arrays.asList(addr1, addr2);
 
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(resolvedAddrs)))
+            .setServers(Collections.singletonList(
+                EquivalentAddressGroup.createFromList(resolvedAddrs)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -982,7 +987,7 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
 
     // Simulate name resolution results
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
+    EquivalentAddressGroup addressGroup = EquivalentAddressGroup.createFromList(resolvedAddrs);
     inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
         eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
@@ -1052,22 +1057,22 @@ public class ManagedChannelImplTest {
 
     // requestConnection()
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
     sub1.requestConnection();
-    verify(mockTransportFactory).newClientTransport(socketAddress, clientTransportOptions);
+    verify(mockTransportFactory).newClientTransport(proxySocketAddress, clientTransportOptions);
     MockClientTransportInfo transportInfo1 = transports.poll();
     assertNotNull(transportInfo1);
 
     sub2.requestConnection();
     verify(mockTransportFactory, times(2))
-        .newClientTransport(socketAddress, clientTransportOptions);
+        .newClientTransport(proxySocketAddress, clientTransportOptions);
     MockClientTransportInfo transportInfo2 = transports.poll();
     assertNotNull(transportInfo2);
 
     sub1.requestConnection();
     sub2.requestConnection();
     verify(mockTransportFactory, times(2))
-        .newClientTransport(socketAddress, clientTransportOptions);
+        .newClientTransport(proxySocketAddress, clientTransportOptions);
 
     // shutdown() has a delay
     sub1.shutdown();
@@ -1135,7 +1140,7 @@ public class ManagedChannelImplTest {
     sub2.shutdown();
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
   }
 
   @Test
@@ -1150,7 +1155,7 @@ public class ManagedChannelImplTest {
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown subchannels.
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
   }
 
   @Test
@@ -1170,7 +1175,7 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, headers);
     verify(mockTransportFactory)
         .newClientTransport(
-            socketAddress,
+            proxySocketAddress,
             new ClientTransportOptions().setAuthority("oob1authority").setUserAgent(USER_AGENT));
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
@@ -1192,7 +1197,7 @@ public class ManagedChannelImplTest {
         oob1.newCall(method, CallOptions.DEFAULT.withWaitForReady());
     call3.start(mockCallListener3, headers);
     verify(mockTransportFactory, times(2)).newClientTransport(
-        socketAddress,
+        proxySocketAddress,
         new ClientTransportOptions().setAuthority("oob1authority").setUserAgent(USER_AGENT));
     transportInfo = transports.poll();
     assertNotNull(transportInfo);
@@ -1298,7 +1303,7 @@ public class ManagedChannelImplTest {
     assertTrue(oob2.isTerminated());
     assertTrue(channel.isTerminated());
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
   }
 
   @Test
@@ -1313,7 +1318,7 @@ public class ManagedChannelImplTest {
     // Channel's shutdownNow() will call shutdownNow() on all subchannels and oobchannels.
     // Therefore, channel is terminated without relying on LoadBalancer to shutdown oobchannels.
     verify(mockTransportFactory, never())
-        .newClientTransport(any(SocketAddress.class), any(ClientTransportOptions.class));
+        .newClientTransport(any(ProxySocketAddress.class), any(ClientTransportOptions.class));
   }
 
   @Test
@@ -1329,7 +1334,7 @@ public class ManagedChannelImplTest {
   private void subtestRefreshNameResolutionWhenConnectionFailed(boolean isOobChannel) {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -1406,11 +1411,11 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     // Simulate name resolution results
-    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
+    EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(proxySocketAddress);
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory)
-        .newClientTransport(same(socketAddress), eq(clientTransportOptions));
+        .newClientTransport(same(proxySocketAddress), eq(clientTransportOptions));
     MockClientTransportInfo transportInfo = transports.poll();
     final ConnectionClientTransport transport = transportInfo.transport;
     when(transport.getAttributes()).thenReturn(Attributes.EMPTY);
@@ -1850,7 +1855,7 @@ public class ManagedChannelImplTest {
     channelBuilder.idleTimeout(idleTimeoutMillis, TimeUnit.MILLISECONDS);
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build());
     createChannel();
     assertEquals(IDLE, channel.getState(false));
@@ -2017,7 +2022,7 @@ public class ManagedChannelImplTest {
   public void resetConnectBackoff_noOpWithoutPendingResolverBackoff() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
@@ -2118,13 +2123,13 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
     createChannel();
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Address resolved: "
-            + Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            + Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -2472,7 +2477,7 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
-            .setServers(Collections.singletonList(new EquivalentAddressGroup(socketAddress)))
+            .setServers(Collections.singletonList(new EquivalentAddressGroup(proxySocketAddress)))
             .build();
     nameResolverFactory.nextResolvedAttributes.set(attributesWithRetryPolicy);
     channelBuilder.nameResolverFactory(nameResolverFactory);

@@ -21,7 +21,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
-import io.grpc.internal.ProxyParameters;
+import io.grpc.ProxySocketAddress;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
@@ -40,7 +40,8 @@ public class NettyChannelBuilderTest {
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
   private final SslContext noSslContext = null;
-  private final ProxyParameters noProxy = null;
+  private final ProxySocketAddress noProxy
+      = ProxySocketAddress.withoutProxy(new SocketAddress() {});
 
   private void shutdown(ManagedChannel mc) throws Exception {
     mc.shutdownNow();
@@ -136,6 +137,21 @@ public class NettyChannelBuilderTest {
     thrown.expectMessage("Server SSL context can not be used for client channel");
 
     builder.sslContext(sslContext);
+  }
+
+  @Test
+  public void createProtocolNegotiator_proxy() {
+    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiator(
+        "authority",
+        NegotiationType.PLAINTEXT,
+        noSslContext,
+        ProxySocketAddress.withProxy(
+            InetSocketAddress.createUnresolved("localhost", 1234),
+            new InetSocketAddress("localhost", 5678),
+            null,
+            null));
+    // just check that the classes are the same, and that negotiator is not null.
+    assertTrue(negotiator instanceof ProtocolNegotiators.ProxyNegotiator);
   }
 
   @Test

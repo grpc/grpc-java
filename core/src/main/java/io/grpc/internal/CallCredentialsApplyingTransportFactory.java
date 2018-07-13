@@ -24,9 +24,9 @@ import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxySocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
-import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -42,7 +42,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
 
   @Override
   public ConnectionClientTransport newClientTransport(
-      SocketAddress serverAddress, ClientTransportOptions options) {
+      ProxySocketAddress serverAddress, ClientTransportOptions options) {
     return new CallCredentialsApplyingTransport(
         delegate.newClientTransport(serverAddress, options), options.getAuthority());
   }

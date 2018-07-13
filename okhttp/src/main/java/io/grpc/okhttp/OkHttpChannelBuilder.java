@@ -27,6 +27,7 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
@@ -41,7 +42,6 @@ import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.Platform;
 import io.grpc.okhttp.internal.TlsVersion;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.SecureRandom;
@@ -516,10 +516,13 @@ public class OkHttpChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, ClientTransportOptions options) {
+        ProxySocketAddress addr, ClientTransportOptions options) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
+      Preconditions.checkArgument(
+          addr.getAddress() instanceof InetSocketAddress,
+          "target address must be InetSocketAddress");
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
         @Override
@@ -527,9 +530,8 @@ public class OkHttpChannelBuilder extends
           keepAliveTimeNanosState.backoff();
         }
       };
-      InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       OkHttpClientTransport transport = new OkHttpClientTransport(
-          inetSocketAddr,
+          addr,
           options.getAuthority(),
           options.getUserAgent(),
           executor,
@@ -537,7 +539,6 @@ public class OkHttpChannelBuilder extends
           hostnameVerifier,
           connectionSpec,
           maxMessageSize,
-          options.getProxyParameters(),
           tooManyPingsRunnable,
           transportTracerFactory.create());
       if (enableKeepAlive) {

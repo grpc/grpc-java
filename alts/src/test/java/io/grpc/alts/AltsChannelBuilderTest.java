@@ -22,6 +22,7 @@ import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Defaults;
 import io.grpc.ManagedChannel;
+import io.grpc.ProxySocketAddress;
 import io.grpc.alts.AltsChannelBuilder.AltsChannel;
 import io.grpc.alts.internal.AltsClientOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
@@ -58,7 +59,10 @@ public final class AltsChannelBuilderTest {
     assertThat(tcpfFactory).isNotNull();
     ProtocolNegotiator protocolNegotiator =
         tcpfFactory
-            .create(new InetSocketAddress(8080), "fakeAuthority", "fakeUserAgent", null)
+            .create(
+                ProxySocketAddress.withoutProxy(new InetSocketAddress(8080)),
+                "fakeAuthority",
+                "fakeUserAgent")
             .getProtocolNegotiator();
     assertThat(protocolNegotiator).isInstanceOf(AltsProtocolNegotiator.class);
 
