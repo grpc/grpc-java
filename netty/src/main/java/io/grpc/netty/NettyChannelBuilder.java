@@ -30,13 +30,13 @@ import io.grpc.Attributes;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
@@ -366,12 +366,15 @@ public final class NettyChannelBuilder
       String authority,
       NegotiationType negotiationType,
       SslContext sslContext,
-      ProxyParameters proxy) {
+      ProxySocketAddress proxySocketAddress) {
     ProtocolNegotiator negotiator =
         createProtocolNegotiatorByType(authority, negotiationType, sslContext);
-    if (proxy != null) {
+    if (proxySocketAddress.getProxyAddress() != null) {
       negotiator = ProtocolNegotiators.httpProxy(
-          proxy.proxyAddress, proxy.username, proxy.password, negotiator);
+          proxySocketAddress.getProxyAddress(),
+          proxySocketAddress.getUsername(),
+          proxySocketAddress.getPassword(),
+          negotiator);
     }
     return negotiator;
   }
@@ -436,15 +439,14 @@ public final class NettyChannelBuilder
   interface TransportCreationParamsFilterFactory {
     @CheckReturnValue
     TransportCreationParamsFilter create(
-        SocketAddress targetServerAddress,
+        ProxySocketAddress targetServerAddress,
         String authority,
-        @Nullable String userAgent,
-        @Nullable ProxyParameters proxy);
+        @Nullable String userAgent);
   }
 
   @CheckReturnValue
   interface TransportCreationParamsFilter {
-    SocketAddress getTargetServerAddress();
+    ProxySocketAddress getProxySocketAddress();
 
     String getAuthority();
 
@@ -508,15 +510,14 @@ public final class NettyChannelBuilder
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress serverAddress, ClientTransportOptions options) {
+        ProxySocketAddress serverAddress, ClientTransportOptions options) {
       checkState(!closed, "The transport factory is closed.");
 
       TransportCreationParamsFilter dparams =
           transportCreationParamsFilterFactory.create(
               serverAddress,
               options.getAuthority(),
-              options.getUserAgent(),
-              options.getProxyParameters());
+              options.getUserAgent());
 
       final AtomicBackoff.State keepAliveTimeNanosState = keepAliveTimeNanos.getState();
       Runnable tooManyPingsRunnable = new Runnable() {
@@ -526,7 +527,7 @@ public final class NettyChannelBuilder
         }
       };
       NettyClientTransport transport = new NettyClientTransport(
-          dparams.getTargetServerAddress(), channelType, channelOptions, group,
+          dparams.getProxySocketAddress().getAddress(), channelType, channelOptions, group,
           dparams.getProtocolNegotiator(), flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, dparams.getAuthority(), dparams.getUserAgent(),
@@ -568,36 +569,32 @@ public final class NettyChannelBuilder
 
       @Override
       public TransportCreationParamsFilter create(
-          SocketAddress targetServerAddress,
+          ProxySocketAddress proxySocketAddress,
           String authority,
-          String userAgent,
-          ProxyParameters proxyParams) {
+          String userAgent) {
         return new DynamicNettyTransportParams(
-            targetServerAddress, authority, userAgent, proxyParams);
+            proxySocketAddress, authority, userAgent);
       }
 
       @CheckReturnValue
       private final class DynamicNettyTransportParams implements TransportCreationParamsFilter {
 
-        private final SocketAddress targetServerAddress;
+        private final ProxySocketAddress proxySocketAddress;
         private final String authority;
         @Nullable private final String userAgent;
-        private ProxyParameters proxyParams;
 
         private DynamicNettyTransportParams(
-            SocketAddress targetServerAddress,
+            ProxySocketAddress proxySocketAddress,
             String authority,
-            String userAgent,
-            ProxyParameters proxyParams) {
-          this.targetServerAddress = targetServerAddress;
+            String userAgent) {
+          this.proxySocketAddress = proxySocketAddress;
           this.authority = authority;
           this.userAgent = userAgent;
-          this.proxyParams = proxyParams;
         }
 
         @Override
-        public SocketAddress getTargetServerAddress() {
-          return targetServerAddress;
+        public ProxySocketAddress getProxySocketAddress() {
+          return proxySocketAddress;
         }
 
         @Override
@@ -612,7 +609,8 @@ public final class NettyChannelBuilder
 
         @Override
         public ProtocolNegotiator getProtocolNegotiator() {
-          return createProtocolNegotiator(authority, negotiationType, sslContext, proxyParams);
+          return createProtocolNegotiator(
+              authority, negotiationType, sslContext, proxySocketAddress);
         }
       }
     }

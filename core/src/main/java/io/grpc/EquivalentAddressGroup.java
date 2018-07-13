@@ -17,13 +17,15 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * A group of {@link SocketAddress}es that are considered equivalent when channel makes connections.
+ * A group of {@link ProxySocketAddress}es that are considered equivalent when channel makes
+ * connections.
  *
  * <p>Usually the addresses are addresses resolved from the same host name, and connecting to any of
  * them is equally sufficient. They do have order. An address appears earlier on the list is likely
@@ -32,7 +34,7 @@ import java.util.List;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
 
-  private final List<SocketAddress> addrs;
+  private final List<ProxySocketAddress> addrs;
   private final Attributes attrs;
 
   /**
@@ -41,18 +43,18 @@ public final class EquivalentAddressGroup {
   private final int hashCode;
 
   /**
-   * List constructor without {@link Attributes}.
+   * List constructor without {@link Attributes}. The addresses are used without proxies.
    */
   public EquivalentAddressGroup(List<SocketAddress> addrs) {
     this(addrs, Attributes.EMPTY);
   }
 
   /**
-   * List constructor with {@link Attributes}.
+   * List constructor with {@link Attributes}. The addresses are used without proxies.
    */
   public EquivalentAddressGroup(List<SocketAddress> addrs, Attributes attrs) {
     Preconditions.checkArgument(!addrs.isEmpty(), "addrs is empty");
-    this.addrs = Collections.unmodifiableList(new ArrayList<SocketAddress>(addrs));
+    this.addrs = Collections.unmodifiableList(withoutProxy(addrs));
     this.attrs = Preconditions.checkNotNull(attrs, "attrs");
     // Attributes may contain mutable objects, which means Attributes' hashCode may change over
     // time, thus we don't cache Attributes' hashCode.
@@ -60,23 +62,79 @@ public final class EquivalentAddressGroup {
   }
 
   /**
-   * Singleton constructor without Attributes.
+   * Singleton constructor without Attributes. The address is used without a proxy.
    */
   public EquivalentAddressGroup(SocketAddress addr) {
     this(addr, Attributes.EMPTY);
   }
 
   /**
-   * Singleton constructor with Attributes.
+   * Singleton constructor with Attributes. The address is used without a proxy.
    */
   public EquivalentAddressGroup(SocketAddress addr, Attributes attrs) {
     this(Collections.singletonList(addr), attrs);
   }
 
   /**
+   * List constructor with {@link Attributes}. The extra ignored parameter exists to prevent
+   * aliasing with the other constructor that takes a (List, Attributes).
+   */
+  private EquivalentAddressGroup(List<ProxySocketAddress> addrs, Attributes attrs, int ignored) {
+    Preconditions.checkArgument(!addrs.isEmpty(), "addrs is empty");
+    this.addrs = Collections.unmodifiableList(new ArrayList<ProxySocketAddress>(addrs));
+    this.attrs = Preconditions.checkNotNull(attrs, "attrs");
+    // Attributes may contain mutable objects, which means Attributes' hashCode may change over
+    // time, thus we don't cache Attributes' hashCode.
+    hashCode = this.addrs.hashCode();
+  }
+
+  /**
+   * List constructor.
+   */
+  public static EquivalentAddressGroup createFromList(List<ProxySocketAddress> addrs) {
+    return new EquivalentAddressGroup(addrs, Attributes.EMPTY, 0);
+  }
+
+  /**
+   * List constructor with {@link Attributes}.
+   */
+  public static EquivalentAddressGroup createFromList(
+      List<ProxySocketAddress> addrs, Attributes attrs) {
+    return new EquivalentAddressGroup(addrs, attrs, 0);
+  }
+
+  /**
+   * Singleton constructor without Attributes.
+   */
+  public EquivalentAddressGroup(ProxySocketAddress addr) {
+    this(ImmutableList.of(addr), Attributes.EMPTY, 0);
+  }
+
+  /**
+   * Singleton constructor with Attributes.
+   */
+  public EquivalentAddressGroup(ProxySocketAddress addr, Attributes attrs) {
+    this(Collections.singletonList(addr), attrs, 0);
+  }
+
+  /**
+   * Returns an immutable list of the addresses, without proxy information.
+   *
+   * @deprecated use {@link #getProxySocketAddresses()}, which retains proxy information.
+   */
+  @Deprecated
+  public List<SocketAddress> getAddresses() {
+    List<SocketAddress> ret = new ArrayList<SocketAddress>();
+    for (ProxySocketAddress addr : addrs) {
+      ret.add(addr.getAddress());
+    }
+    return ret;
+  }
+
+  /**
    * Returns an immutable list of the addresses.
    */
-  public List<SocketAddress> getAddresses() {
+  public List<ProxySocketAddress> getProxySocketAddresses() {
     return addrs;
   }
 
@@ -126,5 +184,13 @@ public final class EquivalentAddressGroup {
       return false;
     }
     return true;
+  }
+
+  private static List<ProxySocketAddress> withoutProxy(List<SocketAddress> addrs) {
+    List<ProxySocketAddress> ret = new ArrayList<ProxySocketAddress>();
+    for (SocketAddress addr : addrs) {
+      ret.add(ProxySocketAddress.withoutProxy(addr));
+    }
+    return ret;
   }
 }

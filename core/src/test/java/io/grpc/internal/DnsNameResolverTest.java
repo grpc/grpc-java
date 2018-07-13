@@ -34,6 +34,7 @@ import com.google.common.net.InetAddresses;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
@@ -311,11 +312,13 @@ public class DnsNameResolverTest {
     List<EquivalentAddressGroup> result = resultCaptor.getValue();
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
-    assertThat(eag.getAddresses()).hasSize(1);
+    assertThat(eag.getProxySocketAddresses()).hasSize(1);
 
-    PairSocketAddress socketAddress = (PairSocketAddress) eag.getAddresses().get(0);
-    assertSame(proxyParameters, socketAddress.getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY));
-    assertTrue(((InetSocketAddress) socketAddress.getAddress()).isUnresolved());
+    ProxySocketAddress proxySocketAddress = eag.getProxySocketAddresses().get(0);
+    assertSame(proxyParameters.proxyAddress, proxySocketAddress.getProxyAddress());
+    assertEquals(proxyParameters.username, proxySocketAddress.getUsername());
+    assertEquals(proxyParameters.password, proxySocketAddress.getPassword());
+    assertTrue(((InetSocketAddress) proxySocketAddress.getAddress()).isUnresolved());
   }
 
   @Test
@@ -582,10 +585,11 @@ public class DnsNameResolverTest {
     assertEquals(addrs.size(), results.size());
     for (int i = 0; i < addrs.size(); i++) {
       EquivalentAddressGroup addrGroup = results.get(i);
-      InetSocketAddress socketAddr =
-          (InetSocketAddress) Iterables.getOnlyElement(addrGroup.getAddresses());
-      assertEquals("Addr " + i, port, socketAddr.getPort());
-      assertEquals("Addr " + i, addrs.get(i), socketAddr.getAddress());
+      ProxySocketAddress proxySocketAddress =
+          Iterables.getOnlyElement(addrGroup.getProxySocketAddresses());
+      InetSocketAddress address = (InetSocketAddress) proxySocketAddress.getAddress();
+      assertEquals("Addr " + i, port, address.getPort());
+      assertEquals("Addr " + i, addrs.get(i), address.getAddress());
     }
   }
 }

@@ -21,7 +21,6 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
-import java.net.InetSocketAddress;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -32,8 +31,6 @@ public final class ClientTransportFactoryTest {
   private Attributes eagAttributes =
       Attributes.newBuilder().set(Attributes.Key.create("fake key"), "fake value").build();
   private String userAgent = "best-ua/3.14";
-  private ProxyParameters proxyParameters =
-      new ProxyParameters(new InetSocketAddress(0), null, null);
 
   @Test
   public void clientTransportOptions_init_checkNotNulls() {
@@ -47,12 +44,10 @@ public final class ClientTransportFactoryTest {
     ClientTransportOptions cto = new ClientTransportOptions()
         .setAuthority(authority)
         .setEagAttributes(eagAttributes)
-        .setUserAgent(userAgent)
-        .setProxyParameters(proxyParameters);
+        .setUserAgent(userAgent);
     assertThat(cto.getAuthority()).isEqualTo(authority);
     assertThat(cto.getEagAttributes()).isEqualTo(eagAttributes);
     assertThat(cto.getUserAgent()).isEqualTo(userAgent);
-    assertThat(cto.getProxyParameters()).isSameAs(proxyParameters);
   }
 
   @Test
@@ -74,17 +69,6 @@ public final class ClientTransportFactoryTest {
               .setAuthority(authority)
               .setEagAttributes(eagAttributes)
               .setUserAgent(userAgent))
-        .addEqualityGroup(
-            new ClientTransportOptions()
-              .setAuthority(authority)
-              .setEagAttributes(eagAttributes)
-              .setUserAgent(userAgent)
-              .setProxyParameters(proxyParameters),
-            new ClientTransportOptions()
-              .setAuthority(authority)
-              .setEagAttributes(eagAttributes)
-              .setUserAgent(userAgent)
-              .setProxyParameters(proxyParameters))
         .testEquals();
   }
 }

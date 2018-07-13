@@ -37,6 +37,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.internal.Channelz.ChannelStats;
 import io.grpc.internal.Channelz.ChannelTrace;
@@ -219,20 +220,13 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     if (addressIndex.isAtBeginning()) {
       connectingTimer.reset().start();
     }
-    SocketAddress address = addressIndex.getCurrentAddress();
-
-    ProxyParameters proxy = null;
-    if (address instanceof PairSocketAddress) {
-      proxy = ((PairSocketAddress) address).getAttributes().get(ProxyDetector.PROXY_PARAMS_KEY);
-      address = ((PairSocketAddress) address).getAddress();
-    }
+    ProxySocketAddress address = addressIndex.getCurrentAddress();
 
     ClientTransportFactory.ClientTransportOptions options =
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(authority)
           .setEagAttributes(addressIndex.getCurrentEagAttributes())
-          .setUserAgent(userAgent)
-          .setProxyParameters(proxy);
+          .setUserAgent(userAgent);
     ConnectionClientTransport transport =
         new CallTracingTransport(
             transportFactory.newClientTransport(address, options), callsTracer);
@@ -352,7 +346,7 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     ManagedClientTransport savedTransport = null;
     try {
       synchronized (lock) {
-        SocketAddress previousAddress = addressIndex.getCurrentAddress();
+        ProxySocketAddress previousAddress = addressIndex.getCurrentAddress();
         addressIndex.updateGroups(newAddressGroups);
         if (state.getState() == READY || state.getState() == CONNECTING) {
           if (!addressIndex.seekTo(previousAddress)) {
@@ -532,9 +526,9 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
   /** Listener for real transports. */
   private class TransportListener implements ManagedClientTransport.Listener {
     final ConnectionClientTransport transport;
-    final SocketAddress address;
+    final ProxySocketAddress address;
 
-    TransportListener(ConnectionClientTransport transport, SocketAddress address) {
+    TransportListener(ConnectionClientTransport transport, ProxySocketAddress address) {
       this.transport = transport;
       this.address = address;
     }
@@ -741,7 +735,7 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     public void increment() {
       EquivalentAddressGroup group = addressGroups.get(groupIndex);
       addressIndex++;
-      if (addressIndex >= group.getAddresses().size()) {
+      if (addressIndex >= group.getProxySocketAddresses().size()) {
         groupIndex++;
         addressIndex = 0;
       }
@@ -752,8 +746,8 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
       addressIndex = 0;
     }
 
-    public SocketAddress getCurrentAddress() {
-      return addressGroups.get(groupIndex).getAddresses().get(addressIndex);
+    public ProxySocketAddress getCurrentAddress() {
+      return addressGroups.get(groupIndex).getProxySocketAddresses().get(addressIndex);
     }
 
     public Attributes getCurrentEagAttributes() {
@@ -771,10 +765,10 @@ final class InternalSubchannel implements Instrumented<ChannelStats> {
     }
 
     /** Returns false if the needle was not found and the current index was left unchanged. */
-    public boolean seekTo(SocketAddress needle) {
+    public boolean seekTo(ProxySocketAddress needle) {
       for (int i = 0; i < addressGroups.size(); i++) {
         EquivalentAddressGroup group = addressGroups.get(i);
-        int j = group.getAddresses().indexOf(needle);
+        int j = group.getProxySocketAddresses().indexOf(needle);
         if (j == -1) {
           continue;
         }

@@ -19,8 +19,8 @@ package io.grpc.internal;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.ProxySocketAddress;
 import java.io.Closeable;
-import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
@@ -34,7 +34,7 @@ public interface ClientTransportFactory extends Closeable {
    * @param options additional configuration
    */
   ConnectionClientTransport newClientTransport(
-      SocketAddress serverAddress,
+      ProxySocketAddress serverAddress,
       ClientTransportOptions options);
 
   /**
@@ -59,7 +59,7 @@ public interface ClientTransportFactory extends Closeable {
   void close();
 
   /**
-   * Options passed to {@link #newClientTransport(SocketAddress, ClientTransportOptions)}. Although
+   * Options passed to {@link #newClientTransport}. Although
    * it is safe to save this object if received, it is generally expected that the useful fields are
    * copied and then the options object is discarded. This allows using {@code final} for those
    * fields as well as avoids retaining unused objects contained in the options.
@@ -68,7 +68,6 @@ public interface ClientTransportFactory extends Closeable {
     private String authority = "unknown-authority";
     private Attributes eagAttributes = Attributes.EMPTY;
     private @Nullable String userAgent;
-    private @Nullable ProxyParameters proxyParameters;
 
     public String getAuthority() {
       return authority;
@@ -101,19 +100,9 @@ public interface ClientTransportFactory extends Closeable {
       return this;
     }
 
-    @Nullable
-    public ProxyParameters getProxyParameters() {
-      return proxyParameters;
-    }
-
-    public ClientTransportOptions setProxyParameters(@Nullable ProxyParameters proxyParameters) {
-      this.proxyParameters = proxyParameters;
-      return this;
-    }
-
     @Override
     public int hashCode() {
-      return Objects.hashCode(authority, eagAttributes, userAgent, proxyParameters);
+      return Objects.hashCode(authority, eagAttributes, userAgent);
     }
 
     @Override
@@ -124,8 +113,7 @@ public interface ClientTransportFactory extends Closeable {
       ClientTransportOptions that = (ClientTransportOptions) o;
       return this.authority.equals(that.authority)
           && this.eagAttributes.equals(that.eagAttributes)
-          && Objects.equal(this.userAgent, that.userAgent)
-          && Objects.equal(this.proxyParameters, that.proxyParameters);
+          && Objects.equal(this.userAgent, that.userAgent);
     }
   }
 }

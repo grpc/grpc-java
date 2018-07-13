@@ -24,6 +24,7 @@ import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -184,12 +185,11 @@ final class DnsNameResolver extends NameResolver {
           if (proxy != null) {
             EquivalentAddressGroup server =
                 new EquivalentAddressGroup(
-                    new PairSocketAddress(
+                    ProxySocketAddress.withProxy(
                         destination,
-                        Attributes
-                            .newBuilder()
-                            .set(ProxyDetector.PROXY_PARAMS_KEY, proxy)
-                            .build()));
+                        proxy.proxyAddress,
+                        proxy.username,
+                        proxy.password));
             savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
             return;
           }

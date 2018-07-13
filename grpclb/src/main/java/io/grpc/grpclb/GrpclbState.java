@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.ProxySocketAddress;
 import io.grpc.Status;
 import io.grpc.grpclb.LoadBalanceResponse.LoadBalanceResponseTypeCase;
 import io.grpc.internal.BackoffPolicy;
@@ -49,7 +50,6 @@ import io.grpc.internal.TimeProvider;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -748,11 +748,11 @@ final class GrpclbState {
    */
   private static EquivalentAddressGroup flattenEquivalentAddressGroup(
       List<EquivalentAddressGroup> groupList, Attributes attrs) {
-    List<SocketAddress> addrs = new ArrayList<SocketAddress>();
+    List<ProxySocketAddress> addrs = new ArrayList<ProxySocketAddress>();
     for (EquivalentAddressGroup group : groupList) {
-      addrs.addAll(group.getAddresses());
+      addrs.addAll(group.getProxySocketAddresses());
     }
-    return new EquivalentAddressGroup(addrs, attrs);
+    return EquivalentAddressGroup.createFromList(addrs, attrs);
   }
 
   @VisibleForTesting
