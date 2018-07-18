@@ -75,6 +75,9 @@ subprojects {
         it.options.encoding = "UTF-8"
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
+            if (JavaVersion.current().ordinal() >= JavaVersion.VERSION_1_9.ordinal()) {
+                it.options.compilerArgs += ["--release", "7"]
+            }
         }
     }
 
