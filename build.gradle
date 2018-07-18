@@ -73,11 +73,12 @@ subprojects {
             "-Xlint:-path"
         ]
         it.options.encoding = "UTF-8"
+        // Use --release to taret jdk7. The flag was introduced in jdk9
+        if (JavaVersion.current().ordinal() >= JavaVersion.VERSION_1_9.ordinal()) {
+            it.options.compilerArgs += ["--release", "7"]
+        }
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
-            if (JavaVersion.current().ordinal() >= JavaVersion.VERSION_1_9.ordinal()) {
-                it.options.compilerArgs += ["--release", "7"]
-            }
         }
     }
 
