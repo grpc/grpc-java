@@ -27,8 +27,8 @@ subprojects {
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
     // jdk10 not supported by errorprone: https://github.com/google/error-prone/issues/860
-    if (!JavaVersion.current().isJava10Compatible()
-        && (!rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean())) {
+    if (!JavaVersion.current().isJava10Compatible() &&
+        rootProject.properties.get('errorProne', true)) {
         apply plugin: "net.ltgt.errorprone"
         apply plugin: "net.ltgt.apt"
 
