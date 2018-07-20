@@ -559,18 +559,13 @@ public abstract class AbstractInteropTest {
       requestObserver.onNext(request);
     }
     requestObserver.onCompleted();
-    responseObserver.awaitCompletion();
+
     assertEquals(goldenResponse, responseObserver.firstValue().get());
+    responseObserver.awaitCompletion();
     assertThat(responseObserver.getValues()).hasSize(1);
-    final Throwable t = responseObserver.getError();
+    Throwable t = responseObserver.getError();
     if (t != null) {
-      // AssertionError(String, Throwable) only present in Android API 19+ & Java 7+
-      throw new AssertionError("RPC failed") {
-        @Override
-            public synchronized Throwable getCause() {
-              return t;
-            }
-      };
+      throw new AssertionError(t);
     }
   }
 
