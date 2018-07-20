@@ -50,7 +50,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     return new AutoConfiguredLoadBalancer(helper);
   }
 
-  private static final class FailingLoadBalancer extends LoadBalancer {
+  private static final class NoopLoadBalancer extends LoadBalancer {
 
     @Override
     public void handleResolvedAddressGroups(List<EquivalentAddressGroup> s, Attributes a) {}
@@ -93,7 +93,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
         delegate.shutdown();
         delegateFactory = null;
-        delegate = new FailingLoadBalancer();
+        delegate = new NoopLoadBalancer();
         return;
       }
 
