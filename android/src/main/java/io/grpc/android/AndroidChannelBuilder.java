@@ -114,18 +114,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     }
   }
 
-  /** Set the delegate channel builder's hostnameVerifier. */
-  public AndroidChannelBuilder hostnameVerifier(@Nullable HostnameVerifier hostnameVerifier) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("hostnameVerifier", HostnameVerifier.class)
-          .invoke(delegateBuilder, hostnameVerifier);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to invoke hostnameVerifier on delegate builder", e);
-    }
-  }
-
   /** Set the delegate channel builder's sslSocketFactory. */
   public AndroidChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
     try {
@@ -135,20 +123,6 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
       return this;
     } catch (Exception e) {
       throw new RuntimeException("Failed to invoke sslSocketFactory on delegate builder", e);
-    }
-  }
-
-  /** Set the delegate channel builder's scheduledExecutorService. */
-  public AndroidChannelBuilder scheduledExecutorService(
-      ScheduledExecutorService scheduledExecutorService) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("scheduledExecutorService", ScheduledExecutorService.class)
-          .invoke(delegateBuilder, scheduledExecutorService);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException(
-          "Failed to invoke scheduledExecutorService on delegate builder", e);
     }
   }
 
