@@ -126,6 +126,20 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     }
   }
 
+  /** Set the delegate channel builder's scheduledExecutorService. */
+  public AndroidChannelBuilder scheduledExecutorService(
+      ScheduledExecutorService scheduledExecutorService) {
+    try {
+      OKHTTP_CHANNEL_BUILDER_CLASS
+          .getMethod("scheduledExecutorService", ScheduledExecutorService.class)
+          .invoke(delegateBuilder, scheduledExecutorService);
+      return this;
+    } catch (Exception e) {
+      throw new RuntimeException(
+          "Failed to invoke scheduledExecutorService on delegate builder", e);
+    }
+  }
+
   @Override
   protected ManagedChannelBuilder<?> delegate() {
     return delegateBuilder;

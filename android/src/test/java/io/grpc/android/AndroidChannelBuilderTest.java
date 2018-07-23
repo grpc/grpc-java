@@ -113,6 +113,11 @@ public final class AndroidChannelBuilderTest {
   }
 
   @Test
+  public void scheduledExecutorService() {
+    AndroidChannelBuilder.forTarget("target").scheduledExecutorService(new ScheduledExecutorImpl());
+  }
+
+  @Test
   @Config(sdk = 23)
   public void nullContextDoesNotThrow_api23() {
     TestChannel delegateChannel = new TestChannel();
