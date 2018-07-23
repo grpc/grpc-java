@@ -211,6 +211,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   @CheckForNull
   private final ChannelTracer channelTracer;
   private final Channelz channelz;
+  private Boolean nonzeroBackends; // a flag for doing channel tracing when flipped
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -1246,12 +1247,13 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             new Object[]{getLogId(), servers, config});
       }
 
-      if (channelTracer != null) {
+      if (channelTracer != null && (nonzeroBackends == null || !nonzeroBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Address resolved: " + servers)
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
+        nonzeroBackends = true;
       }
 
       final class NamesResolved implements Runnable {
@@ -1292,12 +1294,13 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkArgument(!error.isOk(), "the error status must not be OK");
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      if (channelTracer != null) {
+      if (channelTracer != null && (nonzeroBackends == null || nonzeroBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name")
             .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
+        nonzeroBackends = false;
       }
       channelExecutor
           .executeLater(
