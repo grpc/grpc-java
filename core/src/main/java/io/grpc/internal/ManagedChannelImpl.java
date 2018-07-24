@@ -211,7 +211,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   @CheckForNull
   private final ChannelTracer channelTracer;
   private final Channelz channelz;
+  @CheckForNull
   private Boolean zeroBackends; // a flag for doing channel tracing when flipped
+  @Nullable
+  private Map<String, Object> lastServiceConfig; // used for channel tracing when value changed
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -1258,6 +1261,17 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             .build());
         zeroBackends = false;
       }
+      final Map<String, Object> serviceConfig =
+          config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+      if (channelTracer != null && serviceConfig != null
+          && !serviceConfig.equals(lastServiceConfig)) {
+        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
+            .setDescription("Service config changed")
+            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+            .setTimestampNanos(timeProvider.currentTimeNanos())
+            .build());
+        lastServiceConfig = serviceConfig;
+      }
 
       final class NamesResolved implements Runnable {
         @Override
@@ -1269,8 +1283,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
           nameResolverBackoffPolicy = null;
 
-          Map<String, Object> serviceConfig =
-              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+
           if (serviceConfig != null) {
             try {
               serviceConfigInterceptor.handleUpdate(serviceConfig);
