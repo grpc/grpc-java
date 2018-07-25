@@ -212,7 +212,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   private final ChannelTracer channelTracer;
   private final Channelz channelz;
   @CheckForNull
-  private Boolean zeroBackends; // a flag for doing channel tracing when flipped
+  private Boolean haveBackends; // a flag for doing channel tracing when flipped
   @Nullable
   private Map<String, Object> lastServiceConfig; // used for channel tracing when value changed
 
@@ -1253,13 +1253,13 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             new Object[]{getLogId(), servers, config});
       }
 
-      if (channelTracer != null && (zeroBackends == null || zeroBackends)) {
+      if (channelTracer != null && (haveBackends == null || !haveBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Address resolved: " + servers)
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
-        zeroBackends = false;
+        haveBackends = true;
       }
       final Map<String, Object> serviceConfig =
           config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
@@ -1282,7 +1282,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
           }
 
           nameResolverBackoffPolicy = null;
-
 
           if (serviceConfig != null) {
             try {
@@ -1310,13 +1309,13 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkArgument(!error.isOk(), "the error status must not be OK");
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      if (channelTracer != null && (zeroBackends == null || !zeroBackends)) {
+      if (channelTracer != null && (haveBackends == null || haveBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name")
             .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
-        zeroBackends = true;
+        haveBackends = false;
       }
       channelExecutor
           .executeLater(
