@@ -209,6 +209,11 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       }
     }
 
+    @Override
+    public String toString() {
+      return "RoundRobinLoadBalancer";
+    }
+
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */

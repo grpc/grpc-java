@@ -547,8 +547,16 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    maxTraceEvents = builder.maxTraceEvents;
+    if (maxTraceEvents > 0) {
+      long currentTimeNanos = timeProvider.currentTimeNanos();
+      channelTracer = new ChannelTracer(builder.maxTraceEvents, currentTimeNanos, "Channel");
+    } else {
+      channelTracer = null;
+    }
     if (builder.loadBalancerFactory == null) {
-      this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory();
+      this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(channelTracer, timeProvider);
     } else {
       this.loadBalancerFactory = builder.loadBalancerFactory;
     }
@@ -601,7 +609,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     this.channelBufferLimit = builder.retryBufferSize;
     this.perRpcBufferLimit = builder.perRpcBufferLimit;
-    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.callTracerFactory = new CallTracer.Factory() {
       @Override
       public CallTracer create() {
@@ -612,13 +619,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
 
-    maxTraceEvents = builder.maxTraceEvents;
-    if (maxTraceEvents > 0) {
-      long currentTimeNanos = timeProvider.currentTimeNanos();
-      channelTracer = new ChannelTracer(builder.maxTraceEvents, currentTimeNanos, "Channel");
-    } else {
-      channelTracer = null;
-    }
     logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 

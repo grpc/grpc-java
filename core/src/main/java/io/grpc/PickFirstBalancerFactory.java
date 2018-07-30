@@ -124,6 +124,11 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
         subchannel.shutdown();
       }
     }
+
+    @Override
+    public String toString() {
+      return "PickFirstBalancer";
+    }
   }
 
   /**
