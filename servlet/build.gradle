@@ -1,0 +1,9 @@
+description = "gRPC: Servlet"
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+dependencies {
+    compile project(':grpc-core')
+    compileOnly group: 'javax.servlet', name: 'javax.servlet-api', version: '4.0.1'
+    compileOnly libraries.javax_annotation // java 9, 10 needs it
+}

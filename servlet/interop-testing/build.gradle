@@ -1,0 +1,73 @@
+description = "gRPC: Servlet testing"
+buildscript {
+    repositories {
+        maven { // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+
+    }
+    dependencies { classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3' }
+}
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+apply plugin: 'war'
+
+apply plugin: 'com.google.protobuf'
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins { grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.13.1" } }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs "${rootDir}/interop-testing/src/main/java"
+            // include only the necessary source files in interop-testing
+            fileTree("${rootDir}/interop-testing/src/main/java")
+                    .exclude("io/grpc/testing/integration/Util.java")
+                    .exclude("io/grpc/testing/integration/TestServiceImpl.java")
+                    .each {
+                        exclude new File("${rootDir}/interop-testing/src/main/java").toPath()
+                                .relativize(it.toPath()).toString() }
+        }
+
+        proto { srcDirs "${rootDir}/interop-testing/src/main/proto" }
+
+        resources { srcDirs "${rootDir}/interop-testing/src/main/resources" }
+    }
+}
+
+dependencies {
+    compile project(':grpc-core')
+    compile project(':grpc-stub')
+    compile project(':grpc-protobuf')
+    compile project(':grpc-servlet')
+
+    // for container that already supports CDI 2
+    // providedCompile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
+
+    // for container that needs CDI 2
+    compile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
+    compile "org.jboss.weld.servlet:weld-servlet-core:3.0.5.Final"
+
+    compile ("com.google.protobuf:protobuf-java-util:${protobufVersion}") {
+        exclude group: 'com.google.guava', module: 'guava'
+    }
+
+    providedCompile group: 'javax.servlet', name: 'javax.servlet-api', version: '4.0.1'
+
+    providedCompile "junit:junit:4.12"
+}
+
+compileJava {
+    options.compilerArgs += [
+        // Protobuf-generated code produces some warnings.
+        // https://github.com/google/protobuf/issues/2718
+        "-Xlint:-cast",
+        "-XepExcludedPaths:.*/generated/.*/java/.*",
+    ]
+}

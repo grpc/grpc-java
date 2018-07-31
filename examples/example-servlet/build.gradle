@@ -1,0 +1,64 @@
+description = "gRPC: Servlet example"
+buildscript {
+    repositories {
+        maven { // The google mirror is less flaky than mavenCentral()
+            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+
+    }
+    dependencies { classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3' }
+}
+
+repositories {
+    maven { // The google mirror is less flaky than mavenCentral()
+        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+    mavenLocal()
+}
+
+apply plugin: 'war'
+
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+def grpcVersion = '1.15.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.5.1'
+def protocVersion = '3.5.1-1'
+
+dependencies {
+    compile "io.grpc:grpc-stub:${grpcVersion}"
+    compile "io.grpc:grpc-protobuf:${grpcVersion}"
+    compile "io.grpc:grpc-servlet:${grpcVersion}"
+
+    // for container that already supports CDI 2
+    // providedCompile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
+
+    // for container that needs CDI 2
+    compile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
+    compile "org.jboss.weld.servlet:weld-servlet-core:3.0.5.Final"
+
+    compile ("com.google.protobuf:protobuf-java-util:${protobufVersion}") {
+        exclude group: 'com.google.guava', module: 'guava'
+    }
+
+    providedCompile group: 'javax.servlet', name: 'javax.servlet-api', version: '4.0.1'
+}
+
+apply plugin: 'com.google.protobuf'
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+    plugins { grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.13.1" } }
+    generateProtoTasks {
+        all()*.plugins { grpc {} }
+    }
+}
+
+apply plugin: 'idea'
+
+// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+sourceSets {
+    main {
+        java {
+            srcDirs 'build/generated/source/proto/main/grpc'
+            srcDirs 'build/generated/source/proto/main/java'
+        }
+    }
+}
