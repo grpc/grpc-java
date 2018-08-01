@@ -27,6 +27,7 @@ import android.net.NetworkInfo;
 import android.os.Build;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
@@ -100,7 +101,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   }
 
   private AndroidChannelBuilder(ManagedChannelBuilder delegateBuilder) {
-    this.delegateBuilder = delegate;
+    this.delegateBuilder = Preconditions.checkNotNull(delegateBuilder, "delegateBuilder");
   }
 
   /** Enables automatic monitoring of the device's network state. */
