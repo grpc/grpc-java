@@ -50,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -111,6 +112,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private final Helper helper;
     private final Map<EquivalentAddressGroup, Subchannel> subchannels =
         new HashMap<EquivalentAddressGroup, Subchannel>();
+    private final Random random;
     // true when map contains at least one Subchannel in READY state
     private boolean ready;
 
@@ -119,6 +121,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
     RoundRobinLoadBalancer(Helper helper) {
       this.helper = checkNotNull(helper, "helper");
+      this.random = new Random();
     }
 
     @Override
@@ -220,7 +223,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       getSubchannelStateInfoRef(subchannel).value =
           ConnectivityStateInfo.forNonError(SHUTDOWN);
       if (stickinessState != null) {
-        stickinessState.remove(subchannel); 
+        stickinessState.remove(subchannel);
       }
     }
 
@@ -237,11 +240,17 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private void updateBalancingState(ConnectivityState state, Status error) {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
       ready = !activeList.isEmpty();
-      if (state == null) {
-        state = ready ? READY : getAggregatedState();
+      SubchannelPicker picker;
+      if (ready) {
+        state = state != null ? state : READY;
+        // initialize the Picker to a random start index to ensure that a high frequency of Picker
+        // churn does not skew subchannel selection.
+        int startIndex = random.nextInt(activeList.size());
+        picker = new Picker(activeList, startIndex, stickinessState);
+      } else {
+        state = state != null ? state : getAggregatedState();
+        picker = new EmptyPicker(error != null ? error : getAggregatedError());
       }
-      SubchannelPicker picker = ready ? new Picker(activeList, stickinessState) :
-          new EmptyPicker(error != null ? error : getAggregatedError());
       helper.updateBalancingState(state, picker);
     }
 
@@ -425,12 +434,13 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     @Nullable
     private final RoundRobinLoadBalancer.StickinessState stickinessState;
     @SuppressWarnings("unused")
-    private volatile int index = -1; // start off at -1 so the address on first use is 0.
+    private volatile int index;
 
-    Picker(List<Subchannel> list,
+    Picker(List<Subchannel> list, int startIndex,
         @Nullable RoundRobinLoadBalancer.StickinessState stickinessState) {
       this.list = list;
       this.stickinessState = stickinessState;
+      this.index = startIndex - 1;
     }
 
     @Override

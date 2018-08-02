@@ -61,6 +61,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -210,6 +211,10 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
   @CheckForNull
   private final ChannelTracer channelTracer;
   private final Channelz channelz;
+  @CheckForNull
+  private Boolean haveBackends; // a flag for doing channel tracing when flipped
+  @Nullable
+  private Map<String, Object> lastServiceConfig; // used for channel tracing when value changed
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -394,6 +399,9 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
               .build());
     }
     channelStateManager.gotoState(IDLE);
+    if (inUseStateAggregator.isInUse()) {
+      exitIdleMode();
+    }
   }
 
   // Must be run from channelExecutor
@@ -1007,8 +1015,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     @Override
     public AbstractSubchannel createSubchannel(
-        EquivalentAddressGroup addressGroup, Attributes attrs) {
-      checkNotNull(addressGroup, "addressGroup");
+        List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
+      checkNotNull(addressGroups, "addressGroups");
       checkNotNull(attrs, "attrs");
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
@@ -1019,7 +1027,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         subchannelTracer = new ChannelTracer(maxTraceEvents, subchannelCreationTime, "Subchannel");
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroup,
+          addressGroups,
           authority(),
           userAgent,
           backoffPolicyProvider,
@@ -1070,7 +1078,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       channelz.addSubchannel(internalSubchannel);
       subchannel.subchannel = internalSubchannel;
       logger.log(Level.FINE, "[{0}] {1} created for {2}",
-          new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroup});
+          new Object[] {getLogId(), internalSubchannel.getLogId(), addressGroups});
       runSerialized(new Runnable() {
           @Override
           public void run() {
@@ -1125,7 +1133,7 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
     @Override
     public void updateSubchannelAddresses(
-        LoadBalancer.Subchannel subchannel, EquivalentAddressGroup addrs) {
+        LoadBalancer.Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
       checkArgument(subchannel instanceof SubchannelImpl,
           "subchannel must have been returned from createSubchannel");
       ((SubchannelImpl) subchannel).subchannel.updateAddresses(addrs);
@@ -1154,7 +1162,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
         subchannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "Subchannel");
       }
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroup, authority, userAgent, backoffPolicyProvider, transportFactory,
+          Collections.singletonList(addressGroup),
+          authority, userAgent, backoffPolicyProvider, transportFactory,
           transportFactory.getScheduledExecutorService(), stopwatchSupplier, channelExecutor,
           // All callback methods are run from channelExecutor
           new InternalSubchannel.Callback() {
@@ -1244,12 +1253,24 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
             new Object[]{getLogId(), servers, config});
       }
 
-      if (channelTracer != null) {
+      if (channelTracer != null && (haveBackends == null || !haveBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Address resolved: " + servers)
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
+        haveBackends = true;
+      }
+      final Map<String, Object> serviceConfig =
+          config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+      if (channelTracer != null && serviceConfig != null
+          && !serviceConfig.equals(lastServiceConfig)) {
+        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
+            .setDescription("Service config changed")
+            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+            .setTimestampNanos(timeProvider.currentTimeNanos())
+            .build());
+        lastServiceConfig = serviceConfig;
       }
 
       final class NamesResolved implements Runnable {
@@ -1262,8 +1283,6 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
 
           nameResolverBackoffPolicy = null;
 
-          Map<String, Object> serviceConfig =
-              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
           if (serviceConfig != null) {
             try {
               serviceConfigInterceptor.handleUpdate(serviceConfig);
@@ -1290,12 +1309,13 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
       checkArgument(!error.isOk(), "the error status must not be OK");
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      if (channelTracer != null) {
+      if (channelTracer != null && (haveBackends == null || haveBackends)) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
             .setDescription("Failed to resolve name")
             .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
             .setTimestampNanos(timeProvider.currentTimeNanos())
             .build());
+        haveBackends = false;
       }
       channelExecutor
           .executeLater(
@@ -1413,8 +1433,8 @@ final class ManagedChannelImpl extends ManagedChannel implements Instrumented<Ch
     }
 
     @Override
-    public EquivalentAddressGroup getAddresses() {
-      return subchannel.getAddressGroup();
+    public List<EquivalentAddressGroup> getAllAddresses() {
+      return subchannel.getAddressGroups();
     }
 
     @Override

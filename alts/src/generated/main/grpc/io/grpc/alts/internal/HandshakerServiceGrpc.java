@@ -30,6 +30,11 @@ public final class HandshakerServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.alts.internal.Handshaker.HandshakerReq,
       io.grpc.alts.internal.Handshaker.HandshakerResp> getDoHandshakeMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "DoHandshake",
+      requestType = io.grpc.alts.internal.Handshaker.HandshakerReq.class,
+      responseType = io.grpc.alts.internal.Handshaker.HandshakerResp.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.alts.internal.Handshaker.HandshakerReq,
       io.grpc.alts.internal.Handshaker.HandshakerResp> getDoHandshakeMethod() {
     io.grpc.MethodDescriptor<io.grpc.alts.internal.Handshaker.HandshakerReq, io.grpc.alts.internal.Handshaker.HandshakerResp> getDoHandshakeMethod;

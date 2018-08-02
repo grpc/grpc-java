@@ -6,7 +6,7 @@ buildscript {
     dependencies {
         classpath "com.diffplug.spotless:spotless-plugin-gradle:3.13.0"
         classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
-        classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.0'
+        classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.5'
         classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.13'
         classpath 'net.ltgt.gradle:gradle-apt-plugin:0.13'
         classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.5"
@@ -26,7 +26,9 @@ subprojects {
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
-    if (!rootProject.hasProperty('errorProne') || rootProject.errorProne.toBoolean()) {
+    // jdk10 not supported by errorprone: https://github.com/google/error-prone/issues/860
+    if (!JavaVersion.current().isJava10Compatible() &&
+        rootProject.properties.get('errorProne', true)) {
         apply plugin: "net.ltgt.errorprone"
         apply plugin: "net.ltgt.apt"
 
@@ -51,7 +53,7 @@ subprojects {
     idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.14.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.15.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.6
     targetCompatibility = 1.6
@@ -107,7 +109,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.25.Final'
+        nettyVersion = '4.1.27.Final'
         guavaVersion = '20.0'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
@@ -192,7 +194,7 @@ subprojects {
             epoll_suffix = ":" + osdetector.classifier
         }
         libraries = [
-            errorprone: "com.google.errorprone:error_prone_annotations:2.1.2",
+            errorprone: "com.google.errorprone:error_prone_annotations:2.2.0",
             gson: "com.google.code.gson:gson:2.7",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
@@ -219,7 +221,7 @@ subprojects {
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
             netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
             netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.8.Final',
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.12.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:1.0.1',
             re2j: 'com.google.re2j:re2j:1.2',
@@ -227,7 +229,7 @@ subprojects {
             // Test dependencies.
             junit: 'junit:junit:4.12',
             mockito: 'org.mockito:mockito-core:1.9.5',
-            truth: 'com.google.truth:truth:0.36',
+            truth: 'com.google.truth:truth:0.42',
             guava_testlib: 'com.google.guava:guava-testlib:20.0',
 
             // Benchmark dependencies
@@ -248,7 +250,9 @@ subprojects {
             // care for artifacts used as libraries by others.
             if (!(project.name in [
                 'grpc-benchmarks',
-                'grpc-interop-testing'
+                'grpc-interop-testing',
+                'grpc-gae-interop-testing-jdk7',
+                'grpc-gae-interop-testing-jdk8',
             ])) {
                 resolutionStrategy.failOnVersionConflict()
             }
@@ -281,14 +285,22 @@ subprojects {
         }
     }
 
+    // For jdk10 we must explicitly choose between html4 and html5, otherwise we get a warning
+    if (JavaVersion.current().isJava10Compatible()) {
+        allprojects {
+            tasks.withType(Javadoc) {
+                options.addBooleanOption('html4', true)
+            }
+        }
+    }
+
     checkstyle {
-        configFile = file("$rootDir/buildscripts/checkstyle.xml")
+        configDir = file("$rootDir/buildscripts")
         toolVersion = "6.17"
         ignoreFailures = false
         if (rootProject.hasProperty("checkstyle.ignoreFailures")) {
             ignoreFailures = rootProject.properties["checkstyle.ignoreFailures"].toBoolean()
         }
-        configProperties["rootDir"] = rootDir
     }
 
     checkstyleMain {

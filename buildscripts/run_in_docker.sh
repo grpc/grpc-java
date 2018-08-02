@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eux -o pipefail
+set -eu -o pipefail
 
 quote() {
   local arg
@@ -21,5 +21,5 @@ fi
 # the original exit code. $DOCKER_ARGS can not be quoted, otherwise it becomes a '' which confuses
 # docker.
 exec docker run $DOCKER_ARGS --rm=true -v "${grpc_java_dir}":/grpc-java -w /grpc-java \
-  grpc-java-releasing \
+  protoc-artifacts \
   bash -c "function fixFiles() { chown -R $(id -u):$(id -g) /grpc-java; }; trap fixFiles EXIT; $(quote "$@")"

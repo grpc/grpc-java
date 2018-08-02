@@ -30,6 +30,11 @@ public final class BenchmarkServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getUnaryCallMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "UnaryCall",
+      requestType = io.grpc.benchmarks.proto.Messages.SimpleRequest.class,
+      responseType = io.grpc.benchmarks.proto.Messages.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getUnaryCallMethod() {
     io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> getUnaryCallMethod;
@@ -57,6 +62,11 @@ public final class BenchmarkServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingCallMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "StreamingCall",
+      requestType = io.grpc.benchmarks.proto.Messages.SimpleRequest.class,
+      responseType = io.grpc.benchmarks.proto.Messages.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingCallMethod() {
     io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingCallMethod;
@@ -84,6 +94,11 @@ public final class BenchmarkServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromClientMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "StreamingFromClient",
+      requestType = io.grpc.benchmarks.proto.Messages.SimpleRequest.class,
+      responseType = io.grpc.benchmarks.proto.Messages.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromClientMethod() {
     io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromClientMethod;
@@ -111,6 +126,11 @@ public final class BenchmarkServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromServerMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "StreamingFromServer",
+      requestType = io.grpc.benchmarks.proto.Messages.SimpleRequest.class,
+      responseType = io.grpc.benchmarks.proto.Messages.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromServerMethod() {
     io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingFromServerMethod;
@@ -138,6 +158,11 @@ public final class BenchmarkServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingBothWaysMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "StreamingBothWays",
+      requestType = io.grpc.benchmarks.proto.Messages.SimpleRequest.class,
+      responseType = io.grpc.benchmarks.proto.Messages.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
   public static io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest,
       io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingBothWaysMethod() {
     io.grpc.MethodDescriptor<io.grpc.benchmarks.proto.Messages.SimpleRequest, io.grpc.benchmarks.proto.Messages.SimpleResponse> getStreamingBothWaysMethod;

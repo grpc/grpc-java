@@ -559,8 +559,14 @@ public abstract class AbstractInteropTest {
       requestObserver.onNext(request);
     }
     requestObserver.onCompleted();
+
     assertEquals(goldenResponse, responseObserver.firstValue().get());
     responseObserver.awaitCompletion();
+    assertThat(responseObserver.getValues()).hasSize(1);
+    Throwable t = responseObserver.getError();
+    if (t != null) {
+      throw new AssertionError(t);
+    }
   }
 
   /**
@@ -1524,6 +1530,27 @@ public abstract class AbstractInteropTest {
     assertEquals(errorMessage, Status.fromThrowable(captor.getValue()).getDescription());
     verifyNoMoreInteractions(responseObserver);
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
+  }
+
+  @Test
+  public void specialStatusMessage() throws Exception {
+    int errorCode = 2;
+    String errorMessage = "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
+    SimpleRequest simpleRequest = SimpleRequest.newBuilder()
+        .setResponseStatus(EchoStatus.newBuilder()
+            .setCode(errorCode)
+            .setMessage(errorMessage)
+            .build())
+        .build();
+
+    try {
+      blockingStub.unaryCall(simpleRequest);
+      fail();
+    } catch (StatusRuntimeException e) {
+      assertEquals(Status.UNKNOWN.getCode(), e.getStatus().getCode());
+      assertEquals(errorMessage, e.getStatus().getDescription());
+    }
+    assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
   }
 
   /** Sends an rpc to an unimplemented method within TestService. */

@@ -29,14 +29,21 @@ public class StatusRuntimeException extends RuntimeException {
   private final Status status;
   private final Metadata trailers;
 
+  /**
+   * Constructs the exception with both a status.  See also {@link Status#asException()}.
+   *
+   * @since 1.0.0
+   */
   public StatusRuntimeException(Status status) {
     this(status, null);
   }
 
   /**
-   * Constructs the exception with both a status and trailers.
+   * Constructs the exception with both a status and trailers.  See also
+   * {@link Status#asException(Metadata)}.
+   *
+   * @since 1.0.0
    */
-  @ExperimentalApi
   public StatusRuntimeException(Status status, @Nullable Metadata trailers) {
     super(Status.formatThrowableMessage(status), status.getCause());
     this.status = status;
@@ -45,6 +52,8 @@ public class StatusRuntimeException extends RuntimeException {
 
   /**
    * Returns the status code as a {@link Status} object.
+   *
+   * @since 1.0.0
    */
   public final Status getStatus() {
     return status;
@@ -52,8 +61,9 @@ public class StatusRuntimeException extends RuntimeException {
 
   /**
    * Returns the received trailers.
+   *
+   * @since 1.0.0
    */
-  @ExperimentalApi
   public final Metadata getTrailers() {
     return trailers;
   }

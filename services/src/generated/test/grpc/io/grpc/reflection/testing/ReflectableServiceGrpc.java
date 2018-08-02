@@ -30,6 +30,11 @@ public final class ReflectableServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request,
       io.grpc.reflection.testing.Reply> getMethodMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "Method",
+      requestType = io.grpc.reflection.testing.Request.class,
+      responseType = io.grpc.reflection.testing.Reply.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request,
       io.grpc.reflection.testing.Reply> getMethodMethod() {
     io.grpc.MethodDescriptor<io.grpc.reflection.testing.Request, io.grpc.reflection.testing.Reply> getMethodMethod;

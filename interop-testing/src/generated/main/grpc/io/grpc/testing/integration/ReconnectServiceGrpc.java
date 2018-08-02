@@ -33,6 +33,11 @@ public final class ReconnectServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
       io.grpc.testing.integration.EmptyProtos.Empty> getStartMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "Start",
+      requestType = io.grpc.testing.integration.EmptyProtos.Empty.class,
+      responseType = io.grpc.testing.integration.EmptyProtos.Empty.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
       io.grpc.testing.integration.EmptyProtos.Empty> getStartMethod() {
     io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.EmptyProtos.Empty> getStartMethod;
@@ -60,6 +65,11 @@ public final class ReconnectServiceGrpc {
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
       io.grpc.testing.integration.Messages.ReconnectInfo> getStopMethod;
 
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "Stop",
+      requestType = io.grpc.testing.integration.EmptyProtos.Empty.class,
+      responseType = io.grpc.testing.integration.Messages.ReconnectInfo.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
   public static io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
       io.grpc.testing.integration.Messages.ReconnectInfo> getStopMethod() {
     io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.Messages.ReconnectInfo> getStopMethod;

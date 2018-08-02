@@ -477,6 +477,11 @@ static void PrintMethodFields(
           "private static volatile $MethodDescriptor$<$input_type$,\n"
           "    $output_type$> $method_new_field_name$;\n"
           "\n"
+          "@$RpcMethod$(\n"
+          "    fullMethodName = SERVICE_NAME + '/' + \"$method_name$\",\n"
+          "    requestType = $input_type$.class,\n"
+          "    responseType = $output_type$.class,\n"
+          "    methodType = $MethodType$.$method_type$)\n"
           "public static $MethodDescriptor$<$input_type$,\n"
           "    $output_type$> $method_method_name$() {\n"
           "  $MethodDescriptor$<$input_type$, $output_type$> $method_new_field_name$;\n"
@@ -1275,6 +1280,7 @@ void GenerateService(const ServiceDescriptor* service,
   vars["ProtoMethodDescriptorSupplier"] =
       "io.grpc.protobuf.ProtoMethodDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
+  vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
