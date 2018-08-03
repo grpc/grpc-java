@@ -78,7 +78,7 @@ public class MessageDeframer implements Closeable, Deframer {
      *
      * @param cause the actual failure
      */
-    void deframeFailed(Throwable cause);
+    void deframeFailed(Status status);
   }
 
   private enum State {

@@ -187,9 +187,8 @@ class NettyServerStream extends AbstractServerStream {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {
-      log.log(Level.WARNING, "Exception processing message", cause);
-      Status status = Status.fromThrowable(cause);
+    public void deframeFailed(Status status) {
+      log.log(Level.WARNING, "Exception processing message {0}", status);
       transportReportStatus(status);
       handler.getWriteQueue().enqueue(new CancelServerStreamCommand(this, status), true);
     }

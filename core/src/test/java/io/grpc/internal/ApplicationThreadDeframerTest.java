@@ -28,6 +28,7 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
+import io.grpc.Status;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -108,9 +109,9 @@ public class ApplicationThreadDeframerTest {
   public void deframeFailedInvokesTransportExecutor() {
     Throwable cause = new Throwable("error");
     applicationThreadDeframer.deframeFailed(cause);
-    assertNull(listener.deframeFailedCause);
+    assertNull(listener.deframeFailedStatus);
     transportExecutor.runStoredRunnable();
-    assertEquals(cause, listener.deframeFailedCause);
+    assertEquals(cause, listener.deframeFailedStatus);
   }
 
   @Test
@@ -136,7 +137,7 @@ public class ApplicationThreadDeframerTest {
     private MessageProducer storedProducer;
     private int bytesRead;
     private boolean deframerClosedWithPartialMessage;
-    private Throwable deframeFailedCause;
+    private Status deframeFailedStatus;
 
     private void runStoredProducer() {
       assertNotNull(storedProducer);
@@ -162,9 +163,9 @@ public class ApplicationThreadDeframerTest {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {
-      assertNull(deframeFailedCause);
-      deframeFailedCause = cause;
+    public void deframeFailed(Status status) {
+      assertNull(deframeFailedStatus);
+      deframeFailedStatus = status;
     }
   }
 

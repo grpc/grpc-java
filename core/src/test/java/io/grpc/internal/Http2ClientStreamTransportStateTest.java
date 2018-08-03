@@ -354,7 +354,7 @@ public class Http2ClientStreamTransportStateTest {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {}
+    public void deframeFailed(Status status) {}
 
     @Override
     public void bytesRead(int processedBytes) {}

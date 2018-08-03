@@ -259,8 +259,8 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @Override
     @GuardedBy("lock")
-    public void deframeFailed(Throwable cause) {
-      http2ProcessingFailed(Status.fromThrowable(cause), true, new Metadata());
+    public void deframeFailed(Status status) {
+      http2ProcessingFailed(status, true, new Metadata());
     }
 
     @Override

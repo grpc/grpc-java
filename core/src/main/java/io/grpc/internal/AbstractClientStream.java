@@ -307,8 +307,7 @@ public abstract class AbstractClientStream extends AbstractStream
           deframeFailed(
               Status.INTERNAL
                   .withDescription(
-                      String.format("Can't find full stream decompressor for %s", streamEncoding))
-                  .asRuntimeException());
+                      String.format("Can't find full stream decompressor for %s", streamEncoding)));
           return;
         }
       }
@@ -318,17 +317,15 @@ public abstract class AbstractClientStream extends AbstractStream
         Decompressor decompressor = decompressorRegistry.lookupDecompressor(messageEncoding);
         if (decompressor == null) {
           deframeFailed(
-              Status.INTERNAL
-                  .withDescription(String.format("Can't find decompressor for %s", messageEncoding))
-                  .asRuntimeException());
+              Status.INTERNAL.withDescription(
+                  String.format("Can't find decompressor for %s", messageEncoding)));
           return;
         } else if (decompressor != Codec.Identity.NONE) {
           if (compressedStream) {
             deframeFailed(
                 Status.INTERNAL
                     .withDescription(
-                        String.format("Full stream and gRPC message encoding cannot both be set"))
-                    .asRuntimeException());
+                        String.format("Full stream and gRPC message encoding cannot both be set")));
             return;
           }
           setDecompressor(decompressor);

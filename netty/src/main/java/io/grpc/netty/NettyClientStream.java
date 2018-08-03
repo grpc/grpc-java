@@ -286,8 +286,8 @@ class NettyClientStream extends AbstractClientStream {
     }
 
     @Override
-    public void deframeFailed(Throwable cause) {
-      http2ProcessingFailed(Status.fromThrowable(cause), true, new Metadata());
+    public void deframeFailed(Status status) {
+      http2ProcessingFailed(status, true, new Metadata());
     }
 
     void transportHeadersReceived(Http2Headers headers, boolean endOfStream) {

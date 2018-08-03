@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Decompressor;
+import io.grpc.Status;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -161,12 +162,12 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public void deframeFailed(final Throwable cause) {
+  public void deframeFailed(final Status status) {
     transportExecutor.runOnTransportThread(
         new Runnable() {
           @Override
           public void run() {
-            storedListener.deframeFailed(cause);
+            storedListener.deframeFailed(status);
           }
         });
   }
