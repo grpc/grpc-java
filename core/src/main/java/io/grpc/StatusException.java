@@ -59,9 +59,9 @@ public class StatusException extends Exception {
   @Override
   public synchronized Throwable fillInStackTrace() {
     // Let's observe final variables in two states!  This works because Throwable will invoke this
-    // method before publicConstruction is set, thus doing nothing.  After the constructor has set
-    // publicConstruction, this method will properly fill it in.  Additionally, sub classes may call
-    // this normally, because publicConstruction will either be set, or this method will be
+    // method before fillInStackTrace is set, thus doing nothing.  After the constructor has set
+    // fillInStackTrace, this method will properly fill it in.  Additionally, sub classes may call
+    // this normally, because fillInStackTrace will either be set, or this method will be
     // overriden.
     return fillInStackTrace ? super.fillInStackTrace() : this;
   }
