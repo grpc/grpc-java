@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
+import io.grpc.Status;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -188,11 +189,15 @@ public abstract class AbstractStream implements Stream {
      * Called to parse a received frame and attempt delivery of any completed messages. Must be
      * called from the transport thread.
      */
-    protected final void deframe(final ReadableBuffer frame) {
+    protected final void deframe(ReadableBuffer frame) {
+      Status s;
       try {
-        deframer.deframe(frame);
+        s = deframer.deframe(frame);
       } catch (Throwable t) {
-        deframeFailed(t);
+        s = Status.UNKNOWN.withDescription("unexpected error deframing messages").withCause(t);
+      }
+      if (!s.isOk()) {
+        deframeFailed(s);
       }
     }
 
@@ -201,10 +206,14 @@ public abstract class AbstractStream implements Stream {
      * transport thread.
      */
     public final void requestMessagesFromDeframer(final int numMessages) {
+      Status s;
       try {
-        deframer.request(numMessages);
+        s = deframer.request(numMessages);
       } catch (Throwable t) {
-        deframeFailed(t);
+        s = Status.UNKNOWN.withDescription("unexpected error requesting messages").withCause(t);
+      }
+      if (!s.isOk()) {
+        deframeFailed(s);
       }
     }
 

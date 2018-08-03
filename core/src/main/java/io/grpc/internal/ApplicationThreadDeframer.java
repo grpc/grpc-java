@@ -70,7 +70,7 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public void request(final int numMessages) {
+  public Status request(final int numMessages) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
@@ -79,31 +79,43 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
                 if (deframer.isClosed()) {
                   return;
                 }
+                Status s;
                 try {
-                  deframer.request(numMessages);
+                  s = deframer.request(numMessages);
                 } catch (Throwable t) {
-                  storedListener.deframeFailed(t);
+                  s = Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error requesting messages");
+                }
+                if (!s.isOk()) {
+                  storedListener.deframeFailed(s);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
+    return Status.OK;
   }
 
   @Override
-  public void deframe(final ReadableBuffer data) {
+  public Status deframe(final ReadableBuffer data) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
               @Override
               public void run() {
+                Status s;
                 try {
-                  deframer.deframe(data);
+                  s = deframer.deframe(data);
                 } catch (Throwable t) {
-                  deframeFailed(t);
+                  s = Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error deframing messages");
+                }
+                if (!s.isOk()) {
+                  deframeFailed(s);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
+    return Status.OK;
   }
 
   @Override

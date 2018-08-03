@@ -533,7 +533,7 @@ public class AbstractClientStreamTest {
 
     @Override
     public void deframeFailed(Status status) {
-      assertNull("deframeFailed already called", status);
+      assertNull("deframeFailed already called", deframeFailedStatus);
       deframeFailedStatus = status;
     }
 

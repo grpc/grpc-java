@@ -76,7 +76,7 @@ public class MessageDeframer implements Closeable, Deframer {
     /**
      * Called when a {@link #deframe(ReadableBuffer)} operation failed.
      *
-     * @param cause the actual failure
+     * @param status the actual failure.  Should never be {@link Status#isOk()}.
      */
     void deframeFailed(Status status);
   }
@@ -152,17 +152,17 @@ public class MessageDeframer implements Closeable, Deframer {
   }
 
   @Override
-  public void request(int numMessages) {
+  public Status request(int numMessages) {
     checkArgument(numMessages > 0, "numMessages must be > 0");
     if (isClosed()) {
-      return;
+      return Status.OK;
     }
     pendingDeliveries += numMessages;
-    deliver();
+    return deliver();
   }
 
   @Override
-  public void deframe(ReadableBuffer data) {
+  public Status deframe(ReadableBuffer data) {
     checkNotNull(data, "data");
     boolean needToCloseData = true;
     try {
@@ -174,8 +174,9 @@ public class MessageDeframer implements Closeable, Deframer {
         }
         needToCloseData = false;
 
-        deliver();
+        return deliver();
       }
+      return Status.OK;
     } finally {
       if (needToCloseData) {
         data.close();
@@ -252,23 +253,28 @@ public class MessageDeframer implements Closeable, Deframer {
   /**
    * Reads and delivers as many messages to the listener as possible.
    */
-  private void deliver() {
+  private Status deliver() {
     // We can have reentrancy here when using a direct executor, triggered by calls to
     // request more messages. This is safe as we simply loop until pendingDelivers = 0
     if (inDelivery) {
-      return;
+      return Status.OK;
     }
     inDelivery = true;
+    Status s;
     try {
       // Process the uncompressed bytes.
       while (!stopDelivery && pendingDeliveries > 0 && readRequiredBytes()) {
         switch (state) {
           case HEADER:
-            processHeader();
+            if (!(s = processHeader()).isOk()) {
+              return s;
+            }
             break;
           case BODY:
             // Read the body and deliver the message.
-            processBody();
+            if (!(s = processBody()).isOk()) {
+              return s;
+            }
 
             // Since we've delivered a message, decrement the number of pending
             // deliveries remaining.
@@ -281,7 +287,7 @@ public class MessageDeframer implements Closeable, Deframer {
 
       if (stopDelivery) {
         close();
-        return;
+        return Status.OK;
       }
 
       /*
@@ -295,6 +301,7 @@ public class MessageDeframer implements Closeable, Deframer {
       if (closeWhenComplete && isStalled()) {
         close();
       }
+      return Status.OK;
     } finally {
       inDelivery = false;
     }
@@ -369,22 +376,19 @@ public class MessageDeframer implements Closeable, Deframer {
    * Processes the GRPC compression header which is composed of the compression flag and the outer
    * frame length.
    */
-  private void processHeader() {
+  private Status processHeader() {
     int type = nextFrame.readUnsignedByte();
     if ((type & RESERVED_MASK) != 0) {
-      throw Status.INTERNAL.withDescription(
-          "gRPC frame header malformed: reserved bits not zero")
-          .asRuntimeException();
+      return Status.INTERNAL.withDescription("gRPC frame header malformed: reserved bits not zero");
     }
     compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
 
     // Update the required length to include the length of the frame.
     requiredLength = nextFrame.readInt();
     if (requiredLength < 0 || requiredLength > maxInboundMessageSize) {
-      throw Status.RESOURCE_EXHAUSTED.withDescription(
-          String.format("gRPC message exceeds maximum size %d: %d",
-              maxInboundMessageSize, requiredLength))
-          .asRuntimeException();
+      return Status.RESOURCE_EXHAUSTED.withDescription(
+          String.format(
+              "gRPC message exceeds maximum size %d: %d", maxInboundMessageSize, requiredLength));
     }
 
     currentMessageSeqNo++;
@@ -392,24 +396,35 @@ public class MessageDeframer implements Closeable, Deframer {
     transportTracer.reportMessageReceived();
     // Continue reading the frame body.
     state = State.BODY;
+    return Status.OK;
   }
 
   /**
    * Processes the GRPC message body, which depending on frame header flags may be compressed.
    */
-  private void processBody() {
+  private Status processBody() {
     // There is no reliable way to get the uncompressed size per message when it's compressed,
     // because the uncompressed bytes are provided through an InputStream whose total size is
     // unknown until all bytes are read, and we don't know when it happens.
     statsTraceCtx.inboundMessageRead(currentMessageSeqNo, inboundBodyWireSize, -1);
     inboundBodyWireSize = 0;
-    InputStream stream = compressedFlag ? getCompressedBody() : getUncompressedBody();
+    InputStream stream;
+    if (compressedFlag) {
+      if (decompressor == Codec.Identity.NONE) {
+        return Status.INTERNAL.withDescription(
+            "Can't decode compressed gRPC message as compression not configured");
+      }
+      stream = getCompressedBody();
+    } else {
+      stream = getUncompressedBody();
+    }
     nextFrame = null;
     listener.messagesAvailable(new SingleMessageProducer(stream));
 
     // Done with this frame, begin processing the next header.
     state = State.HEADER;
     requiredLength = HEADER_LENGTH;
+    return Status.OK;
   }
 
   private InputStream getUncompressedBody() {
@@ -418,12 +433,6 @@ public class MessageDeframer implements Closeable, Deframer {
   }
 
   private InputStream getCompressedBody() {
-    if (decompressor == Codec.Identity.NONE) {
-      throw Status.INTERNAL.withDescription(
-          "Can't decode compressed gRPC message as compression not configured")
-          .asRuntimeException();
-    }
-
     try {
       // Enforce the maxMessageSize limit on the returned stream.
       InputStream unlimitedStream =

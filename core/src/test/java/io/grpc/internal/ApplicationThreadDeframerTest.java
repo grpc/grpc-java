@@ -21,10 +21,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
@@ -51,6 +54,8 @@ public class ApplicationThreadDeframerTest {
 
   @Before
   public void setUp() {
+    when(mockDeframer.request(anyInt())).thenReturn(Status.OK);
+    when(mockDeframer.deframe(any(ReadableBuffer.class))).thenReturn(Status.OK);
     // ApplicationThreadDeframer constructor injects itself as the wrapped deframer's listener.
     verify(mockDeframer).setListener(applicationThreadDeframer);
   }
@@ -107,11 +112,11 @@ public class ApplicationThreadDeframerTest {
 
   @Test
   public void deframeFailedInvokesTransportExecutor() {
-    Throwable cause = new Throwable("error");
-    applicationThreadDeframer.deframeFailed(cause);
+    Status status = Status.UNAVAILABLE;
+    applicationThreadDeframer.deframeFailed(status);
     assertNull(listener.deframeFailedStatus);
     transportExecutor.runStoredRunnable();
-    assertEquals(cause, listener.deframeFailedStatus);
+    assertEquals(status, listener.deframeFailedStatus);
   }
 
   @Test
