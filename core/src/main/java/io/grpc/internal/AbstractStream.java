@@ -24,6 +24,7 @@ import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.grpc.Status;
+import io.grpc.internal.Deframer.StatusHolder;
 import java.io.InputStream;
 import javax.annotation.concurrent.GuardedBy;
 
@@ -190,14 +191,15 @@ public abstract class AbstractStream implements Stream {
      * called from the transport thread.
      */
     protected final void deframe(ReadableBuffer frame) {
-      Status s;
+      StatusHolder sh;
       try {
-        s = deframer.deframe(frame);
+        sh = deframer.deframe(frame);
       } catch (Throwable t) {
-        s = Status.UNKNOWN.withDescription("unexpected error deframing messages").withCause(t);
+        sh = new StatusHolder(
+            Status.UNKNOWN.withDescription("unexpected error deframing messages").withCause(t));
       }
-      if (!s.isOk()) {
-        deframeFailed(s);
+      if (sh != StatusHolder.NO_STATUS) {
+        deframeFailed(sh.status);
       }
     }
 
@@ -206,14 +208,15 @@ public abstract class AbstractStream implements Stream {
      * transport thread.
      */
     public final void requestMessagesFromDeframer(final int numMessages) {
-      Status s;
+      StatusHolder sh;
       try {
-        s = deframer.request(numMessages);
+        sh = deframer.request(numMessages);
       } catch (Throwable t) {
-        s = Status.UNKNOWN.withDescription("unexpected error requesting messages").withCause(t);
+        sh = new StatusHolder(
+            Status.UNKNOWN.withDescription("unexpected error requesting messages").withCause(t));
       }
-      if (!s.isOk()) {
-        deframeFailed(s);
+      if (sh != StatusHolder.NO_STATUS) {
+        deframeFailed(sh.status);
       }
     }
 

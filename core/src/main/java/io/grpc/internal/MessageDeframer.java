@@ -152,17 +152,17 @@ public class MessageDeframer implements Closeable, Deframer {
   }
 
   @Override
-  public Status request(int numMessages) {
+  public StatusHolder request(int numMessages) {
     checkArgument(numMessages > 0, "numMessages must be > 0");
     if (isClosed()) {
-      return Status.OK;
+      return StatusHolder.NO_STATUS;
     }
     pendingDeliveries += numMessages;
     return deliver();
   }
 
   @Override
-  public Status deframe(ReadableBuffer data) {
+  public StatusHolder deframe(ReadableBuffer data) {
     checkNotNull(data, "data");
     boolean needToCloseData = true;
     try {
@@ -176,7 +176,7 @@ public class MessageDeframer implements Closeable, Deframer {
 
         return deliver();
       }
-      return Status.OK;
+      return StatusHolder.NO_STATUS;
     } finally {
       if (needToCloseData) {
         data.close();
@@ -253,11 +253,11 @@ public class MessageDeframer implements Closeable, Deframer {
   /**
    * Reads and delivers as many messages to the listener as possible.
    */
-  private Status deliver() {
+  private StatusHolder deliver() {
     // We can have reentrancy here when using a direct executor, triggered by calls to
     // request more messages. This is safe as we simply loop until pendingDelivers = 0
     if (inDelivery) {
-      return Status.OK;
+      return StatusHolder.NO_STATUS;
     }
     inDelivery = true;
     Status s;
@@ -267,13 +267,13 @@ public class MessageDeframer implements Closeable, Deframer {
         switch (state) {
           case HEADER:
             if (!(s = processHeader()).isOk()) {
-              return s;
+              return new StatusHolder(s);
             }
             break;
           case BODY:
             // Read the body and deliver the message.
             if (!(s = processBody()).isOk()) {
-              return s;
+              return new StatusHolder(s);
             }
 
             // Since we've delivered a message, decrement the number of pending
@@ -287,7 +287,7 @@ public class MessageDeframer implements Closeable, Deframer {
 
       if (stopDelivery) {
         close();
-        return Status.OK;
+        return StatusHolder.NO_STATUS;
       }
 
       /*
@@ -301,7 +301,7 @@ public class MessageDeframer implements Closeable, Deframer {
       if (closeWhenComplete && isStalled()) {
         close();
       }
-      return Status.OK;
+      return StatusHolder.NO_STATUS;
     } finally {
       inDelivery = false;
     }

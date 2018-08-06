@@ -32,6 +32,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Bytes;
 import io.grpc.Status;
+import io.grpc.internal.Deframer.StatusHolder;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -54,8 +55,8 @@ public class ApplicationThreadDeframerTest {
 
   @Before
   public void setUp() {
-    when(mockDeframer.request(anyInt())).thenReturn(Status.OK);
-    when(mockDeframer.deframe(any(ReadableBuffer.class))).thenReturn(Status.OK);
+    when(mockDeframer.request(anyInt())).thenReturn(StatusHolder.NO_STATUS);
+    when(mockDeframer.deframe(any(ReadableBuffer.class))).thenReturn(StatusHolder.NO_STATUS);
     // ApplicationThreadDeframer constructor injects itself as the wrapped deframer's listener.
     verify(mockDeframer).setListener(applicationThreadDeframer);
   }

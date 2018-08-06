@@ -70,7 +70,7 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
   }
 
   @Override
-  public Status request(final int numMessages) {
+  public StatusHolder request(final int numMessages) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
@@ -79,43 +79,43 @@ public class ApplicationThreadDeframer implements Deframer, MessageDeframer.List
                 if (deframer.isClosed()) {
                   return;
                 }
-                Status s;
+                StatusHolder sh;
                 try {
-                  s = deframer.request(numMessages);
+                  sh = deframer.request(numMessages);
                 } catch (Throwable t) {
-                  s = Status.UNKNOWN.withCause(t).withDescription(
-                      "unexpected error requesting messages");
+                  sh = new StatusHolder(Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error requesting messages"));
                 }
-                if (!s.isOk()) {
-                  storedListener.deframeFailed(s);
+                if (sh != StatusHolder.NO_STATUS) {
+                  storedListener.deframeFailed(sh.status);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
-    return Status.OK;
+    return StatusHolder.NO_STATUS;
   }
 
   @Override
-  public Status deframe(final ReadableBuffer data) {
+  public StatusHolder deframe(final ReadableBuffer data) {
     storedListener.messagesAvailable(
         new InitializingMessageProducer(
             new Runnable() {
               @Override
               public void run() {
-                Status s;
+                StatusHolder sh;
                 try {
-                  s = deframer.deframe(data);
+                  sh = deframer.deframe(data);
                 } catch (Throwable t) {
-                  s = Status.UNKNOWN.withCause(t).withDescription(
-                      "unexpected error deframing messages");
+                  sh = new StatusHolder(Status.UNKNOWN.withCause(t).withDescription(
+                      "unexpected error deframing messages"));
                 }
-                if (!s.isOk()) {
-                  deframeFailed(s);
+                if (sh != StatusHolder.NO_STATUS) {
+                  deframeFailed(sh.status);
                   deframer.close(); // unrecoverable state
                 }
               }
             }));
-    return Status.OK;
+    return StatusHolder.NO_STATUS;
   }
 
   @Override
