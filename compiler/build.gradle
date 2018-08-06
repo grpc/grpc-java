@@ -124,26 +124,41 @@ model {
 }
 
 configurations {
+    testCompatCompile {
+        extendsFrom testCompile
+    }
     testLiteCompile
+    testLiteCompatCompile {
+        extendsFrom testLiteCompile
+    }
     testNanoCompile
+    testNanoCompatCompile {
+        extendsFrom testNanoCompile
+    }
+}
+
+sourceSets {
+    testCompat
+    testLite {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
+    testLiteCompat
+    testNano {
+        proto { setSrcDirs(['src/test/proto']) }
+    }
+    testNanoCompat
 }
 
 dependencies {
     testCompile project(':grpc-protobuf'),
             project(':grpc-stub')
+    testCompatCompile sourceSets.test.output
     testLiteCompile project(':grpc-protobuf-lite'),
             project(':grpc-stub')
+    testLiteCompatCompile sourceSets.testLite.output
     testNanoCompile project(':grpc-protobuf-nano'),
             project(':grpc-stub')
-}
-
-sourceSets {
-    testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
-    testNano {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
+    testNanoCompatCompile sourceSets.testNano.output
 }
 
 compileTestJava {
@@ -151,6 +166,10 @@ compileTestJava {
         "-Xlint:-cast",
         "-XepExcludedPaths:.*/build/generated/source/proto/.*",
     ]
+}
+
+compileTestCompatJava {
+    options.compilerArgs = ["-Xlint:-deprecation"]
 }
 
 compileTestLiteJava {
@@ -163,8 +182,24 @@ compileTestLiteJava {
     ]
 }
 
+compileTestLiteCompatJava {
+    options.compilerArgs = ["-Xlint:-deprecation"]
+}
+
 compileTestNanoJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
+}
+
+compileTestNanoCompatJava {
+    options.compilerArgs = ["-Xlint:-deprecation"]
+}
+
+checkstyleTestCompat.enabled = false
+checkstyleTestLiteCompat.enabled = false
+checkstyleTestNanoCompat.enabled = false
+
+checkstyleTestNano {
+    source = fileTree(dir: "src/testNano", include: "**/*.java")
 }
 
 protobuf {
@@ -206,10 +241,6 @@ protobuf {
             task.plugins { grpc { option 'nano' } }
         }
     }
-}
-
-checkstyleTestNano {
-    source = fileTree(dir: "src/testNano", include: "**/*.java")
 }
 
 println "*** Building codegen requires Protobuf version ${protocVersion}"

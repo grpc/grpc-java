@@ -170,6 +170,29 @@ We have containers for each release to detect compatibility regressions with old
 releases. Generate one for the new release by following the
 [GCR image generation instructions](https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test).
 
+Save Generated Code for Testing
+-------------------------------
+
+We save copies of previous generated code to make sure they continue compiling.
+
+```
+$ git checkout -b released-codegen master
+$ NEW_FILE=java/io/grpc/testing/compiler/TestServiceGrpc_${MAJOR}_${MINOR}_$PATCH.java
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/test/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testCompat/$NEW_FILE
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/testLite/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testLiteCompat/$NEW_FILE
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/testNano/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testNanoCompat/$NEW_FILE
+$ sed -i s/TestServiceGrpc/TestServiceGrpc_${MAJOR}_${MINOR}_$PATCH/ \
+  compiler/src/test{,Lite,Nano}Compat/$NEW_FILE
+$ git add compiler/src/test{,Lite,Nano}Compat/
+$ ./gradlew :grpc-compiler:build -PskipCodegen=false
+$ git commit -m "compiler: Add generated code for v$MAJOR.$MINOR.$PATCH"
+```
+
+Go through PR review and submit.
+
 Update README.md
 ----------------
 After waiting ~1 day and verifying that the release appears on [Maven
