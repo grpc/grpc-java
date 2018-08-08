@@ -33,7 +33,7 @@ import javax.annotation.Nullable;
  * running at the same time.
  */
 // TODO(madongfly): figure out a way to not expose it or move it to transport package.
-public final class SerializingExecutor implements Executor, Runnable {
+public final class SerializingExecutor implements Executor {
   private static final Logger log =
       Logger.getLogger(SerializingExecutor.class.getName());
 
@@ -64,6 +64,30 @@ public final class SerializingExecutor implements Executor, Runnable {
   /** A list of Runnables to be run in order. */
   private final Queue<Runnable> runQueue = new ConcurrentLinkedQueue<Runnable>();
 
+  private final Runnable runQueueRunnable =
+      new Runnable() {
+        @Override
+        public void run() {
+          Runnable r;
+          try {
+            while ((r = runQueue.poll()) != null) {
+              try {
+                r.run();
+              } catch (RuntimeException e) {
+                // Log it and keep going.
+                log.log(Level.SEVERE, "Exception while executing runnable " + r, e);
+              }
+            }
+          } finally {
+            atomicHelper.runStateSet(SerializingExecutor.this, STOPPED);
+          }
+          if (!runQueue.isEmpty()) {
+            // we didn't enqueue anything but someone else did.
+            schedule(null);
+          }
+        }
+      };
+
   private volatile int runState = STOPPED;
 
   /**
@@ -90,7 +114,7 @@ public final class SerializingExecutor implements Executor, Runnable {
     if (atomicHelper.runStateCompareAndSet(this, STOPPED, RUNNING)) {
       boolean success = false;
       try {
-        executor.execute(this);
+        executor.execute(runQueueRunnable);
         success = true;
       } finally {
         // It is possible that at this point that there are still tasks in
@@ -111,27 +135,6 @@ public final class SerializingExecutor implements Executor, Runnable {
           atomicHelper.runStateSet(this, STOPPED);
         }
       }
-    }
-  }
-
-  @Override
-  public void run() {
-    Runnable r;
-    try {
-      while ((r = runQueue.poll()) != null) {
-        try {
-          r.run();
-        } catch (RuntimeException e) {
-          // Log it and keep going.
-          log.log(Level.SEVERE, "Exception while executing runnable " + r, e);
-        }
-      }
-    } finally {
-      atomicHelper.runStateSet(this, STOPPED);
-    }
-    if (!runQueue.isEmpty()) {
-      // we didn't enqueue anything but someone else did.
-      schedule(null);
     }
   }
 
