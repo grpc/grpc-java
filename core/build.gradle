@@ -6,7 +6,8 @@ dependencies {
             libraries.gson,
             libraries.guava,
             libraries.errorprone,
-            libraries.jsr305
+            libraries.jsr305,
+            libraries.animalsniffer_annotations
     compile (libraries.opencensus_api) {
         // prefer 3.0.0 from libraries instead of 3.0.1
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
@@ -23,7 +24,7 @@ dependencies {
         // prefer 20.0 from libraries instead of 19.0
         exclude group: 'com.google.guava', module: 'guava'
     }
-    compileOnly libraries.animalsniffer_annotations
+
     testCompile project(':grpc-context').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
