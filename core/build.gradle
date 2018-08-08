@@ -1,6 +1,5 @@
 description = 'gRPC: Core'
 
-
 dependencies {
     compile project(':grpc-context'),
             libraries.gson,
@@ -33,7 +32,6 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
-
 
 javadoc {
     // We want io.grpc.Internal, but not io.grpc.Internal*
