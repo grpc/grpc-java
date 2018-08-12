@@ -48,7 +48,7 @@ dependencies {
     compile project(':grpc-servlet')
 
     // for container that already supports CDI 2
-    // providedCompile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
+    //  providedCompile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
 
     // for container that needs CDI 2
     compile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'

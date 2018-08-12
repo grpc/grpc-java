@@ -21,12 +21,16 @@ import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
 import static io.grpc.servlet.ServerStream.ByteArrayWritableBuffer.FLUSH;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.FINEST;
 
+import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.LogId;
 import io.grpc.internal.ReadableBuffer;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.StatsTraceContext;
@@ -41,6 +45,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 import java.util.stream.IntStream;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nonnull;
@@ -51,6 +56,8 @@ import javax.servlet.http.HttpServletResponse;
 
 final class ServerStream extends AbstractServerStream {
 
+  static final Logger logger = Logger.getLogger(ServerStream.class.getName());
+
   private final TransportState transportState =
       new TransportState(Integer.MAX_VALUE, StatsTraceContext.NOOP, new TransportTracer());
   final Sink sink;
@@ -58,16 +65,18 @@ final class ServerStream extends AbstractServerStream {
   final AtomicReference<WriteState> writeState;
   final WritableBufferChain writeChain;
   final ScheduledExecutorService scheduler;
+  final LogId logId;
 
   ServerStream(
       WritableBufferAllocator bufferAllocator, AsyncContext asyncCtx,
       AtomicReference<WriteState> writeState, WritableBufferChain writeChain,
-      ScheduledExecutorService scheduler) {
+      ScheduledExecutorService scheduler, LogId logId) {
     super(bufferAllocator, StatsTraceContext.NOOP);
     this.asyncCtx = asyncCtx;
     this.writeState = writeState;
     this.writeChain = writeChain;
     this.scheduler = scheduler;
+    this.logId = logId;
     this.sink = new Sink();
   }
 
@@ -99,7 +108,7 @@ final class ServerStream extends AbstractServerStream {
     @Override
     public void bytesRead(int numBytes) {
       // no-op
-      // TODO: flow control
+      // not able to do flow control
     }
 
     @Override
@@ -171,10 +180,8 @@ final class ServerStream extends AbstractServerStream {
       boolean polled;
     }
 
-    @Nonnull
-    Entry head;
-    @Nonnull
-    Entry tail;
+    Entry head; // not null
+    Entry tail; // not null
 
     WritableBufferChain() {
       head = new Entry();
@@ -262,11 +269,14 @@ final class ServerStream extends AbstractServerStream {
 
     @Override
     public void writeHeaders(Metadata headers) {
-      System.out.println("writeHeaders"); // TODO: better logging
       // Discard any application supplied duplicates of the reserved headers
       headers.discardAll(CONTENT_TYPE_KEY);
       headers.discardAll(GrpcUtil.TE_HEADER);
       headers.discardAll(GrpcUtil.USER_AGENT_KEY);
+
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, "[{0}] writeHeaders {1}", new Object[] {logId, headers});
+      }
 
       resp.setStatus(HttpServletResponse.SC_OK);
       resp.setContentType(CONTENT_TYPE_GRPC);
@@ -277,7 +287,6 @@ final class ServerStream extends AbstractServerStream {
             new String(serializedHeaders[i], StandardCharsets.US_ASCII),
             new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
       }
-      // resp.setHeader("trailer", "grpc-status"); // , grpc-message");
       resp.setTrailerFields(trailerSupplier);
     }
 
@@ -286,21 +295,30 @@ final class ServerStream extends AbstractServerStream {
       if (frame == null && !flush) {
         return;
       }
-      if (frame != null && flush) {
-        writeFrame(frame, false, numMessages);
-        writeFrame(null, true, 0);
-        return;
+
+      if (logger.isLoggable(FINE)) {
+        logger.log(
+            FINE,
+            "[{0}] writeFrame: numBytes = {1}, flush = {2}, numMessages = {3}",
+            new Object[]{logId, frame == null ? 0 : frame.readableBytes(), flush, numMessages});
       }
-      System.out.println("writeFrame flush = " + flush); // TODO: better logging
 
-      WriteState curState = writeState.get();
-      ByteArrayWritableBuffer byteBuffer = frame == null ? FLUSH : (ByteArrayWritableBuffer) frame;
+      if (frame != null) {
+        writeFrame((ByteArrayWritableBuffer) frame);
+      }
 
+      if (flush) {
+        writeFrame(FLUSH);
+      }
+    }
+
+    private void writeFrame(ByteArrayWritableBuffer byteBuffer) {
       int numBytes = byteBuffer.readableBytes();
       if (numBytes > 0) {
         onSendingBytes(numBytes);
       }
 
+      WriteState curState = writeState.get();
       if (curState.stillWritePossible) {
         try {
           ServletOutputStream outputStream = resp.getOutputStream();
@@ -308,14 +326,22 @@ final class ServerStream extends AbstractServerStream {
             resp.flushBuffer();
           } else {
             outputStream.write(byteBuffer.bytes, 0, byteBuffer.readableBytes());
+            transportState().onSentBytes(numBytes);
+            if (logger.isLoggable(FINEST)) {
+              logger.log(
+                  FINEST,
+                  "[{0}] outbound data: length = {1}, bytes = {2}",
+                  new Object[]{
+                      logId, numBytes, toHexString(byteBuffer.bytes, byteBuffer.readableBytes())});
+            }
           }
           if (!outputStream.isReady()) {
-            while (!writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
-              Thread.yield();
+            while (true) {
+              if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
+                return;
+              }
               curState = writeState.get();
             }
-            // TODO: better logging
-            System.out.println("writeFrame() - set stillWritePossible false");
           }
         } catch (IOException ioe) {
           ioe.printStackTrace(); // TODO
@@ -325,7 +351,7 @@ final class ServerStream extends AbstractServerStream {
         if (!writeState.compareAndSet(curState, curState.newState())) {
           // state changed by another thread, need to check if stillWritePossible again
           if (writeState.get().stillWritePossible && writeChain.poll() != null) {
-            writeFrame(frame, flush, numMessages);
+            writeFrame(byteBuffer);
           }
         }
       }
@@ -333,7 +359,12 @@ final class ServerStream extends AbstractServerStream {
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
-      System.out.println("writeTrailers"); // TODO: better logging
+      if (logger.isLoggable(FINE)) {
+        logger.log(
+            FINE,
+            "[{0}] writeTrailers: {1}, headersSent = {2}, status = {3}",
+            new Object[] {logId, trailers, headersSent, status});
+      }
       if (!headersSent) {
         // Discard any application supplied duplicates of the reserved headers
         trailers.discardAll(CONTENT_TYPE_KEY);
@@ -362,8 +393,8 @@ final class ServerStream extends AbstractServerStream {
       while (true) {
         WriteState curState = writeState.get();
         if (curState.stillWritePossible) {
-          System.out.println("writeTrailers - complete"); // TODO: better logging
           ServletAdapterImpl.asyncContextComplete(asyncCtx, scheduler);
+          logger.log(FINE, "[{0}] writeTrailers: call complete", logId);
           return;
         }
         if (writeState.compareAndSet(curState, curState.withTrailersSent(true))) {
@@ -394,5 +425,17 @@ final class ServerStream extends AbstractServerStream {
     public Map<String, String> get() {
       return trailers;
     }
+  }
+
+  static String toHexString(byte[] bytes, int length) {
+    String hex = BaseEncoding.base16().encode(bytes, 0, min(length, 64));
+    if (length > 80) {
+      hex += "...";
+    }
+    if (length > 64) {
+      int offset = max(64, length - 16);
+      hex += BaseEncoding.base16().encode(bytes, offset, length - offset);
+    }
+    return hex;
   }
 }

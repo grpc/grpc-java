@@ -18,8 +18,12 @@ package io.grpc.servlet;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.servlet.ServerStream.toHexString;
+import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.FINEST;
 
 import io.grpc.Metadata;
+import io.grpc.internal.LogId;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.WritableBufferAllocator;
@@ -31,6 +35,8 @@ import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.PreDestroy;
 import javax.servlet.AsyncContext;
 import javax.servlet.ReadListener;
@@ -45,6 +51,8 @@ import javax.servlet.http.HttpServletResponse;
  * An implementation of {@link ServletAdapter}.
  */
 final class ServletAdapterImpl implements ServletAdapter {
+
+  static final Logger logger = Logger.getLogger(ServerStream.class.getName());
 
   private final ServerTransportListener transportListener;
   private final ScheduledExecutorService scheduler;
@@ -78,11 +86,12 @@ final class ServletAdapterImpl implements ServletAdapter {
   public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "req is not a gRPC request");
+
+    LogId logId = LogId.allocate(getClass().getName());
+    logger.log(FINE, "[{0}] RPC started", logId);
+
     String method = req.getRequestURI().substring(1); // remove the leading "/"
     Metadata headers = new Metadata();
-
-    System.out.println(req.getServletContext().getServerInfo()); // TODO: better logging
-    System.out.println("resp.bufferSize = " + resp.getBufferSize());
 
     AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
     AsyncContext asyncCtx = req.startAsync();
@@ -94,7 +103,7 @@ final class ServletAdapterImpl implements ServletAdapter {
     WritableBufferChain writeChain = new WritableBufferChain();
 
     ServerStream stream =
-        new ServerStream(bufferAllocator, asyncCtx, writeState, writeChain, scheduler);
+        new ServerStream(bufferAllocator, asyncCtx, writeState, writeChain, scheduler, logId);
     transportListener.streamCreated(stream, method, headers);
     stream.transportState().onStreamAllocated();
 
@@ -102,7 +111,7 @@ final class ServletAdapterImpl implements ServletAdapter {
         new WriteListener() {
           @Override
           public void onWritePossible() throws IOException {
-            System.out.println("onWritePossible()"); // TODO: better logging
+            logger.log(FINE, "[{0}] onWritePossible", logId);
 
             WriteState curState = writeState.get();
             // curState.stillWritePossible should have been set to false already or right now
@@ -122,6 +131,16 @@ final class ServletAdapterImpl implements ServletAdapter {
                   resp.flushBuffer();
                 } else {
                   output.write(buffer.bytes, 0, buffer.readableBytes());
+                  stream.transportState().onSentBytes(buffer.readableBytes());
+
+                  if (logger.isLoggable(Level.FINEST)) {
+                    logger.log(
+                        Level.FINEST,
+                        "[{0}] outbound data: length = {1}, bytes = {2}",
+                        new Object[]{
+                            logId, buffer.readableBytes(),
+                            toHexString(buffer.bytes, buffer.readableBytes())});
+                  }
                 }
                 continue;
               }
@@ -129,15 +148,14 @@ final class ServletAdapterImpl implements ServletAdapter {
               if (writeState.compareAndSet(curState, curState.withStillWritePossible(true))) {
                 // state has not changed since. It's possible a new entry is just enqueued into the
                 // writeChain, but this case is handled right after the enqueuing
-                // TODO: better logging
-                System.out.println("onWritePossible() - set stillWritePossible true");
                 break;
               } // else state changed by another thread, need to drain the writeChain again
             }
 
             if (isReady && writeState.get().trailersSent) {
-              System.out.println("onWritePossible - complete");
               asyncContextComplete(asyncCtx, scheduler);
+
+              logger.log(FINE, "[{0}] onWritePossible: call complete", logId);
             }
           }
 
@@ -152,20 +170,24 @@ final class ServletAdapterImpl implements ServletAdapter {
     input.setReadListener(
         new ReadListener() {
           volatile boolean allDataRead;
-          volatile boolean readEos;
           final byte[] buffer = new byte[4 * 1024];
 
           @Override
           public void onDataAvailable() throws IOException {
-            System.out.println("onDataAvailable"); // TODO: better logging
+            logger.log(FINE, "[{0}] onDataAvailable", logId);
             while (input.isReady()) {
               int length = input.read(buffer);
-              System.out.println("onDataAvailable: length = " + length);
               if (length == -1) {
-                readEos = true;
-                System.out.println("onDataAvailable: finished = " + input.isFinished());
+                logger.log(FINEST, "[{0}] inbound data: read end of stream", logId);
                 return;
               } else {
+                if (logger.isLoggable(FINEST)) {
+                  logger.log(
+                      FINEST,
+                      "[{0}] inbound data: length = {1}, bytes = {2}",
+                      new Object[]{logId, length, toHexString(buffer, length)});
+                }
+
                 stream
                     .transportState()
                     .inboundDataReceived(
@@ -177,10 +199,9 @@ final class ServletAdapterImpl implements ServletAdapter {
           @SuppressWarnings("FutureReturnValueIgnored")
           @Override
           public void onAllDataRead() {
-            System.out.println("onAllDataRead"); // TODO: better logging
+            logger.log(FINE, "[{0}] onAllDataRead", logId);
             if (input.isFinished() && !allDataRead) {
               allDataRead = true;
-              System.out.println("onAllDataRead finished"); // TODO: better logging
               ServletContext servletContext = asyncCtx.getRequest().getServletContext();
               if (servletContext != null
                   && servletContext.getServerInfo().contains("GlassFish Server")
@@ -196,11 +217,9 @@ final class ServletAdapterImpl implements ServletAdapter {
                     1,
                     TimeUnit.MILLISECONDS);
               } else {
-                System.out.println("read EOS: " + readEos);
                 stream
                     .transportState()
                     .inboundDataReceived(ReadableBuffers.wrap(new byte[] {}), true);
-                System.out.println("onAllDataRead - endOfStream received"); // TODO: better logging
               }
             }
           }
