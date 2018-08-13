@@ -29,7 +29,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Instrumented;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.LogId;
-import io.grpc.internal.ServerImpl;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
@@ -50,6 +49,7 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
   private ScheduledExecutorService scheduledExecutorService;
   private boolean internalCaller;
   private boolean usingCustomScheduler;
+  private ServerListener serverListener;
 
   /**
    * Builds a gRPC server that can run as a servlet.
@@ -69,10 +69,9 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
   }
 
   ServerTransportListener buildAndStart() {
-    ServerImpl server;
     try {
       internalCaller = true;
-      server = (ServerImpl) build().start();
+      build().start();
       internalCaller = false;
     } catch (IOException e) {
       // actually this should never happen
@@ -88,12 +87,14 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
     // container does.
     ServerTransportImpl serverTransport =
         new ServerTransportImpl(scheduledExecutorService, usingCustomScheduler);
-    return server.getServerListener().transportCreated(serverTransport);
+    return serverListener.transportCreated(serverTransport);
   }
 
   @Override
   protected InternalServer buildTransportServer(List<Factory> streamTracerFactories) {
-    return new InternalServerImpl();
+    InternalServerImpl internalServer = new InternalServerImpl();
+    serverListener = internalServer.serverListener;
+    return internalServer;
   }
 
   @Override
