@@ -84,10 +84,10 @@ public interface ServletAdapter {
 
     /**
      * Creates an instance of ServletAdapter. A gRPC server will be built and started with the given
-     * {@link ServerBuilder}. The servlet using this servletAdapter will be backed by the gRPC
-     * server.
+     * {@link ServletServerBuilder}. The servlet using this servletAdapter will be backed by the
+     * gRPC server.
      */
-    public static ServletAdapter create(ServerBuilder serverBuilder) {
+    public static ServletAdapter create(ServletServerBuilder serverBuilder) {
       ServerTransportListener listener = serverBuilder.buildAndStart();
       return new ServletAdapterImpl(listener, serverBuilder.getScheduledExecutorService());
     }

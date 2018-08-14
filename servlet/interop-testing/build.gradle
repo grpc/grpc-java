@@ -1,4 +1,4 @@
-description = "gRPC: Servlet testing"
+description = "gRPC: Servlet Integration Testing"
 buildscript {
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()

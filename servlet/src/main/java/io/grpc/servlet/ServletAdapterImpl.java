@@ -18,7 +18,7 @@ package io.grpc.servlet;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.servlet.ServerStream.toHexString;
+import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
@@ -27,9 +27,9 @@ import io.grpc.internal.LogId;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.WritableBufferAllocator;
-import io.grpc.servlet.ServerStream.ByteArrayWritableBuffer;
-import io.grpc.servlet.ServerStream.WritableBufferChain;
-import io.grpc.servlet.ServerStream.WriteState;
+import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
+import io.grpc.servlet.ServletServerStream.WritableBufferChain;
+import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,7 +52,7 @@ import javax.servlet.http.HttpServletResponse;
  */
 final class ServletAdapterImpl implements ServletAdapter {
 
-  static final Logger logger = Logger.getLogger(ServerStream.class.getName());
+  static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final ServerTransportListener transportListener;
   private final ScheduledExecutorService scheduler;
@@ -102,8 +102,8 @@ final class ServletAdapterImpl implements ServletAdapter {
         capacityHint -> new ByteArrayWritableBuffer(capacityHint);
     WritableBufferChain writeChain = new WritableBufferChain();
 
-    ServerStream stream =
-        new ServerStream(bufferAllocator, asyncCtx, writeState, writeChain, scheduler, logId);
+    ServletServerStream stream = new ServletServerStream(
+        bufferAllocator, asyncCtx, writeState, writeChain, scheduler, logId);
     transportListener.streamCreated(stream, method, headers);
     stream.transportState().onStreamAllocated();
 

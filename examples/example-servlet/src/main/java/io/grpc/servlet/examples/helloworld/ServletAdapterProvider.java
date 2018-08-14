@@ -20,8 +20,8 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.servlet.ServerBuilder;
 import io.grpc.servlet.ServletAdapter;
+import io.grpc.servlet.ServletServerBuilder;
 import java.util.concurrent.Executors;
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Produces;
@@ -38,7 +38,7 @@ final class ServletAdapterProvider {
 
   private static final class Provider {
     static final ServletAdapter servletAdapter = ServletAdapter.Factory.create(
-        new ServerBuilder().addService(new GreeterImpl()));
+        new ServletServerBuilder().addService(new GreeterImpl()));
   }
 
   private static final class GreeterImpl extends GreeterGrpc.GreeterImplBase {

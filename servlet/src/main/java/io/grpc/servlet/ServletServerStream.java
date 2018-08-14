@@ -18,7 +18,7 @@ package io.grpc.servlet;
 
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_GRPC;
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
-import static io.grpc.servlet.ServerStream.ByteArrayWritableBuffer.FLUSH;
+import static io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer.FLUSH;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.util.logging.Level.FINE;
@@ -54,9 +54,9 @@ import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
 
-final class ServerStream extends AbstractServerStream {
+final class ServletServerStream extends AbstractServerStream {
 
-  static final Logger logger = Logger.getLogger(ServerStream.class.getName());
+  static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final TransportState transportState =
       new TransportState(Integer.MAX_VALUE, StatsTraceContext.NOOP, new TransportTracer());
@@ -67,7 +67,7 @@ final class ServerStream extends AbstractServerStream {
   final ScheduledExecutorService scheduler;
   final LogId logId;
 
-  ServerStream(
+  ServletServerStream(
       WritableBufferAllocator bufferAllocator, AsyncContext asyncCtx,
       AtomicReference<WriteState> writeState, WritableBufferChain writeChain,
       ScheduledExecutorService scheduler, LogId logId) {
@@ -244,7 +244,7 @@ final class ServerStream extends AbstractServerStream {
 
     /**
      * Only {@link javax.servlet.WriteListener#onWritePossible()} can set it to true, and only
-     * {@link ServerStream.Sink#writeFrame} can set it to false;
+     * {@link ServletServerStream.Sink#writeFrame} can set it to false;
      */
     @CheckReturnValue
     WriteState withStillWritePossible(boolean stillWritePossible) {

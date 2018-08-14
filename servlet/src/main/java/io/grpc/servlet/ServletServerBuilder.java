@@ -44,9 +44,9 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Builder to build a gRPC server that can run as a servlet.
  */
 @NotThreadSafe
-public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder> {
+public final class ServletServerBuilder extends AbstractServerImplBuilder<ServletServerBuilder> {
 
-  private ScheduledExecutorService scheduledExecutorService;
+  private ScheduledExecutorService scheduler;
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private ServerListener serverListener;
@@ -57,8 +57,8 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
    * <p>The returned server will not been started or be bound a port.
    *
    * <p>Users should not call this method directly. Instead users should call {@link
-   * ServletAdapter.Factory#create(ServerBuilder)}, which internally will call {@code build()} and
-   * {@code start()} appropriately.
+   * ServletAdapter.Factory#create(ServletServerBuilder)}, which internally will call {@code
+   * build()} and {@code start()} appropriately.
    *
    * @throws IllegalStateException if this method is called by users directly
    */
@@ -79,14 +79,14 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
     }
 
     if (!usingCustomScheduler) {
-      scheduledExecutorService = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
+      scheduler = SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE);
     }
 
     // Create only one "transport" for all requests because it has no knowledge of which request is
     // associated with which client socket. This "transport" does not do socket connection, the
     // container does.
     ServerTransportImpl serverTransport =
-        new ServerTransportImpl(scheduledExecutorService, usingCustomScheduler);
+        new ServerTransportImpl(scheduler, usingCustomScheduler);
     return serverListener.transportCreated(serverTransport);
   }
 
@@ -98,12 +98,12 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
   }
 
   @Override
-  public ServerBuilder useTransportSecurity(File certChain, File privateKey) {
+  public ServletServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS should be configured by the servlet container");
   }
 
   @Override
-  public ServerBuilder maxInboundMessageSize(int bytes) {
+  public ServletServerBuilder maxInboundMessageSize(int bytes) {
     // TODO
     return this;
   }
@@ -113,16 +113,14 @@ public final class ServerBuilder extends AbstractServerImplBuilder<ServerBuilder
    *
    * @return this
    */
-  public ServerBuilder scheduledExecutorService(
-      ScheduledExecutorService scheduledExecutorService) {
-    this.scheduledExecutorService =
-        checkNotNull(scheduledExecutorService, "scheduledExecutorService");
+  public ServletServerBuilder scheduledExecutorService(ScheduledExecutorService scheduler) {
+    this.scheduler = checkNotNull(scheduler, "scheduler");
     usingCustomScheduler = true;
     return this;
   }
 
   ScheduledExecutorService getScheduledExecutorService() {
-    return scheduledExecutorService;
+    return scheduler;
   }
 
   private static final class InternalServerImpl implements InternalServer {

@@ -16,8 +16,8 @@
 
 package io.grpc.servlet.interoptest;
 
-import io.grpc.servlet.ServerBuilder;
 import io.grpc.servlet.ServletAdapter;
+import io.grpc.servlet.ServletServerBuilder;
 import io.grpc.testing.integration.TestServiceImpl;
 import java.util.concurrent.Executors;
 import javax.enterprise.context.ApplicationScoped;
@@ -35,6 +35,7 @@ final class ServletAdapterProvider {
 
   private static final class Provider {
     static final ServletAdapter servletAdapter = ServletAdapter.Factory.create(
-        new ServerBuilder().addService(new TestServiceImpl(Executors.newScheduledThreadPool(2))));
+        new ServletServerBuilder()
+            .addService(new TestServiceImpl(Executors.newScheduledThreadPool(2))));
   }
 }
