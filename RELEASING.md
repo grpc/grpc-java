@@ -65,7 +65,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$((MINOR+1)).0'\1/' \
      "${VERSION_FILES[@]}"
    $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$((MINOR+1)).0/ \
-     compiler/src/test{,Lite,Nano}/golden/TestService.java.txt
+     compiler/src/test{,Lite,Nano}/golden/TestServiceGrpc.java.txt
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
@@ -113,7 +113,7 @@ Tagging the Release
    ```bash
    # Change version to remove -SNAPSHOT
    $ sed -i 's/-SNAPSHOT\(.*CURRENT_GRPC_VERSION\)/\1/' "${VERSION_FILES[@]}"
-   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite,Nano}/golden/TestService.java.txt
+   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite,Nano}/golden/TestServiceGrpc.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
@@ -125,7 +125,7 @@ Tagging the Release
    # Change version to next patch and add -SNAPSHOT
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT'\1/' \
      "${VERSION_FILES[@]}"
-   $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ compiler/src/test{,Lite,Nano}/golden/TestService.java.txt
+   $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ compiler/src/test{,Lite,Nano}/golden/TestServiceGrpc.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```
@@ -169,6 +169,29 @@ Build interop container image
 We have containers for each release to detect compatibility regressions with old
 releases. Generate one for the new release by following the
 [GCR image generation instructions](https://github.com/grpc/grpc/blob/master/tools/interop_matrix/README.md#step-by-step-instructions-for-adding-a-gcr-image-for-a-new-release-for-compatibility-test).
+
+Save Generated Code for Testing
+-------------------------------
+
+We save copies of previous generated code to make sure they continue compiling.
+
+```
+$ git checkout -b released-codegen master
+$ NEW_FILE=java/io/grpc/testing/compiler/TestServiceGrpc_${MAJOR}_${MINOR}_$PATCH.java
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/test/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testCompat/$NEW_FILE
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/testLite/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testLiteCompat/$NEW_FILE
+$ git show v$MAJOR.$MINOR.$PATCH:compiler/src/testNano/golden/TestServiceGrpc.java.txt \
+  > compiler/src/testNanoCompat/$NEW_FILE
+$ sed -i s/TestServiceGrpc/TestServiceGrpc_${MAJOR}_${MINOR}_$PATCH/ \
+  compiler/src/test{,Lite,Nano}Compat/$NEW_FILE
+$ git add compiler/src/test{,Lite,Nano}Compat/
+$ ./gradlew :grpc-compiler:build -PskipCodegen=false
+$ git commit -m "compiler: Add generated code for v$MAJOR.$MINOR.$PATCH"
+```
+
+Go through PR review and submit.
 
 Update README.md
 ----------------
