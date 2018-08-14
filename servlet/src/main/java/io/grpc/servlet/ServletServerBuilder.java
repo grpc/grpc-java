@@ -49,7 +49,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   private ScheduledExecutorService scheduler;
   private boolean internalCaller;
   private boolean usingCustomScheduler;
-  private ServerListener serverListener;
+  private InternalServerImpl internalServer;
 
   /**
    * Builds a gRPC server that can run as a servlet.
@@ -87,13 +87,12 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     // container does.
     ServerTransportImpl serverTransport =
         new ServerTransportImpl(scheduler, usingCustomScheduler);
-    return serverListener.transportCreated(serverTransport);
+    return internalServer.serverListener.transportCreated(serverTransport);
   }
 
   @Override
   protected InternalServer buildTransportServer(List<Factory> streamTracerFactories) {
-    InternalServerImpl internalServer = new InternalServerImpl();
-    serverListener = internalServer.serverListener;
+    internalServer = new InternalServerImpl();
     return internalServer;
   }
 
