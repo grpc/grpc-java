@@ -146,6 +146,7 @@ final class ServletAdapterImpl implements ServletAdapter {
               }
 
               if (writeState.compareAndSet(curState, curState.withStillWritePossible(true))) {
+                logger.log(FINEST, "[{0}] set stillWritePossible to true", logId);
                 // state has not changed since. It's possible a new entry is just enqueued into the
                 // writeChain, but this case is handled right after the enqueuing
                 break;

@@ -304,6 +304,10 @@ final class ServletServerStream extends AbstractServerStream {
       }
 
       if (frame != null) {
+        int numBytes = frame.readableBytes();
+        if (numBytes > 0) {
+          onSendingBytes(numBytes);
+        }
         writeFrame((ByteArrayWritableBuffer) frame);
       }
 
@@ -314,12 +318,11 @@ final class ServletServerStream extends AbstractServerStream {
 
     private void writeFrame(ByteArrayWritableBuffer byteBuffer) {
       int numBytes = byteBuffer.readableBytes();
-      if (numBytes > 0) {
-        onSendingBytes(numBytes);
-      }
 
       WriteState curState = writeState.get();
       if (curState.stillWritePossible) {
+        logger.log(FINEST, "[{0}] stillWritePossible = true", logId);
+
         try {
           ServletOutputStream outputStream = resp.getOutputStream();
           if (byteBuffer == FLUSH) {
@@ -336,22 +339,38 @@ final class ServletServerStream extends AbstractServerStream {
             }
           }
           if (!outputStream.isReady()) {
+            logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = false", logId);
+
             while (true) {
               if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
+                logger.log(
+                    FINEST, "[{0}] writeFrame set stillWritePossible to false", logId);
                 return;
               }
               curState = writeState.get();
             }
+
           }
+          logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = false", logId);
         } catch (IOException ioe) {
           ioe.printStackTrace(); // TODO
         }
       } else {
+        logger.log(FINEST, "[{0}] stillWritePossible = false", logId);
+
         writeChain.enqueue(byteBuffer);
         if (!writeState.compareAndSet(curState, curState.newState())) {
           // state changed by another thread, need to check if stillWritePossible again
-          if (writeState.get().stillWritePossible && writeChain.poll() != null) {
-            writeFrame(byteBuffer);
+          if (writeState.get().stillWritePossible) {
+            logger.log(
+                FINEST,
+                "[{0}] stillWritePossible changed from false to true while enqueuing buffer",
+                logId);
+            ByteArrayWritableBuffer bf = writeChain.poll();
+            if (bf != null) {
+              assert bf == byteBuffer;
+              writeFrame(bf);
+            }
           }
         }
       }
