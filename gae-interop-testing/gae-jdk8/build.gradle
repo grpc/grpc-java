@@ -147,7 +147,7 @@ task runInteropTestRemote(dependsOn: 'appengineDeploy') {
             try {
                 def response = client.newCall(interopRequest).execute()
                 result = response.body().string()
-                logger.log(LogLevel.INFO, result)
+                project.println(result)
                 if (response.code() == 200) {
                     return
                 }
