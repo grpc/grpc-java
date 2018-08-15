@@ -101,7 +101,7 @@ public class AsyncFrameWriterTest {
 
     verify(frameWriter, times(2)).ping(anyBoolean(), anyInt(), anyInt());
     verify(frameWriter, times(1)).flush();
-    assertThat(Iterables.getLast(PartiallyTrackingFrameWriter.getAllMethodsInOrder()))
+    assertThat(Iterables.getLast(PartiallyTrackingFrameWriter.getAllInvokedMethodsInOrder()))
         .isSameAs(PartiallyTrackingFrameWriter.Method.FLUSH);
   }
 
@@ -130,7 +130,7 @@ public class AsyncFrameWriterTest {
 
     private static final List<Method> methods = new ArrayList<Method>();
 
-    static ImmutableList<Method> getAllMethodsInOrder() {
+    static ImmutableList<Method> getAllInvokedMethodsInOrder() {
       return ImmutableList.copyOf(methods);
     }
 
