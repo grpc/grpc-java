@@ -25,6 +25,7 @@ import io.grpc.okhttp.internal.framed.Settings;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
@@ -37,6 +38,7 @@ class AsyncFrameWriter implements FrameWriter {
   // just waiting on each other.
   private final SerializingExecutor executor;
   private final OkHttpClientTransport transport;
+  private final AtomicLong flushCounter = new AtomicLong();
 
   public AsyncFrameWriter(OkHttpClientTransport transport, SerializingExecutor executor) {
     this.transport = transport;
@@ -89,10 +91,17 @@ class AsyncFrameWriter implements FrameWriter {
 
   @Override
   public void flush() {
+    // keep track of version of flushes to skip flush if another flush task is queued.
+    final long flushCount = flushCounter.incrementAndGet();
+
     executor.execute(new WriteRunnable() {
       @Override
       public void doRun() throws IOException {
-        frameWriter.flush();
+        // There can be a flush starvation if there are continuous flood of flush is queued, this
+        // is not an issue with OkHttp since it flushes if the buffer is full.
+        if (flushCounter.get() == flushCount) {
+          frameWriter.flush();
+        }
       }
     });
   }
