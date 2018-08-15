@@ -73,7 +73,6 @@ public class AsyncFrameWriterTest {
     queueingExecutor.runAll();
 
     verify(frameWriter, times(1)).ping(anyBoolean(), anyInt(), anyInt());
-    verify(asyncFrameWriter, times(1)).flush();
     verify(frameWriter, times(1)).flush();
   }
 
@@ -88,7 +87,6 @@ public class AsyncFrameWriterTest {
     queueingExecutor.runAll();
 
     verify(frameWriter, times(2)).ping(anyBoolean(), anyInt(), anyInt());
-    verify(asyncFrameWriter, times(2)).flush();
     verify(frameWriter, times(2)).flush();
   }
 
@@ -102,7 +100,6 @@ public class AsyncFrameWriterTest {
     queueingExecutor.runAll();
 
     verify(frameWriter, times(2)).ping(anyBoolean(), anyInt(), anyInt());
-    verify(asyncFrameWriter, times(2)).flush();
     verify(frameWriter, times(1)).flush();
     assertThat(Iterables.getLast(PartiallyTrackingFrameWriter.getAllMethodsInOrder()))
         .isSameAs(PartiallyTrackingFrameWriter.Method.FLUSH);
