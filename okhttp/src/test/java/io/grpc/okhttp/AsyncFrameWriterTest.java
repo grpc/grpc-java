@@ -98,8 +98,8 @@ public class AsyncFrameWriterTest {
   }
 
   /**
-   * Executor queues incoming runnables instead of running it. Runnables can be invoked via {@code
-   * runAll} in serial order.
+   * Executor queues incoming runnables instead of running it. Runnables can be invoked via {@link
+   * QueueingExecutor#runAll} in serial order.
    */
   private static class QueueingExecutor implements Executor {
 
