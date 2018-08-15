@@ -16,23 +16,16 @@
 
 package io.grpc.okhttp;
 
-import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterables;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PipedOutputStream;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -40,7 +33,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Answers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.runners.MockitoJUnitRunner;
 
@@ -49,26 +42,21 @@ public class AsyncFrameWriterTest {
 
   @Mock private OkHttpClientTransport transport;
   @Mock private Socket socket;
-  @Mock(answer = Answers.CALLS_REAL_METHODS)
-  private PartiallyTrackingFrameWriter frameWriter;
+  @Mock private FrameWriter frameWriter;
 
   private QueueingExecutor queueingExecutor;
   private AsyncFrameWriter asyncFrameWriter;
-  private OutputStream outputStream;
 
   @Before
   public void setUp() throws Exception {
     queueingExecutor = new QueueingExecutor();
     asyncFrameWriter = new AsyncFrameWriter(transport, new SerializingExecutor(queueingExecutor));
     asyncFrameWriter.becomeConnected(frameWriter, socket);
-    outputStream = new PipedOutputStream();
-    when(socket.getOutputStream()).thenReturn(outputStream);
   }
 
   @After
   public void tearDown() throws Exception {
     asyncFrameWriter.close();
-    PartiallyTrackingFrameWriter.clearMethodHistory();
   }
 
   @Test
@@ -104,10 +92,9 @@ public class AsyncFrameWriterTest {
 
     queueingExecutor.runAll();
 
-    verify(frameWriter, times(2)).ping(anyBoolean(), anyInt(), anyInt());
-    verify(frameWriter, times(1)).flush();
-    assertThat(Iterables.getLast(PartiallyTrackingFrameWriter.getAllInvokedMethodsHistory()))
-        .isSameAs(PartiallyTrackingFrameWriter.Method.FLUSH);
+    InOrder inOrder = inOrder(frameWriter);
+    inOrder.verify(frameWriter, times(2)).ping(anyBoolean(), anyInt(), anyInt());
+    inOrder.verify(frameWriter).flush();
   }
 
   /**
@@ -128,33 +115,6 @@ public class AsyncFrameWriterTest {
       while ((r = runnables.poll()) != null) {
         r.run();
       }
-    }
-  }
-
-  private abstract static class PartiallyTrackingFrameWriter implements FrameWriter {
-
-    private static final List<Method> methodHistory = new ArrayList<Method>();
-
-    static void clearMethodHistory() {
-      methodHistory.clear();
-    }
-
-    static ImmutableList<Method> getAllInvokedMethodsHistory() {
-      return ImmutableList.copyOf(methodHistory);
-    }
-
-    @Override
-    public void ping(boolean ack, int payload1, int payload2) throws IOException {
-      methodHistory.add(Method.PING);
-    }
-
-    @Override
-    public void flush() throws IOException {
-      methodHistory.add(Method.FLUSH);
-    }
-
-    enum Method {
-      PING, FLUSH
     }
   }
 }
