@@ -65,6 +65,7 @@ class CronetClientStream extends AbstractClientStream {
   private static final String LOG_TAG = "grpc-java-cronet";
   private final String url;
   private final String userAgent;
+  private final StatsTraceContext statsTraceCtx;
   private final Executor executor;
   private final Metadata headers;
   private final CronetClientTransport transport;
@@ -98,6 +99,7 @@ class CronetClientStream extends AbstractClientStream {
         method.isSafe());
     this.url = Preconditions.checkNotNull(url, "url");
     this.userAgent = Preconditions.checkNotNull(userAgent, "userAgent");
+    this.statsTraceCtx = Preconditions.checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.executor = Preconditions.checkNotNull(executor, "executor");
     this.headers = Preconditions.checkNotNull(headers, "headers");
     this.transport = Preconditions.checkNotNull(transport, "transport");
@@ -374,6 +376,7 @@ class CronetClientStream extends AbstractClientStream {
         // Now that the stream is ready, call the listener's onReady callback if
         // appropriate.
         state.onStreamAllocated();
+        statsTraceCtx.clientOutboundHeaders();
         state.streamReady = true;
         state.writeAllPendingData();
       }
