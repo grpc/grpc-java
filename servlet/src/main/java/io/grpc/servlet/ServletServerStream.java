@@ -41,6 +41,7 @@ import io.grpc.internal.WritableBufferAllocator;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,7 +49,6 @@ import java.util.function.Supplier;
 import java.util.logging.Logger;
 import java.util.stream.IntStream;
 import javax.annotation.CheckReturnValue;
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
 import javax.servlet.ServletOutputStream;
@@ -63,13 +63,13 @@ final class ServletServerStream extends AbstractServerStream {
   final Sink sink;
   final AsyncContext asyncCtx;
   final AtomicReference<WriteState> writeState;
-  final WritableBufferChain writeChain;
+  final Queue<ByteArrayWritableBuffer> writeChain;
   final ScheduledExecutorService scheduler;
   final LogId logId;
 
   ServletServerStream(
       WritableBufferAllocator bufferAllocator, AsyncContext asyncCtx,
-      AtomicReference<WriteState> writeState, WritableBufferChain writeChain,
+      AtomicReference<WriteState> writeState, Queue<ByteArrayWritableBuffer> writeChain,
       ScheduledExecutorService scheduler, LogId logId) {
     super(bufferAllocator, StatsTraceContext.NOOP);
     this.asyncCtx = asyncCtx;
@@ -164,59 +164,6 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void release() {}
-  }
-
-  /**
-   * A queue of WritableBuffers. Not safe for multiple concurrent polls, or multiple concurrent
-   * enqueues, but safe for concurrently calling one poll() and one enqueue().
-   */
-  static final class WritableBufferChain {
-
-    private static final class Entry {
-      @Nullable
-      ByteArrayWritableBuffer buffer;
-      @Nullable
-      volatile Entry next;
-      boolean polled;
-    }
-
-    Entry head; // not null
-    Entry tail; // not null
-
-    WritableBufferChain() {
-      head = new Entry();
-      head.polled = true;
-      tail = head;
-    }
-
-    @Nullable
-    ByteArrayWritableBuffer poll() {
-      if (head.polled) {
-        if (head.next != null) {
-          Entry oldHead = head;
-          head = oldHead.next;
-          oldHead.next = null;
-          return poll();
-        }
-        return null;
-      }
-
-      head.polled = true;
-      ByteArrayWritableBuffer retVal = head.buffer;
-      if (head.next != null) {
-        Entry oldHead = head;
-        head = head.next;
-        oldHead.next = null;
-      }
-      return retVal;
-    }
-
-    void enqueue(@Nonnull ByteArrayWritableBuffer buffer) {
-      Entry newTail = new Entry();
-      newTail.buffer = buffer;
-      tail.next = newTail;
-      tail = newTail;
-    }
   }
 
   static final class WriteState {
@@ -358,7 +305,7 @@ final class ServletServerStream extends AbstractServerStream {
       } else {
         logger.log(FINEST, "[{0}] stillWritePossible = false", logId);
 
-        writeChain.enqueue(byteBuffer);
+        writeChain.offer(byteBuffer);
         if (!writeState.compareAndSet(curState, curState.newState())) {
           // state changed by another thread, need to check if stillWritePossible again
           if (writeState.get().stillWritePossible) {

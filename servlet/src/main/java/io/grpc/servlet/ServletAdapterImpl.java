@@ -28,10 +28,11 @@ import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.WritableBufferAllocator;
 import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
-import io.grpc.servlet.ServletServerStream.WritableBufferChain;
 import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -100,7 +101,14 @@ final class ServletAdapterImpl implements ServletAdapter {
 
     WritableBufferAllocator bufferAllocator =
         capacityHint -> new ByteArrayWritableBuffer(capacityHint);
-    WritableBufferChain writeChain = new WritableBufferChain();
+
+    /*
+     * The concurrency for pushing and polling on the writeChain is handled by the WriteState state
+     * machine, not by the thread-safety of ConcurrentLinkedDeque. Actually the the thread-safety of
+     * ConcurrentLinkedDeque alone is neither sufficient nor necessary. A plain singly-linked queue
+     * would also work with WriteState, but java library only has ConcurrentLinkedDeque.
+     */
+    Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedDeque<>();
 
     ServletServerStream stream = new ServletServerStream(
         bufferAllocator, asyncCtx, writeState, writeChain, scheduler, logId);
