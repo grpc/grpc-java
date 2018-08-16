@@ -175,7 +175,6 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
               failures,
               ignored));
     }
-
     writer.println(sb);
   }
 
