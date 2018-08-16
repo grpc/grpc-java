@@ -30,6 +30,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
@@ -54,7 +56,7 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
 
   private static final class LogEntryRecorder extends Handler {
-    private List<LogRecord> loggedMessages = new ArrayList<LogRecord>();
+    private Queue<LogRecord> loggedMessages = new ConcurrentLinkedQueue<>();
 
     @Override
     public void publish(LogRecord logRecord) {
@@ -77,20 +79,21 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
     }
   }
 
-  private final LogEntryRecorder handler = new LogEntryRecorder();
-
-  @Override
-  public void init() {
-    Logger.getLogger("").addHandler(handler);
-  }
-
-  @Override
-  public void destroy() {
-    Logger.getLogger("").removeHandler(handler);
-  }
-
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    LogEntryRecorder handler = new LogEntryRecorder();
+    try {
+      Logger.getLogger("").addHandler(handler);
+      doGetHelper(req, resp);
+    } finally {
+      Logger.getLogger("").removeHandler(handler);
+    }
+    resp.getWriter().append("=======================================\n")
+        .append("Server side java.util.logging messages:\n")
+        .append(handler.getLogOutput());
+  }
+
+  private void doGetHelper(HttpServletRequest req, HttpServletResponse resp) throws IOException {
     resp.setContentType("text/plain");
     PrintWriter writer = resp.getWriter();
     writer.println("Test invoked at: ");
@@ -172,10 +175,6 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
               failures,
               ignored));
     }
-
-    sb.append("=======================================\n")
-        .append("Server side java.util.logging messages:\n")
-        .append(handler.getLogOutput());
 
     writer.println(sb);
   }
