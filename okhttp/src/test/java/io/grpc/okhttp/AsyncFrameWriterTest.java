@@ -22,7 +22,9 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 
+import io.grpc.Status;
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.okhttp.AsyncFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import java.io.IOException;
 import java.net.Socket;
@@ -40,23 +42,25 @@ import org.mockito.runners.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class AsyncFrameWriterTest {
 
-  @Mock private OkHttpClientTransport transport;
   @Mock private Socket socket;
   @Mock private FrameWriter frameWriter;
 
-  private QueueingExecutor queueingExecutor;
+  private QueueingExecutor queueingExecutor = new QueueingExecutor();
+  private TransportExceptionHandler transportExceptionHandler =
+      new EscalatingTransportErrorHandler();
+
   private AsyncFrameWriter asyncFrameWriter;
 
   @Before
   public void setUp() throws Exception {
-    queueingExecutor = new QueueingExecutor();
-    asyncFrameWriter = new AsyncFrameWriter(transport, new SerializingExecutor(queueingExecutor));
+    asyncFrameWriter =
+        new AsyncFrameWriter(transportExceptionHandler, new SerializingExecutor(queueingExecutor));
     asyncFrameWriter.becomeConnected(frameWriter, socket);
   }
 
   @After
   public void tearDown() throws Exception {
-    asyncFrameWriter.close();
+    queueingExecutor.clear();
   }
 
   @Test
@@ -115,6 +119,19 @@ public class AsyncFrameWriterTest {
       while ((r = runnables.poll()) != null) {
         r.run();
       }
+    }
+
+    public void clear() {
+      runnables.clear();
+    }
+  }
+
+  /** Rethrows as Internal error. */
+  private static class EscalatingTransportErrorHandler implements TransportExceptionHandler {
+
+    @Override
+    public void onException(Throwable throwable) {
+      throw Status.INTERNAL.asRuntimeException();
     }
   }
 }

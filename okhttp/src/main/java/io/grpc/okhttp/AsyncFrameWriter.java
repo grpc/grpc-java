@@ -37,11 +37,12 @@ class AsyncFrameWriter implements FrameWriter {
   // Although writes are thread-safe, we serialize them to prevent consuming many Threads that are
   // just waiting on each other.
   private final SerializingExecutor executor;
-  private final OkHttpClientTransport transport;
+  private final TransportExceptionHandler transportExceptionHandler;
   private final AtomicLong flushCounter = new AtomicLong();
 
-  public AsyncFrameWriter(OkHttpClientTransport transport, SerializingExecutor executor) {
-    this.transport = transport;
+  public AsyncFrameWriter(
+      TransportExceptionHandler transportExceptionHandler, SerializingExecutor executor) {
+    this.transportExceptionHandler = transportExceptionHandler;
     this.executor = executor;
   }
 
@@ -228,9 +229,9 @@ class AsyncFrameWriter implements FrameWriter {
         }
         doRun();
       } catch (RuntimeException e) {
-        transport.onException(e);
+        transportExceptionHandler.onException(e);
       } catch (Exception e) {
-        transport.onException(e);
+        transportExceptionHandler.onException(e);
       }
     }
 
@@ -241,5 +242,12 @@ class AsyncFrameWriter implements FrameWriter {
   public int maxDataLength() {
     return frameWriter == null ? 0x4000 /* 16384, the minimum required by the HTTP/2 spec */
         : frameWriter.maxDataLength();
+  }
+
+  /** A class that handles transport exception. */
+  interface TransportExceptionHandler {
+
+    /** Handles exception. */
+    void onException(Throwable throwable);
   }
 }
