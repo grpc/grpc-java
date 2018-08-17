@@ -82,8 +82,8 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
     LogEntryRecorder handler = new LogEntryRecorder();
+    Logger.getLogger("").addHandler(handler);
     try {
-      Logger.getLogger("").addHandler(handler);
       doGetHelper(req, resp);
     } finally {
       Logger.getLogger("").removeHandler(handler);
