@@ -49,7 +49,7 @@ final class ClientTransportLifecycleManager {
     }
     transportShutdown = true;
     shutdownStatus = s;
-    shutdownThrowable = s.asException();
+    shutdownThrowable = s.asStacklessRuntimeException();
     listener.transportShutdown(s);
   }
 

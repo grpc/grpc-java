@@ -26,7 +26,7 @@ import com.google.common.base.Supplier;
 import io.grpc.Attributes;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport.PingCallback;
@@ -484,7 +484,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     final int streamId;
     try {
       streamId = incrementAndGetNextStreamId();
-    } catch (StatusException e) {
+    } catch (StatusRuntimeException e) {
       // Stream IDs have been exhausted for this connection. Fail the promise immediately.
       promise.setFailure(e);
 
@@ -611,7 +611,7 @@ class NettyClientHandler extends AbstractNettyHandler {
             cause = lifecycleManager.getShutdownThrowable();
             if (cause == null) {
               cause = Status.UNKNOWN.withDescription("Ping failed but for unknown reason.")
-                  .withCause(future.cause()).asException();
+                  .withCause(future.cause()).asStacklessRuntimeException();
             }
           }
           finalPing.failed(cause);
@@ -703,12 +703,12 @@ class NettyClientHandler extends AbstractNettyHandler {
     return stream == null ? null : (NettyClientStream.TransportState) stream.getProperty(streamKey);
   }
 
-  private int incrementAndGetNextStreamId() throws StatusException {
+  private int incrementAndGetNextStreamId() {
     int nextStreamId = connection().local().incrementAndGetNextStreamId();
     if (nextStreamId < 0) {
       logger.fine("Stream IDs have been exhausted for this connection. "
               + "Initiating graceful shutdown of the connection.");
-      throw EXHAUSTED_STREAMS_STATUS.asException();
+      throw EXHAUSTED_STREAMS_STATUS.asStacklessRuntimeException();
     }
     return nextStreamId;
   }

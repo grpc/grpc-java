@@ -32,12 +32,15 @@ public class StatusTest {
 
   @Test
   public void verifyExceptionMessage() {
-    assertEquals("UNKNOWN", Status.UNKNOWN.asRuntimeException().getMessage());
+    assertEquals("UNKNOWN", Status.UNKNOWN.asStacklessRuntimeException().getMessage());
     assertEquals("CANCELLED: This is a test",
-        Status.CANCELLED.withDescription("This is a test").asRuntimeException().getMessage());
-    assertEquals("UNKNOWN", Status.UNKNOWN.asException().getMessage());
+        Status.CANCELLED
+            .withDescription("This is a test")
+            .asStacklessRuntimeException()
+            .getMessage());
+    assertEquals("UNKNOWN", Status.UNKNOWN.asStacklessException().getMessage());
     assertEquals("CANCELLED: This is a test",
-        Status.CANCELLED.withDescription("This is a test").asException().getMessage());
+        Status.CANCELLED.withDescription("This is a test").asStacklessException().getMessage());
   }
 
   @Test

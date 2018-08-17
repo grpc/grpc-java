@@ -275,7 +275,7 @@ public class AsyncServer {
           } else {
             responseObserver.onError(
                 Status.FAILED_PRECONDITION
-                    .withDescription("never received any requests").asException());
+                    .withDescription("never received any requests").asStacklessRuntimeException());
           }
         }
       };

@@ -129,8 +129,8 @@ public class StatusProtoTest {
   public void fromThrowable_shouldReturnNullIfTrailersAreNull() {
     Status status = Status.fromCodeValue(0);
 
-    assertNull(StatusProto.fromThrowable(status.asRuntimeException()));
-    assertNull(StatusProto.fromThrowable(status.asException()));
+    assertNull(StatusProto.fromThrowable(status.asStacklessRuntimeException()));
+    assertNull(StatusProto.fromThrowable(status.asStacklessException()));
   }
 
   @Test

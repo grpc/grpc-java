@@ -54,7 +54,7 @@ public class UtilsTest {
   @Test
   public void testStatusFromThrowable() {
     Status s = Status.CANCELLED.withDescription("msg");
-    assertSame(s, Utils.statusFromThrowable(new Exception(s.asException())));
+    assertSame(s, Utils.statusFromThrowable(new Exception(s.asStacklessRuntimeException())));
     Throwable t;
     t = new ConnectTimeoutException("msg");
     assertStatusEquals(Status.UNAVAILABLE.withCause(t), Utils.statusFromThrowable(t));

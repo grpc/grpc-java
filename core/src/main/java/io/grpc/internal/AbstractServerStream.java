@@ -235,7 +235,7 @@ public abstract class AbstractServerStream extends AbstractStream
           deframeFailed(
               Status.INTERNAL
                   .withDescription("Encountered end-of-stream mid-frame")
-                  .asRuntimeException());
+                  .asStacklessRuntimeException());
           deframerClosedTask = null;
           return;
         }

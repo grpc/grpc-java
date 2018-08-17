@@ -356,7 +356,7 @@ public final class ProtocolNegotiators {
   }
 
   private static RuntimeException unavailableException(String msg) {
-    return Status.UNAVAILABLE.withDescription(msg).asRuntimeException();
+    return Status.UNAVAILABLE.withDescription(msg).asStacklessRuntimeException();
   }
 
   @VisibleForTesting

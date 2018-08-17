@@ -249,7 +249,8 @@ public final class Utils {
   public static SimpleResponse makeResponse(SimpleRequest request) {
     if (request.getResponseSize() > 0) {
       if (!Messages.PayloadType.COMPRESSABLE.equals(request.getResponseType())) {
-        throw Status.INTERNAL.augmentDescription("Error creating payload.").asRuntimeException();
+        throw Status.INTERNAL.augmentDescription("Error creating payload.")
+            .asStacklessRuntimeException();
       }
 
       ByteString body = ByteString.copyFrom(new byte[request.getResponseSize()]);

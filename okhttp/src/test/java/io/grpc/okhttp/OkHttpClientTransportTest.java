@@ -61,7 +61,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusException;
 import io.grpc.internal.AbstractStream;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Channelz.TransportStats;
@@ -1338,16 +1337,14 @@ public class OkHttpClientTransportTest {
     clientTransport.shutdown(SHUTDOWN_REASON);
     // ping failed on channel shutdown
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    assertSame(SHUTDOWN_REASON, Status.fromThrowable(callback.failureCause));
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertSame(SHUTDOWN_REASON, ((StatusException) callback.failureCause).getStatus());
+    assertSame(SHUTDOWN_REASON, Status.fromThrowable(callback.failureCause));
     shutdownAndVerify();
   }
 
@@ -1362,18 +1359,14 @@ public class OkHttpClientTransportTest {
     clientTransport.onException(new IOException());
     // ping failed on error
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, Status.fromThrowable(callback.failureCause).getCode());
 
     // now that handler is in terminal state, all future pings fail immediately
     callback = new PingCallbackImpl();
     clientTransport.ping(callback, MoreExecutors.directExecutor());
     assertEquals(1, getTransportStats(clientTransport).keepAlivesSent);
     assertEquals(1, callback.invocationCount);
-    assertTrue(callback.failureCause instanceof StatusException);
-    assertEquals(Status.Code.UNAVAILABLE,
-        ((StatusException) callback.failureCause).getStatus().getCode());
+    assertEquals(Status.Code.UNAVAILABLE, Status.fromThrowable(callback.failureCause).getCode());
     shutdownAndVerify();
   }
 

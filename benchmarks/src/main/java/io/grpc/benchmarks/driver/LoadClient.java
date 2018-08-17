@@ -208,7 +208,7 @@ class LoadClient {
         default: {
           throw Status.UNIMPLEMENTED.withDescription(
               "Unknown payload case " + config.getPayloadConfig().getPayloadCase().name())
-              .asRuntimeException();
+              .asStacklessRuntimeException();
         }
       }
       if (r == null) {

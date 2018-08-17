@@ -193,7 +193,8 @@ public class ContextsTest {
   @Test
   public void statusFromCancelled_returnStatusAsSetOnCtx() {
     Context.CancellableContext cancellableContext = Context.current().withCancellation();
-    cancellableContext.cancel(Status.DEADLINE_EXCEEDED.withDescription("foo bar").asException());
+    cancellableContext.cancel(
+        Status.DEADLINE_EXCEEDED.withDescription("foo bar").asStacklessException());
     Status status = statusFromCancelled(cancellableContext);
     assertNotNull(status);
     assertEquals(Status.Code.DEADLINE_EXCEEDED, status.getCode());
@@ -242,7 +243,7 @@ public class ContextsTest {
   @Test
   public void statusFromCancelled_StatusUnknownShouldWork() {
     Context.CancellableContext cancellableContext = Context.current().withCancellation();
-    Exception e = Status.UNKNOWN.asException();
+    Exception e = Status.UNKNOWN.asStacklessRuntimeException();
     cancellableContext.cancel(e);
     assertTrue(cancellableContext.isCancelled());
 

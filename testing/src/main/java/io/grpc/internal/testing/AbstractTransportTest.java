@@ -1003,7 +1003,8 @@ public abstract class AbstractTransportTest {
       public void closed(Status status, Metadata trailers) {
         super.closed(status, trailers);
         // This simulates the blocking calls which can trigger clientStream.cancel().
-        clientStream.cancel(Status.CANCELLED.withCause(status.asRuntimeException()));
+        clientStream.cancel(Status.CANCELLED.withDescription("closed")
+            .withCause(status.asStacklessRuntimeException()));
       }
 
       @Override
@@ -1011,7 +1012,8 @@ public abstract class AbstractTransportTest {
           Status status, RpcProgress rpcProgress, Metadata trailers) {
         super.closed(status, rpcProgress, trailers);
         // This simulates the blocking calls which can trigger clientStream.cancel().
-        clientStream.cancel(Status.CANCELLED.withCause(status.asRuntimeException()));
+        clientStream.cancel(Status.CANCELLED.withDescription("closed")
+            .withCause(status.asStacklessRuntimeException()));
       }
     };
     clientStream.start(clientStreamListener);

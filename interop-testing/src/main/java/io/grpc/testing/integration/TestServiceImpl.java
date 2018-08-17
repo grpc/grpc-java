@@ -98,7 +98,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       obs.onError(Status.UNIMPLEMENTED
           .withDescription("compression not supported.")
           .withCause(e)
-          .asRuntimeException());
+          .asStacklessRuntimeException());
       return;
     }
 
@@ -119,7 +119,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
     if (req.hasResponseStatus()) {
       obs.onError(Status.fromCodeValue(req.getResponseStatus().getCode())
           .withDescription(req.getResponseStatus().getMessage())
-          .asRuntimeException());
+          .asStacklessRuntimeException());
       return;
     }
 
@@ -182,7 +182,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
           dispatcher.cancel();
           dispatcher.onError(Status.fromCodeValue(request.getResponseStatus().getCode())
               .withDescription(request.getResponseStatus().getMessage())
-              .asRuntimeException());
+              .asStacklessRuntimeException());
           return;
         }
         dispatcher.enqueue(toChunkQueue(request));

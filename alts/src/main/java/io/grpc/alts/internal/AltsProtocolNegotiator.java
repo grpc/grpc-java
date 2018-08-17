@@ -117,7 +117,9 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
                       + RpcProtocolVersionsUtil.getRpcProtocolVersions().toString()
                       + "are not compatible with peer Rpc Protocol Versions "
                       + altsContext.getPeerRpcVersions().toString();
-              fail(ctx, Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException());
+              fail(
+                  ctx,
+                  Status.UNAVAILABLE.withDescription(errorMessage).asStacklessRuntimeException());
             }
             grpcHandler.handleProtocolNegotiationCompleted(
                 Attributes.newBuilder()
@@ -139,7 +141,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
     }
 
     private static RuntimeException unavailableException(String msg, Throwable cause) {
-      return Status.UNAVAILABLE.withCause(cause).withDescription(msg).asRuntimeException();
+      return Status.UNAVAILABLE.withCause(cause).withDescription(msg).asStacklessRuntimeException();
     }
   }
 }

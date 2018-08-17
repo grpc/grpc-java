@@ -40,7 +40,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -488,7 +488,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
               .set(CallCredentials.ATTR_SECURITY_LEVEL,
                   sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
               .build();
-        } catch (StatusException e) {
+        } catch (StatusRuntimeException e) {
           startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
           return;
         } catch (Exception e) {
@@ -528,7 +528,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
-      String proxyUsername, String proxyPassword) throws IOException, StatusException {
+      String proxyUsername, String proxyPassword) {
     try {
       Socket sock;
       // The proxy address may not be resolved
@@ -580,12 +580,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             "Response returned from proxy was not successful (expected 2xx, got %d %s). "
               + "Response body:\n%s",
             statusLine.code, statusLine.message, body.readUtf8());
-        throw Status.UNAVAILABLE.withDescription(message).asException();
+        throw Status.UNAVAILABLE.withDescription(message).asStacklessRuntimeException();
       }
       return sock;
     } catch (IOException e) {
       throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
-          .asException();
+          .asStacklessRuntimeException();
     }
   }
 
@@ -892,9 +892,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private Throwable getPingFailure() {
     synchronized (lock) {
       if (goAwayStatus != null) {
-        return goAwayStatus.asException();
+        return goAwayStatus.asStacklessRuntimeException();
       } else {
-        return Status.UNAVAILABLE.withDescription("Connection closed").asException();
+        return Status.UNAVAILABLE.withDescription("Connection closed")
+            .asStacklessRuntimeException();
       }
     }
   }

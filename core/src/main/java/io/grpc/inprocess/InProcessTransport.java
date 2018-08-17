@@ -167,7 +167,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       executor.execute(new Runnable() {
         @Override
         public void run() {
-          callback.onFailure(shutdownStatus.asRuntimeException());
+          callback.onFailure(shutdownStatus.asStacklessRuntimeException());
         }
       });
     } else {
