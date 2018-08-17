@@ -111,10 +111,6 @@ public class AsyncFrameWriterTest {
         r.run();
       }
     }
-
-    public void clear() {
-      runnables.clear();
-    }
   }
 
   /** Rethrows as Assertion error. */
