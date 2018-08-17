@@ -359,7 +359,7 @@ final class ServletServerStream extends AbstractServerStream {
       while (true) {
         WriteState curState = writeState.get();
         if (curState.stillWritePossible) {
-          ServletAdapterImpl.asyncContextComplete(asyncCtx, scheduler);
+          ServletAdapter.asyncContextComplete(asyncCtx, scheduler);
           logger.log(FINE, "[{0}] writeTrailers: call complete", logId);
           return;
         }
