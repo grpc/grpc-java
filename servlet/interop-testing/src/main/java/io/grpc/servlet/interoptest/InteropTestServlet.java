@@ -16,27 +16,18 @@
 
 package io.grpc.servlet.interoptest;
 
-import io.grpc.servlet.ServletAdapter;
-import java.io.IOException;
-import javax.inject.Inject;
+import io.grpc.servlet.GrpcServlet;
+import io.grpc.testing.integration.TestServiceImpl;
+import java.util.Collections;
+import java.util.concurrent.Executors;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.HttpServlet;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
-/**
- * A servlet that hosts a gRPC server.
- */
-@WebServlet(urlPatterns = {"/grpc.testing.TestService/*"}, asyncSupported = true)
-public class InteropTestServlet extends HttpServlet {
+/** A servlet that hosts a gRPC server. */
+@WebServlet(urlPatterns = "/grpc.testing.TestService/*", asyncSupported = true)
+public class InteropTestServlet extends GrpcServlet {
   private static final long serialVersionUID = 1L;
 
-  @Inject
-  private ServletAdapter servletAdapter;
-
-  @Override
-  protected void doPost(HttpServletRequest request, HttpServletResponse response)
-      throws IOException {
-    servletAdapter.doPost(request, response);
+  public InteropTestServlet() {
+    super(Collections.singletonList(new TestServiceImpl(Executors.newScheduledThreadPool(2))));
   }
 }

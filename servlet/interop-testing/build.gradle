@@ -47,13 +47,6 @@ dependencies {
     compile project(':grpc-protobuf')
     compile project(':grpc-servlet')
 
-    // for container that already supports CDI 2
-    //  providedCompile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
-
-    // for container that needs CDI 2
-    compile group: 'javax.enterprise', name: 'cdi-api', version: '2.0.SP1'
-    compile "org.jboss.weld.servlet:weld-servlet-core:3.0.5.Final"
-
     compile ("com.google.protobuf:protobuf-java-util:${protobufVersion}") {
         exclude group: 'com.google.guava', module: 'guava'
     }

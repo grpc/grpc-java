@@ -19,7 +19,6 @@ package io.grpc.servlet;
 import io.grpc.BindableService;
 import java.io.IOException;
 import java.util.List;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -37,8 +36,10 @@ public class GrpcServlet extends HttpServlet {
   /**
    * Instantiate the servlet serving the given list of gRPC services.
    */
-  public GrpcServlet(List<? extends BindableService> grpcServices) {
-    servletAdapter = ServletAdapter.Factory.create(grpcServices);
+  public GrpcServlet(List<BindableService> grpcServices) {
+    ServletServerBuilder serverBuilder = new ServletServerBuilder();
+    grpcServices.forEach(service -> serverBuilder.addService(service));
+    servletAdapter = ServletAdapter.Factory.create(serverBuilder);
   }
 
   @Override
@@ -50,13 +51,7 @@ public class GrpcServlet extends HttpServlet {
   @Override
   protected final void doPost(HttpServletRequest request, HttpServletResponse response)
       throws IOException {
-    servletAdapter.doGet(request, response);
-  }
-
-  @Override
-  public void init() throws ServletException {
-    super.init();
-    servletAdapter.init();
+    servletAdapter.doPost(request, response);
   }
 
   @Override

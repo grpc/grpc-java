@@ -298,7 +298,7 @@ final class ServletServerStream extends AbstractServerStream {
             }
 
           }
-          logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = false", logId);
+          logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = true", logId);
         } catch (IOException ioe) {
           ioe.printStackTrace(); // TODO
         }

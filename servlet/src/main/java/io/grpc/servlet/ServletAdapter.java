@@ -22,7 +22,6 @@ import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
-import io.grpc.BindableService;
 import io.grpc.Metadata;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.LogId;
@@ -33,7 +32,6 @@ import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
 import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ScheduledExecutorService;
@@ -41,8 +39,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import javax.servlet.AsyncContext;
 import javax.servlet.ReadListener;
 import javax.servlet.ServletContext;
@@ -253,15 +249,8 @@ public final class ServletAdapter {
   }
 
   /**
-   * Call this method before the adapter is in use.
-   */
-  @PostConstruct
-  public void init() {}
-
-  /**
    * Call this method when the adapter is no longer need.
    */
-  @PreDestroy
   public void destroy() {
     transportListener.transportTerminated();
   }
@@ -304,17 +293,6 @@ public final class ServletAdapter {
     public static ServletAdapter create(ServletServerBuilder serverBuilder) {
       ServerTransportListener listener = serverBuilder.buildAndStart();
       return new ServletAdapter(listener, serverBuilder.getScheduledExecutorService());
-    }
-
-    /**
-     * Creates an instance of ServletAdapter. A gRPC server with the given services and default
-     * settings will be built and started. The servlet using this servletAdapter will be backed by
-     * the gRPC server.
-     */
-    public static ServletAdapter create(List<? extends BindableService> services) {
-      ServletServerBuilder serverBuilder = new ServletServerBuilder();
-      services.forEach(service -> serverBuilder.addService(service));
-      return create(serverBuilder);
     }
   }
 }
