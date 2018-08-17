@@ -223,6 +223,8 @@ class CronetClientStream extends AbstractClientStream {
     private Status cancelReason;
     @GuardedBy("lock")
     private boolean readClosed;
+    @GuardedBy("lock")
+    private boolean firstWriteComplete;
 
     public TransportState(
         int maxMessageSize, StatsTraceContext statsTraceCtx, Object lock,
@@ -376,7 +378,6 @@ class CronetClientStream extends AbstractClientStream {
         // Now that the stream is ready, call the listener's onReady callback if
         // appropriate.
         state.onStreamAllocated();
-        statsTraceCtx.clientOutboundHeaders();
         state.streamReady = true;
         state.writeAllPendingData();
       }
@@ -421,6 +422,12 @@ class CronetClientStream extends AbstractClientStream {
         Log.v(LOG_TAG, "onWriteCompleted");
       }
       synchronized (state.lock) {
+        if (!state.firstWriteComplete) {
+          // Cronet API doesn't notify when headers are written to wire, but it occurs before first
+          // onWriteCompleted callback.
+          state.firstWriteComplete = true;
+          statsTraceCtx.clientOutboundHeaders();
+        }
         state.onSentBytes(buffer.position());
       }
     }
