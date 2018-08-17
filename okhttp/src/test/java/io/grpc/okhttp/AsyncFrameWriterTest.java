@@ -111,9 +111,13 @@ public class AsyncFrameWriterTest {
         r.run();
       }
     }
+
+    public void clear() {
+      runnables.clear();
+    }
   }
 
-  /** Rethrows as Internal error. */
+  /** Rethrows as Assertion error. */
   private static class EscalatingTransportErrorHandler implements TransportExceptionHandler {
 
     @Override
