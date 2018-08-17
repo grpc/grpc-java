@@ -22,7 +22,6 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.internal.verification.VerificationModeFactory.times;
 
-import io.grpc.Status;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.AsyncFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.framed.FrameWriter;
@@ -31,7 +30,6 @@ import java.net.Socket;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -48,19 +46,12 @@ public class AsyncFrameWriterTest {
   private QueueingExecutor queueingExecutor = new QueueingExecutor();
   private TransportExceptionHandler transportExceptionHandler =
       new EscalatingTransportErrorHandler();
-
-  private AsyncFrameWriter asyncFrameWriter;
+  private AsyncFrameWriter asyncFrameWriter =
+      new AsyncFrameWriter(transportExceptionHandler, new SerializingExecutor(queueingExecutor));
 
   @Before
   public void setUp() throws Exception {
-    asyncFrameWriter =
-        new AsyncFrameWriter(transportExceptionHandler, new SerializingExecutor(queueingExecutor));
     asyncFrameWriter.becomeConnected(frameWriter, socket);
-  }
-
-  @After
-  public void tearDown() throws Exception {
-    queueingExecutor.clear();
   }
 
   @Test
@@ -120,10 +111,6 @@ public class AsyncFrameWriterTest {
         r.run();
       }
     }
-
-    public void clear() {
-      runnables.clear();
-    }
   }
 
   /** Rethrows as Internal error. */
@@ -131,7 +118,7 @@ public class AsyncFrameWriterTest {
 
     @Override
     public void onException(Throwable throwable) {
-      throw Status.INTERNAL.asRuntimeException();
+      throw new AssertionError(throwable);
     }
   }
 }
