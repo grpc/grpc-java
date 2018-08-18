@@ -24,6 +24,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -42,6 +43,7 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
@@ -50,13 +52,17 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -494,7 +500,8 @@ public final class GrpcUtil {
 
         @Override
         public void close(ExecutorService instance) {
-          instance.shutdown();
+          //instance.shutdown();
+          instance.shutdownNow();
         }
 
         @Override
@@ -537,10 +544,16 @@ public final class GrpcUtil {
 
         @Override
         public void close(ScheduledExecutorService instance) {
-          instance.shutdown();
+          instance.shutdownNow();
         }
       };
 
+
+  private static final Logger logger = Logger.getLogger(GrpcUtil.class.getName());
+
+
+  static final List<WeakReference<Thread>> threads = new ArrayList<WeakReference<Thread>>();
+  static final AtomicLong total = new AtomicLong();
 
   /**
    * Get a {@link ThreadFactory} suitable for use in the current environment.
@@ -552,8 +565,43 @@ public final class GrpcUtil {
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
     if (IS_RESTRICTED_APPENGINE) {
       @SuppressWarnings("BetaApi")
-      ThreadFactory factory = MoreExecutors.platformThreadFactory();
-      return factory;
+      final ThreadFactory factory = MoreExecutors.platformThreadFactory();
+
+
+      return new ThreadFactory() {
+        @Override
+        public Thread newThread(final Runnable r) {
+
+          long localTotal;
+          int alive = 1;
+          synchronized (threads) {
+            for (WeakReference<Thread> wr : threads) {
+              if (wr.get() != null) {
+                alive++;
+              }
+            }
+            localTotal = total.incrementAndGet();
+          }
+          logger.log(Level.SEVERE,
+              "WHY AM I MAKING A THREAD? " + alive + " / " + localTotal,
+              new Throwable("don't do it!"));
+          Thread t = factory.newThread(new Runnable() {
+            @Override
+            public void run() {
+              try {
+                r.run();
+              } catch (Throwable t) {
+                System.err.println("BADDD" + Throwables.getStackTraceAsString(t));
+              }
+            }
+          });
+          synchronized (threads) {
+            threads.add(new WeakReference<Thread>(t));
+          }
+
+          return t;
+        }
+      };
     } else {
       return new ThreadFactoryBuilder()
           .setDaemon(daemon)
