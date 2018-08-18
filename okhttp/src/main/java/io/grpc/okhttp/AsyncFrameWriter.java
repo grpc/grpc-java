@@ -210,10 +210,14 @@ class AsyncFrameWriter implements FrameWriter {
       public void run() {
         if (frameWriter != null) {
           try {
+            log.log(Level.SEVERE, "I REALLY WANT OT CLOSE");
             frameWriter.close();
+            log.log(Level.SEVERE, "I REALLY WANT OT CLOSE ALOT");
             socket.close();
           } catch (IOException e) {
             log.log(Level.WARNING, "Failed closing connection", e);
+          } finally {
+            log.log(Level.SEVERE, "AND I GOT WHAT AI WANT");
           }
         }
       }
