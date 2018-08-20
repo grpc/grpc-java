@@ -127,7 +127,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
       if (providers.isEmpty()) {
         String msg = "No NameResolverProviders found via ServiceLoader, including for DNS. "
             + "This is probably due to a broken build. If using ProGuard, check your configuration";
-        throw new UnsupportedOperationException(msg);
+        throw new RuntimeException(msg);
       }
     }
   }
