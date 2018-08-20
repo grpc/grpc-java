@@ -58,9 +58,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import java.util.concurrent.Executor;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -96,15 +96,15 @@ public class DnsNameResolverTest {
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
 
-  private final Resource<ExecutorService> fakeExecutorResource =
-      new Resource<ExecutorService>() {
+  private final Resource<Executor> fakeExecutorResource =
+      new Resource<Executor>() {
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return fakeExecutor.getScheduledExecutorService();
         }
 
         @Override
-        public void close(ExecutorService instance) {
+        public void close(Executor instance) {
         }
       };
 
