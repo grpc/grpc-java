@@ -46,7 +46,7 @@ public class NameResolverProviderTest {
     try {
       factory.getDefaultScheme();
       fail("Expected exception");
-    } catch (UnsupportedOperationException ex) {
+    } catch (RuntimeException ex) {
       assertTrue(ex.toString(), ex.getMessage().contains("No NameResolverProviders found"));
     }
   }
@@ -72,7 +72,7 @@ public class NameResolverProviderTest {
     try {
       factory.newNameResolver(uri, attributes);
       fail("Expected exception");
-    } catch (UnsupportedOperationException ex) {
+    } catch (RuntimeException ex) {
       assertTrue(ex.toString(), ex.getMessage().contains("No NameResolverProviders found"));
     }
   }
