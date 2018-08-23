@@ -22,13 +22,11 @@ import com.google.common.collect.ImmutableSet;
 import io.grpc.Status.Code;
 import java.util.Collections;
 import java.util.Set;
-import javax.annotation.ParametersAreNonnullByDefault;
 import javax.annotation.concurrent.Immutable;
 
 /**
  * Hedging policy data object.
  */
-@ParametersAreNonnullByDefault
 @Immutable
 class HedgingPolicy {
   final int maxAttempts;
@@ -78,14 +76,12 @@ class HedgingPolicy {
   }
 
   /**
-   * Providers the most suitable hedging policy for a call when this will have to provide one.
-   *
-   * <p>Never returns null.
+   * Provides the most suitable hedging policy for a call.
    */
   interface Provider {
 
     /**
-     * This method is used no more than once for each call.
+     * This method is used no more than once for each call. Never returns null.
      */
     HedgingPolicy get();
   }
