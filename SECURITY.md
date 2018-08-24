@@ -331,6 +331,7 @@ If you are on a 32-bit operating system, or not on a [Transport Security support
 If you are using `musl` libc (e.g., with Alpine Linux), then
 `netty-tcnative-boringssl-static` won't work. There are several alternatives:
  - Use [netty-tcnative-alpine](https://github.com/pires/netty-tcnative-alpine)
+ - On Alpine Linux: Install the [grpc-java](https://pkgs.alpinelinux.org/package/edge/testing/x86_64/grpc-java) package from edge
  - Use a distribution with `glibc`
 
 If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot),
