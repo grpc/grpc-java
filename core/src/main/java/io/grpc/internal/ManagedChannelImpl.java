@@ -489,7 +489,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
               transportFactory.getScheduledExecutorService(),
               callOptions.getOption(RETRY_POLICY_KEY),
               callOptions.getOption(HEDGING_POLICY_KEY),
-              throttle);
+              throttle,
+              stopwatchSupplier);
         }
 
         @Override

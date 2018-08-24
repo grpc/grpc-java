@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -40,6 +42,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.CheckReturnValue;
@@ -67,6 +70,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final RetryPolicy.Provider retryPolicyProvider;
   private final HedgingPolicy.Provider hedgingPolicyProvider;
   private RetryPolicy retryPolicy;
+  private HedgingPolicy hedgingPolicy;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
@@ -76,6 +80,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final long channelBufferLimit;
   @Nullable
   private final Throttle throttle;
+  private final Supplier<Stopwatch> stopwatchSupplier;
+
+  // special value: negative when committed on Sublistener.closed()
+  private final AtomicInteger numOfActiveHedges = new AtomicInteger();
+  private ConcurrentRescheduler rescheduler;
 
   private volatile State state = new State(
       new ArrayList<BufferEntry>(8), Collections.<Substream>emptyList(), null, false, false);
@@ -83,7 +92,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   /**
    * Either transparent retry happened or reached server's application logic.
    */
-  private boolean noMoreTransparentRetry;
+  private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
+  private volatile boolean hedgingFrozen; // no more hedging due to events like drop or pushback
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -91,7 +101,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
-  private Future<?> scheduledRetry;
+  private volatile Substream latestSubstream;
   private long nextBackoffIntervalNanos;
 
   RetriableStream(
@@ -99,7 +109,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
       RetryPolicy.Provider retryPolicyProvider, HedgingPolicy.Provider hedgingPolicyProvider,
-      @Nullable Throttle throttle) {
+      @Nullable Throttle throttle, Supplier<Stopwatch> stopwatchSupplier) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -110,6 +120,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.retryPolicyProvider = checkNotNull(retryPolicyProvider, "retryPolicyProvider");
     this.hedgingPolicyProvider = checkNotNull(hedgingPolicyProvider, "hedgingPolicyProvider");
     this.throttle = throttle;
+    this.stopwatchSupplier = stopwatchSupplier;
   }
 
   @Nullable // null if already committed
@@ -130,7 +141,15 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         @Override
         public void run() {
           // For hedging only, not needed for normal retry
-          // TODO(zdapeng): also cancel all the scheduled hedges.
+          // cancel the scheduled hedging if it is scheduled prior to the commitment
+          if (rescheduler != null) {
+            rescheduler.cancel(true);
+          }
+
+          // It is possible that some new hedges are spawned during the commitment, but they will
+          // get cancelled below or while draining.
+
+          // For hedging only, not needed for normal retry
           for (Substream substream : savedDrainedSubstreams) {
             if (substream != winningSubstream) {
               substream.stream.cancel(CANCELLED_BECAUSE_COMMITTED);
@@ -173,6 +192,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Metadata newHeaders = updateHeaders(headers, previousAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(tracerFactory, newHeaders);
+    numOfActiveHedges.getAndIncrement();
+    latestSubstream = sub;
     return sub;
   }
 
@@ -268,8 +289,31 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     class StartEntry implements BufferEntry {
       @Override
-      public void runWith(Substream substream) {
+      public void runWith(final Substream substream) {
+        if (hedgingPolicy == null) {
+          hedgingPolicy = hedgingPolicyProvider.get();
+          if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+            retryPolicy = RetryPolicy.DEFAULT;
+            rescheduler = new ConcurrentRescheduler(
+                new HedgingRunnable(), scheduledExecutorService, stopwatchSupplier.get());
+          }
+        }
+
         substream.stream.start(new Sublistener(substream));
+
+        if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
+            && throttle.isAboveThreshold()
+            && substream.previousAttempts + 1 < hedgingPolicy.maxAttempts
+            && state.winningSubstream == null) {
+          // The check state.winningSubstream == null, checking if is not already committed, is
+          // racy, but is still safe b/c the new hedge will also handle the committed state.
+          rescheduler.scheduleNewOrNoop(hedgingPolicy.hedgingDelayNanos, TimeUnit.NANOSECONDS);
+
+          if (hedgingFrozen) {
+            // cancel the scheduled hedging if hedging frozen prior to the scheduling
+            rescheduler.cancel(true);
+          }
+        }
       }
     }
 
@@ -279,8 +323,25 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     Substream substream = createSubstream(0);
     drain(substream);
+  }
 
-    // TODO(zdapeng): schedule hedging if needed
+  private final class HedgingRunnable implements Runnable {
+
+    @Override
+    public void run() {
+      callExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          if (hedgingFrozen) {
+            // If hedging is frozen prior to the scheduling, it is cancelled right away,
+            // just in case the cancellation failed/is too late in extreme cases.
+            return;
+          }
+          Substream newSubstream = createSubstream(latestSubstream.previousAttempts + 1);
+          drain(newSubstream);
+        }
+      });
+    }
   }
 
   @Override
@@ -290,10 +351,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      Future<?> savedScheduledRetry = scheduledRetry;
-      if (savedScheduledRetry != null) {
-        savedScheduledRetry.cancel(false);
-        scheduledRetry = null;
+      Substream savedLatestSubstream = latestSubstream;
+      if (savedLatestSubstream != null && savedLatestSubstream.scheduledRetry != null) {
+        // cancel the scheduled retry if it is scheduled prior to the commitment
+        savedLatestSubstream.scheduledRetry.cancel(false);
       }
       masterListener.closed(reason, new Metadata());
       runnable.run();
@@ -516,8 +577,29 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     RetriableStream.random = random;
   }
 
-  boolean hasHedging() {
-    return false;
+  /**
+   * If there is a potential hedge or any active hedges.
+   */
+  private final boolean hasHedging() {
+    if (HedgingPolicy.DEFAULT.equals(hedgingPolicy) || state.winningSubstream != null) {
+      return false;
+    }
+
+    numOfActiveHedges.decrementAndGet();
+
+    if (throttle.isAboveThreshold()
+        && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
+        && !hedgingFrozen) {
+      // there is a potential hedge at the moment, the latestSubstream may not be the last
+      // possible hedge
+      return true;
+    }
+    // else, absolutely no potential hedge, the latestSubstream _is_ the last possible hedge.
+    // At least one of hedges will observe this, unless otherwise the rpc is committed.
+
+    // Instead of just return numOfActiveHedges.get() != 0;
+    // use compareAndSet to avoid contention of concurrent committing multiple hedges.
+    return !numOfActiveHedges.compareAndSet(0, -1);
   }
 
   private interface BufferEntry {
@@ -564,41 +646,41 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
+      boolean isFatal = false;
       if (state.winningSubstream == null) {
-        if (rpcProgress == RpcProgress.REFUSED && !noMoreTransparentRetry) {
-          // TODO(zdapeng): in hedging case noMoreTransparentRetry might need be synchronized.
-          noMoreTransparentRetry = true;
+        if (rpcProgress == RpcProgress.REFUSED
+            && noMoreTransparentRetry.compareAndSet(false, true)) {
           callExecutor.execute(new Runnable() {
             @Override
             public void run() {
               // transparent retry
               Substream newSubstream = createSubstream(
                   substream.previousAttempts);
+              numOfActiveHedges.decrementAndGet(); // adjust the number
               drain(newSubstream);
             }
           });
           return;
         } else if (rpcProgress == RpcProgress.DROPPED) {
           // For normal retry, nothing need be done here, will just commit.
-          // For hedging:
-          // TODO(zdapeng): cancel all scheduled hedges (TBD)
+          // For hedging, cancel scheduled hedge that is scheduled prior to the drop
+          freezeHedging();
         } else {
-          noMoreTransparentRetry = true;
+          noMoreTransparentRetry.set(true);
 
           if (retryPolicy == null) {
             retryPolicy = retryPolicyProvider.get();
             nextBackoffIntervalNanos = retryPolicy.initialBackoffNanos;
           }
 
-          RetryPlan retryPlan = makeRetryDecision(retryPolicy, status, trailers);
+          RetryPlan retryPlan = makeRetryDecision(status, trailers);
           if (retryPlan.shouldRetry) {
             // The check state.winningSubstream == null, checking if is not already committed, is
             // racy, but is still safe b/c the retry will also handle committed/cancellation
-            scheduledRetry = scheduledExecutorService.schedule(
+            substream.scheduledRetry = scheduledExecutorService.schedule(
                 new Runnable() {
                   @Override
                   public void run() {
-                    scheduledRetry = null;
                     callExecutor.execute(new Runnable() {
                       @Override
                       public void run() {
@@ -613,18 +695,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
                 TimeUnit.NANOSECONDS);
             return;
           }
+          isFatal = retryPlan.isFatal;
         }
       }
 
-      if (!hasHedging()) {
+      if (!hasHedging() || isFatal) {
         commitAndRun(substream);
         if (state.winningSubstream == substream) {
           masterListener.closed(status, trailers);
         }
       }
-
-      // TODO(zdapeng): in hedge case, if this is a fatal status, cancel all the other attempts, and
-      // close the masterListener.
     }
 
     /**
@@ -632,11 +712,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
      * long the backoff should be. The decision does not take the commitment status into account, so
      * caller should check it separately.
      */
-    // TODO(zdapeng): add HedgingPolicy as param
-    private RetryPlan makeRetryDecision(RetryPolicy retryPolicy, Status status, Metadata trailer) {
+    private RetryPlan makeRetryDecision(Status status, Metadata trailer) {
       boolean shouldRetry = false;
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
+      boolean isNonFatalStatusCode = hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
+      if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy) && !isNonFatalStatusCode) {
+        return new RetryPlan(/* shouldRetry = */ false, /* isFatal = */ true, 0);
+      }
 
       String pushbackStr = trailer.get(GRPC_RETRY_PUSHBACK_MS);
       Integer pushbackMillis = null;
@@ -650,8 +733,29 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
       boolean isThrottled = false;
       if (throttle != null) {
-        if (isRetryableStatusCode || (pushbackMillis != null && pushbackMillis < 0)) {
+        if (isRetryableStatusCode || isNonFatalStatusCode
+            || (pushbackMillis != null && pushbackMillis < 0)) {
           isThrottled = !throttle.onQualifiedFailureThenCheckIsAboveThreshold();
+        }
+      }
+
+      if ((pushbackMillis != null && pushbackMillis < 0)) {
+        freezeHedging();
+
+        if (pushbackMillis > 0) {
+          if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
+              && throttle.isAboveThreshold()
+              && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
+              && state.winningSubstream == null) {
+            // The check state.winningSubstream == null, checking if is not already committed, is
+            // racy, but is still safe b/c the new hedge will also handle the committed state.
+            rescheduler.reschedule(pushbackMillis, TimeUnit.MILLISECONDS);
+
+            if (hedgingFrozen) {
+              // cancel the scheduled hedging if hedging frozen prior to the scheduling
+              rescheduler.cancel(true);
+            }
+          }
         }
       }
 
@@ -672,9 +776,15 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         } // else no retry
       } // else no retry
 
-      // TODO(zdapeng): transparent retry
-      // TODO(zdapeng): hedging
-      return new RetryPlan(shouldRetry, backoffNanos);
+      return new RetryPlan(shouldRetry, /* isFatal = */ false, backoffNanos);
+    }
+
+    private void freezeHedging() {
+      if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+        hedgingFrozen = true;
+        // cancel the scheduled hedging if it is scheduled prior to the freeze
+        rescheduler.cancel(true);
+      }
     }
 
     @Override
@@ -828,6 +938,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     boolean bufferLimitExceeded;
 
     final int previousAttempts;
+
+    Future<?> scheduledRetry;
 
     Substream(int previousAttempts) {
       this.previousAttempts = previousAttempts;
@@ -1003,11 +1115,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private static final class RetryPlan {
     final boolean shouldRetry;
-    // TODO(zdapeng) boolean hasHedging
+    final boolean isFatal; // receiving a status not among the nonFatalStatusCodes
     final long backoffNanos;
 
-    RetryPlan(boolean shouldRetry, long backoffNanos) {
+    RetryPlan(boolean shouldRetry, boolean isFatal, long backoffNanos) {
       this.shouldRetry = shouldRetry;
+      this.isFatal = isFatal;
       this.backoffNanos = backoffNanos;
     }
   }

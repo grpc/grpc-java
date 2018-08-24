@@ -148,7 +148,7 @@ public class RetriableStreamTest {
               return hedgingPolicy;
             }
           },
-          throttle);
+          throttle, fakeClock.getStopwatchSupplier());
     }
 
     @Override
