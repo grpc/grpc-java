@@ -374,7 +374,7 @@ public class MessageDeframer implements Closeable, Deframer {
     if ((type & RESERVED_MASK) != 0) {
       throw Status.INTERNAL.withDescription(
           "gRPC frame header malformed: reserved bits not zero")
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
     compressedFlag = (type & COMPRESSED_FLAG_MASK) != 0;
 
@@ -384,7 +384,7 @@ public class MessageDeframer implements Closeable, Deframer {
       throw Status.RESOURCE_EXHAUSTED.withDescription(
           String.format("gRPC message exceeds maximum size %d: %d",
               maxInboundMessageSize, requiredLength))
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
 
     currentMessageSeqNo++;
@@ -421,7 +421,7 @@ public class MessageDeframer implements Closeable, Deframer {
     if (decompressor == Codec.Identity.NONE) {
       throw Status.INTERNAL.withDescription(
           "Can't decode compressed gRPC message as compression not configured")
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
 
     try {
@@ -514,7 +514,7 @@ public class MessageDeframer implements Closeable, Deframer {
       if (count > maxMessageSize) {
         throw Status.RESOURCE_EXHAUSTED.withDescription(String.format(
                 "Compressed gRPC message exceeds maximum size %d: %d bytes read",
-                maxMessageSize, count)).asRuntimeException();
+                maxMessageSize, count)).asStacklessRuntimeException();
       }
     }
   }

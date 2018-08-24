@@ -97,7 +97,8 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
   private URI serviceUri(Channel channel, MethodDescriptor<?, ?> method) throws StatusException {
     String authority = channel.authority();
     if (authority == null) {
-      throw Status.UNAUTHENTICATED.withDescription("Channel has no authority").asException();
+      throw Status.UNAUTHENTICATED.withDescription("Channel has no authority")
+          .asStacklessException();
     }
     // Always use HTTPS, by definition.
     final String scheme = "https";
@@ -108,7 +109,7 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
       uri = new URI(scheme, authority, path, null, null);
     } catch (URISyntaxException e) {
       throw Status.UNAUTHENTICATED.withDescription("Unable to construct service URI for auth")
-          .withCause(e).asException();
+          .withCause(e).asStacklessException();
     }
     // The default port must not be present. Alternative ports should be present.
     if (uri.getPort() == defaultPort) {
@@ -124,7 +125,7 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
     } catch (URISyntaxException e) {
       throw Status.UNAUTHENTICATED.withDescription(
             "Unable to construct service URI after removing port")
-          .withCause(e).asException();
+          .withCause(e).asStacklessException();
     }
   }
 
@@ -133,7 +134,7 @@ public final class ClientAuthInterceptor implements ClientInterceptor {
       return credentials.getRequestMetadata(uri);
     } catch (IOException e) {
       throw Status.UNAUTHENTICATED.withDescription("Unable to get request metadata").withCause(e)
-          .asException();
+          .asStacklessException();
     }
   }
 

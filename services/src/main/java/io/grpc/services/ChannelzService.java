@@ -94,7 +94,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
       GetChannelRequest request, StreamObserver<GetChannelResponse> responseObserver) {
     Instrumented<ChannelStats> s = channelz.getRootChannel(request.getChannelId());
     if (s == null) {
-      responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
+      responseObserver.onError(Status.NOT_FOUND.asStacklessRuntimeException());
       return;
     }
 
@@ -122,7 +122,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
       GetSubchannelRequest request, StreamObserver<GetSubchannelResponse> responseObserver) {
     Instrumented<ChannelStats> s = channelz.getSubchannel(request.getSubchannelId());
     if (s == null) {
-      responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
+      responseObserver.onError(Status.NOT_FOUND.asStacklessRuntimeException());
       return;
     }
 
@@ -140,7 +140,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
       GetSocketRequest request, StreamObserver<GetSocketResponse> responseObserver) {
     Instrumented<SocketStats> s = channelz.getSocket(request.getSocketId());
     if (s == null) {
-      responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
+      responseObserver.onError(Status.NOT_FOUND.asStacklessRuntimeException());
       return;
     }
 
@@ -158,7 +158,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
     ServerSocketsList serverSockets
         = channelz.getServerSockets(request.getServerId(), request.getStartSocketId(), maxPageSize);
     if (serverSockets == null) {
-      responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
+      responseObserver.onError(Status.NOT_FOUND.asStacklessRuntimeException());
       return;
     }
 

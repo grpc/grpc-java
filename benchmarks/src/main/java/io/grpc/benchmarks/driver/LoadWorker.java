@@ -149,11 +149,12 @@ public class LoadWorker {
             } else {
               responseObserver.onError(Status.ALREADY_EXISTS
                   .withDescription("Server already started")
-                  .asRuntimeException());
+                  .asStacklessRuntimeException());
             }
           } catch (Throwable t) {
             log.log(Level.WARNING, "Error running server", t);
-            responseObserver.onError(Status.INTERNAL.withCause(t).asException());
+            responseObserver.onError(Status.INTERNAL.withDescription("Error running server")
+                .withCause(t).asStacklessRuntimeException());
             // Shutdown server if we can
             onCompleted();
           }
@@ -201,11 +202,12 @@ public class LoadWorker {
             } else {
               responseObserver.onError(Status.ALREADY_EXISTS
                   .withDescription("Client already started")
-                  .asRuntimeException());
+                  .asStacklessRuntimeException());
             }
           } catch (Throwable t) {
             log.log(Level.WARNING, "Error running client", t);
-            responseObserver.onError(Status.INTERNAL.withCause(t).asException());
+            responseObserver.onError(Status.INTERNAL.withDescription("Error running client")
+                .withCause(t).asStacklessRuntimeException());
             // Shutdown the client if we can
             onCompleted();
           }

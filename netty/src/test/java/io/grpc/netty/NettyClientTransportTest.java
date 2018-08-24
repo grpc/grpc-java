@@ -46,7 +46,7 @@ import io.grpc.MethodDescriptor.Marshaller;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.Status.Code;
-import io.grpc.StatusException;
+import io.grpc.StatusRuntimeException;
 import io.grpc.internal.Channelz;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
@@ -260,7 +260,7 @@ public class NettyClientTransportTest {
       @Override
       public void run() {
         negotiator.handler.fail(transport.channel().pipeline().context(negotiator.handler),
-            failureStatus.asRuntimeException());
+            failureStatus.asStacklessRuntimeException());
       }
     });
 
@@ -269,7 +269,7 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      assertSame(failureStatus, (Status.fromThrowable(ex.getCause())));
     }
   }
 
@@ -302,10 +302,10 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      StatusException sre = (StatusException) ex.getCause();
-      assertEquals(Status.Code.UNAVAILABLE, sre.getStatus().getCode());
-      assertThat(sre.getCause()).isInstanceOf(SSLHandshakeException.class);
-      assertThat(sre.getCause().getMessage()).contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
+      Status s = Status.fromThrowable(ex.getCause());
+      assertEquals(Status.Code.UNAVAILABLE, s.getCode());
+      assertThat(s.getCause()).isInstanceOf(SSLHandshakeException.class);
+      assertThat(s.getCause().getMessage()).contains("SSLV3_ALERT_HANDSHAKE_FAILURE");
     }
   }
 
@@ -318,14 +318,14 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(negotiator);
     callMeMaybe(transport.start(clientTransportListener));
     final Status failureStatus = Status.UNAVAILABLE.withDescription("oh noes!");
-    transport.channel().pipeline().fireExceptionCaught(failureStatus.asRuntimeException());
+    transport.channel().pipeline().fireExceptionCaught(failureStatus.asStacklessRuntimeException());
 
     Rpc rpc = new Rpc(transport).halfClose();
     try {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      assertSame(failureStatus, Status.fromThrowable(ex));
     }
   }
 
@@ -344,7 +344,7 @@ public class NettyClientTransportTest {
         try {
           negotiator.handler.exceptionCaught(
               transport.channel().pipeline().context(negotiator.handler),
-              failureStatus.asRuntimeException());
+              failureStatus.asStacklessRuntimeException());
         } catch (Exception ex) {
           throw new RuntimeException(ex);
         }
@@ -356,7 +356,7 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      assertSame(failureStatus, Status.fromThrowable(ex));
     }
   }
 
@@ -474,7 +474,7 @@ public class NettyClientTransportTest {
           + " size limit!");
     } catch (Exception e) {
       Throwable rootCause = getRootCause(e);
-      Status status = ((StatusException) rootCause).getStatus();
+      Status status = Status.fromThrowable(rootCause);
       assertEquals(Status.Code.INTERNAL, status.getCode());
       assertEquals("HTTP/2 error code: PROTOCOL_ERROR\nReceived Rst Stream",
           status.getDescription());
@@ -695,7 +695,7 @@ public class NettyClientTransportTest {
       if (status.isOk()) {
         closedFuture.set(null);
       } else {
-        StatusException e = status.asException();
+        StatusRuntimeException e = status.asStacklessRuntimeException();
         closedFuture.setException(e);
         responseFuture.setException(e);
       }

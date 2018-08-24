@@ -133,7 +133,7 @@ public final class ClientCalls {
           throw Status.CANCELLED
               .withDescription("Call was interrupted")
               .withCause(e)
-              .asRuntimeException();
+              .asStacklessRuntimeException();
         }
       }
       return getUnchecked(responseFuture);
@@ -209,7 +209,7 @@ public final class ClientCalls {
       throw Status.CANCELLED
           .withDescription("Call was interrupted")
           .withCause(e)
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     } catch (ExecutionException e) {
       throw toStatusRuntimeException(e.getCause());
     }
@@ -235,7 +235,7 @@ public final class ClientCalls {
       cause = cause.getCause();
     }
     return Status.UNKNOWN.withDescription("unexpected exception").withCause(t)
-        .asRuntimeException();
+        .asStacklessRuntimeException();
   }
 
   /**
@@ -415,7 +415,7 @@ public final class ClientCalls {
       if (firstResponseReceived && !streamingResponse) {
         throw Status.INTERNAL
             .withDescription("More than one responses received for unary or client-streaming call")
-            .asRuntimeException();
+            .asStacklessRuntimeException();
       }
       firstResponseReceived = true;
       observer.onNext(message);
@@ -463,7 +463,7 @@ public final class ClientCalls {
     public void onMessage(RespT value) {
       if (this.value != null) {
         throw Status.INTERNAL.withDescription("More than one value received for unary call")
-            .asRuntimeException();
+            .asStacklessRuntimeException();
       }
       this.value = value;
     }
@@ -567,7 +567,8 @@ public final class ClientCalls {
           last = waitForNext();
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
-          throw Status.CANCELLED.withDescription("interrupted").withCause(ie).asRuntimeException();
+          throw Status.CANCELLED.withDescription("interrupted").withCause(ie)
+              .asStacklessRuntimeException();
         }
       }
       if (last instanceof StatusRuntimeException) {

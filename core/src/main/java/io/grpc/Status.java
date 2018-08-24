@@ -513,6 +513,15 @@ public final class Status {
    * Convert this {@link Status} to a {@link RuntimeException}. Use {@link #fromThrowable}
    * to recover this {@link Status} instance when the returned exception is in the causal chain.
    */
+  @ExperimentalApi("FIXME")
+  public StatusRuntimeException asStacklessRuntimeException() {
+    return new StatusRuntimeException(this, /*trailers=*/ null, /*fillInStackTrace=*/ false);
+  }
+
+  /**
+   * Convert this {@link Status} to a {@link RuntimeException}. Use {@link #fromThrowable}
+   * to recover this {@link Status} instance when the returned exception is in the causal chain.
+   */
   public StatusRuntimeException asRuntimeException() {
     return new StatusRuntimeException(this);
   }
@@ -524,6 +533,15 @@ public final class Status {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4683")
   public StatusRuntimeException asRuntimeException(@Nullable Metadata trailers) {
     return new StatusRuntimeException(this, trailers);
+  }
+
+  /**
+   * Convert this {@link Status} to an {@link Exception}. Use {@link #fromThrowable}
+   * to recover this {@link Status} instance when the returned exception is in the causal chain.
+   */
+  @ExperimentalApi("FIXME")
+  public StatusException asStacklessException() {
+    return new StatusException(this, /*trailers=*/ null, /*fillInStackTrace=*/ false);
   }
 
   /**

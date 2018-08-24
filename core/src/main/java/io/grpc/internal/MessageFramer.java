@@ -144,17 +144,17 @@ public class MessageFramer implements Framer {
       throw Status.INTERNAL
           .withDescription("Failed to frame message")
           .withCause(e)
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     } catch (RuntimeException e) {
       throw Status.INTERNAL
           .withDescription("Failed to frame message")
           .withCause(e)
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
 
     if (messageLength != -1 && written != messageLength) {
       String err = String.format("Message length inaccurate %s != %s", written, messageLength);
-      throw Status.INTERNAL.withDescription(err).asRuntimeException();
+      throw Status.INTERNAL.withDescription(err).asStacklessRuntimeException();
     }
     statsTraceCtx.outboundUncompressedSize(written);
     statsTraceCtx.outboundWireSize(currentMessageWireSize);
@@ -172,7 +172,7 @@ public class MessageFramer implements Framer {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
               String.format("message too large %d > %d", written , maxOutboundMessageSize))
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
     writeBufferChain(bufferChain, false);
     return written;
@@ -192,7 +192,7 @@ public class MessageFramer implements Framer {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
               String.format("message too large %d > %d", written , maxOutboundMessageSize))
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
 
     writeBufferChain(bufferChain, true);
@@ -215,7 +215,7 @@ public class MessageFramer implements Framer {
       throw Status.RESOURCE_EXHAUSTED
           .withDescription(
               String.format("message too large %d > %d", messageLength , maxOutboundMessageSize))
-          .asRuntimeException();
+          .asStacklessRuntimeException();
     }
     ByteBuffer header = ByteBuffer.wrap(headerScratch);
     header.put(UNCOMPRESSED);

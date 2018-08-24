@@ -60,9 +60,10 @@ public interface StreamObserver<V>  {
    *
    * <p>{@code t} should be a {@link io.grpc.StatusException} or {@link
    * io.grpc.StatusRuntimeException}, but other {@code Throwable} types are possible. Callers should
-   * generally convert from a {@link io.grpc.Status} via {@link io.grpc.Status#asException()} or
-   * {@link io.grpc.Status#asRuntimeException()}. Implementations should generally convert to a
-   * {@code Status} via {@link io.grpc.Status#fromThrowable(Throwable)}.
+   * generally convert from a {@link io.grpc.Status} via
+   * {@link io.grpc.Status#asStacklessException()} or
+   * {@link io.grpc.Status#asStacklessRuntimeException()}. Implementations should generally convert
+   * to a {@code Status} via {@link io.grpc.Status#fromThrowable(Throwable)}.
    *
    * @param t the error occurred on the stream
    */

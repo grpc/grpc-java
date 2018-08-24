@@ -269,7 +269,7 @@ public final class ServerCalls {
           requestObserver.onError(
               Status.CANCELLED
                   .withDescription("cancelled before receiving half close")
-                  .asRuntimeException());
+                  .asStacklessRuntimeException());
         }
       }
 
@@ -332,7 +332,8 @@ public final class ServerCalls {
     @Override
     public void onNext(RespT response) {
       if (cancelled) {
-        throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
+        throw Status.CANCELLED.withDescription("call already cancelled")
+            .asStacklessRuntimeException();
       }
       if (!sentHeaders) {
         call.sendHeaders(new Metadata());
@@ -353,7 +354,8 @@ public final class ServerCalls {
     @Override
     public void onCompleted() {
       if (cancelled) {
-        throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
+        throw Status.CANCELLED.withDescription("call already cancelled")
+            .asStacklessRuntimeException();
       } else {
         call.close(Status.OK, new Metadata());
       }
@@ -406,7 +408,7 @@ public final class ServerCalls {
     responseObserver.onError(Status.UNIMPLEMENTED
         .withDescription(String.format("Method %s is unimplemented",
             methodDescriptor.getFullMethodName()))
-        .asRuntimeException());
+        .asStacklessRuntimeException());
   }
 
   /**

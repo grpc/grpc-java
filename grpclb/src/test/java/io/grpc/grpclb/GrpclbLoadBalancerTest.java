@@ -556,7 +556,8 @@ public class GrpclbLoadBalancerTest {
 
     assertEquals(1, fakeClock.numPendingTasks());
     // Balancer closes the stream, scheduled reporting task cancelled
-    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    lbResponseObserver.onError(
+        Status.UNAVAILABLE.withDescription("bad").asStacklessRuntimeException());
     assertEquals(0, fakeClock.numPendingTasks());
 
     // New stream created
@@ -1081,7 +1082,7 @@ public class GrpclbLoadBalancerTest {
     // Break the LB stream before timer expires
     /////////////////////////////////////////////
     Status streamError = Status.UNAVAILABLE.withDescription("OOB stream broken");
-    lbResponseObserver.onError(streamError.asException());
+    lbResponseObserver.onError(streamError.asStacklessException());
     // Not in fallback mode. The error will be propagated.
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
@@ -1156,7 +1157,7 @@ public class GrpclbLoadBalancerTest {
     // Break the LB stream after the timer expires
     ////////////////////////////////////////////////
     if (timerExpires) {
-      lbResponseObserver.onError(streamError.asException());
+      lbResponseObserver.onError(streamError.asStacklessRuntimeException());
 
       // The error will NOT propagate to picker because fallback list is in use.
       inOrder.verify(helper, never())
@@ -1254,7 +1255,7 @@ public class GrpclbLoadBalancerTest {
 
     // Break connections
     if (balancerBroken) {
-      lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+      lbResponseObserver.onError(Status.UNAVAILABLE.withDescription("bad").asStacklessException());
       // A new stream to LB is created
       inOrder.verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
       lbResponseObserver = lbResponseObserverCaptor.getValue();
@@ -1430,7 +1431,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
     // Balancer closes it with an error.
-    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    lbResponseObserver.onError(Status.UNAVAILABLE.withDescription("bad").asStacklessException());
     // Will continue the backoff sequence 1 (100ns)
     verifyNoMoreInteractions(backoffPolicyProvider);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -1452,7 +1453,7 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildInitialResponse());
 
     // Then breaks the RPC
-    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    lbResponseObserver.onError(Status.UNAVAILABLE.withDescription("bad").asStacklessException());
 
     // Will reset the retry sequence and retry immediately, because balancer has responded.
     inOrder.verify(backoffPolicyProvider).get();
@@ -1464,7 +1465,7 @@ public class GrpclbLoadBalancerTest {
 
     // Fail the retry after spending 4ns
     fakeClock.forwardNanos(4);
-    lbResponseObserver.onError(Status.UNAVAILABLE.asException());
+    lbResponseObserver.onError(Status.UNAVAILABLE.withDescription("bad").asStacklessException());
     
     // Will be on the first retry (10ns) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();

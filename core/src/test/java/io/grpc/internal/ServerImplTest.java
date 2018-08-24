@@ -732,7 +732,7 @@ public class ServerImplTest {
               public ServerCall.Listener<String> startCall(
                   ServerCall<String, Integer> call,
                   Metadata headers) {
-                throw status.asRuntimeException();
+                throw status.asStacklessRuntimeException();
               }
             }).build());
     ServerTransportListener transportListener

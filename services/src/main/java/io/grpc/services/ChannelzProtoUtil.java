@@ -460,13 +460,13 @@ final class ChannelzProtoUtil {
         throw Status.UNIMPLEMENTED
             .withDescription("The entity's stats can not be retrieved. "
                 + "If this is an InProcessTransport this is expected.")
-            .asRuntimeException();
+            .asStacklessRuntimeException();
       }
       return ret;
     } catch (InterruptedException e) {
-      throw Status.INTERNAL.withCause(e).asRuntimeException();
+      throw Status.INTERNAL.withCause(e).asStacklessRuntimeException();
     } catch (ExecutionException e) {
-      throw Status.INTERNAL.withCause(e).asRuntimeException();
+      throw Status.INTERNAL.withCause(e).asStacklessRuntimeException();
     }
   }
 }

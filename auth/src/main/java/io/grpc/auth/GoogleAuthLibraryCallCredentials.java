@@ -172,7 +172,7 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       uri = new URI(scheme, authority, path, null, null);
     } catch (URISyntaxException e) {
       throw Status.UNAUTHENTICATED.withDescription("Unable to construct service URI for auth")
-          .withCause(e).asException();
+          .withCause(e).asStacklessException();
     }
     // The default port must not be present. Alternative ports should be present.
     if (uri.getPort() == defaultPort) {
@@ -186,8 +186,8 @@ final class GoogleAuthLibraryCallCredentials implements CallCredentials {
       return new URI(uri.getScheme(), uri.getUserInfo(), uri.getHost(), -1 /* port */,
           uri.getPath(), uri.getQuery(), uri.getFragment());
     } catch (URISyntaxException e) {
-      throw Status.UNAUTHENTICATED.withDescription(
-           "Unable to construct service URI after removing port").withCause(e).asException();
+      throw Status.UNAUTHENTICATED.withCause(e).withDescription(
+           "Unable to construct service URI after removing port").asStacklessException();
     }
   }
 

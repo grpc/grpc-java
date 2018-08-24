@@ -69,7 +69,7 @@ public final class NanoUtils {
         return message;
       } catch (IOException ipbe) {
         throw Status.INTERNAL.withDescription("Failed parsing nano proto message").withCause(ipbe)
-            .asRuntimeException();
+            .asStacklessRuntimeException();
       }
     }
 

@@ -215,7 +215,7 @@ public final class ProtoLiteUtils {
         return parseFrom(cis);
       } catch (InvalidProtocolBufferException ipbe) {
         throw Status.INTERNAL.withDescription("Invalid protobuf byte sequence")
-            .withCause(ipbe).asRuntimeException();
+            .withCause(ipbe).asStacklessRuntimeException();
       }
     }
 
