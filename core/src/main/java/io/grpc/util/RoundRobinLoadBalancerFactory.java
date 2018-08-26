@@ -176,7 +176,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.requestConnection();
       }
       
-      // Note that the active list will never change if there are only subchannel additions,
+      // Note that the active list is not changed by subchannel additions,
       // since they are added in IDLE (non-READY) state.
       boolean activeListChanged = false;
 
@@ -188,10 +188,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         shutdownSubchannel(subchannel);
       }
 
-      // Only refresh an active picker if either the active list or stickiness state changed.
-      if (!(currentPicker instanceof ReadyPicker) || activeListChanged || stickinessStateChanged) {
-        updateBalancingState();
-      }
+      updateBalancingState(activeListChanged || stickinessStateChanged);
     }
 
     @Override
@@ -222,11 +219,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannel.requestConnection();
       }
       stateInfoRef.value = stateInfo;
-      // The active list only changes if this channel is moving between READY and non-READY.
-      // Otherwise, we don't need to refresh the picker if it's already active.
-      if (!(currentPicker instanceof ReadyPicker) || (newState == READY ^ stateBefore == READY)) {
-        updateBalancingState();
-      }
+      // The active list only changes if this channel is moving between READY and non-READY
+      updateBalancingState(newState == READY ^ stateBefore == READY);
     }
 
     private void shutdownSubchannel(Subchannel subchannel) {
@@ -248,9 +242,14 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */
-    private void updateBalancingState() {
+    private void updateBalancingState(boolean activeListOrStickinessStateChanged) {
+      if (!activeListOrStickinessStateChanged && currentPicker instanceof ReadyPicker) {
+        // no refresh needed if there's an active picker with no change to its list
+        return;
+      }
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
       if (activeList.isEmpty()) {
+        // empty picker returns error or no result
         currentPicker = new EmptyPicker(getAggregatedError());
         helper.updateBalancingState(getAggregatedState(), currentPicker);
       } else {
