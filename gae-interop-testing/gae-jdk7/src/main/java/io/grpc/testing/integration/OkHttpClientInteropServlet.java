@@ -21,6 +21,7 @@ import static org.junit.Assert.assertTrue;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.internal.MoreThrowables;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -30,6 +31,12 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.logging.Handler;
+import java.util.logging.LogRecord;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -49,8 +56,45 @@ import org.junit.internal.AssumptionViolatedException;
 public final class OkHttpClientInteropServlet extends HttpServlet {
   private static final String INTEROP_TEST_ADDRESS = "grpc-test.sandbox.googleapis.com:443";
 
+  private static final class LogEntryRecorder extends Handler {
+    private Queue<LogRecord> loggedMessages = new ConcurrentLinkedQueue<>();
+
+    @Override
+    public void publish(LogRecord logRecord) {
+      loggedMessages.add(logRecord);
+    }
+
+    @Override
+    public void flush() {}
+
+    @Override
+    public void close() {}
+
+    public String getLogOutput() {
+      SimpleFormatter formatter = new SimpleFormatter();
+      StringBuilder sb = new StringBuilder();
+      for (LogRecord loggedMessage : loggedMessages) {
+        sb.append(formatter.format(loggedMessage));
+      }
+      return sb.toString();
+    }
+  }
+
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    LogEntryRecorder handler = new LogEntryRecorder();
+    Logger.getLogger("").addHandler(handler);
+    try {
+      doGetHelper(req, resp);
+    } finally {
+      Logger.getLogger("").removeHandler(handler);
+    }
+    resp.getWriter().append("=======================================\n")
+        .append("Server side java.util.logging messages:\n")
+        .append(handler.getLogOutput());
+  }
+
+  private void doGetHelper(HttpServletRequest req, HttpServletResponse resp) throws IOException {
     resp.setContentType("text/plain");
     PrintWriter writer = resp.getWriter();
     writer.println("Test invoked at: ");
@@ -87,15 +131,16 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
         for (Method before : befores) {
           before.invoke(tester);
         }
-        method.invoke(tester);
-        for (Method after : afters) {
-          after.invoke(tester);
+        try (AutoCloseable unused = toCloseable(tester, afters)) {
+          method.invoke(tester);
         }
-      } catch (Exception e) {
+        sb.append("================\n");
+        sb.append("PASS: Test method: ").append(method).append("\n");
+      } catch (Throwable t) {
         // The default JUnit4 test runner skips tests with failed assumptions.
         // We will do the same here.
         boolean assumptionViolated = false;
-        for (Throwable iter = e; iter != null; iter = iter.getCause()) {
+        for (Throwable iter = t; iter != null; iter = iter.getCause()) {
           if (iter instanceof AssumptionViolatedException) {
             assumptionViolated = true;
             break;
@@ -106,11 +151,11 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
         }
 
         sb.append("================\n");
-        sb.append("Test method: ").append(method).append("\n");
+        sb.append("FAILED: Test method: ").append(method).append("\n");
         failures++;
         StringWriter stringWriter = new StringWriter();
         PrintWriter printWriter = new PrintWriter(stringWriter);
-        e.printStackTrace(printWriter);
+        t.printStackTrace(printWriter);
         sb.append(stringWriter);
       }
     }
@@ -131,6 +176,30 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
               ignored));
     }
     writer.println(sb);
+  }
+
+  private static AutoCloseable toCloseable(final Object o, final List<Method> methods) {
+    return new AutoCloseable() {
+      @Override
+      public void close() throws Exception {
+        Throwable failure = null;
+        for (Method method : methods) {
+          try {
+            method.invoke(o);
+          } catch (Throwable t) {
+            if (failure == null) {
+              failure = t;
+            } else {
+              failure.addSuppressed(t);
+            }
+          }
+        }
+        if (failure != null) {
+          MoreThrowables.throwIfUnchecked(failure);
+          throw new Exception(failure);
+        }
+      }
+    };
   }
 
   public static final class Tester extends AbstractInteropTest {
@@ -177,5 +246,10 @@ public final class OkHttpClientInteropServlet extends HttpServlet {
     @Ignore
     @Override
     public void specialStatusMessage() {}
+
+    // grpc-java/issues/4626: this test has become flakey on GAE JDK7
+    @Ignore
+    @Override
+    public void timeoutOnSleepingServer() {}
   }
 }

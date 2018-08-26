@@ -63,7 +63,8 @@ public class RetryPolicyTest {
       Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
-          true /* retryEnabled */, 4 /* maxRetryAttemptsLimit */);
+          /* retryEnabled = */ true, /* maxRetryAttemptsLimit = */ 4,
+          /* maxHedgedAttemptsLimit = */ 3);
       serviceConfigInterceptor.handleUpdate(serviceConfig);
 
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();
@@ -140,7 +141,8 @@ public class RetryPolicyTest {
       Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
-          false /* retryEnabled */, 4 /* maxRetryAttemptsLimit */);
+          /* retryEnabled = */ false, /* maxRetryAttemptsLimit = */ 4,
+          /* maxHedgedAttemptsLimit = */ 3);
       serviceConfigInterceptor.handleUpdate(serviceConfig);
 
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();

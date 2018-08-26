@@ -120,6 +120,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -140,6 +142,7 @@ import org.mockito.verification.VerificationMode;
  * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
  */
 public abstract class AbstractInteropTest {
+  private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(30);
 
@@ -296,9 +299,16 @@ public abstract class AbstractInteropTest {
 
   /** Clean up. */
   @After
-  public void tearDown() throws Exception {
+  public void tearDown() {
     if (channel != null) {
-      channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
+      channel.shutdownNow();
+      try {
+        channel.awaitTermination(1, TimeUnit.SECONDS);
+      } catch (InterruptedException ie) {
+        logger.log(Level.FINE, "Interrupted while waiting for channel termination", ie);
+        // Best effort. If there is an interruption, we want to continue cleaning up, but quickly
+        Thread.currentThread().interrupt();
+      }
     }
     stopServer();
   }
@@ -1604,7 +1614,7 @@ public abstract class AbstractInteropTest {
       // This can happen if the stream has already been terminated due to deadline exceeded.
     }
 
-    responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+    assertTrue(responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     assertEquals(0, responseObserver.getValues().size());
     assertEquals(Status.DEADLINE_EXCEEDED.getCode(),
                  Status.fromThrowable(responseObserver.getError()).getCode());
