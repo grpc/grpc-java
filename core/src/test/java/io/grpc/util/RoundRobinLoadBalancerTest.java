@@ -57,7 +57,7 @@ import io.grpc.Metadata.Key;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.util.RoundRobinLoadBalancerFactory.EmptyPicker;
-import io.grpc.util.RoundRobinLoadBalancerFactory.Picker;
+import io.grpc.util.RoundRobinLoadBalancerFactory.ReadyPicker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.Ref;
 import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
 import java.net.SocketAddress;
@@ -247,7 +247,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue()).isInstanceOf(Picker.class);
+    assertThat(pickerCaptor.getValue()).isInstanceOf(ReadyPicker.class);
     assertThat(subchannelStateInfo.value).isEqualTo(
         ConnectivityStateInfo.forNonError(READY));
 
@@ -282,8 +282,9 @@ public class RoundRobinLoadBalancerTest {
     Subchannel subchannel1 = mock(Subchannel.class);
     Subchannel subchannel2 = mock(Subchannel.class);
 
-    Picker picker = new Picker(Collections.unmodifiableList(Lists.<Subchannel>newArrayList(
-        subchannel, subchannel1, subchannel2)), 0 /* startIndex */, null /* stickinessState */);
+    ReadyPicker picker = new ReadyPicker(Collections.unmodifiableList(
+        Lists.<Subchannel>newArrayList(subchannel, subchannel1, subchannel2)),
+        0 /* startIndex */, null /* stickinessState */);
 
     assertThat(picker.getList()).containsExactly(subchannel, subchannel1, subchannel2);
 
@@ -689,7 +690,7 @@ public class RoundRobinLoadBalancerTest {
   }
   
   private static List<Subchannel> getList(SubchannelPicker picker) {
-    return picker instanceof Picker ? ((Picker) picker).getList() :
+    return picker instanceof ReadyPicker ? ((ReadyPicker) picker).getList() :
         Collections.<Subchannel>emptyList();
   }
 
