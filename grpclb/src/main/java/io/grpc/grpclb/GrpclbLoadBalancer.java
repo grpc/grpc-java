@@ -129,9 +129,4 @@ class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
   GrpclbState getGrpclbState() {
     return grpclbState;
   }
-
-  @Override
-  public String toString() {
-    return "GrpclbLoadBalancer";
-  }
 }

@@ -52,7 +52,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   @Nullable
   private final TimeProvider timeProvider;
 
-  AutoConfiguredLoadBalancerFactory(ChannelTracer channelTracer, TimeProvider timeProvider) {
+  AutoConfiguredLoadBalancerFactory(
+      @Nullable ChannelTracer channelTracer, @Nullable TimeProvider timeProvider) {
     this.channelTracer = channelTracer;
     this.timeProvider = timeProvider;
   }
