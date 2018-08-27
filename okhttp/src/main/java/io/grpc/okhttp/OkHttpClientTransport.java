@@ -34,6 +34,8 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -41,8 +43,6 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
-import io.grpc.internal.Channelz;
-import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
@@ -192,7 +192,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   @GuardedBy("lock")
-  private Channelz.Security securityInfo;
+  private InternalChannelz.Security securityInfo;
 
   @VisibleForTesting
   @Nullable
@@ -505,7 +505,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
           if (sslSession != null) {
-            securityInfo = new Channelz.Security(new Channelz.Tls(sslSession));
+            securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
           }
         }
 
@@ -930,7 +930,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             transportTracer.getStats(),
             /*local=*/ null,
             /*remote=*/ null,
-            new Channelz.SocketOptions.Builder().build(),
+            new InternalChannelz.SocketOptions.Builder().build(),
             /*security=*/ null));
       } else {
         ret.set(new SocketStats(

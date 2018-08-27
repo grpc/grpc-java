@@ -30,6 +30,9 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.ChannelStats;
+import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -39,8 +42,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.ChannelStats;
-import io.grpc.internal.Channelz.ChannelTrace;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import java.util.Collections;
 import java.util.List;
@@ -69,7 +70,7 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final DelayedClientTransport delayedTransport;
-  private final Channelz channelz;
+  private final InternalChannelz channelz;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
@@ -99,7 +100,7 @@ final class OobChannel extends ManagedChannel implements Instrumented<ChannelSta
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor,
-      CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, Channelz channelz,
+      CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, InternalChannelz channelz,
       TimeProvider timeProvider) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");

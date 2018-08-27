@@ -36,6 +36,8 @@ import io.grpc.Context;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
+import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -45,7 +47,6 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
-import io.grpc.internal.Channelz.ServerStats;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -111,7 +112,7 @@ public final class ServerImpl extends io.grpc.Server implements Instrumented<Ser
   private final CompressorRegistry compressorRegistry;
   private final BinaryLog binlog;
 
-  private final Channelz channelz;
+  private final InternalChannelz channelz;
   private final CallTracer serverCallTracer;
 
   /**

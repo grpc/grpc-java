@@ -19,8 +19,8 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.Instrumented;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ObjectPool;
