@@ -16,57 +16,51 @@
 
 package io.grpc.alts;
 
-import com.google.common.base.Preconditions;
 import io.grpc.ManagedChannel;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.util.concurrent.ThreadFactory;
 
 /**
- * Class for creating a single shared grpc channel to the ALTS Handshaker Service. The channel to
- * the handshaker service is local and is over plaintext. Each application will have at most one
- * connection to the handshaker service.
- *
- * <p>TODO: Release the channel if it is not used. https://github.com/grpc/grpc-java/issues/4755.
+ * Class for creating a single shared gRPC channel to the ALTS Handshaker Service using
+ * SharedResourceHolder. The channel to the handshaker service is local and is over plaintext. Each
+ * application will have at most one connection to the handshaker service.
  */
 final class HandshakerServiceChannel {
-  // Default handshaker service address.
-  private static String handshakerAddress = "metadata.google.internal:8080";
-  // Shared channel to ALTS handshaker service.
-  private static ManagedChannel channel = null;
 
-  // Construct me not!
-  private HandshakerServiceChannel() {}
+  static final HandshakerChannelResource SHARED_HANDSHAKER_CHANNEL =
+      new HandshakerChannelResource();
 
-  // Sets handshaker service address for testing and creates the channel to the handshaker service.
-  public static synchronized void setHandshakerAddressForTesting(String handshakerAddress) {
-    Preconditions.checkState(
-        channel == null || HandshakerServiceChannel.handshakerAddress.equals(handshakerAddress),
-        "HandshakerServiceChannel already created with a different handshakerAddress");
-    HandshakerServiceChannel.handshakerAddress = handshakerAddress;
-    if (channel == null) {
-      channel = createChannel();
+  static class HandshakerChannelResource implements Resource<ManagedChannel> {
+
+    private String handshakerAddress = "metadata.google.internal:8080";
+    private static final String NAME = "grpc-alts-handshaker-service-channel";
+
+    public void setHandshakerAddressForTesting(String handshakerAddress) {
+      this.handshakerAddress = handshakerAddress;
     }
-  }
 
-  /** Create a new channel to ALTS handshaker service, if it has not been created yet. */
-  private static ManagedChannel createChannel() {
-    /* Use its own event loop thread pool to avoid blocking. */
-    ThreadFactory clientThreadFactory = new DefaultThreadFactory("handshaker pool", true);
-    ManagedChannel channel =
-        NettyChannelBuilder.forTarget(handshakerAddress)
-            .directExecutor()
-            .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
-            .usePlaintext()
-            .build();
-    return channel;
-  }
-
-  public static synchronized ManagedChannel get() {
-    if (channel == null) {
-      channel = createChannel();
+    @Override
+    public ManagedChannel create() {
+      /* Use its own event loop thread pool to avoid blocking. */
+      ThreadFactory clientThreadFactory = new DefaultThreadFactory("handshaker pool", true);
+      return NettyChannelBuilder.forTarget(handshakerAddress)
+          .directExecutor()
+          .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
+          .usePlaintext()
+          .build();
     }
-    return channel;
+
+    @Override
+    public void close(ManagedChannel instance) {
+      instance.shutdown();
+    }
+
+    @Override
+    public String toString() {
+      return NAME;
+    }
   }
 }

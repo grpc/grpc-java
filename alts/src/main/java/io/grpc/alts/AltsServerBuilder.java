@@ -35,6 +35,7 @@ import io.grpc.alts.internal.HandshakerServiceGrpc;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil;
 import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.netty.NettyServerBuilder;
 import java.io.File;
 import java.io.IOException;
@@ -80,7 +81,8 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
 
   /** Sets a new handshaker service address for testing. */
   public AltsServerBuilder setHandshakerAddressForTesting(String handshakerAddress) {
-    HandshakerServiceChannel.setHandshakerAddressForTesting(handshakerAddress);
+    HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL.setHandshakerAddressForTesting(
+        handshakerAddress);
     return this;
   }
 
@@ -177,8 +179,12 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
               @Override
               public TsiHandshaker newHandshaker() {
                 // Used the shared grpc channel to connecting to the ALTS handshaker service.
+                // Release the channel if it is not used.
+                // https://github.com/grpc/grpc-java/issues/4755.
                 return AltsTsiHandshaker.newServer(
-                    HandshakerServiceGrpc.newStub(HandshakerServiceChannel.get()),
+                    HandshakerServiceGrpc.newStub(
+                        SharedResourceHolder.get(
+                            HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL)),
                     new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
               }
             }));

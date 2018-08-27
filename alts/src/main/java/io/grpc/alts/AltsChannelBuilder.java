@@ -36,6 +36,7 @@ import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ProxyParameters;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
@@ -104,7 +105,8 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
 
   /** Sets a new handshaker service address for testing. */
   public AltsChannelBuilder setHandshakerAddressForTesting(String handshakerAddress) {
-    HandshakerServiceChannel.setHandshakerAddressForTesting(handshakerAddress);
+    HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL.setHandshakerAddressForTesting(
+        handshakerAddress);
     return this;
   }
 
@@ -147,7 +149,9 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
           @Override
           public TsiHandshaker newHandshaker() {
             // Used the shared grpc channel to connecting to the ALTS handshaker service.
-            ManagedChannel channel = HandshakerServiceChannel.get();
+            // Release the channel if it is not used. https://github.com/grpc/grpc-java/issues/4755.
+            ManagedChannel channel =
+                SharedResourceHolder.get(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
             return AltsTsiHandshaker.newClient(
                 HandshakerServiceGrpc.newStub(channel), handshakerOptions);
           }
