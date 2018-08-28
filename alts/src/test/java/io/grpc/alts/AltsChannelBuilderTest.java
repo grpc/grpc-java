@@ -17,19 +17,13 @@
 package io.grpc.alts;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
-import com.google.common.base.Defaults;
 import io.grpc.ManagedChannel;
-import io.grpc.alts.AltsChannelBuilder.AltsChannel;
 import io.grpc.alts.internal.AltsClientOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.TransportSecurityCommon.RpcProtocolVersions;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
 import io.grpc.netty.ProtocolNegotiator;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.net.InetSocketAddress;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,7 +44,7 @@ public final class AltsChannelBuilderTest {
     assertThat(altsClientOptions).isNull();
 
     ManagedChannel channel = builder.build();
-    assertThat(channel).isInstanceOf(AltsChannel.class);
+    assertThat(channel).isInstanceOf(ManagedChannel.class);
 
     tcpfFactory = builder.getTcpfFactoryForTest();
     altsClientOptions = builder.getAltsClientOptionsForTest();
@@ -71,25 +65,5 @@ public final class AltsChannelBuilderTest {
                 RpcProtocolVersions.Version.newBuilder().setMajor(2).setMinor(1).build())
             .build();
     assertThat(altsClientOptions.getRpcProtocolVersions()).isEqualTo(expectedVersions);
-  }
-
-  @Test
-  public void allAltsChannelMethodsForward() throws Exception {
-    ManagedChannel mockDelegate = mock(ManagedChannel.class);
-    AltsChannel altsChannel = new AltsChannel(mockDelegate);
-
-    for (Method method : ManagedChannel.class.getDeclaredMethods()) {
-      if (Modifier.isStatic(method.getModifiers()) || Modifier.isPrivate(method.getModifiers())) {
-        continue;
-      }
-      Class<?>[] argTypes = method.getParameterTypes();
-      Object[] args = new Object[argTypes.length];
-      for (int i = 0; i < argTypes.length; i++) {
-        args[i] = Defaults.defaultValue(argTypes[i]);
-      }
-
-      method.invoke(altsChannel, args);
-      method.invoke(verify(mockDelegate), args);
-    }
   }
 }
