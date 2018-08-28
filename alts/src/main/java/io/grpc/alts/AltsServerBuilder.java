@@ -179,7 +179,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
               @Override
               public TsiHandshaker newHandshaker() {
                 // Used the shared grpc channel to connecting to the ALTS handshaker service.
-                // Release the channel if it is not used.
+                // TODO: Release the channel if it is not used.
                 // https://github.com/grpc/grpc-java/issues/4755.
                 return AltsTsiHandshaker.newServer(
                     HandshakerServiceGrpc.newStub(

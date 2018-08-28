@@ -117,7 +117,8 @@ public final class GoogleDefaultChannelBuilder
           @Override
           public TsiHandshaker newHandshaker() {
             // Used the shared grpc channel to connecting to the ALTS handshaker service.
-            // Release the channel if it is not used. https://github.com/grpc/grpc-java/issues/4755.
+            // TODO: Release the channel if it is not used.
+            // https://github.com/grpc/grpc-java/issues/4755.
             ManagedChannel channel =
                 SharedResourceHolder.get(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
             return AltsTsiHandshaker.newClient(

@@ -19,9 +19,9 @@ package io.grpc.alts;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * Class for creating a single shared gRPC channel to the ALTS Handshaker Service using
@@ -36,7 +36,7 @@ final class HandshakerServiceChannel {
   static class HandshakerChannelResource implements Resource<ManagedChannel> {
 
     private String handshakerAddress = "metadata.google.internal:8080";
-    private static final String NAME = "grpc-alts-handshaker-service-channel";
+    private EventLoopGroup eventGroup = null;
 
     public void setHandshakerAddressForTesting(String handshakerAddress) {
       this.handshakerAddress = handshakerAddress;
@@ -45,22 +45,27 @@ final class HandshakerServiceChannel {
     @Override
     public ManagedChannel create() {
       /* Use its own event loop thread pool to avoid blocking. */
-      ThreadFactory clientThreadFactory = new DefaultThreadFactory("handshaker pool", true);
+      if (eventGroup == null) {
+        eventGroup = new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
+      }
       return NettyChannelBuilder.forTarget(handshakerAddress)
           .directExecutor()
-          .eventLoopGroup(new NioEventLoopGroup(1, clientThreadFactory))
+          .eventLoopGroup(eventGroup)
           .usePlaintext()
           .build();
     }
 
     @Override
     public void close(ManagedChannel instance) {
-      instance.shutdown();
+      instance.shutdownNow();
+      if (eventGroup != null) {
+        eventGroup.shutdownGracefully();
+      }
     }
 
     @Override
     public String toString() {
-      return NAME;
+      return "grpc-alts-handshaker-service-channel";
     }
   }
 }
