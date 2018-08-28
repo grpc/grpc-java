@@ -90,7 +90,9 @@ public final class GoogleDefaultChannelBuilder
       credentials = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
     } catch (IOException e) {
       status =
-          Status.INTERNAL.withDescription("Failed to get Google default credentials").withCause(e);
+          Status.UNAUTHENTICATED
+              .withDescription("Failed to get Google default credentials")
+              .withCause(e);
     }
     return delegate().intercept(new GoogleDefaultInterceptor(credentials, status)).build();
   }

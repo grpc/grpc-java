@@ -18,7 +18,6 @@ package io.grpc.alts;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.ManagedChannel;
 import io.grpc.alts.internal.AltsClientOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.alts.internal.TransportSecurityCommon.RpcProtocolVersions;
@@ -43,8 +42,7 @@ public final class AltsChannelBuilderTest {
     assertThat(tcpfFactory).isNull();
     assertThat(altsClientOptions).isNull();
 
-    ManagedChannel channel = builder.build();
-    assertThat(channel).isInstanceOf(ManagedChannel.class);
+    builder.build();
 
     tcpfFactory = builder.getTcpfFactoryForTest();
     altsClientOptions = builder.getAltsClientOptionsForTest();

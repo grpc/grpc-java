@@ -184,7 +184,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
       } else {
         Status status =
             Status.INTERNAL.withDescription("ALTS is only allowed to run on Google Cloud Platform");
-        delegate.intercept(new AltsServerInterceptor(status));
+        delegate.intercept(new FailingServerInterceptor(status));
       }
     }
 
@@ -202,12 +202,12 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
     return delegate.build();
   }
 
-  /** An implementation of {@link ServerInterceptor} that fails each call if status is not OK. */
-  static final class AltsServerInterceptor implements ServerInterceptor {
+  /** An implementation of {@link ServerInterceptor} that fails each call. */
+  static final class FailingServerInterceptor implements ServerInterceptor {
 
     private final Status status;
 
-    public AltsServerInterceptor(Status status) {
+    public FailingServerInterceptor(Status status) {
       this.status = status;
     }
 
@@ -216,11 +216,8 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
         ServerCall<ReqT, RespT> serverCall,
         Metadata metadata,
         ServerCallHandler<ReqT, RespT> nextHandler) {
-      if (!status.isOk()) {
-        serverCall.close(status, new Metadata());
-        return new Listener<ReqT>() {};
-      }
-      return nextHandler.startCall(serverCall, metadata);
+      serverCall.close(status, new Metadata());
+      return new Listener<ReqT>() {};
     }
   }
 }

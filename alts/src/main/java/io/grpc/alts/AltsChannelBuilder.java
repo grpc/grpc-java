@@ -129,7 +129,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
       } else {
         Status status =
             Status.INTERNAL.withDescription("ALTS is only allowed to run on Google Cloud Platform");
-        delegate().intercept(new AltsClientInterceptor(status));
+        delegate().intercept(new FailingClientInterceptor(status));
       }
     }
 
@@ -206,22 +206,19 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
     }
   }
 
-  /** An implementation of {@link ClientInterceptor} that fails each call if status is not OK. */
-  static final class AltsClientInterceptor implements ClientInterceptor {
+  /** An implementation of {@link ClientInterceptor} that fails each call. */
+  static final class FailingClientInterceptor implements ClientInterceptor {
 
     private final Status status;
 
-    public AltsClientInterceptor(Status status) {
+    public FailingClientInterceptor(Status status) {
       this.status = status;
     }
 
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      if (!status.isOk()) {
-        return new FailingClientCall<>(status);
-      }
-      return next.newCall(method, callOptions);
+      return new FailingClientCall<>(status);
     }
   }
 }
