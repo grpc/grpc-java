@@ -65,6 +65,7 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.CensusStatsModule;
+import io.grpc.internal.DeprecatedCensusConstants;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -140,7 +141,6 @@ import org.mockito.verification.VerificationMode;
  *
  * <p> New tests should avoid using Mockito to support running on AppEngine.</p>
  */
-@SuppressWarnings("deprecation")
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 
@@ -1929,7 +1929,7 @@ public abstract class AbstractInteropTest {
 
   private static void checkStartTags(MetricsRecord record, String methodName, Type type) {
     assertNotNull("record is not null", record);
-    TagValue methodNameTagOld = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    TagValue methodNameTagOld = record.tags.get(DeprecatedCensusConstants.RPC_METHOD);
     assertNotNull("method name tagged", methodNameTagOld);
     assertEquals("method names match", methodName, methodNameTagOld.asString());
 
@@ -1943,10 +1943,10 @@ public abstract class AbstractInteropTest {
   private static void checkEndTags(
       MetricsRecord record, String methodName, Status.Code status, Type type) {
     assertNotNull("record is not null", record);
-    TagValue methodNameTagOld = record.tags.get(RpcMeasureConstants.RPC_METHOD);
+    TagValue methodNameTagOld = record.tags.get(DeprecatedCensusConstants.RPC_METHOD);
     assertNotNull("method name tagged", methodNameTagOld);
     assertEquals("method names match", methodName, methodNameTagOld.asString());
-    TagValue statusTagOld = record.tags.get(RpcMeasureConstants.RPC_STATUS);
+    TagValue statusTagOld = record.tags.get(DeprecatedCensusConstants.RPC_STATUS);
     assertNotNull("status tagged", statusTagOld);
     assertEquals(status.toString(), statusTagOld.asString());
 
@@ -2016,39 +2016,43 @@ public abstract class AbstractInteropTest {
     if (isServer) {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT));
       assertEquals(
           uncompressedRequestsSize,
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
+          record.getMetricAsLongOrFail(
+              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES));
       assertEquals(
           uncompressedResponsesSize,
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY));
+          record.getMetricAsLongOrFail(
+              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES));
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES));
     } else {
       assertEquals(
           requests.size(),
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT));
+          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT));
       assertEquals(
           responses.size(),
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT));
+          record.getMetricAsLongOrFail(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT));
       assertEquals(
           uncompressedRequestsSize,
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
+          record.getMetricAsLongOrFail(
+              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
       assertEquals(
           uncompressedResponsesSize,
-          record.getMetricAsLongOrFail(RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
+          record.getMetricAsLongOrFail(
+              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY));
       // It's impossible to get the expected wire sizes because it may be compressed, so we just
       // check if they are recorded.
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES));
-      assertNotNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES));
+      assertNotNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES));
     }
   }
 
