@@ -18,196 +18,134 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.base.Stopwatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.concurrent.GuardedBy;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Reschedules a runnable lazily. A thread-safe version of {@link Rescheduler}. As opposed to
- * {@code Rescheduler}, {@code ConcurrentRescheduler} does not execute {@code runnable.run()} in a
- * serialized executor.
+ * Schedules, reschedules or cancels a runnable. As opposed to {@code Rescheduler}, {@code
+ * ConcurrentRescheduler} does not execute {@code runnable.run()} in a serialized executor.
  */
-public class ConcurrentRescheduler {
-
+@ThreadSafe
+final class ConcurrentRescheduler {
   private final Runnable runnable;
   private final ScheduledExecutorService scheduler;
-  private final Stopwatch stopwatch;
-
   private final Object lock = new Object();
 
-  // Set to null when the task of the old value is cancelled;
-  // also set to null when the task of the old value starts to run;
+  // Represents the currently scheduled task.
+  // Set to null when the task is cancelled;
+  // also set to null when the task starts to run;
   // set to a new instance when a new task is scheduled;
-  // also set to a new instance when the task is rescheduled ahead;
-  // lazily set to a new instance when the task of the old value is postponed.
-  // Whenever cancelled or rescheduled ahead, the old value MUST be marked with
-  // cancelledPermanently = true.
+  // also set to a new instance when the task is rescheduled.
+  // Whenever cancelled or rescheduled, the old value MUST be marked with cancelled = true.
   @GuardedBy("lock")
   @CheckForNull
   private FutureRunnable wakeUp;
 
-  ConcurrentRescheduler(
-      Runnable runnable,
-      ScheduledExecutorService scheduler,
-      Stopwatch stopwatch) {
+  ConcurrentRescheduler(Runnable runnable, ScheduledExecutorService scheduler) {
     this.runnable = runnable;
     this.scheduler = scheduler;
-    this.stopwatch = stopwatch;
-    stopwatch.start();
   }
 
-  /**
-   * Schedules a new one or reschedule an existing one.
-   */
+  /** Schedules a new one or reschedules an existing one. */
   void reschedule(long delay, TimeUnit timeUnit) {
-    if (delay < 0) {
-      delay = 0;
-    }
-    long delayNanos = timeUnit.toNanos(delay);
-    long newRunAtNanos = nanoTime() + delayNanos;
-    FutureRunnable oldWakeUp;
+    Future<?> existingTask = null;
     FutureRunnable newWakeUp;
-    boolean needCancel = false;
 
     synchronized (lock) {
-      oldWakeUp = wakeUp;
-      if (oldWakeUp == null) {
-        // schedule new one
-      } else if (newRunAtNanos - oldWakeUp.runAtNanos < 0) {
-        // need to schedule earlier:
-        // cancel the old one and schedule new one
-        oldWakeUp.cancelledPermanently = true;
-        needCancel = true;
-      } else {
-        // postpone and return
-        oldWakeUp.runAtNanos = newRunAtNanos;
-        oldWakeUp.disabled = false;
-        return;
+      FutureRunnable existingWakeUp = wakeUp;
+      if (existingWakeUp != null) {
+        // cancel the existing one and schedule new one
+        existingWakeUp.cancelled = true;
+        existingTask = existingWakeUp.task;
       }
-
-      newWakeUp = new FutureRunnable(newRunAtNanos);
+      newWakeUp = new FutureRunnable();
       wakeUp = newWakeUp;
     }
 
-    if (needCancel && oldWakeUp.task != null) {
-      oldWakeUp.task.cancel(false);
+    if (existingTask != null) {
+      existingTask.cancel(false);
     }
-
-    schedule(newWakeUp);
+    schedule(newWakeUp, delay, timeUnit);
   }
 
-  /**
-   * Schedules a new one if currently no one in schedule.
-   */
+  /** Schedules a new one if currently no one in schedule. */
   void scheduleNewOrNoop(long delay, TimeUnit timeUnit) {
-    if (delay < 0) {
-      delay = 0;
-    }
-    long delayNanos = timeUnit.toNanos(delay);
-    long newRunAtNanos = nanoTime() + delayNanos;
     FutureRunnable newWakeUp;
 
     synchronized (lock) {
       if (wakeUp == null) {
-        newWakeUp = new FutureRunnable(newRunAtNanos);
+        newWakeUp = new FutureRunnable();
         wakeUp = newWakeUp;
       } else {
         return;
       }
     }
 
-    schedule(newWakeUp);
+    schedule(newWakeUp, delay, timeUnit);
   }
 
-  void cancel(boolean permanent) {
-    Future<?> oldTask;
+  void cancel() {
+    Future<?> existingTask;
 
     synchronized (lock) {
-      FutureRunnable oldWakeUp = wakeUp;
-      if (oldWakeUp == null) {
+      FutureRunnable existingWakeUp = wakeUp;
+      if (existingWakeUp == null) {
         return;
       }
-      oldWakeUp.disabled = true;
-      oldWakeUp.cancelledPermanently = permanent;
-      oldTask = oldWakeUp.task;
-      if (permanent) {
-        wakeUp = null;
-      }
+      existingWakeUp.cancelled = true;
+      existingTask = existingWakeUp.task;
+      wakeUp = null;
     }
 
-    if (permanent && oldTask != null) {
-      oldTask.cancel(false);
+    if (existingTask != null) {
+      existingTask.cancel(false);
     }
   }
 
-  private void schedule(FutureRunnable newWakeUp) {
-    // don't care whether newWakeUp.runAtNanos is stale or not
+  private void schedule(FutureRunnable newWakeUp, long delay, TimeUnit timeUnit) {
     Future<?> task =
-        scheduler.schedule(newWakeUp, newWakeUp.runAtNanos - nanoTime(), TimeUnit.NANOSECONDS);
-
-    boolean cancelledPermanently = false;
+        scheduler.schedule(newWakeUp, delay, timeUnit);
+    boolean cancelled;
 
     synchronized (lock) {
-      if (newWakeUp.cancelledPermanently) {
-        cancelledPermanently = true;
-      } else {
+      cancelled = newWakeUp.cancelled;
+      if (!cancelled) {
         newWakeUp.task = task;
       }
     }
 
-    if (cancelledPermanently) {
+    if (cancelled) {
       task.cancel(false);
     }
   }
 
+  /** Wrapper of a future and a cancelled flag. */
   private final class FutureRunnable implements Runnable {
-
-    long runAtNanos;
-    boolean cancelledPermanently;
-    boolean disabled;
-
+    // @GuardedBy("lock")
+    boolean cancelled;
+    // @GuardedBy("lock")
     @CheckForNull
     Future<?> task;
 
-    FutureRunnable(long runAtNanos) {
-      this.runAtNanos = runAtNanos;
-    }
+    FutureRunnable() {}
 
     @Override
     public void run() {
-      FutureRunnable postponed = null;
-
       synchronized (lock) {
         if (wakeUp == this) {
           wakeUp = null;
         }
-
-        if (cancelledPermanently || disabled) {
+        if (cancelled) {
           return;
         }
-
-        // there couldn't be another uncancelled wakeUp
         checkState(wakeUp == null, "wakeUp not null and not cancelled");
-
-        if (runAtNanos > nanoTime()) {
-          postponed = new FutureRunnable(runAtNanos);
-          wakeUp = postponed;
-        }
-      }
-
-      if (postponed != null) {
-        schedule(postponed);
-        return;
       }
 
       runnable.run();
     }
-  }
-
-  private long nanoTime() {
-    return stopwatch.elapsed(TimeUnit.NANOSECONDS);
   }
 }

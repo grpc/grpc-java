@@ -21,8 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -80,7 +78,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final long channelBufferLimit;
   @Nullable
   private final Throttle throttle;
-  private final Supplier<Stopwatch> stopwatchSupplier;
 
   // special value: negative when committed on Sublistener.closed()
   private final AtomicInteger numOfActiveHedges = new AtomicInteger();
@@ -109,7 +106,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       ChannelBufferMeter channelBufferUsed, long perRpcBufferLimit, long channelBufferLimit,
       Executor callExecutor, ScheduledExecutorService scheduledExecutorService,
       RetryPolicy.Provider retryPolicyProvider, HedgingPolicy.Provider hedgingPolicyProvider,
-      @Nullable Throttle throttle, Supplier<Stopwatch> stopwatchSupplier) {
+      @Nullable Throttle throttle) {
     this.method = method;
     this.channelBufferUsed = channelBufferUsed;
     this.perRpcBufferLimit = perRpcBufferLimit;
@@ -120,7 +117,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     this.retryPolicyProvider = checkNotNull(retryPolicyProvider, "retryPolicyProvider");
     this.hedgingPolicyProvider = checkNotNull(hedgingPolicyProvider, "hedgingPolicyProvider");
     this.throttle = throttle;
-    this.stopwatchSupplier = stopwatchSupplier;
   }
 
   @Nullable // null if already committed
@@ -143,7 +139,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           // For hedging only, not needed for normal retry
           // cancel the scheduled hedging if it is scheduled prior to the commitment
           if (rescheduler != null) {
-            rescheduler.cancel(true);
+            rescheduler.cancel();
           }
 
           // It is possible that some new hedges are spawned during the commitment, but they will
@@ -295,14 +291,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
             retryPolicy = RetryPolicy.DEFAULT;
             rescheduler = new ConcurrentRescheduler(
-                new HedgingRunnable(), scheduledExecutorService, stopwatchSupplier.get());
+                new HedgingRunnable(), scheduledExecutorService);
           }
         }
 
         substream.stream.start(new Sublistener(substream));
 
         if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
-            && throttle.isAboveThreshold()
+            && (throttle == null || throttle.isAboveThreshold())
             && substream.previousAttempts + 1 < hedgingPolicy.maxAttempts
             && state.winningSubstream == null) {
           // The check state.winningSubstream == null, checking if is not already committed, is
@@ -311,7 +307,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
           if (hedgingFrozen) {
             // cancel the scheduled hedging if hedging frozen prior to the scheduling
-            rescheduler.cancel(true);
+            rescheduler.cancel();
           }
         }
       }
@@ -587,7 +583,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     numOfActiveHedges.decrementAndGet();
 
-    if (throttle.isAboveThreshold()
+    if ((throttle == null || throttle.isAboveThreshold())
         && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
         && !hedgingFrozen) {
       // there is a potential hedge at the moment, the latestSubstream may not be the last
@@ -739,12 +735,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
       }
 
-      if ((pushbackMillis != null && pushbackMillis < 0)) {
-        freezeHedging();
-
-        if (pushbackMillis > 0) {
+      if (pushbackMillis != null) {
+        if (pushbackMillis < 0) {
+          freezeHedging();
+        } else {
           if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
-              && throttle.isAboveThreshold()
+              && (throttle == null || throttle.isAboveThreshold())
               && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
               && state.winningSubstream == null) {
             // The check state.winningSubstream == null, checking if is not already committed, is
@@ -753,7 +749,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
             if (hedgingFrozen) {
               // cancel the scheduled hedging if hedging frozen prior to the scheduling
-              rescheduler.cancel(true);
+              rescheduler.cancel();
             }
           }
         }
@@ -783,7 +779,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
         hedgingFrozen = true;
         // cancel the scheduled hedging if it is scheduled prior to the freeze
-        rescheduler.cancel(true);
+        rescheduler.cancel();
       }
     }
 
