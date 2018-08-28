@@ -175,7 +175,6 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
   /** {@inheritDoc} */
   @Override
   public Server build() {
-    Status status = Status.OK;
     if (!CheckGcpEnvironment.isOnGcp()) {
       if (enableUntrustedAlts) {
         logger.log(
@@ -183,9 +182,9 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
             "Untrusted ALTS mode is enabled and we cannot guarantee the trustworthiness of the "
                 + "ALTS handshaker service");
       } else {
-        status =
-            Status.FAILED_PRECONDITION.withDescription(
-                "ALTS is only allowed to run on Google Cloud Platform");
+        Status status =
+            Status.INTERNAL.withDescription("ALTS is only allowed to run on Google Cloud Platform");
+        delegate.intercept(new AltsServerInterceptor(status));
       }
     }
 
@@ -200,7 +199,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
                     new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
               }
             }));
-    return delegate.intercept(new AltsServerInterceptor(status)).build();
+    return delegate.build();
   }
 
   /** An implementation of {@link ServerInterceptor} that fails each call if status is not OK. */

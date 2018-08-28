@@ -120,7 +120,6 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
 
   @Override
   public ManagedChannel build() {
-    Status status = Status.OK;
     if (!CheckGcpEnvironment.isOnGcp()) {
       if (enableUntrustedAlts) {
         logger.log(
@@ -128,9 +127,9 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
             "Untrusted ALTS mode is enabled and we cannot guarantee the trustworthiness of the "
                 + "ALTS handshaker service");
       } else {
-        status =
-            Status.FAILED_PRECONDITION.withDescription(
-                "ALTS is only allowed to run on Google Cloud Platform");
+        Status status =
+            Status.INTERNAL.withDescription("ALTS is only allowed to run on Google Cloud Platform");
+        delegate().intercept(new AltsClientInterceptor(status));
       }
     }
 
@@ -138,7 +137,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
     InternalNettyChannelBuilder.setDynamicTransportParamsFactory(delegate(), tcpfFactory);
     tcpfFactoryForTest = tcpfFactory;
 
-    return delegate().intercept(new AltsClientInterceptor(status)).build();
+    return delegate().build();
   }
 
   @VisibleForTesting
