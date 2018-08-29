@@ -35,8 +35,9 @@ import io.grpc.alts.internal.RpcProtocolVersionsUtil;
 import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ProxyParameters;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
 import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
@@ -56,6 +57,8 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
   private final NettyChannelBuilder delegate;
   private final AltsClientOptions.Builder handshakerOptionsBuilder =
       new AltsClientOptions.Builder();
+  private ObjectPool<ManagedChannel> handshakerChannelPool =
+      SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
   private TcpfFactory tcpfFactoryForTest;
   private boolean enableUntrustedAlts;
 
@@ -105,8 +108,10 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
 
   /** Sets a new handshaker service address for testing. */
   public AltsChannelBuilder setHandshakerAddressForTesting(String handshakerAddress) {
-    HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL.setHandshakerAddressForTesting(
-        handshakerAddress);
+    // Instead of using the default shared channel to the handshaker service, create a fix object
+    // pool of handshaker service channel for testing.
+    handshakerChannelPool =
+        HandshakerServiceChannel.getHandshakerChannelPoolForTesting(handshakerAddress);
     return this;
   }
 
@@ -151,10 +156,9 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
             // Used the shared grpc channel to connecting to the ALTS handshaker service.
             // TODO: Release the channel if it is not used.
             // https://github.com/grpc/grpc-java/issues/4755.
-            ManagedChannel channel =
-                SharedResourceHolder.get(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
             return AltsTsiHandshaker.newClient(
-                HandshakerServiceGrpc.newStub(channel), handshakerOptions);
+                HandshakerServiceGrpc.newStub(handshakerChannelPool.getObject()),
+                handshakerOptions);
           }
         };
 
