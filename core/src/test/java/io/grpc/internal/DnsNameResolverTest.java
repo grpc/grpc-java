@@ -31,6 +31,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
 import com.google.common.net.InetAddresses;
+import com.google.common.testing.FakeTicker;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -45,6 +46,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -52,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -177,6 +180,8 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve() throws Exception {
+    // disable network address cache
+    Security.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_SECURITY_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
@@ -192,6 +197,76 @@ public class DnsNameResolverTest {
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
+    resolver.refresh();
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener, times(2)).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    assertAnswerMatches(answer2, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    resolver.shutdown();
+
+    verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+  }
+
+  @Test
+  public void resolve_usingCache() throws Exception {
+    long ttl = 60;
+    Security.setProperty(
+        DnsNameResolver.NETWORKADDRESS_CACHE_TTL_SECURITY_PROPERTY, Long.toString(ttl));
+    final List<InetAddress> answer = createAddressList(2);
+    String name = "foo.googleapis.com";
+    FakeTicker fakeTicker = new FakeTicker();
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setTicker(fakeTicker);
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString()))
+        .thenReturn(answer)
+        .thenThrow(new AssertionError("should not reach here."));
+    resolver.setAddressResolver(mockResolver);
+
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    // this refresh should return cached result
+    fakeTicker.advance(ttl - 1, TimeUnit.SECONDS);
+    resolver.refresh();
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener, times(2)).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    resolver.shutdown();
+
+    verify(mockResolver).resolveAddress(Matchers.anyString());
+  }
+
+  @Test
+  public void resolve_cacheExpired() throws Exception {
+    long ttl = 60;
+    Security.setProperty(
+        DnsNameResolver.NETWORKADDRESS_CACHE_TTL_SECURITY_PROPERTY, Long.toString(ttl));
+    final List<InetAddress> answer1 = createAddressList(2);
+    final List<InetAddress> answer2 = createAddressList(1);
+    String name = "foo.googleapis.com";
+    FakeTicker fakeTicker = new FakeTicker();
+
+    DnsNameResolver resolver = newResolver(name, 81);
+    resolver.setTicker(fakeTicker);
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
+    resolver.setAddressResolver(mockResolver);
+
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    assertAnswerMatches(answer1, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    fakeTicker.advance(ttl, TimeUnit.SECONDS);
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener, times(2)).onAddresses(resultCaptor.capture(), any(Attributes.class));

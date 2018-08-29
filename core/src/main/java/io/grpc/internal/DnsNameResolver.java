@@ -20,6 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Ticker;
 import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -32,6 +34,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,6 +45,7 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,6 +92,17 @@ final class DnsNameResolver extends NameResolver {
   private static final String JNDI_TXT_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_service_config", "false");
 
+  /**
+   * Java networking security properties name for caching DNS result.
+   *
+   * <p>Default value is -1 (cache forever) if security manager is installed. If security manager is
+   * not installed, the ttl value is {@code null} which falls back to {@link
+   * #DEFAULT_NETWORK_CACHE_TTL gRPC default value}.
+   */
+  static final String NETWORKADDRESS_CACHE_TTL_SECURITY_PROPERTY = "networkaddress.cache.ttl";
+  /** Default DNS cache duration if network cache ttl value is not specified ({@code null}). */
+  private static final long DEFAULT_NETWORK_CACHE_TTL = 5 * 60;
+
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
   @VisibleForTesting
@@ -123,6 +138,8 @@ final class DnsNameResolver extends NameResolver {
   private boolean resolving;
   @GuardedBy("this")
   private Listener listener;
+  private ResolutionResults cachedResolutionResults;
+  private Stopwatch stopwatch = Stopwatch.createUnstarted();
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
       Resource<ExecutorService> executorResource,
@@ -200,17 +217,33 @@ final class DnsNameResolver extends NameResolver {
           }
 
           ResolutionResults resolutionResults;
-          try {
-            ResourceResolver resourceResolver = null;
-            if (enableJndi) {
-              resourceResolver = getResourceResolver();
+          long networkAddressCacheTtl = getNetworkAddressCacheTtl();
+          boolean refreshRequired = networkAddressCacheTtl <= 0
+              || cachedResolutionResults == null
+              || stopwatch.elapsed(TimeUnit.SECONDS) >= networkAddressCacheTtl;
+
+          if (refreshRequired) {
+            try {
+              ResourceResolver resourceResolver = null;
+              if (enableJndi) {
+                resourceResolver = getResourceResolver();
+              }
+
+              resolutionResults =
+                  resolveAll(addressResolver, resourceResolver, enableSrv, enableTxt, host);
+              if (networkAddressCacheTtl > 0) {
+                cachedResolutionResults = resolutionResults;
+                stopwatch.reset().start();
+              }
+            } catch (Exception e) {
+              savedListener.onError(
+                  Status.UNAVAILABLE
+                      .withDescription("Unable to resolve host " + host)
+                      .withCause(e));
+              return;
             }
-            resolutionResults =
-                resolveAll(addressResolver, resourceResolver, enableSrv, enableTxt, host);
-          } catch (Exception e) {
-            savedListener.onError(
-                Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-            return;
+          } else {
+            resolutionResults = cachedResolutionResults;
           }
           // Each address forms an EAG
           List<EquivalentAddressGroup> servers = new ArrayList<EquivalentAddressGroup>();
@@ -252,6 +285,27 @@ final class DnsNameResolver extends NameResolver {
         }
       }
     };
+
+  /** Returns value of security property of network address cache ttl. */
+  private long getNetworkAddressCacheTtl() {
+    String cacheTtlPropertyValue = Security.getProperty(NETWORKADDRESS_CACHE_TTL_SECURITY_PROPERTY);
+    long cacheTtl = DEFAULT_NETWORK_CACHE_TTL;
+    if (cacheTtlPropertyValue != null) {
+      try {
+        cacheTtl = Long.parseLong(cacheTtlPropertyValue);
+      } catch (NumberFormatException e) {
+        // do nothing (use default value).
+      }
+    }
+    return cacheTtl;
+  }
+
+  /** Sets a specified time source for checking DNS lookup ttl. */
+  @SuppressWarnings("BetaApi") // Stopwatch.createUnstarted(Ticker ticker) is not Beta. Test only.
+  @VisibleForTesting
+  void setTicker(Ticker ticker) {
+    this.stopwatch = Stopwatch.createUnstarted(ticker);
+  }
 
   @GuardedBy("this")
   private void resolve() {
