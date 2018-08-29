@@ -76,5 +76,5 @@ public final class DeprecatedCensusConstants {
   public static final MeasureLong RPC_SERVER_RESPONSE_COUNT =
       RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT;
 
-  DeprecatedCensusConstants() {}
+  private DeprecatedCensusConstants() {}
 }
