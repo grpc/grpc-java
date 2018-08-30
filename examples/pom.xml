@@ -85,7 +85,7 @@
   <repositories>
     <repository>
       <snapshots><enabled>false</enabled></snapshots>
-      <id>Maven-central-google-mirror</id>
+      <id>maven-central-google-mirror</id>
       <name>Maven Central Google Mirror</name>
       <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
     </repository>
@@ -98,8 +98,8 @@
       <snapshots>
         <enabled>false</enabled>
       </snapshots>
-      <id>Maven-central-google-mirror</id>
-      <name>Maven Central Google Mirror</name>
+      <id>maven-central-google-mirror</id>
+      <name>maven Central Google Mirror</name>
       <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
     </pluginRepository>
   </pluginRepositories>
