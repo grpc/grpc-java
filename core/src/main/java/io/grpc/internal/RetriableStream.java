@@ -34,8 +34,11 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -69,6 +72,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final HedgingPolicy.Provider hedgingPolicyProvider;
   private RetryPolicy retryPolicy;
   private HedgingPolicy hedgingPolicy;
+  private boolean isHedging;
 
   /** Must be held when updating state, accessing state.buffer, or certain substream attributes. */
   private final Object lock = new Object();
@@ -79,9 +83,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @Nullable
   private final Throttle throttle;
 
-  // special value: negative when committed on Sublistener.closed()
-  private final AtomicInteger numOfActiveHedges = new AtomicInteger();
-  private ConcurrentRescheduler rescheduler;
+  private Set<Substream> activeHedges; // not null and unchanged once isHedging = true
+  private ConcurrentRescheduler rescheduler; // not null and unchanged once isHedging = true
 
   private volatile State state = new State(
       new ArrayList<BufferEntry>(8), Collections.<Substream>emptyList(), null, false, false);
@@ -188,7 +191,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Metadata newHeaders = updateHeaders(headers, previousAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(tracerFactory, newHeaders);
-    numOfActiveHedges.getAndIncrement();
+    if (isHedging) {
+      activeHedges.add(sub);
+    }
     latestSubstream = sub;
     return sub;
   }
@@ -285,11 +290,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
     class StartEntry implements BufferEntry {
       @Override
-      public void runWith(final Substream substream) {
+      public void runWith(Substream substream) {
         if (hedgingPolicy == null) {
+          // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
           hedgingPolicy = hedgingPolicyProvider.get();
           if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+            isHedging = true;
             retryPolicy = RetryPolicy.DEFAULT;
+            activeHedges =
+                Collections.newSetFromMap(new ConcurrentHashMap<Substream, Boolean>(4));
+            activeHedges.add(substream);
             rescheduler = new ConcurrentRescheduler(
                 new HedgingRunnable(), scheduledExecutorService);
           }
@@ -297,7 +307,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
         substream.stream.start(new Sublistener(substream));
 
-        if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
+        if (isHedging
             && (throttle == null || throttle.isAboveThreshold())
             && substream.previousAttempts + 1 < hedgingPolicy.maxAttempts
             && state.winningSubstream == null) {
@@ -574,28 +584,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   /**
-   * If there is a potential hedge or any active hedges.
+   * Whether there is any potential hedge at the moment. A false return value implies there is
+   * absolutely no potential hedge, the latestSubstream _is_ the last possible hedge. At least one
+   * of the hedges will observe a false return value when calling this method, unless otherwise the
+   * rpc is committed.
    */
-  private final boolean hasHedging() {
-    if (HedgingPolicy.DEFAULT.equals(hedgingPolicy) || state.winningSubstream != null) {
-      return false;
-    }
-
-    numOfActiveHedges.decrementAndGet();
-
-    if ((throttle == null || throttle.isAboveThreshold())
+  // only called when isHedging is true
+  private boolean hasPotentialHedging() {
+    return state.winningSubstream == null
         && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
-        && !hedgingFrozen) {
-      // there is a potential hedge at the moment, the latestSubstream may not be the last
-      // possible hedge
-      return true;
-    }
-    // else, absolutely no potential hedge, the latestSubstream _is_ the last possible hedge.
-    // At least one of hedges will observe this, unless otherwise the rpc is committed.
-
-    // Instead of just return numOfActiveHedges.get() != 0;
-    // use compareAndSet to avoid contention of concurrent committing multiple hedges.
-    return !numOfActiveHedges.compareAndSet(0, -1);
+        && !hedgingFrozen;
   }
 
   private interface BufferEntry {
@@ -642,17 +640,30 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         return;
       }
 
-      boolean isFatal = false;
       if (state.winningSubstream == null) {
+        boolean isFatal = false;
         if (rpcProgress == RpcProgress.REFUSED
             && noMoreTransparentRetry.compareAndSet(false, true)) {
+          // transparent retry
+          final Substream newSubstream = createSubstream(
+              substream.previousAttempts);
+          if (isHedging) {
+            // must not remove substream until after newSubstream is created
+            activeHedges.remove(substream);
+            if (!hasPotentialHedging() && activeHedges.size() == 1) {
+              commitAndRun(newSubstream);
+            }
+          } else {
+            if (retryPolicy == null) {
+              retryPolicy = retryPolicyProvider.get();
+            }
+            if (retryPolicy.maxAttempts == 1) {
+              commitAndRun(newSubstream);
+            }
+          }
           callExecutor.execute(new Runnable() {
             @Override
             public void run() {
-              // transparent retry
-              Substream newSubstream = createSubstream(
-                  substream.previousAttempts);
-              numOfActiveHedges.decrementAndGet(); // adjust the number
               drain(newSubstream);
             }
           });
@@ -693,13 +704,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           }
           isFatal = retryPlan.isFatal;
         }
+
+        if (isHedging) {
+          activeHedges.remove(substream);
+          if (!isFatal) {
+            if (hasPotentialHedging()) {
+              return;
+            }
+            if (activeHedges.size() == 1) {
+              Iterator<Substream> it = activeHedges.iterator();
+              if (it.hasNext()) {
+                Substream sub = it.next();
+                if (!sub.closed) {
+                  commitAndRun(sub);
+                } // else, sub is closed, it will commit itself soon
+              } // else, all hedges are closed, try to commit, one will win
+            }
+            if (!activeHedges.isEmpty()) {
+              return;
+            } // else, all hedges are closed, try to commit, one will win
+          }
+        }
       }
 
-      if (!hasHedging() || isFatal) {
-        commitAndRun(substream);
-        if (state.winningSubstream == substream) {
-          masterListener.closed(status, trailers);
-        }
+      commitAndRun(substream);
+      if (state.winningSubstream == substream) {
+        masterListener.closed(status, trailers);
       }
     }
 
@@ -713,7 +743,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       long backoffNanos = 0L;
       boolean isRetryableStatusCode = retryPolicy.retryableStatusCodes.contains(status.getCode());
       boolean isNonFatalStatusCode = hedgingPolicy.nonFatalStatusCodes.contains(status.getCode());
-      if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy) && !isNonFatalStatusCode) {
+      if (isHedging && !isNonFatalStatusCode) {
         return new RetryPlan(/* shouldRetry = */ false, /* isFatal = */ true, 0);
       }
 
@@ -739,7 +769,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         if (pushbackMillis < 0) {
           freezeHedging();
         } else {
-          if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)
+          if (isHedging
               && (throttle == null || throttle.isAboveThreshold())
               && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
               && state.winningSubstream == null) {
@@ -776,7 +806,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     private void freezeHedging() {
-      if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+      if (isHedging) {
         hedgingFrozen = true;
         // cancel the scheduled hedging if it is scheduled prior to the freeze
         rescheduler.cancel();

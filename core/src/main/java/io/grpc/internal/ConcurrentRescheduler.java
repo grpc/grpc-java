@@ -26,7 +26,7 @@ import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Schedules, reschedules or cancels a runnable. As opposed to {@code Rescheduler}, {@code
+ * Schedules, reschedules or cancels a runnable. As opposed to {@link Rescheduler}, {@code
  * ConcurrentRescheduler} does not execute {@code runnable.run()} in a serialized executor.
  */
 @ThreadSafe
