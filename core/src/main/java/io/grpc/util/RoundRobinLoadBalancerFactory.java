@@ -24,6 +24,8 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
+
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -112,6 +114,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private final Map<EquivalentAddressGroup, Subchannel> subchannels =
         new HashMap<EquivalentAddressGroup, Subchannel>();
     private final Random random;
+
+    private ConnectivityState currentState;
     private SubchannelPicker currentPicker = new EmptyPicker(null);
 
     @Nullable
@@ -130,7 +134,6 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       Set<EquivalentAddressGroup> addedAddrs = setsDifference(latestAddrs, currentAddrs);
       Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs);
 
-      boolean stickinessStateChanged = false;
       Map<String, Object> serviceConfig =
           attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       if (serviceConfig != null) {
@@ -145,7 +148,6 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
           } else if (stickinessState == null
               || !stickinessState.key.name().equals(stickinessMetadataKey)) {
             stickinessState = new StickinessState(stickinessMetadataKey);
-            stickinessStateChanged = true;
           }
         }
       }
@@ -175,52 +177,42 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
         subchannels.put(addressGroup, subchannel);
         subchannel.requestConnection();
       }
-      
-      // Note that the active list is not changed by subchannel additions,
-      // since they are added in IDLE (non-READY) state.
-      boolean activeListChanged = false;
 
       // Shutdown subchannels for removed addresses.
       for (EquivalentAddressGroup addressGroup : removedAddrs) {
         Subchannel subchannel = subchannels.remove(addressGroup);
-        // Active list only changes if we remove a subchannel in READY state
-        activeListChanged = activeListChanged || isReady(subchannel);
         shutdownSubchannel(subchannel);
       }
 
-      updateBalancingState(activeListChanged || stickinessStateChanged);
+      updateBalancingState();
     }
 
     @Override
     public void handleNameResolutionError(Status error) {
-      if (!(currentPicker instanceof ReadyPicker)) {
-        currentPicker = new EmptyPicker(error);
-      }
-      helper.updateBalancingState(TRANSIENT_FAILURE, currentPicker);
+      // ready pickers aren't affected by status changes
+      updateBalancingState(TRANSIENT_FAILURE,
+          currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
     }
 
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       Ref<ConnectivityStateInfo> stateInfoRef = getSubchannelStateInfoRef(subchannel);
-      ConnectivityState stateBefore = stateInfoRef.value.getState();
-      if (stateBefore == SHUTDOWN) {
+      if (stateInfoRef.value.getState() == SHUTDOWN) {
         // This is the case the shutdown was triggered by a name resolver removal, the channel
         // shutdown state change logic was already triggered in handleResolvedAddressGroups().
         return;
       }
-      ConnectivityState newState = stateInfo.getState();
-      if (newState == SHUTDOWN && stickinessState != null) {
+      if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
         stickinessState.remove(subchannel);
       }
       if (subchannels.get(subchannel.getAddresses()) != subchannel) {
         return;
       }
-      if (newState == IDLE) {
+      if (stateInfo.getState() == IDLE) {
         subchannel.requestConnection();
       }
       stateInfoRef.value = stateInfo;
-      // The active list only changes if this channel is moving between READY and non-READY
-      updateBalancingState(newState == READY ^ stateBefore == READY);
+      updateBalancingState();
     }
 
     private void shutdownSubchannel(Subchannel subchannel) {
@@ -242,23 +234,45 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */
-    private void updateBalancingState(boolean activeListOrStickinessStateChanged) {
-      if (!activeListOrStickinessStateChanged && currentPicker instanceof ReadyPicker) {
-        // no refresh needed if there's an active picker with no change to its list
-        return;
-      }
+    private void updateBalancingState() {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
       if (activeList.isEmpty()) {
         // empty picker returns error or no result
-        currentPicker = new EmptyPicker(getAggregatedError());
-        helper.updateBalancingState(getAggregatedState(), currentPicker);
+        updateBalancingState(getAggregatedState(), new EmptyPicker(getAggregatedError()));
       } else {
         // initialize the Picker to a random start index to ensure that a high frequency of Picker
         // churn does not skew subchannel selection.
         int startIndex = random.nextInt(activeList.size());
-        currentPicker = new ReadyPicker(activeList, startIndex, stickinessState);
-        helper.updateBalancingState(READY, currentPicker);
+        updateBalancingState(READY, new ReadyPicker(activeList, startIndex, stickinessState));
       }
+    }
+
+    private void updateBalancingState(ConnectivityState state, SubchannelPicker picker) {
+      if (state != currentState || !areEquivalentPickers(picker, currentPicker)) {
+        helper.updateBalancingState(state, picker);
+        currentState = state;
+        currentPicker = picker;
+      }
+    }
+
+    private static boolean areEquivalentPickers(SubchannelPicker p1, SubchannelPicker p2) {
+      if (p1 == p2) {
+        return true;
+      }
+      if (p1.getClass() != p2.getClass()) {
+        return false;
+      }
+      if (p1 instanceof EmptyPicker) {
+        return Objects.equal(((EmptyPicker)p1).status, ((EmptyPicker)p2).status);
+      }
+      if (p1 instanceof ReadyPicker) {
+        ReadyPicker rp1 = (ReadyPicker) p1;
+        ReadyPicker rp2 = (ReadyPicker) p2;
+        // the lists cannot contain duplicate subchannels
+        return rp1.stickinessState == rp2.stickinessState && rp1.list.size() == rp2.list.size()
+            && new HashSet<Subchannel>(rp1.list).containsAll(rp2.list);
+      }
+      return false;
     }
 
     /**

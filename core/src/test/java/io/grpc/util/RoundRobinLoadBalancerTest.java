@@ -261,8 +261,6 @@ public class RoundRobinLoadBalancerTest {
 
     loadBalancer.handleSubchannelState(subchannel,
         ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
-    assertThat(pickerCaptor.getValue()).isInstanceOf(EmptyPicker.class);
     assertThat(subchannelStateInfo.value).isEqualTo(
         ConnectivityStateInfo.forNonError(IDLE));
 
