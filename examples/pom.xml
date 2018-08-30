@@ -90,6 +90,19 @@
       <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
     </repository>
   </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <releases>
+        <updatePolicy>never</updatePolicy>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>Maven-central-google-mirror</id>
+      <name>Maven Central Google Mirror</name>
+      <url>https://maven-central.storage-download.googleapis.com/repos/central/data/</url>
+    </pluginRepository>
+  </pluginRepositories>
   <build>
     <extensions>
       <extension>
