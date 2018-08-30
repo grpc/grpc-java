@@ -28,6 +28,8 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Schedules, reschedules or cancels a runnable. As opposed to {@link Rescheduler}, {@code
  * ConcurrentRescheduler} does not execute {@code runnable.run()} in a serialized executor.
+ * Lazy-reschedule is not used here because that will add logic complexity and currently no usecase
+ * benefits much from that.
  */
 @ThreadSafe
 final class ConcurrentRescheduler {
