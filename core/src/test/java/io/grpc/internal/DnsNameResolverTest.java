@@ -198,9 +198,8 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void resolve() throws Exception {
-    // disable network address cache
-    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+  public void resolve_neverCache() throws Exception {
+    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
@@ -225,6 +224,39 @@ public class DnsNameResolverTest {
     resolver.shutdown();
 
     verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+  }
+
+  @Test
+  public void resolve_cacheForever() throws Exception {
+    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
+    final List<InetAddress> answer1 = createAddressList(2);
+    String name = "foo.googleapis.com";
+    FakeTicker fakeTicker = new FakeTicker();
+
+    DnsNameResolver resolver =
+        newResolver(name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString()))
+        .thenReturn(answer1)
+        .thenThrow(new AssertionError("should not called twice"));
+    resolver.setAddressResolver(mockResolver);
+
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onAddresses(resultCaptor.capture(), any(Attributes.class));
+    assertAnswerMatches(answer1, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    fakeTicker.advance(1, TimeUnit.DAYS);
+    resolver.refresh();
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verifyNoMoreInteractions(mockListener);
+    assertAnswerMatches(answer1, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    resolver.shutdown();
+
+    verify(mockResolver).resolveAddress(Matchers.anyString());
   }
 
   @Test
@@ -298,6 +330,16 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_invalidTtlPropertyValue() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
+    resolveDefaultValue();
+  }
+
+  @Test
+  public void resolve_noPropertyValue() throws Exception {
+    System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    resolveDefaultValue();
+  }
+
+  private void resolveDefaultValue() throws Exception {
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";

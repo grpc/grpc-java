@@ -102,7 +102,6 @@ final class DnsNameResolver extends NameResolver {
   /** Default DNS cache duration if network cache ttl value is not specified ({@code null}). */
   @VisibleForTesting
   static final long DEFAULT_NETWORK_CACHE_TTL_SECONDS = 30;
-  private final long networkAddressCacheTtlNanoSeconds;
 
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
@@ -131,6 +130,8 @@ final class DnsNameResolver extends NameResolver {
   private final String host;
   private final int port;
   private final Resource<ExecutorService> executorResource;
+  private final long networkAddressCacheTtlNanoSeconds;
+  private final Stopwatch stopwatch;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -140,7 +141,6 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
   private ResolutionResults cachedResolutionResults;
-  private Stopwatch stopwatch;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
       Resource<ExecutorService> executorResource, ProxyDetector proxyDetector,
@@ -198,9 +198,10 @@ final class DnsNameResolver extends NameResolver {
           if (shutdown) {
             return;
           }
-          boolean resourceRefreshRequired = networkAddressCacheTtlNanoSeconds == 0
-              || cachedResolutionResults == null
-              || stopwatch.elapsed(TimeUnit.NANOSECONDS) >= networkAddressCacheTtlNanoSeconds;
+          boolean resourceRefreshRequired = cachedResolutionResults == null
+              || networkAddressCacheTtlNanoSeconds == 0
+              || (networkAddressCacheTtlNanoSeconds > 0
+                  && stopwatch.elapsed(TimeUnit.NANOSECONDS) >= networkAddressCacheTtlNanoSeconds);
           if (!resourceRefreshRequired) {
             return;
           }
@@ -233,8 +234,8 @@ final class DnsNameResolver extends NameResolver {
             }
             resolutionResults =
                 resolveAll(addressResolver, resourceResolver, enableSrv, enableTxt, host);
+            cachedResolutionResults = resolutionResults;
             if (networkAddressCacheTtlNanoSeconds > 0) {
-              cachedResolutionResults = resolutionResults;
               stopwatch.reset().start();
             }
           } catch (Exception e) {
