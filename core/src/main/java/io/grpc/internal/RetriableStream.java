@@ -101,6 +101,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
+  private Future<?> scheduledRetry;
   private Substream latestSubstream;
   private long nextBackoffIntervalNanos;
 
@@ -357,10 +358,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      Substream savedLatestSubstream = latestSubstream;
-      if (savedLatestSubstream != null && savedLatestSubstream.scheduledRetry != null) {
-        // cancel the scheduled retry if it is scheduled prior to the commitment
-        savedLatestSubstream.scheduledRetry.cancel(false);
+      Future<?> savedScheduledRetry = scheduledRetry;
+      if (savedScheduledRetry != null) {
+        savedScheduledRetry.cancel(false);
+        scheduledRetry = null;
       }
       masterListener.closed(reason, new Metadata());
       runnable.run();
@@ -684,10 +685,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           if (retryPlan.shouldRetry) {
             // The check state.winningSubstream == null, checking if is not already committed, is
             // racy, but is still safe b/c the retry will also handle committed/cancellation
-            substream.scheduledRetry = scheduledExecutorService.schedule(
+            scheduledRetry = scheduledExecutorService.schedule(
                 new Runnable() {
                   @Override
                   public void run() {
+                    scheduledRetry = null;
                     callExecutor.execute(new Runnable() {
                       @Override
                       public void run() {
@@ -964,8 +966,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     boolean bufferLimitExceeded;
 
     final int previousAttempts;
-
-    Future<?> scheduledRetry;
 
     Substream(int previousAttempts) {
       this.previousAttempts = previousAttempts;
