@@ -101,7 +101,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
-  private volatile Substream latestSubstream;
+  private Substream latestSubstream;
   private long nextBackoffIntervalNanos;
 
   RetriableStream(
