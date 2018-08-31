@@ -18,6 +18,7 @@ package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
+import io.grpc.Instrumented;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ServerList;
@@ -39,7 +40,6 @@ import io.grpc.channelz.v1.GetSubchannelRequest;
 import io.grpc.channelz.v1.GetSubchannelResponse;
 import io.grpc.channelz.v1.GetTopChannelsRequest;
 import io.grpc.channelz.v1.GetTopChannelsResponse;
-import io.grpc.internal.Instrumented;
 import io.grpc.stub.StreamObserver;
 
 /**

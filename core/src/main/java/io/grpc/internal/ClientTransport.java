@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
+import io.grpc.Instrumented;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;

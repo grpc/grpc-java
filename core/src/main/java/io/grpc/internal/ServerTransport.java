@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import io.grpc.Instrumented;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.Status;
 import java.util.concurrent.ScheduledExecutorService;

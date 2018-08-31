@@ -35,8 +35,6 @@ import io.grpc.InternalChannelz.ServerSocketsList;
 import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalChannelz.Tls;
-import io.grpc.internal.Instrumented;
-import io.grpc.internal.LogId;
 import java.security.cert.Certificate;
 import javax.net.ssl.SSLSession;
 import org.junit.Test;

@@ -24,10 +24,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.Instrumented;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.ServerStreamTracer;
-import io.grpc.internal.Instrumented;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;

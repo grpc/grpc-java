@@ -17,9 +17,11 @@
 package io.grpc.internal;
 
 import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.Instrumented;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ServerStats;
 import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.LogId;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
