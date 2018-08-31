@@ -130,7 +130,7 @@ final class DnsNameResolver extends NameResolver {
   private final String host;
   private final int port;
   private final Resource<ExecutorService> executorResource;
-  private final long networkAddressCacheTtlNanoSeconds;
+  private final long networkAddressCacheTtlNanos;
   private final Stopwatch stopwatch;
   @GuardedBy("this")
   private boolean shutdown;
@@ -168,7 +168,7 @@ final class DnsNameResolver extends NameResolver {
     }
     this.proxyDetector = proxyDetector;
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
-    this.networkAddressCacheTtlNanoSeconds = getNetworkAddressCacheTtlNanoSeconds();
+    this.networkAddressCacheTtlNanos = getNetworkAddressCacheTtlNanos();
   }
 
   @Override
@@ -199,9 +199,9 @@ final class DnsNameResolver extends NameResolver {
             return;
           }
           boolean resourceRefreshRequired = cachedResolutionResults == null
-              || networkAddressCacheTtlNanoSeconds == 0
-              || (networkAddressCacheTtlNanoSeconds > 0
-                  && stopwatch.elapsed(TimeUnit.NANOSECONDS) >= networkAddressCacheTtlNanoSeconds);
+              || networkAddressCacheTtlNanos == 0
+              || (networkAddressCacheTtlNanos > 0
+                  && stopwatch.elapsed(TimeUnit.NANOSECONDS) > networkAddressCacheTtlNanos);
           if (!resourceRefreshRequired) {
             return;
           }
@@ -235,7 +235,7 @@ final class DnsNameResolver extends NameResolver {
             resolutionResults =
                 resolveAll(addressResolver, resourceResolver, enableSrv, enableTxt, host);
             cachedResolutionResults = resolutionResults;
-            if (networkAddressCacheTtlNanoSeconds > 0) {
+            if (networkAddressCacheTtlNanos > 0) {
               stopwatch.reset().start();
             }
           } catch (Exception e) {
@@ -285,7 +285,7 @@ final class DnsNameResolver extends NameResolver {
     };
 
   /** Returns value of network address cache ttl property. */
-  private static long getNetworkAddressCacheTtlNanoSeconds() {
+  private static long getNetworkAddressCacheTtlNanos() {
     String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
     long cacheTtl = DEFAULT_NETWORK_CACHE_TTL_SECONDS;
     if (cacheTtlPropertyValue != null) {

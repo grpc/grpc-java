@@ -315,7 +315,7 @@ public class DnsNameResolverTest {
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
-    fakeTicker.advance(ttl, TimeUnit.SECONDS);
+    fakeTicker.advance(ttl + 1, TimeUnit.SECONDS);
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
     verify(mockListener, times(2)).onAddresses(resultCaptor.capture(), any(Attributes.class));
@@ -357,7 +357,7 @@ public class DnsNameResolverTest {
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
-    fakeTicker.advance(DnsNameResolver.DEFAULT_NETWORK_CACHE_TTL_SECONDS - 1, TimeUnit.SECONDS);
+    fakeTicker.advance(DnsNameResolver.DEFAULT_NETWORK_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
     verifyNoMoreInteractions(mockListener);
