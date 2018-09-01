@@ -49,6 +49,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -61,6 +62,7 @@ import io.grpc.util.RoundRobinLoadBalancerFactory.ReadyPicker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.Ref;
 import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -229,6 +231,13 @@ public class RoundRobinLoadBalancerTest {
 
     picker = pickerCaptor.getValue();
     assertThat(getList(picker)).containsExactly(oldSubchannel, newSubchannel);
+
+    // test going from non-empty to empty
+    loadBalancer.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(),
+            affinity);
+
+    inOrder.verify(mockHelper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
+    assertEquals(PickResult.withNoResult(), pickerCaptor.getValue().pickSubchannel(mockArgs));
 
     verifyNoMoreInteractions(mockHelper);
   }
@@ -642,6 +651,7 @@ public class RoundRobinLoadBalancerTest {
 
     Subchannel sc1 = picker.pickSubchannel(mockArgs).getSubchannel();
 
+    // shutdown channel directly
     loadBalancer
         .handleSubchannelState(sc1, ConnectivityStateInfo.forNonError(ConnectivityState.SHUTDOWN));
 
@@ -649,6 +659,23 @@ public class RoundRobinLoadBalancerTest {
 
     assertEquals(nextSubchannel(sc1, allSubchannels),
                  picker.pickSubchannel(mockArgs).getSubchannel());
+    assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
+    verify(mockArgs, atLeast(2)).getHeaders();
+
+    Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
+
+    assertEquals(sc2, loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
+
+    // shutdown channel via name resolver change
+    List<EquivalentAddressGroup> newServers = new ArrayList<EquivalentAddressGroup>(servers);
+    newServers.remove(sc2.getAddresses());
+
+    loadBalancer.handleResolvedAddressGroups(newServers, attributes);
+
+    assertNull(loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
+
+    assertEquals(nextSubchannel(sc2, allSubchannels),
+            picker.pickSubchannel(mockArgs).getSubchannel());
     assertThat(loadBalancer.getStickinessMapForTest()).hasSize(1);
     verify(mockArgs, atLeast(2)).getHeaders();
   }
