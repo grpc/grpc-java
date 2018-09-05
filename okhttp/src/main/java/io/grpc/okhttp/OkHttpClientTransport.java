@@ -1070,6 +1070,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void settings(boolean clearPrevious, Settings settings) {
+      boolean outboundWindowSizeIncreased = false;
       synchronized (lock) {
         if (OkHttpSettingsUtil.isSet(settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS)) {
           int receivedMaxConcurrentStreams = OkHttpSettingsUtil.get(
@@ -1080,16 +1081,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         if (OkHttpSettingsUtil.isSet(settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE)) {
           int initialWindowSize = OkHttpSettingsUtil.get(
               settings, OkHttpSettingsUtil.INITIAL_WINDOW_SIZE);
-          outboundFlow.initialOutboundWindowSize(initialWindowSize);
+          outboundWindowSizeIncreased = outboundFlow.initialOutboundWindowSize(initialWindowSize);
         }
         if (firstSettings) {
           listener.transportReady();
           firstSettings = false;
         }
-        startPendingStreams();
       }
 
       frameWriter.ackSettings(settings);
+
+      // Write pending bytes / streams after ack settings.
+      synchronized (lock) {
+        if (outboundWindowSizeIncreased) {
+          outboundFlow.writeStreams();
+        }
+        startPendingStreams();
+      }
     }
 
     @Override

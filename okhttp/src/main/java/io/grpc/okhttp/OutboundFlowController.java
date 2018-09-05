@@ -46,9 +46,15 @@ class OutboundFlowController {
   }
 
   /**
-   * Must be called with holding transport lock.
+   * Adjusts outbound window size requested by peer. When window size is increased, it does not send
+   * any pending frames. Caller should send any pending frames after notify the peer about
+   * successful window size update.
+   *
+   * <p>Must be called with holding transport lock.
+   *
+   * @return true, if new window size is increased, false otherwise.
    */
-  void initialOutboundWindowSize(int newWindowSize) {
+  boolean initialOutboundWindowSize(int newWindowSize) {
     if (newWindowSize < 0) {
       throw new IllegalArgumentException("Invalid initial window size: " + newWindowSize);
     }
@@ -66,10 +72,7 @@ class OutboundFlowController {
       }
     }
 
-    if (delta > 0) {
-      // The window size increased, send any pending frames for all streams.
-      writeStreams();
-    }
+    return delta > 0;
   }
 
   /**
@@ -163,8 +166,10 @@ class OutboundFlowController {
 
   /**
    * Writes as much data for all the streams as possible given the current flow control windows.
+   *
+   * <p>Must be called with holding transport lock.
    */
-  private void writeStreams() {
+  void writeStreams() {
     OkHttpClientStream[] streams = transport.getActiveStreams();
     int connectionWindow = connectionState.window();
     for (int numStreams = streams.length; numStreams > 0 && connectionWindow > 0;) {
