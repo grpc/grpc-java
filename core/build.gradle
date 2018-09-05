@@ -37,6 +37,10 @@ javadoc {
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
     exclude 'io/grpc/internal/**'
+    // Individually exclude some @Internal classes
+    exclude 'io/grpc/Instrumented.java'
+    exclude 'io/grpc/LogId.java'
+    exclude 'io/grpc/WithLogId.java'
 }
 
 animalsniffer {
