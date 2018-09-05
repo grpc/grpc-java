@@ -776,11 +776,14 @@ public class OkHttpClientTransportTest {
     verify(frameWriter, timeout(TIME_OUT_MS))
         .data(eq(false), eq(3), any(Buffer.class), eq(HEADER_LENGTH + 10));
     // Avoid connection flow control.
-    frameHandler().windowUpdate(0, HEADER_LENGTH + 10);
+    frameHandler().windowUpdate(0, HEADER_LENGTH + 20);
 
     // Increase initial window size
     setInitialWindowSize(HEADER_LENGTH + 20);
 
+    // wait until pending frames sent (inOrder doesn't support timeout)
+    verify(frameWriter, timeout(TIME_OUT_MS).atLeastOnce())
+        .data(eq(false), eq(3), any(Buffer.class), eq(10));
     // It should ack the settings, then send remaining message.
     InOrder inOrder = inOrder(frameWriter);
     inOrder.verify(frameWriter).ackSettings(any(Settings.class));
