@@ -292,20 +292,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     class StartEntry implements BufferEntry {
       @Override
       public void runWith(Substream substream) {
-        if (hedgingPolicy == null) {
-          // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
-          hedgingPolicy = hedgingPolicyProvider.get();
-          if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
-            isHedging = true;
-            retryPolicy = RetryPolicy.DEFAULT;
-            activeHedges =
-                Collections.newSetFromMap(new ConcurrentHashMap<Substream, Boolean>(4));
-            activeHedges.add(substream);
-            rescheduler = new ConcurrentRescheduler(
-                new HedgingRunnable(), scheduledExecutorService);
-          }
-        }
-
         substream.stream.start(new Sublistener(substream));
 
         if (isHedging
@@ -329,6 +315,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     }
 
     Substream substream = createSubstream(0);
+    if (hedgingPolicy == null) {
+      // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
+      hedgingPolicy = hedgingPolicyProvider.get();
+      if (!HedgingPolicy.DEFAULT.equals(hedgingPolicy)) {
+        isHedging = true;
+        retryPolicy = RetryPolicy.DEFAULT;
+        activeHedges =
+            Collections.newSetFromMap(new ConcurrentHashMap<Substream, Boolean>(4));
+        rescheduler = new ConcurrentRescheduler(
+            new HedgingRunnable(), scheduledExecutorService);
+      }
+    }
     drain(substream);
   }
 
