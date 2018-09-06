@@ -47,8 +47,8 @@ class OutboundFlowController {
 
   /**
    * Adjusts outbound window size requested by peer. When window size is increased, it does not send
-   * any pending frames. Caller should send any pending frames after notify the peer about
-   * successful window size update.
+   * any pending frames. If this method returns {@code true}, the caller should call {@link
+   * #writeStreams()} after settings ack.
    *
    * <p>Must be called with holding transport lock.
    *
