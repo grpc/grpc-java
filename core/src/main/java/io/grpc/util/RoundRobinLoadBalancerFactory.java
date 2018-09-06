@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
@@ -114,7 +115,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private final Random random;
 
     private ConnectivityState currentState;
-    private RoundRobinPicker currentPicker = new EmptyPicker(/*status=*/ null);
+    private RoundRobinPicker currentPicker = new EmptyPicker(Status.OK);
 
     @Nullable
     private StickinessState stickinessState;
@@ -223,15 +224,18 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
       }
     }
 
+    private static final Status EMPTY_OK = Status.OK.withDescription("no subchannels ready");
+
     /**
      * Updates picker with the list of active subchannels (state == READY).
      */
+    @SuppressWarnings("ReferenceEquality")
     private void updateBalancingState() {
       List<Subchannel> activeList = filterNonFailingSubchannels(getSubchannels());
       if (activeList.isEmpty()) {
         // No READY subchannels, determine aggregate state and error status
         boolean isConnecting = false;
-        Status aggStatus = null;
+        Status aggStatus = EMPTY_OK;
         for (Subchannel subchannel : getSubchannels()) {
           ConnectivityStateInfo stateInfo = getSubchannelStateInfoRef(subchannel).value;
           // This subchannel IDLE is not because of channel IDLE_TIMEOUT,
@@ -240,14 +244,14 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
           if (stateInfo.getState() == CONNECTING || stateInfo.getState() == IDLE) {
             isConnecting = true;
           }
-          if (aggStatus == null || !aggStatus.isOk()) {
+          if (aggStatus == EMPTY_OK || !aggStatus.isOk()) {
             aggStatus = stateInfo.getStatus();
           }
         }
         updateBalancingState(isConnecting ? CONNECTING : TRANSIENT_FAILURE,
             // If all subchannels are TRANSIENT_FAILURE, return the Status associated with
-            // an arbitrary subchannel, otherwise return null.
-            new EmptyPicker(aggStatus != null && !aggStatus.isOk() ? aggStatus : null));
+            // an arbitrary subchannel, otherwise return OK.
+            new EmptyPicker(aggStatus));
       } else {
         // initialize the Picker to a random start index to ensure that a high frequency of Picker
         // churn does not skew subchannel selection.
@@ -322,7 +326,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
      * Holds stickiness related states: The stickiness key, a registry mapping stickiness values to
      * the associated Subchannel Ref, and a map from Subchannel to Subchannel Ref.
      */
-    private static final class StickinessState {
+    @VisibleForTesting
+    static final class StickinessState {
       static final int MAX_ENTRIES = 1000;
 
       final Key<String> key;
@@ -413,7 +418,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
     ReadyPicker(List<Subchannel> list, int startIndex,
         @Nullable RoundRobinLoadBalancer.StickinessState stickinessState) {
-      assert !list.isEmpty();
+      Preconditions.checkArgument(!list.isEmpty(), "empty list");
       this.list = list;
       this.stickinessState = stickinessState;
       this.index = startIndex - 1;
@@ -466,21 +471,22 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   @VisibleForTesting
   static final class EmptyPicker extends RoundRobinPicker {
-    @Nullable
+
     private final Status status;
 
-    EmptyPicker(@Nullable Status status) {
-      this.status = status;
+    EmptyPicker(@Nonnull Status status) {
+      this.status = Preconditions.checkNotNull(status, "status");
     }
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      return status != null ? PickResult.withError(status) : PickResult.withNoResult();
+      return status.isOk() ? PickResult.withNoResult() : PickResult.withError(status);
     }
 
     @Override
     boolean isEquivalentTo(RoundRobinPicker picker) {
-      return picker instanceof EmptyPicker && Objects.equal(status, ((EmptyPicker) picker).status);
+      return picker instanceof EmptyPicker && (Objects.equal(status, ((EmptyPicker) picker).status)
+          || (status.isOk() && ((EmptyPicker) picker).status.isOk()));
     }
   }
 }

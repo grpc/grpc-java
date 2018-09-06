@@ -20,13 +20,16 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
@@ -61,8 +64,10 @@ import io.grpc.util.RoundRobinLoadBalancerFactory.EmptyPicker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.ReadyPicker;
 import io.grpc.util.RoundRobinLoadBalancerFactory.Ref;
 import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
+import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.StickinessState;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -221,6 +226,9 @@ public class RoundRobinLoadBalancerTest {
 
     verify(newSubchannel, times(1)).requestConnection();
     verify(removedSubchannel, times(1)).shutdown();
+    
+    loadBalancer.handleSubchannelState(removedSubchannel,
+            ConnectivityStateInfo.forNonError(SHUTDOWN));
 
     assertThat(loadBalancer.getSubchannels()).containsExactly(oldSubchannel,
         newSubchannel);
@@ -672,6 +680,10 @@ public class RoundRobinLoadBalancerTest {
 
     loadBalancer.handleResolvedAddressGroups(newServers, attributes);
 
+    verify(sc2, times(1)).shutdown();
+
+    loadBalancer.handleSubchannelState(sc2, ConnectivityStateInfo.forNonError(SHUTDOWN));
+
     assertNull(loadBalancer.getStickinessMapForTest().get("my-sticky-value").value);
 
     assertEquals(nextSubchannel(sc2, allSubchannels),
@@ -714,6 +726,39 @@ public class RoundRobinLoadBalancerTest {
     assertSame(stickinessMap1, stickinessMap2);
   }
   
+  @Test(expected = IllegalArgumentException.class)
+  public void readyPicker_emptyList() {
+    // ready picker list must be non-empty
+    new ReadyPicker(Collections.<Subchannel>emptyList(), 0, null);
+  }
+
+  @Test
+  public void internalPickerComparisons() {
+    EmptyPicker emptyOk1 = new EmptyPicker(Status.OK);
+    EmptyPicker emptyOk2 = new EmptyPicker(Status.OK.withDescription("different OK"));
+    EmptyPicker emptyErr = new EmptyPicker(Status.UNKNOWN.withDescription("¯\\_(ツ)_//¯"));
+
+    Iterator<Subchannel> subchannelIterator = subchannels.values().iterator();
+    Subchannel sc1 = subchannelIterator.next();
+    Subchannel sc2 = subchannelIterator.next();
+    StickinessState stickinessState = new StickinessState("stick-key");
+    ReadyPicker ready1 = new ReadyPicker(Arrays.asList(sc1, sc2), 0, null);
+    ReadyPicker ready2 = new ReadyPicker(Arrays.asList(sc1), 0, null);
+    ReadyPicker ready3 = new ReadyPicker(Arrays.asList(sc2, sc1), 1, null);
+    ReadyPicker ready4 = new ReadyPicker(Arrays.asList(sc1, sc2), 1, stickinessState);
+    ReadyPicker ready5 = new ReadyPicker(Arrays.asList(sc2, sc1), 0, stickinessState);
+
+    assertTrue(emptyOk1.isEquivalentTo(emptyOk2));
+    assertFalse(emptyOk1.isEquivalentTo(emptyErr));
+    assertFalse(ready1.isEquivalentTo(ready2));
+    assertTrue(ready1.isEquivalentTo(ready3));
+    assertFalse(ready3.isEquivalentTo(ready4));
+    assertTrue(ready4.isEquivalentTo(ready5));
+    assertFalse(emptyOk1.isEquivalentTo(ready1));
+    assertFalse(ready1.isEquivalentTo(emptyOk1));
+  }
+
+
   private static List<Subchannel> getList(SubchannelPicker picker) {
     return picker instanceof ReadyPicker ? ((ReadyPicker) picker).getList() :
         Collections.<Subchannel>emptyList();
