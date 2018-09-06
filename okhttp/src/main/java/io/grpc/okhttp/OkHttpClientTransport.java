@@ -1068,12 +1068,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           stopDelivery, null, null);
     }
 
-    /**
-     * Handles inbound {@code SETTINGS} frame. The changed settings are not finalized until {@code
-     * SETTINGS} acknowledgment frame is sent. Any writes due to update in settings must be sent
-     * after {@code SETTINGS} acknowledgment frame, otherwise it will cause a stream error ({@code
-     * RST_STREAM}).
-     */
     @Override
     public void settings(boolean clearPrevious, Settings settings) {
       boolean outboundWindowSizeIncreased = false;
@@ -1094,9 +1088,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           firstSettings = false;
         }
 
+        // The changed settings are not finalized until SETTINGS acknowledgment frame is sent. Any
+        // writes due to update in settings must be sent after SETTINGS acknowledgment frame,
+        // otherwise it will cause a stream error (RST_STREAM).
         frameWriter.ackSettings(settings);
 
-        // any pending bytes / streams frames must sent after ack settings.
+        // send any pending bytes / streams
         if (outboundWindowSizeIncreased) {
           outboundFlow.writeStreams();
         }
