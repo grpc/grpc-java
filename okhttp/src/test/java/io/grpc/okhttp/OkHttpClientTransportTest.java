@@ -55,9 +55,6 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalChannelz.TransportStats;
-import io.grpc.InternalInstrumented;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -80,6 +77,9 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Settings;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.Channelz.TransportStats;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -2037,7 +2037,7 @@ public class OkHttpClientTransportTest {
     }
   }
 
-  private static TransportStats getTransportStats(InternalInstrumented<SocketStats> obj)
+  private static TransportStats getTransportStats(Instrumented<SocketStats> obj)
       throws ExecutionException, InterruptedException {
     return obj.getStats().get().data;
   }

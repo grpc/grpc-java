@@ -27,12 +27,12 @@ import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.stats.Channelz;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -135,7 +135,7 @@ public abstract class AbstractManagedChannelImplBuilder
   // TODO(zdapeng): delete me
   boolean temporarilyDisableRetry;
 
-  InternalChannelz channelz = InternalChannelz.instance();
+  Channelz channelz = Channelz.instance();
   int maxTraceEvents;
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();

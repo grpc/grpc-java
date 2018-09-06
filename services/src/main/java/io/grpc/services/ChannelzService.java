@@ -18,12 +18,6 @@ package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ExperimentalApi;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ServerList;
-import io.grpc.InternalChannelz.ServerSocketsList;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
 import io.grpc.ServerInterceptors;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.Status;
@@ -40,6 +34,12 @@ import io.grpc.channelz.v1.GetSubchannelRequest;
 import io.grpc.channelz.v1.GetSubchannelResponse;
 import io.grpc.channelz.v1.GetTopChannelsRequest;
 import io.grpc.channelz.v1.GetTopChannelsResponse;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.ServerList;
+import io.grpc.stats.Channelz.ServerSocketsList;
+import io.grpc.stats.Channelz.SocketStats;
 import io.grpc.stub.StreamObserver;
 
 /**
@@ -47,7 +47,7 @@ import io.grpc.stub.StreamObserver;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4206")
 public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
-  private final InternalChannelz channelz;
+  private final Channelz channelz;
   private final int maxPageSize;
 
   /**
@@ -56,7 +56,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
    */
   @Deprecated
   public static ChannelzService newInstance(int maxPageSize) {
-    return new ChannelzService(InternalChannelz.instance(), maxPageSize);
+    return new ChannelzService(Channelz.instance(), maxPageSize);
   }
 
   /**
@@ -67,12 +67,12 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
    */
   public static ServerServiceDefinition createInstance(int maxPageSize) {
     return ServerInterceptors.intercept(
-        new ChannelzService(InternalChannelz.instance(), maxPageSize),
+        new ChannelzService(Channelz.instance(), maxPageSize),
         new RequireDoubleSubmitCookieInterceptor("grpc-channelz-v1-channelz-token"));
   }
 
   @VisibleForTesting
-  ChannelzService(InternalChannelz channelz, int maxPageSize) {
+  ChannelzService(Channelz channelz, int maxPageSize) {
     this.channelz = channelz;
     this.maxPageSize = maxPageSize;
   }
@@ -81,7 +81,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   @Override
   public void getTopChannels(
       GetTopChannelsRequest request, StreamObserver<GetTopChannelsResponse> responseObserver) {
-    InternalChannelz.RootChannelList rootChannels
+    Channelz.RootChannelList rootChannels
         = channelz.getRootChannels(request.getStartChannelId(), maxPageSize);
 
     responseObserver.onNext(ChannelzProtoUtil.toGetTopChannelResponse(rootChannels));
@@ -92,7 +92,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   @Override
   public void getChannel(
       GetChannelRequest request, StreamObserver<GetChannelResponse> responseObserver) {
-    InternalInstrumented<ChannelStats> s = channelz.getRootChannel(request.getChannelId());
+    Instrumented<ChannelStats> s = channelz.getRootChannel(request.getChannelId());
     if (s == null) {
       responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
       return;
@@ -120,7 +120,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   @Override
   public void getSubchannel(
       GetSubchannelRequest request, StreamObserver<GetSubchannelResponse> responseObserver) {
-    InternalInstrumented<ChannelStats> s = channelz.getSubchannel(request.getSubchannelId());
+    Instrumented<ChannelStats> s = channelz.getSubchannel(request.getSubchannelId());
     if (s == null) {
       responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
       return;
@@ -138,7 +138,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
   @Override
   public void getSocket(
       GetSocketRequest request, StreamObserver<GetSocketResponse> responseObserver) {
-    InternalInstrumented<SocketStats> s = channelz.getSocket(request.getSocketId());
+    Instrumented<SocketStats> s = channelz.getSocket(request.getSocketId());
     if (s == null) {
       responseObserver.onError(Status.NOT_FOUND.asRuntimeException());
       return;

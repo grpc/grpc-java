@@ -18,9 +18,9 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace.Event;
-import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace.Event;
+import io.grpc.stats.Channelz.ChannelTrace.Event.Severity;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;

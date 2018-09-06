@@ -22,8 +22,6 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -34,6 +32,8 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,7 +46,7 @@ import javax.annotation.concurrent.GuardedBy;
  * A cronet-based {@link ConnectionClientTransport} implementation.
  */
 class CronetClientTransport implements ConnectionClientTransport {
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final InetSocketAddress address;
   private final String authority;
   private final String userAgent;
@@ -231,7 +231,7 @@ class CronetClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 

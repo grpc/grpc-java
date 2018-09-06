@@ -26,8 +26,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -40,6 +38,8 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -64,7 +64,7 @@ import javax.annotation.Nullable;
  */
 class NettyClientTransport implements ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress address;
   private final Class<? extends Channel> channelType;
@@ -310,7 +310,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 

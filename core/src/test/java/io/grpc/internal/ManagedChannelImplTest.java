@@ -69,10 +69,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace;
-import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -90,6 +86,10 @@ import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace;
+import io.grpc.stats.Channelz.Instrumented;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
@@ -167,7 +167,7 @@ public class ManagedChannelImplTest {
         }
       };
 
-  private final InternalChannelz channelz = new InternalChannelz();
+  private final Channelz channelz = new Channelz();
 
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -2950,7 +2950,7 @@ public class ManagedChannelImplTest {
   }
 
   private static ChannelStats getStats(
-      InternalInstrumented<ChannelStats> instrumented) throws Exception {
+      Instrumented<ChannelStats> instrumented) throws Exception {
     return instrumented.getStats().get();
   }
 

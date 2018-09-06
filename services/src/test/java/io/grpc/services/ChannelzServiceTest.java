@@ -20,7 +20,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
-import io.grpc.InternalChannelz;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.channelz.v1.GetChannelRequest;
@@ -36,6 +35,7 @@ import io.grpc.channelz.v1.GetTopChannelsResponse;
 import io.grpc.services.ChannelzTestHelper.TestChannel;
 import io.grpc.services.ChannelzTestHelper.TestServer;
 import io.grpc.services.ChannelzTestHelper.TestSocket;
+import io.grpc.stats.Channelz;
 import io.grpc.stub.StreamObserver;
 import java.util.concurrent.ExecutionException;
 import org.junit.Test;
@@ -48,7 +48,7 @@ public class ChannelzServiceTest {
   // small value to force pagination
   private static final int MAX_PAGE_SIZE = 1;
 
-  private final InternalChannelz channelz = new InternalChannelz();
+  private final Channelz channelz = new Channelz();
   private ChannelzService service = new ChannelzService(channelz, MAX_PAGE_SIZE);
 
   @Test

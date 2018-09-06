@@ -41,12 +41,12 @@ import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalWithLogId;
 import io.grpc.Status;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
 import io.grpc.internal.InternalSubchannel.Index;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.WithLogId;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -81,7 +81,7 @@ public class InternalSubchannelTest {
   private final FakeClock fakeExecutor = new FakeClock();
   private final ChannelExecutor channelExecutor = new ChannelExecutor();
 
-  private final InternalChannelz channelz = new InternalChannelz();
+  private final Channelz channelz = new Channelz();
 
   @Mock private BackoffPolicy mockBackoffPolicy1;
   @Mock private BackoffPolicy mockBackoffPolicy2;
@@ -983,7 +983,7 @@ public class InternalSubchannelTest {
     createInternalSubchannel(addr);
     internalSubchannel.obtainActiveTransport();
 
-    InternalWithLogId registeredTransport
+    WithLogId registeredTransport
         = Iterables.getOnlyElement(internalSubchannel.getStats().get().sockets);
     MockClientTransportInfo actualTransport = Iterables.getOnlyElement(transports);
     assertEquals(actualTransport.transport.getLogId(), registeredTransport.getLogId());

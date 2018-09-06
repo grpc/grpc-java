@@ -24,17 +24,6 @@ import com.google.protobuf.Int64Value;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.ConnectivityState;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace.Event;
-import io.grpc.InternalChannelz.RootChannelList;
-import io.grpc.InternalChannelz.ServerList;
-import io.grpc.InternalChannelz.ServerSocketsList;
-import io.grpc.InternalChannelz.ServerStats;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalChannelz.TransportStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalWithLogId;
 import io.grpc.Status;
 import io.grpc.channelz.v1.Address;
 import io.grpc.channelz.v1.Address.OtherAddress;
@@ -67,6 +56,17 @@ import io.grpc.channelz.v1.SocketOptionTimeout;
 import io.grpc.channelz.v1.SocketRef;
 import io.grpc.channelz.v1.Subchannel;
 import io.grpc.channelz.v1.SubchannelRef;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace.Event;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.RootChannelList;
+import io.grpc.stats.Channelz.ServerList;
+import io.grpc.stats.Channelz.ServerSocketsList;
+import io.grpc.stats.Channelz.ServerStats;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.Channelz.TransportStats;
+import io.grpc.stats.WithLogId;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.cert.CertificateEncodingException;
@@ -88,7 +88,7 @@ final class ChannelzProtoUtil {
     // do not instantiate.
   }
 
-  static ChannelRef toChannelRef(InternalWithLogId obj) {
+  static ChannelRef toChannelRef(WithLogId obj) {
     return ChannelRef
         .newBuilder()
         .setChannelId(obj.getLogId().getId())
@@ -96,7 +96,7 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static SubchannelRef toSubchannelRef(InternalWithLogId obj) {
+  static SubchannelRef toSubchannelRef(WithLogId obj) {
     return SubchannelRef
         .newBuilder()
         .setSubchannelId(obj.getLogId().getId())
@@ -104,7 +104,7 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static ServerRef toServerRef(InternalWithLogId obj) {
+  static ServerRef toServerRef(WithLogId obj) {
     return ServerRef
         .newBuilder()
         .setServerId(obj.getLogId().getId())
@@ -112,7 +112,7 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static SocketRef toSocketRef(InternalWithLogId obj) {
+  static SocketRef toSocketRef(WithLogId obj) {
     return SocketRef
         .newBuilder()
         .setSocketId(obj.getLogId().getId())
@@ -120,13 +120,13 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static Server toServer(InternalInstrumented<ServerStats> obj) {
+  static Server toServer(Instrumented<ServerStats> obj) {
     ServerStats stats = getFuture(obj.getStats());
     Server.Builder builder = Server
         .newBuilder()
         .setRef(toServerRef(obj))
         .setData(toServerData(stats));
-    for (InternalInstrumented<SocketStats> listenSocket : stats.listenSockets) {
+    for (Instrumented<SocketStats> listenSocket : stats.listenSockets) {
       builder.addListenSocket(toSocketRef(listenSocket));
     }
     return builder.build();
@@ -142,7 +142,7 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static Security toSecurity(InternalChannelz.Security security) {
+  static Security toSecurity(Channelz.Security security) {
     Preconditions.checkNotNull(security);
     Preconditions.checkState(
         security.tls != null ^ security.other != null,
@@ -172,7 +172,7 @@ final class ChannelzProtoUtil {
     }
   }
 
-  static Socket toSocket(InternalInstrumented<SocketStats> obj) {
+  static Socket toSocket(Instrumented<SocketStats> obj) {
     SocketStats socketStats = getFuture(obj.getStats());
     Builder builder = Socket.newBuilder()
         .setRef(toSocketRef(obj))
@@ -276,7 +276,7 @@ final class ChannelzProtoUtil {
         .build();
   }
 
-  static SocketOption toSocketOptionTcpInfo(InternalChannelz.TcpInfo i) {
+  static SocketOption toSocketOptionTcpInfo(Channelz.TcpInfo i) {
     SocketOptionTcpInfo tcpInfo = SocketOptionTcpInfo.newBuilder()
         .setTcpiState(i.state)
         .setTcpiCaState(i.caState)
@@ -321,7 +321,7 @@ final class ChannelzProtoUtil {
     return SocketOption.newBuilder().setName(name).setValue(value).build();
   }
 
-  static List<SocketOption> toSocketOptionsList(InternalChannelz.SocketOptions options) {
+  static List<SocketOption> toSocketOptionsList(Channelz.SocketOptions options) {
     Preconditions.checkNotNull(options);
     List<SocketOption> ret = new ArrayList<SocketOption>();
     if (options.lingerSeconds != null) {
@@ -339,20 +339,20 @@ final class ChannelzProtoUtil {
     return ret;
   }
 
-  static Channel toChannel(InternalInstrumented<ChannelStats> channel) {
+  static Channel toChannel(Instrumented<ChannelStats> channel) {
     ChannelStats stats = getFuture(channel.getStats());
     Channel.Builder channelBuilder = Channel
         .newBuilder()
         .setRef(toChannelRef(channel))
         .setData(extractChannelData(stats));
-    for (InternalWithLogId subchannel : stats.subchannels) {
+    for (WithLogId subchannel : stats.subchannels) {
       channelBuilder.addSubchannelRef(toSubchannelRef(subchannel));
     }
 
     return channelBuilder.build();
   }
 
-  static ChannelData extractChannelData(InternalChannelz.ChannelStats stats) {
+  static ChannelData extractChannelData(Channelz.ChannelStats stats) {
     ChannelData.Builder builder = ChannelData.newBuilder();
     builder.setTarget(stats.target)
         .setState(toChannelConnectivityState(stats.state))
@@ -370,7 +370,7 @@ final class ChannelzProtoUtil {
     return ChannelConnectivityState.newBuilder().setState(toState(s)).build();
   }
 
-  private static ChannelTrace toChannelTrace(InternalChannelz.ChannelTrace channelTrace) {
+  private static ChannelTrace toChannelTrace(Channelz.ChannelTrace channelTrace) {
     return ChannelTrace.newBuilder()
         .setNumEventsLogged(channelTrace.numEventsLogged)
         .setCreationTimestamp(Timestamps.fromNanos(channelTrace.creationTimeNanos))
@@ -407,17 +407,17 @@ final class ChannelzProtoUtil {
     }
   }
 
-  static Subchannel toSubchannel(InternalInstrumented<ChannelStats> subchannel) {
+  static Subchannel toSubchannel(Instrumented<ChannelStats> subchannel) {
     ChannelStats stats = getFuture(subchannel.getStats());
     Subchannel.Builder subchannelBuilder = Subchannel
         .newBuilder()
         .setRef(toSubchannelRef(subchannel))
         .setData(extractChannelData(stats));
     Preconditions.checkState(stats.sockets.isEmpty() || stats.subchannels.isEmpty());
-    for (InternalWithLogId childSocket : stats.sockets) {
+    for (WithLogId childSocket : stats.sockets) {
       subchannelBuilder.addSocketRef(toSocketRef(childSocket));
     }
-    for (InternalWithLogId childSubchannel : stats.subchannels) {
+    for (WithLogId childSubchannel : stats.subchannels) {
       subchannelBuilder.addSubchannelRef(toSubchannelRef(childSubchannel));
     }
     return subchannelBuilder.build();
@@ -427,7 +427,7 @@ final class ChannelzProtoUtil {
     GetTopChannelsResponse.Builder responseBuilder = GetTopChannelsResponse
         .newBuilder()
         .setEnd(rootChannels.end);
-    for (InternalInstrumented<ChannelStats> c : rootChannels.channels) {
+    for (Instrumented<ChannelStats> c : rootChannels.channels) {
       responseBuilder.addChannel(ChannelzProtoUtil.toChannel(c));
     }
     return responseBuilder.build();
@@ -437,7 +437,7 @@ final class ChannelzProtoUtil {
     GetServersResponse.Builder responseBuilder = GetServersResponse
         .newBuilder()
         .setEnd(servers.end);
-    for (InternalInstrumented<ServerStats> s : servers.servers) {
+    for (Instrumented<ServerStats> s : servers.servers) {
       responseBuilder.addServer(ChannelzProtoUtil.toServer(s));
     }
     return responseBuilder.build();
@@ -447,7 +447,7 @@ final class ChannelzProtoUtil {
     GetServerSocketsResponse.Builder responseBuilder = GetServerSocketsResponse
         .newBuilder()
         .setEnd(serverSockets.end);
-    for (InternalWithLogId s : serverSockets.sockets) {
+    for (WithLogId s : serverSockets.sockets) {
       responseBuilder.addSocketRef(ChannelzProtoUtil.toSocketRef(s));
     }
     return responseBuilder.build();

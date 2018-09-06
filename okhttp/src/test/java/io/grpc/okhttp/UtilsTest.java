@@ -19,10 +19,10 @@ package io.grpc.okhttp;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import io.grpc.InternalChannelz.SocketOptions;
 import io.grpc.okhttp.internal.CipherSuite;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.TlsVersion;
+import io.grpc.stats.Channelz.SocketOptions;
 import java.net.Socket;
 import java.util.List;
 import org.junit.Rule;

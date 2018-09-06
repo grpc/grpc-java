@@ -31,8 +31,6 @@ import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Grpc;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -51,6 +49,8 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.StreamListener;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -71,7 +71,7 @@ import javax.annotation.concurrent.ThreadSafe;
 final class InProcessTransport implements ServerTransport, ConnectionClientTransport {
   private static final Logger log = Logger.getLogger(InProcessTransport.class.getName());
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String name;
   private final String authority;
   private final String userAgent;
@@ -223,7 +223,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2018 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,21 +14,23 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.stats;
 
-import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.Internal;
 
 /**
  * An internal class. Do not use.
  *
- * <p>An interface for types that <b>may</b> support instrumentation. If the actual type does not
- * support instrumentation, then the future will return a {@code null}.
+ * <p>A loggable ID, unique for the duration of the program.
  */
 @Internal
-public interface InternalInstrumented<T> extends InternalWithLogId {
-
+public interface WithLogId {
   /**
-   * Returns the stats object.
+   * Returns an ID that is primarily used in debug logs. It usually contains the class name and a
+   * numeric ID that is unique among the instances.
+   *
+   * <p>The subclasses of this interface usually want to include the log ID in their {@link
+   * Object#toString} results.
    */
-  ListenableFuture<T> getStats();
+  LogId getLogId();
 }

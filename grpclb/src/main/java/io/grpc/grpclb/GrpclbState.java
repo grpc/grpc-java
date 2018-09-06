@@ -33,7 +33,6 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -54,6 +53,7 @@ import io.grpc.lb.v1.LoadBalanceResponse.LoadBalanceResponseTypeCase;
 import io.grpc.lb.v1.LoadBalancerGrpc;
 import io.grpc.lb.v1.Server;
 import io.grpc.lb.v1.ServerList;
+import io.grpc.stats.LogId;
 import io.grpc.stub.StreamObserver;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -105,7 +105,7 @@ final class GrpclbState {
       }
     };
 
-  private final InternalLogId logId;
+  private final LogId logId;
   private final String serviceName;
   private final Helper helper;
   private final SubchannelPool subchannelPool;
@@ -152,7 +152,7 @@ final class GrpclbState {
       TimeProvider time,
       ScheduledExecutorService timerService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      InternalLogId logId) {
+      LogId logId) {
     this.helper = checkNotNull(helper, "helper");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.time = checkNotNull(time, "time provider");

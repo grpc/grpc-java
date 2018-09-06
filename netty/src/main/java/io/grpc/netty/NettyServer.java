@@ -26,17 +26,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
@@ -64,10 +64,10 @@ import javax.annotation.Nullable;
 /**
  * Netty-based server implementation.
  */
-class NettyServer implements InternalServer, InternalWithLogId {
+class NettyServer implements InternalServer, WithLogId {
   private static final Logger log = Logger.getLogger(InternalServer.class.getName());
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final SocketAddress address;
   private final Class<? extends ServerChannel> channelType;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -92,10 +92,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
-  private final InternalChannelz channelz;
+  private final Channelz channelz;
   // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
   // In the future we may have >1 listen socket.
-  private volatile ImmutableList<InternalInstrumented<SocketStats>> listenSockets
+  private volatile ImmutableList<Instrumented<SocketStats>> listenSockets
       = ImmutableList.of();
 
   NettyServer(
@@ -109,7 +109,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
-      InternalChannelz channelz) {
+      Channelz channelz) {
     this.address = address;
     this.channelType = checkNotNull(channelType, "channelType");
     checkNotNull(channelOptions, "channelOptions");
@@ -148,7 +148,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   }
 
   @Override
-  public List<InternalInstrumented<SocketStats>> getListenSockets() {
+  public List<Instrumented<SocketStats>> getListenSockets() {
     return listenSockets;
   }
 
@@ -256,7 +256,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     Future<?> channelzFuture = channel.eventLoop().submit(new Runnable() {
       @Override
       public void run() {
-        InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
+        Instrumented<SocketStats> listenSocket = new ListenSocket(channel);
         listenSockets = ImmutableList.of(listenSocket);
         channelz.addListenSocket(listenSocket);
       }
@@ -280,7 +280,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
-        for (InternalInstrumented<SocketStats> listenSocket : listenSockets) {
+        for (Instrumented<SocketStats> listenSocket : listenSockets) {
           channelz.removeListenSocket(listenSocket);
         }
         listenSockets = null;
@@ -302,7 +302,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -342,8 +342,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   /**
    * A class that can answer channelz queries about the server listen sockets.
    */
-  private static final class ListenSocket implements InternalInstrumented<SocketStats> {
-    private final InternalLogId id = InternalLogId.allocate(getClass().getName());
+  private static final class ListenSocket implements Instrumented<SocketStats> {
+    private final LogId id = LogId.allocate(getClass().getName());
     private final Channel ch;
 
     ListenSocket(Channel ch) {
@@ -390,7 +390,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 

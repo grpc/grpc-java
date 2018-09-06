@@ -18,8 +18,8 @@ package io.grpc.internal;
 
 import static io.grpc.internal.TimeProvider.SYSTEM_TIME_PROVIDER;
 
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ServerStats;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ServerStats;
 
 /**
  * A collection of call stats for channelz.

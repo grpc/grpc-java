@@ -35,15 +35,15 @@ import io.grpc.CallOptions;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -63,17 +63,17 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
+final class InternalSubchannel implements Instrumented<ChannelStats> {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final String userAgent;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Callback callback;
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorService scheduledExecutor;
-  private final InternalChannelz channelz;
+  private final Channelz channelz;
   private final CallTracer callsTracer;
   @CheckForNull
   private final ChannelTracer channelTracer;
@@ -166,7 +166,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
       BackoffPolicy.Provider backoffPolicyProvider,
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, ChannelExecutor channelExecutor, Callback callback,
-      InternalChannelz channelz, CallTracer callsTracer, @Nullable ChannelTracer channelTracer,
+      Channelz channelz, CallTracer callsTracer, @Nullable ChannelTracer channelTracer,
       TimeProvider timeProvider) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
@@ -489,7 +489,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -500,10 +500,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     ChannelStats.Builder builder = new ChannelStats.Builder();
 
     List<EquivalentAddressGroup> addressGroupsSnapshot;
-    List<InternalWithLogId> transportsSnapshot;
+    List<WithLogId> transportsSnapshot;
     synchronized (lock) {
       addressGroupsSnapshot = addressIndex.getGroups();
-      transportsSnapshot = new ArrayList<InternalWithLogId>(transports);
+      transportsSnapshot = new ArrayList<WithLogId>(transports);
     }
 
     builder.setTarget(addressGroupsSnapshot.toString()).setState(getState());

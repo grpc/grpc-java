@@ -30,12 +30,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -46,6 +40,12 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -63,17 +63,17 @@ import javax.annotation.concurrent.ThreadSafe;
  * to its own RPC needs.
  */
 @ThreadSafe
-final class OobChannel extends ManagedChannel implements InternalInstrumented<ChannelStats> {
+final class OobChannel extends ManagedChannel implements Instrumented<ChannelStats> {
   private static final Logger log = Logger.getLogger(OobChannel.class.getName());
 
   private InternalSubchannel subchannel;
   private AbstractSubchannel subchannelImpl;
   private SubchannelPicker subchannelPicker;
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String authority;
   private final DelayedClientTransport delayedTransport;
-  private final InternalChannelz channelz;
+  private final Channelz channelz;
   private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
@@ -103,7 +103,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor,
-      CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, InternalChannelz channelz,
+      CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, Channelz channelz,
       TimeProvider timeProvider) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");
@@ -154,7 +154,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
 
         @Override
-        InternalInstrumented<ChannelStats> getInternalSubchannel() {
+        Instrumented<ChannelStats> getInternalSubchannel() {
           return subchannel;
         }
 
@@ -299,13 +299,13 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     builder
         .setTarget(authority)
         .setState(subchannel.getState())
-        .setSubchannels(Collections.<InternalWithLogId>singletonList(subchannel));
+        .setSubchannels(Collections.<WithLogId>singletonList(subchannel));
     ret.set(builder.build());
     return ret;
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 

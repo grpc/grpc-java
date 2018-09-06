@@ -29,8 +29,6 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalMetadata.TrustedAsciiMarshaller;
 import io.grpc.LoadBalancer.PickResult;
@@ -41,6 +39,8 @@ import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -689,7 +689,7 @@ public final class GrpcUtil {
         }
 
         @Override
-        public InternalLogId getLogId() {
+        public LogId getLogId() {
           return transport.getLogId();
         }
 

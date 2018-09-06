@@ -17,8 +17,8 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.InternalChannelz.id;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.stats.Channelz.id;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -55,11 +55,6 @@ import io.grpc.Context;
 import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.IntegerMarshaller;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ServerSocketsList;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -77,6 +72,11 @@ import io.grpc.StringMarshaller;
 import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.ServerSocketsList;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import io.grpc.util.MutableHandlerRegistry;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -145,7 +145,7 @@ public class ServerImplTest {
 
   private final FakeClock executor = new FakeClock();
   private final FakeClock timer = new FakeClock();
-  private final InternalChannelz channelz = new InternalChannelz();
+  private final Channelz channelz = new Channelz();
 
   @Mock
   private ServerStreamTracer.Factory streamTracerFactory;
@@ -1364,7 +1364,7 @@ public class ServerImplTest {
     }
 
     @Override
-    public List<InternalInstrumented<SocketStats>> getListenSockets() {
+    public List<Instrumented<SocketStats>> getListenSockets() {
       return Collections.emptyList();
     }
 
@@ -1380,7 +1380,7 @@ public class ServerImplTest {
 
   private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
-    InternalLogId id = InternalLogId.allocate(getClass().getName());
+    LogId id = LogId.allocate(getClass().getName());
 
     @Override
     public void shutdown() {
@@ -1393,7 +1393,7 @@ public class ServerImplTest {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 

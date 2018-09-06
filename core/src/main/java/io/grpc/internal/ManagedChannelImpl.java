@@ -44,12 +44,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.ChannelTrace;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -62,6 +56,12 @@ import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.ChannelTrace;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -87,7 +87,7 @@ import javax.annotation.concurrent.ThreadSafe;
 /** A communication channel for making outgoing RPCs. */
 @ThreadSafe
 final class ManagedChannelImpl extends ManagedChannel implements
-    InternalInstrumented<ChannelStats> {
+    Instrumented<ChannelStats> {
   static final Logger logger = Logger.getLogger(ManagedChannelImpl.class.getName());
 
   // Matching this pattern means the target string is a URI target or at least intended to be one.
@@ -113,7 +113,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -216,7 +216,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final CallTracer channelCallTracer;
   @CheckForNull
   private final ChannelTracer channelTracer;
-  private final InternalChannelz channelz;
+  private final Channelz channelz;
   @CheckForNull
   private Boolean haveBackends; // a flag for doing channel tracing when flipped
   @Nullable
@@ -302,13 +302,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelExecutor.executeLater(new Runnable() {
       @Override
       public void run() {
-        ChannelStats.Builder builder = new InternalChannelz.ChannelStats.Builder();
+        ChannelStats.Builder builder = new Channelz.ChannelStats.Builder();
         channelCallTracer.updateBuilder(builder);
         if (channelTracer != null) {
           channelTracer.updateBuilder(builder);
         }
         builder.setTarget(target).setState(channelStateManager.getState());
-        List<InternalWithLogId> children = new ArrayList<InternalWithLogId>();
+        List<WithLogId> children = new ArrayList<WithLogId>();
         children.addAll(subchannels);
         children.addAll(oobChannels);
         builder.setSubchannels(children);
@@ -319,7 +319,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -1390,7 +1390,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    InternalInstrumented<ChannelStats> getInternalSubchannel() {
+    Instrumented<ChannelStats> getInternalSubchannel() {
       return subchannel;
     }
 

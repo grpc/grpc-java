@@ -34,9 +34,6 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -65,6 +62,9 @@ import io.grpc.okhttp.internal.framed.HeadersMode;
 import io.grpc.okhttp.internal.framed.Http2;
 import io.grpc.okhttp.internal.framed.Settings;
 import io.grpc.okhttp.internal.framed.Variant;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -144,7 +144,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private AsyncFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
   private final Object lock = new Object();
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   @GuardedBy("lock")
   private int nextStreamId;
   @GuardedBy("lock")
@@ -192,7 +192,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   @GuardedBy("lock")
-  private InternalChannelz.Security securityInfo;
+  private Channelz.Security securityInfo;
 
   @VisibleForTesting
   @Nullable
@@ -505,7 +505,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           maxConcurrentStreams = Integer.MAX_VALUE;
           startPendingStreams();
           if (sslSession != null) {
-            securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
+            securityInfo = new Channelz.Security(new Channelz.Tls(sslSession));
           }
         }
 
@@ -629,7 +629,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 
@@ -930,7 +930,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             transportTracer.getStats(),
             /*local=*/ null,
             /*remote=*/ null,
-            new InternalChannelz.SocketOptions.Builder().build(),
+            new Channelz.SocketOptions.Builder().build(),
             /*security=*/ null));
       } else {
         ret.set(new SocketStats(

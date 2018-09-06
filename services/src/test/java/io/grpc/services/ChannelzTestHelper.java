@@ -20,16 +20,16 @@ import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.ConnectivityState;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalChannelz.Security;
-import io.grpc.InternalChannelz.ServerStats;
-import io.grpc.InternalChannelz.SocketOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalChannelz.TransportStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.ChannelStats;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.Security;
+import io.grpc.stats.Channelz.ServerStats;
+import io.grpc.stats.Channelz.SocketOptions;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.Channelz.TransportStats;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Collections;
@@ -40,8 +40,8 @@ import java.util.Collections;
  */
 final class ChannelzTestHelper {
 
-  static final class TestSocket implements InternalInstrumented<SocketStats> {
-    private final InternalLogId id = InternalLogId.allocate("socket");
+  static final class TestSocket implements Instrumented<SocketStats> {
+    private final LogId id = LogId.allocate("socket");
     TransportStats transportStats = new TransportStats(
         /*streamsStarted=*/ 1,
         /*lastLocalStreamCreatedTimeNanos=*/ 2,
@@ -57,8 +57,8 @@ final class ChannelzTestHelper {
         /*remoteFlowControlWindow=*/ 12);
     SocketAddress local = new InetSocketAddress("10.0.0.1", 1000);
     SocketAddress remote = new InetSocketAddress("10.0.0.2", 1000);
-    InternalChannelz.SocketOptions socketOptions
-        = new InternalChannelz.SocketOptions.Builder().build();
+    Channelz.SocketOptions socketOptions
+        = new Channelz.SocketOptions.Builder().build();
     Security security = null;
 
     @Override
@@ -75,7 +75,7 @@ final class ChannelzTestHelper {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 
@@ -87,8 +87,8 @@ final class ChannelzTestHelper {
     }
   }
 
-  static final class TestListenSocket implements InternalInstrumented<SocketStats> {
-    private final InternalLogId id = InternalLogId.allocate("listensocket");
+  static final class TestListenSocket implements Instrumented<SocketStats> {
+    private final LogId id = LogId.allocate("listensocket");
     SocketAddress listenAddress = new InetSocketAddress("10.0.0.1", 1234);
 
     @Override
@@ -105,7 +105,7 @@ final class ChannelzTestHelper {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 
@@ -117,14 +117,14 @@ final class ChannelzTestHelper {
     }
   }
 
-  static final class TestServer implements InternalInstrumented<ServerStats> {
-    private final InternalLogId id = InternalLogId.allocate("server");
+  static final class TestServer implements Instrumented<ServerStats> {
+    private final LogId id = LogId.allocate("server");
     ServerStats serverStats = new ServerStats(
         /*callsStarted=*/ 1,
         /*callsSucceeded=*/ 2,
         /*callsFailed=*/ 3,
         /*lastCallStartedNanos=*/ 4,
-        Collections.<InternalInstrumented<SocketStats>>emptyList());
+        Collections.<Instrumented<SocketStats>>emptyList());
 
     @Override
     public ListenableFuture<ServerStats> getStats() {
@@ -134,7 +134,7 @@ final class ChannelzTestHelper {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 
@@ -146,8 +146,8 @@ final class ChannelzTestHelper {
     }
   }
 
-  static final class TestChannel implements InternalInstrumented<ChannelStats> {
-    private final InternalLogId id = InternalLogId.allocate("channel-or-subchannel");
+  static final class TestChannel implements Instrumented<ChannelStats> {
+    private final LogId id = LogId.allocate("channel-or-subchannel");
 
     ChannelStats stats = new ChannelStats.Builder()
         .setTarget("sometarget")
@@ -156,8 +156,8 @@ final class ChannelzTestHelper {
         .setCallsSucceeded(2)
         .setCallsFailed(3)
         .setLastCallStartedNanos(4)
-        .setSubchannels(Collections.<InternalWithLogId>emptyList())
-        .setSockets(Collections.<InternalWithLogId>emptyList())
+        .setSubchannels(Collections.<WithLogId>emptyList())
+        .setSockets(Collections.<WithLogId>emptyList())
         .build();
 
     @Override
@@ -168,7 +168,7 @@ final class ChannelzTestHelper {
     }
 
     @Override
-    public InternalLogId getLogId() {
+    public LogId getLogId() {
       return id;
     }
 

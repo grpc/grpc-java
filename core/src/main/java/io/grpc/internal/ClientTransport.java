@@ -17,10 +17,10 @@
 package io.grpc.internal;
 
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.SocketStats;
 import java.util.concurrent.Executor;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -31,7 +31,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * are expected to execute quickly.
  */
 @ThreadSafe
-public interface ClientTransport extends InternalInstrumented<SocketStats> {
+public interface ClientTransport extends Instrumented<SocketStats> {
 
   /**
    * Creates a new stream for sending messages to a remote end-point.

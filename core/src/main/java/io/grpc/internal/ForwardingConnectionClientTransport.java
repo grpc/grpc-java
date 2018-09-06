@@ -20,11 +20,11 @@ import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.util.concurrent.Executor;
 
 abstract class ForwardingConnectionClientTransport implements ConnectionClientTransport {
@@ -55,7 +55,7 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return delegate().getLogId();
   }
 

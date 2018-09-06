@@ -18,20 +18,20 @@ package io.grpc.netty;
 
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.InternalChannelz.id;
+import static io.grpc.stats.Channelz.id;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
+import io.grpc.stats.Channelz;
+import io.grpc.stats.Channelz.Instrumented;
+import io.grpc.stats.Channelz.SocketStats;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.WriteBufferWaterMark;
@@ -49,7 +49,7 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class NettyServerTest {
-  private final InternalChannelz channelz = new InternalChannelz();
+  private final Channelz channelz = new Channelz();
 
   @Test
   public void getPort() throws Exception {
@@ -212,7 +212,7 @@ public class NettyServerTest {
     });
     assertThat(ns.getPort()).isGreaterThan(0);
 
-    InternalInstrumented<SocketStats> listenSocket = getOnlyElement(ns.getListenSockets());
+    Instrumented<SocketStats> listenSocket = getOnlyElement(ns.getListenSockets());
     assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
 
     // very basic sanity check of the contents

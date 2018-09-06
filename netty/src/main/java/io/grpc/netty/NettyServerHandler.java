@@ -31,7 +31,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import io.grpc.Attributes;
-import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -44,6 +43,7 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ServerHeadersDecoder;
+import io.grpc.stats.Channelz;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelFuture;
@@ -113,7 +113,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final KeepAliveEnforcer keepAliveEnforcer;
   /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
-  private InternalChannelz.Security securityInfo;
+  private Channelz.Security securityInfo;
   /** Completed attributes produced by transportReady. */
   private Attributes attributes;
   private Throwable connectionError;
@@ -507,12 +507,12 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attrs, InternalChannelz.Security securityInfo) {
+      Attributes attrs, Channelz.Security securityInfo) {
     negotiationAttributes = attrs;
     this.securityInfo = securityInfo;
   }
 
-  InternalChannelz.Security getSecurityInfo() {
+  Channelz.Security getSecurityInfo() {
     return securityInfo;
   }
 

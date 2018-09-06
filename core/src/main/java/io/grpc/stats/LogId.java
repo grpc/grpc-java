@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.stats;
 
+import io.grpc.Internal;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -24,15 +25,15 @@ import java.util.concurrent.atomic.AtomicLong;
  *<p>An object that has an ID that is unique within the JVM, primarily for debug logging.
  */
 @Internal
-public final class InternalLogId {
+public final class LogId {
   private static final AtomicLong idAlloc = new AtomicLong();
 
   /**
    * @param tag a loggable tag associated with this tag. The ID that is allocated is guaranteed
    *            to be unique and increasing, irrespective of the tag.
    */
-  public static InternalLogId allocate(String tag) {
-    return new InternalLogId(tag, getNextId());
+  public static LogId allocate(String tag) {
+    return new LogId(tag, getNextId());
   }
 
   static long getNextId() {
@@ -42,7 +43,7 @@ public final class InternalLogId {
   private final String tag;
   private final long id;
 
-  protected InternalLogId(String tag, long id) {
+  protected LogId(String tag, long id) {
     this.tag = tag;
     this.id = id;
   }
@@ -59,4 +60,5 @@ public final class InternalLogId {
   public String toString() {
     return tag + "-" + id;
   }
+
 }

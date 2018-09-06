@@ -26,12 +26,12 @@ import static org.junit.Assert.assertTrue;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.Grpc;
-import io.grpc.InternalChannelz;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.Handshaker.HandshakerResult;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.stats.Channelz;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
@@ -405,7 +405,7 @@ public class AltsProtocolNegotiatorTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(
-        Attributes attrs, InternalChannelz.Security securityInfo) {
+        Attributes attrs, Channelz.Security securityInfo) {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;

@@ -22,14 +22,14 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.TimeProvider;
+import io.grpc.stats.LogId;
+import io.grpc.stats.WithLogId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -42,9 +42,9 @@ import javax.annotation.Nullable;
  * <p>Optionally, when requested by the naming system, will delegate the work to a local pick-first
  * or round-robin balancer.
  */
-class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
+class GrpclbLoadBalancer extends LoadBalancer implements WithLogId {
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final LogId logId = LogId.allocate(getClass().getName());
   private final SubchannelPool subchannelPool;
   private final ObjectPool<ScheduledExecutorService> timerServicePool;
 
@@ -72,7 +72,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     return logId;
   }
 

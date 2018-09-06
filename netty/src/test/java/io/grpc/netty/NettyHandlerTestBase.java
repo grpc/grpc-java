@@ -29,12 +29,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
-import io.grpc.InternalChannelz.TransportStats;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.MessageFramer;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
+import io.grpc.stats.Channelz.TransportStats;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufUtil;

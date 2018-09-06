@@ -21,12 +21,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
-import io.grpc.InternalChannelz.SocketStats;
-import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
+import io.grpc.stats.Channelz.SocketStats;
+import io.grpc.stats.LogId;
 import java.util.concurrent.Executor;
 
 /**
@@ -66,7 +66,7 @@ class FailingClientTransport implements ClientTransport {
   }
 
   @Override
-  public InternalLogId getLogId() {
+  public LogId getLogId() {
     throw new UnsupportedOperationException("Not a real transport");
   }
 }

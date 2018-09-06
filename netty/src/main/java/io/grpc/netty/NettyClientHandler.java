@@ -24,7 +24,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.Attributes;
-import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
@@ -35,6 +34,7 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
+import io.grpc.stats.Channelz;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
@@ -106,7 +106,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
   private Attributes attributes = Attributes.EMPTY;
-  private InternalChannelz.Security securityInfo;
+  private Channelz.Security securityInfo;
 
   static NettyClientHandler newHandler(
       ClientTransportLifecycleManager lifecycleManager,
@@ -418,7 +418,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attributes, InternalChannelz.Security securityInfo) {
+      Attributes attributes, Channelz.Security securityInfo) {
     this.attributes = attributes;
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
@@ -429,7 +429,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     return eagAttributes;
   }
 
-  InternalChannelz.Security getSecurityInfo() {
+  Channelz.Security getSecurityInfo() {
     return securityInfo;
   }
 

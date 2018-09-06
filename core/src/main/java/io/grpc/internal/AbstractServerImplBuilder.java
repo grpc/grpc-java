@@ -28,7 +28,6 @@ import io.grpc.Context;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.Internal;
-import io.grpc.InternalChannelz;
 import io.grpc.InternalNotifyOnServerBuild;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -37,6 +36,7 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.ServerTransportFilter;
+import io.grpc.stats.Channelz;
 import io.opencensus.trace.Tracing;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -114,7 +114,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   protected BinaryLog binlog;
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
-  protected InternalChannelz channelz = InternalChannelz.instance();
+  protected Channelz channelz = Channelz.instance();
   protected CallTracer.Factory callTracerFactory = CallTracer.getDefaultFactory();
 
   @Override

@@ -25,7 +25,6 @@ import static io.netty.util.CharsetUtil.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -33,6 +32,7 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
+import io.grpc.stats.Channelz;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
@@ -209,9 +209,9 @@ class Utils {
     }
   }
 
-  static InternalChannelz.SocketOptions getSocketOptions(Channel channel) {
+  static Channelz.SocketOptions getSocketOptions(Channel channel) {
     ChannelConfig config = channel.config();
-    InternalChannelz.SocketOptions.Builder b = new InternalChannelz.SocketOptions.Builder();
+    Channelz.SocketOptions.Builder b = new Channelz.SocketOptions.Builder();
 
     // The API allows returning null but not sure if it can happen in practice.
     // Let's be paranoid and do null checking just in case.
