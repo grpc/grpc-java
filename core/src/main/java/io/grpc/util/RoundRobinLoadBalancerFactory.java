@@ -115,7 +115,7 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
     private final Random random;
 
     private ConnectivityState currentState;
-    private RoundRobinPicker currentPicker = new EmptyPicker(Status.OK);
+    private RoundRobinPicker currentPicker = new EmptyPicker(EMPTY_OK);
 
     @Nullable
     private StickinessState stickinessState;
