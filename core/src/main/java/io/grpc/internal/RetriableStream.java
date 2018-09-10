@@ -85,6 +85,10 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @GuardedBy("lock")
   private Set<Substream> activeHedges; // not null and unchanged once isHedging = true
+  @GuardedBy("lock")
+  private int latestAttempt;
+  @GuardedBy("lock")
+  private boolean hedgingFrozen; // no more hedging due to events like drop or pushback
   private ConcurrentRescheduler rescheduler; // not null and unchanged once isHedging = true
 
   private volatile State state = new State(
@@ -94,8 +98,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * Either transparent retry happened or reached server's application logic.
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
-  @GuardedBy("lock")
-  private boolean hedgingFrozen; // no more hedging due to events like drop or pushback
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -104,7 +106,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   private ClientStreamListener masterListener;
   private Future<?> scheduledRetry;
-  private Substream latestSubstream;
   private long nextBackoffIntervalNanos;
 
   RetriableStream(
@@ -198,7 +199,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         activeHedges.add(sub);
       }
     }
-    latestSubstream = sub;
     return sub;
   }
 
@@ -313,6 +313,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         substream.stream.start(new Sublistener(substream));
 
         if (isHedging) {
+          // the rescheduler has a precondition, so it will noop if the precondition is not met;
+          // it will noop if a pushback has scheduled a new task and the task is pending
           rescheduler.scheduleNewOrNoop(hedgingPolicy.hedgingDelayNanos, TimeUnit.NANOSECONDS);
         }
       }
@@ -345,7 +347,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       callExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          Substream newSubstream = createSubstream(latestSubstream.previousAttempts + 1);
+          int previousAttempts;
+          synchronized (lock) {
+            previousAttempts = latestAttempt + 1;
+            latestAttempt = previousAttempts;
+          }
+          Substream newSubstream = createSubstream(previousAttempts);
           drain(newSubstream);
         }
       });
@@ -595,7 +602,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @GuardedBy("lock")
   private boolean hasPotentialHedging() {
     return state.winningSubstream == null
-        && latestSubstream.previousAttempts + 1 < hedgingPolicy.maxAttempts
+        && latestAttempt + 1 < hedgingPolicy.maxAttempts
         && !hedgingFrozen;
   }
 
@@ -655,6 +662,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
             synchronized (lock) {
               // must not remove substream until after newSubstream is created
               activeHedges.remove(substream);
+
+              // optimization for early commit
               if (!hasPotentialHedging() && activeHedges.size() == 1) {
                 commit = true;
               }
@@ -723,13 +732,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               if (hasPotentialHedging()) {
                 return;
               }
+
               if (activeHedges.size() == 1) {
+                // optimization for early commit
                 sub = activeHedges.iterator().next();
               } else if (!activeHedges.isEmpty()) {
                 return;
               } // else, all hedges are closed, try to commit, one will win
             }
           }
+
           if (sub != null && !sub.closed) {
             commitAndRun(sub);
             return;
