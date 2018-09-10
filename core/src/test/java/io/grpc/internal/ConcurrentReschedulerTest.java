@@ -17,8 +17,12 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
+import io.grpc.internal.ConcurrentRescheduler.Precondition;
 import java.util.concurrent.TimeUnit;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -36,8 +40,15 @@ public class ConcurrentReschedulerTest {
     }
   };
 
+  private final Precondition precondition = mock(Precondition.class);
+
   private final ConcurrentRescheduler rescheduler = new ConcurrentRescheduler(
-      runnable, fakeClock.getScheduledExecutorService());
+      runnable, fakeClock.getScheduledExecutorService(), precondition, new Object());
+
+  @Before
+  public void setUp() {
+    doReturn(true).when(precondition).met();
+  }
 
   @Test
   public void scheduleNew() {

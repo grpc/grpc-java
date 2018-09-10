@@ -22,6 +22,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -35,7 +36,10 @@ import javax.annotation.concurrent.ThreadSafe;
 final class ConcurrentRescheduler {
   private final Runnable runnable;
   private final ScheduledExecutorService scheduler;
-  private final Object lock = new Object();
+  private final Object lock;
+  @GuardedBy("lock")
+  @Nullable
+  private final Precondition precondition;
 
   // Represents the currently scheduled task.
   // Set to null when the task is cancelled;
@@ -47,9 +51,20 @@ final class ConcurrentRescheduler {
   @CheckForNull
   private FutureRunnable wakeUp;
 
-  ConcurrentRescheduler(Runnable runnable, ScheduledExecutorService scheduler) {
+  /**
+   * Constructor.
+   *
+   * @param precondition schedule the runnable only when precondition.met() is true. Does not apply
+   *                     the precondition for rescheduling an existing task. Does not check the
+   *                     precondition when running the task.
+   */
+  ConcurrentRescheduler(
+      Runnable runnable, ScheduledExecutorService scheduler, @Nullable Precondition precondition,
+      Object lock) {
     this.runnable = runnable;
     this.scheduler = scheduler;
+    this.precondition = precondition;
+    this.lock = lock;
   }
 
   /** Schedules a new one or reschedules an existing one. */
@@ -63,6 +78,8 @@ final class ConcurrentRescheduler {
         // cancel the existing one and schedule new one
         existingWakeUp.cancelled = true;
         existingTask = existingWakeUp.task;
+      } else if (precondition != null && !precondition.met()) {
+        return;
       }
       newWakeUp = new FutureRunnable();
       wakeUp = newWakeUp;
@@ -80,6 +97,9 @@ final class ConcurrentRescheduler {
 
     synchronized (lock) {
       if (wakeUp == null) {
+        if (precondition != null && !precondition.met()) {
+          return;
+        }
         newWakeUp = new FutureRunnable();
         wakeUp = newWakeUp;
       } else {
@@ -149,5 +169,14 @@ final class ConcurrentRescheduler {
 
       runnable.run();
     }
+  }
+
+  interface Precondition {
+
+    /**
+     * The method is guarded by the lock of the rescheduler, and does not block. Be cautious of dead
+     * lock.
+     */
+    boolean met();
   }
 }
