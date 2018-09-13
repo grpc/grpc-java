@@ -78,7 +78,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final Throttle throttle;
 
   private volatile State state = new State(
-      new ArrayList<>(8), Collections.<Substream>emptyList(), null, false, false);
+      new ArrayList<BufferEntry>(8), Collections.<Substream>emptyList(), null, false, false);
 
   /**
    * Either transparent retry happened or reached server's application logic.

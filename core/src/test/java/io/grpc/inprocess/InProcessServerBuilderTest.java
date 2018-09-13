@@ -54,7 +54,7 @@ public class InProcessServerBuilderTest {
   @Test
   public void scheduledExecutorService_default() {
     InProcessServerBuilder builder = InProcessServerBuilder.forName("foo");
-    InProcessServer server = builder.buildTransportServer(new ArrayList<>());
+    InProcessServer server = builder.buildTransportServer(new ArrayList<Factory>());
 
     ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool =
         server.getScheduledExecutorServicePool();
@@ -78,7 +78,7 @@ public class InProcessServerBuilderTest {
     InProcessServerBuilder builder1 = builder.scheduledExecutorService(scheduledExecutorService);
     assertSame(builder, builder1);
 
-    InProcessServer server = builder1.buildTransportServer(new ArrayList<>());
+    InProcessServer server = builder1.buildTransportServer(new ArrayList<Factory>());
     ObjectPool<ScheduledExecutorService> scheduledExecutorServicePool =
         server.getScheduledExecutorServicePool();
 

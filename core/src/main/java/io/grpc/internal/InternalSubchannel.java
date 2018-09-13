@@ -125,8 +125,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
    * also be present.
    */
   @GuardedBy("lock")
-  private final Collection<ConnectionClientTransport> transports =
-      new ArrayList<>();
+  private final Collection<ConnectionClientTransport> transports = new ArrayList<>();
 
   // Must only be used from channelExecutor
   private final InUseStateAggregator<ConnectionClientTransport> inUseStateAggregator =
@@ -458,7 +457,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     Collection<ManagedClientTransport> transportsCopy;
     try {
       synchronized (lock) {
-        transportsCopy = new ArrayList<>(transports);
+        transportsCopy = new ArrayList<ManagedClientTransport>(transports);
       }
     } finally {
       channelExecutor.drain();
@@ -503,7 +502,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     List<InternalWithLogId> transportsSnapshot;
     synchronized (lock) {
       addressGroupsSnapshot = addressIndex.getGroups();
-      transportsSnapshot = new ArrayList<>(transports);
+      transportsSnapshot = new ArrayList<InternalWithLogId>(transports);
     }
 
     builder.setTarget(addressGroupsSnapshot.toString()).setState(getState());

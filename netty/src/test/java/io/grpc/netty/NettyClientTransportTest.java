@@ -752,7 +752,7 @@ public class NettyClientTransportTest {
   private static final class EchoServerListener implements ServerListener {
     final List<NettyServerTransport> transports = new ArrayList<>();
     final List<EchoServerStreamListener> streamListeners =
-            Collections.synchronizedList(new ArrayList<>());
+            Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
 
     @Override
     public ServerTransportListener transportCreated(final ServerTransport transport) {

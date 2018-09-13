@@ -372,7 +372,7 @@ public class OkHttpClientTransportTest {
   public void receivedHeadersForInvalidStreamShouldKillConnection() throws Exception {
     initTransport();
     // Empty headers block without correct content type or status
-    frameHandler().headers(false, false, 3, 0, new ArrayList<>(),
+    frameHandler().headers(false, false, 3, 0, new ArrayList<Header>(),
         HeadersMode.HTTP_20_HEADERS);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
