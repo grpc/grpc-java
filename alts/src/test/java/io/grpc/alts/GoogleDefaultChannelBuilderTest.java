@@ -19,9 +19,7 @@ package io.grpc.alts;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.alts.internal.GoogleDefaultProtocolNegotiator;
-import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
 import io.grpc.netty.ProtocolNegotiator;
-import java.net.InetSocketAddress;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,12 +31,7 @@ public final class GoogleDefaultChannelBuilderTest {
   public void buildsNettyChannel() throws Exception {
     GoogleDefaultChannelBuilder builder = GoogleDefaultChannelBuilder.forTarget("localhost:8080");
 
-    TransportCreationParamsFilterFactory tcpfFactory = builder.getTcpfFactoryForTest();
-    assertThat(tcpfFactory).isNotNull();
-    ProtocolNegotiator protocolNegotiator =
-        tcpfFactory
-            .create(new InetSocketAddress(8080), "fakeAuthority", "fakeUserAgent", null)
-            .getProtocolNegotiator();
+    ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
     assertThat(protocolNegotiator).isInstanceOf(GoogleDefaultProtocolNegotiator.class);
   }
 }

@@ -19,14 +19,14 @@ package io.grpc.alts.internal;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.ProtocolNegotiator;
+import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators;
 import io.netty.handler.ssl.SslContext;
 
 /** A client-side GPRC {@link ProtocolNegotiator} for Google Default Channel. */
 public final class GoogleDefaultProtocolNegotiator implements ProtocolNegotiator {
-  private final ProtocolNegotiator altsProtocolNegotiator;
-  private final ProtocolNegotiator tlsProtocolNegotiator;
+  private final io.grpc.netty.ProtocolNegotiator altsProtocolNegotiator;
+  private final io.grpc.netty.ProtocolNegotiator tlsProtocolNegotiator;
 
   public GoogleDefaultProtocolNegotiator(TsiHandshakerFactory altsFactory, SslContext sslContext) {
     altsProtocolNegotiator = AltsProtocolNegotiator.create(altsFactory);
@@ -35,7 +35,8 @@ public final class GoogleDefaultProtocolNegotiator implements ProtocolNegotiator
 
   @VisibleForTesting
   GoogleDefaultProtocolNegotiator(
-      ProtocolNegotiator altsProtocolNegotiator, ProtocolNegotiator tlsProtocolNegotiator) {
+      io.grpc.netty.ProtocolNegotiator altsProtocolNegotiator,
+      io.grpc.netty.ProtocolNegotiator tlsProtocolNegotiator) {
     this.altsProtocolNegotiator = altsProtocolNegotiator;
     this.tlsProtocolNegotiator = tlsProtocolNegotiator;
   }

@@ -16,8 +16,6 @@
 
 package io.grpc.alts;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
@@ -39,17 +37,12 @@ import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
-import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilter;
-import io.grpc.netty.InternalNettyChannelBuilder.TransportCreationParamsFilterFactory;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
@@ -61,7 +54,7 @@ public final class GoogleDefaultChannelBuilder
     extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
-  private final TcpfFactory tcpfFactory;
+  private final GoogleDefaultProtocolNegotiator negotiatorForTest;
 
   private GoogleDefaultChannelBuilder(String target) {
     delegate = NettyChannelBuilder.forTarget(target);
@@ -89,9 +82,10 @@ public final class GoogleDefaultChannelBuilder
     } catch (SSLException ex) {
       throw new RuntimeException(ex);
     }
-    tcpfFactory = new TcpfFactory(
-        new GoogleDefaultProtocolNegotiator(altsHandshakerFactory, sslContext));
-    InternalNettyChannelBuilder.setDynamicTransportParamsFactory(delegate(), tcpfFactory);
+    GoogleDefaultProtocolNegotiator negotiator =
+        new GoogleDefaultProtocolNegotiator(altsHandshakerFactory, sslContext);
+    InternalNettyChannelBuilder.setProtocolNegotiator(delegate(), negotiator);
+    negotiatorForTest = negotiator;
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
@@ -125,49 +119,8 @@ public final class GoogleDefaultChannelBuilder
   }
 
   @VisibleForTesting
-  TransportCreationParamsFilterFactory getTcpfFactoryForTest() {
-    return tcpfFactory;
-  }
-
-  private static final class TcpfFactory implements TransportCreationParamsFilterFactory {
-    private final GoogleDefaultProtocolNegotiator negotiator;
-
-    private TcpfFactory(GoogleDefaultProtocolNegotiator negotiator) {
-      this.negotiator = negotiator;
-    }
-
-    @Override
-    public TransportCreationParamsFilter create(
-        final SocketAddress serverAddress,
-        final String authority,
-        final String userAgent,
-        final ProxyParameters proxy) {
-      checkArgument(
-          serverAddress instanceof InetSocketAddress,
-          "%s must be a InetSocketAddress",
-          serverAddress);
-      return new TransportCreationParamsFilter() {
-        @Override
-        public SocketAddress getTargetServerAddress() {
-          return serverAddress;
-        }
-
-        @Override
-        public String getAuthority() {
-          return authority;
-        }
-
-        @Override
-        public String getUserAgent() {
-          return userAgent;
-        }
-
-        @Override
-        public GoogleDefaultProtocolNegotiator getProtocolNegotiator() {
-          return negotiator;
-        }
-      };
-    }
+  GoogleDefaultProtocolNegotiator getProtocolNegotiatorForTest() {
+    return negotiatorForTest;
   }
 
   /**
