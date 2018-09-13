@@ -372,7 +372,7 @@ public class OkHttpClientTransportTest {
   public void receivedHeadersForInvalidStreamShouldKillConnection() throws Exception {
     initTransport();
     // Empty headers block without correct content type or status
-    frameHandler().headers(false, false, 3, 0, new ArrayList<Header>(),
+    frameHandler().headers(false, false, 3, 0, new ArrayList<>(),
         HeadersMode.HTTP_20_HEADERS);
     verify(frameWriter, timeout(TIME_OUT_MS))
         .goAway(eq(0), eq(ErrorCode.PROTOCOL_ERROR), any(byte[].class));
@@ -1938,7 +1938,7 @@ public class OkHttpClientTransportTest {
     Metadata trailers;
     RpcProgress rpcProgress;
     CountDownLatch closed = new CountDownLatch(1);
-    ArrayList<String> messages = new ArrayList<String>();
+    ArrayList<String> messages = new ArrayList<>();
     boolean onReadyCalled;
 
     MockStreamListener() {

@@ -52,7 +52,7 @@ public class StreamRecorder<T> implements StreamObserver<T> {
   private StreamRecorder() {
     firstValue = SettableFuture.create();
     latch = new CountDownLatch(1);
-    results = Collections.synchronizedList(new ArrayList<T>());
+    results = Collections.synchronizedList(new ArrayList<>());
   }
 
   @Override

@@ -347,7 +347,7 @@ public final class Metadata {
     List<T> ret = null;
     for (; readIdx < size; readIdx++) {
       if (bytesEqual(key.asciiName(), name(readIdx))) {
-        ret = ret != null ? ret : new ArrayList<T>();
+        ret = ret != null ? ret : new ArrayList<>();
         ret.add(key.parseBytes(value(readIdx)));
         continue;
       }

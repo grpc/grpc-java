@@ -126,7 +126,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
    */
   @GuardedBy("lock")
   private final Collection<ConnectionClientTransport> transports =
-      new ArrayList<ConnectionClientTransport>();
+      new ArrayList<>();
 
   // Must only be used from channelExecutor
   private final InUseStateAggregator<ConnectionClientTransport> inUseStateAggregator =
@@ -172,7 +172,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
     this.addressIndex = new Index(
-        Collections.unmodifiableList(new ArrayList<EquivalentAddressGroup>(addressGroups)));
+        Collections.unmodifiableList(new ArrayList<>(addressGroups)));
     this.authority = authority;
     this.userAgent = userAgent;
     this.backoffPolicyProvider = backoffPolicyProvider;
@@ -352,7 +352,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     checkListHasNoNulls(newAddressGroups, "newAddressGroups contains null entry");
     Preconditions.checkArgument(!newAddressGroups.isEmpty(), "newAddressGroups is empty");
     newAddressGroups =
-        Collections.unmodifiableList(new ArrayList<EquivalentAddressGroup>(newAddressGroups));
+        Collections.unmodifiableList(new ArrayList<>(newAddressGroups));
     ManagedClientTransport savedTransport = null;
     try {
       synchronized (lock) {
@@ -458,7 +458,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     Collection<ManagedClientTransport> transportsCopy;
     try {
       synchronized (lock) {
-        transportsCopy = new ArrayList<ManagedClientTransport>(transports);
+        transportsCopy = new ArrayList<>(transports);
       }
     } finally {
       channelExecutor.drain();
@@ -503,7 +503,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     List<InternalWithLogId> transportsSnapshot;
     synchronized (lock) {
       addressGroupsSnapshot = addressIndex.getGroups();
-      transportsSnapshot = new ArrayList<InternalWithLogId>(transports);
+      transportsSnapshot = new ArrayList<>(transports);
     }
 
     builder.setTarget(addressGroupsSnapshot.toString()).setState(getState());
