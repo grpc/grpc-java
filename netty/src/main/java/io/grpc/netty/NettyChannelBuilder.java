@@ -81,6 +81,7 @@ public final class NettyChannelBuilder
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
   private TransportCreationParamsFilterFactory dynamicParamsFactory;
+  private ProtocolNegotiator protocolNegotiator;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -334,16 +335,18 @@ public final class NettyChannelBuilder
     TransportCreationParamsFilterFactory transportCreationParamsFilterFactory =
         dynamicParamsFactory;
     if (transportCreationParamsFilterFactory == null) {
-      SslContext localSslContext = sslContext;
-      if (negotiationType == NegotiationType.TLS && localSslContext == null) {
-        try {
-          localSslContext = GrpcSslContexts.forClient().build();
-        } catch (SSLException ex) {
-          throw new RuntimeException(ex);
+      ProtocolNegotiator negotiator = this.protocolNegotiator;
+      if (negotiator == null) {
+        SslContext localSslContext = sslContext;
+        if (negotiationType == NegotiationType.TLS && localSslContext == null) {
+          try {
+            localSslContext = GrpcSslContexts.forClient().build();
+          } catch (SSLException ex) {
+            throw new RuntimeException(ex);
+          }
         }
+        negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
       }
-      ProtocolNegotiator negotiator =
-          createProtocolNegotiatorByType(negotiationType, localSslContext);
       transportCreationParamsFilterFactory =
           new DefaultNettyTransportCreationParamsFilterFactory(negotiator);
     }
@@ -411,6 +414,10 @@ public final class NettyChannelBuilder
 
   void setDynamicParamsFactory(TransportCreationParamsFilterFactory factory) {
     this.dynamicParamsFactory = checkNotNull(factory, "factory");
+  }
+
+  void protocolNegotiator(ProtocolNegotiator protocolNegotiator) {
+    this.protocolNegotiator = Preconditions.checkNotNull(protocolNegotiator, "protocolNegotiator");
   }
 
   @Override
