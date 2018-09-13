@@ -54,6 +54,8 @@ public class AsyncServer {
    * checkstyle complains if there is no javadoc comment here.
    */
   public static void main(String... args) throws Exception {
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
     new AsyncServer().run(args);
   }
 

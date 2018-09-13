@@ -37,6 +37,7 @@ import io.grpc.Status;
 import io.grpc.benchmarks.proto.BenchmarkServiceGrpc;
 import io.grpc.benchmarks.proto.Messages.SimpleRequest;
 import io.grpc.benchmarks.proto.Messages.SimpleResponse;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
 import java.util.Random;
 import java.util.concurrent.Callable;
@@ -63,6 +64,8 @@ public class OpenLoopClient {
    * Comment for checkstyle.
    */
   public static void main(String... args) throws Exception {
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
     ClientConfiguration.Builder configBuilder = ClientConfiguration.newBuilder(
         ADDRESS, TARGET_QPS, CLIENT_PAYLOAD, SERVER_PAYLOAD, TLS,
         TESTCA, TRANSPORT, DURATION, SAVE_HISTOGRAM, FLOW_CONTROL_WINDOW);

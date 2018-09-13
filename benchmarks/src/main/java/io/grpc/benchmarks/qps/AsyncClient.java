@@ -44,6 +44,7 @@ import io.grpc.benchmarks.proto.BenchmarkServiceGrpc.BenchmarkServiceStub;
 import io.grpc.benchmarks.proto.Messages.Payload;
 import io.grpc.benchmarks.proto.Messages.SimpleRequest;
 import io.grpc.benchmarks.proto.Messages.SimpleResponse;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
 import java.util.ArrayList;
 import java.util.List;
@@ -303,6 +304,8 @@ public class AsyncClient {
    * checkstyle complains if there is no javadoc comment here.
    */
   public static void main(String... args) throws Exception {
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
     ClientConfiguration.Builder configBuilder = ClientConfiguration.newBuilder(
         ADDRESS, CHANNELS, OUTSTANDING_RPCS, CLIENT_PAYLOAD, SERVER_PAYLOAD,
         TLS, TESTCA, TRANSPORT, DURATION, WARMUP_DURATION, DIRECTEXECUTOR,

@@ -24,6 +24,7 @@ import io.grpc.benchmarks.proto.Control.ClientArgs;
 import io.grpc.benchmarks.proto.Control.ServerArgs;
 import io.grpc.benchmarks.proto.Control.ServerArgs.ArgtypeCase;
 import io.grpc.benchmarks.proto.WorkerServiceGrpc;
+import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -107,6 +108,10 @@ public class LoadWorker {
               + "\n    Port to start load servers on. Defaults to any available port");
       System.exit(1);
     }
+
+    // Let Netty or OkHttp use Conscrypt if it is available.
+    TestUtils.installConscryptIfAvailable();
+
     LoadWorker loadWorker = new LoadWorker(driverPort, serverPort);
     loadWorker.start();
     loadWorker.driverServer.awaitTermination();
