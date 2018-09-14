@@ -238,7 +238,7 @@ public final class CronetClientStreamTest {
     verify(cronetStream, times(0)).read(isA(ByteBuffer.class));
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
@@ -298,7 +298,7 @@ public final class CronetClientStreamTest {
     clientStream.request(2);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
     // Receive one message
@@ -356,7 +356,7 @@ public final class CronetClientStreamTest {
     clientStream.request(2);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
     verify(cronetStream, times(1)).read(isA(ByteBuffer.class));
 
@@ -411,7 +411,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
 
     CronetException exception = mock(CronetException.class);
@@ -439,7 +439,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
 
     // Report trailer but not endOfStream.
@@ -471,7 +471,7 @@ public final class CronetClientStreamTest {
     // Receive response header
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
 
     // Report trailer and endOfStream
@@ -524,7 +524,7 @@ public final class CronetClientStreamTest {
     callback.onStreamReady(cronetStream);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
     // Receive trailer first
     ((CronetClientStream.BidirectionalStreamCallback) callback)
@@ -553,7 +553,7 @@ public final class CronetClientStreamTest {
     callback.onStreamReady(cronetStream);
     UrlResponseInfo info =
         new UrlResponseInfoImpl(
-            new ArrayList<>(), 200, "", responseHeader("200"), false, "", "");
+            new ArrayList<String>(), 200, "", responseHeader("200"), false, "", "");
     callback.onResponseHeadersReceived(cronetStream, info);
     // Receive cronet's endOfStream
     callback.onReadCompleted(cronetStream, null, ByteBuffer.allocate(0), true);
