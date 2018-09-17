@@ -18,7 +18,6 @@ package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.grpc.testing.integration.Messages.PayloadType.COMPRESSABLE;
 import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 import static org.junit.Assert.assertEquals;
@@ -39,10 +38,8 @@ import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
 import io.grpc.CallOptions;
@@ -84,9 +81,9 @@ import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.TestUtils;
 import io.grpc.testing.integration.EmptyProtos.Empty;
+import io.grpc.testing.integration.Messages.BoolValue;
 import io.grpc.testing.integration.Messages.EchoStatus;
 import io.grpc.testing.integration.Messages.Payload;
-import io.grpc.testing.integration.Messages.PayloadType;
 import io.grpc.testing.integration.Messages.ResponseParameters;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -154,11 +151,11 @@ public abstract class AbstractInteropTest {
       new FakeTagContextBinarySerializer();
 
   private final AtomicReference<ServerCall<?, ?>> serverCallCapture =
-      new AtomicReference<ServerCall<?, ?>>();
+      new AtomicReference<>();
   private final AtomicReference<Metadata> requestHeadersCapture =
-      new AtomicReference<Metadata>();
+      new AtomicReference<>();
   private final AtomicReference<Context> contextCapture =
-      new AtomicReference<Context>();
+      new AtomicReference<>();
   private final FakeStatsRecorder clientStatsRecorder = new FakeStatsRecorder();
   private final FakeStatsRecorder serverStatsRecorder = new FakeStatsRecorder();
 
@@ -166,7 +163,7 @@ public abstract class AbstractInteropTest {
   private Server server;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
-      new LinkedBlockingQueue<ServerStreamTracerInfo>();
+      new LinkedBlockingQueue<>();
 
   private static final class ServerStreamTracerInfo {
     final String fullMethodName;
@@ -256,7 +253,7 @@ public abstract class AbstractInteropTest {
   protected TestServiceGrpc.TestServiceStub asyncStub;
 
   private final LinkedBlockingQueue<TestClientStreamTracer> clientStreamTracers =
-      new LinkedBlockingQueue<TestClientStreamTracer>();
+      new LinkedBlockingQueue<>();
 
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
       new ClientStreamTracer.Factory() {
@@ -389,13 +386,11 @@ public abstract class AbstractInteropTest {
     assumeEnoughMemory();
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseSize(314159)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
 
@@ -500,7 +495,6 @@ public abstract class AbstractInteropTest {
   @Test
   public void serverStreaming() throws Exception {
     final StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-        .setResponseType(PayloadType.COMPRESSABLE)
         .addResponseParameters(ResponseParameters.newBuilder()
             .setSize(31415))
         .addResponseParameters(ResponseParameters.newBuilder()
@@ -513,22 +507,18 @@ public abstract class AbstractInteropTest {
     final List<StreamingOutputCallResponse> goldenResponses = Arrays.asList(
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[31415])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[9])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[2653])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[58979])))
             .build());
 
@@ -692,22 +682,18 @@ public abstract class AbstractInteropTest {
     final List<StreamingOutputCallResponse> goldenResponses = Arrays.asList(
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[31415])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[9])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[2653])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[58979])))
             .build());
 
@@ -735,7 +721,7 @@ public abstract class AbstractInteropTest {
       Object actualResponse = queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
       assertNotNull("Timed out waiting for response", actualResponse);
       if (actualResponse instanceof Throwable) {
-        throw new AssertionError((Throwable) actualResponse);
+        throw new AssertionError(actualResponse);
       }
       assertEquals(goldenResponses.get(i), actualResponse);
     }
@@ -787,7 +773,6 @@ public abstract class AbstractInteropTest {
         .build();
     final StreamingOutputCallResponse goldenResponse = StreamingOutputCallResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[31415])))
         .build();
 
@@ -811,7 +796,6 @@ public abstract class AbstractInteropTest {
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     StreamingOutputCallRequest.Builder streamingOutputBuilder =
         StreamingOutputCallRequest.newBuilder();
-    streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
       streamingOutputBuilder.addResponseParameters(
           ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
@@ -835,7 +819,6 @@ public abstract class AbstractInteropTest {
     assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
-      assertEquals(COMPRESSABLE, response.getPayload().getType());
       int length = response.getPayload().getBody().size();
       int expectedSize = responseSizes.get(ix % responseSizes.size());
       assertEquals("comparison failed at index " + ix, expectedSize, length);
@@ -851,7 +834,6 @@ public abstract class AbstractInteropTest {
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     StreamingOutputCallRequest.Builder streamingOutputBuilder =
         StreamingOutputCallRequest.newBuilder();
-    streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
       streamingOutputBuilder.addResponseParameters(
           ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
@@ -871,7 +853,6 @@ public abstract class AbstractInteropTest {
     assertEquals(responseSizes.size() * numRequests, recorder.getValues().size());
     for (int ix = 0; ix < recorder.getValues().size(); ++ix) {
       StreamingOutputCallResponse response = recorder.getValues().get(ix);
-      assertEquals(COMPRESSABLE, response.getPayload().getType());
       int length = response.getPayload().getBody().size();
       int expectedSize = responseSizes.get(ix % responseSizes.size());
       assertEquals("comparison failed at index " + ix, expectedSize, length);
@@ -881,23 +862,20 @@ public abstract class AbstractInteropTest {
   @Test
   public void serverStreamingShouldBeFlowControlled() throws Exception {
     final StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-        .setResponseType(COMPRESSABLE)
         .addResponseParameters(ResponseParameters.newBuilder().setSize(100000))
         .addResponseParameters(ResponseParameters.newBuilder().setSize(100001))
         .build();
     final List<StreamingOutputCallResponse> goldenResponses = Arrays.asList(
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[100000]))).build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[100001]))).build());
 
     long start = System.nanoTime();
 
-    final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<Object>(10);
+    final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<>(10);
     ClientCall<StreamingOutputCallRequest, StreamingOutputCallResponse> call =
         channel.newCall(TestServiceGrpc.getStreamingOutputCallMethod(), CallOptions.DEFAULT);
     call.start(new ClientCall.Listener<StreamingOutputCallResponse>() {
@@ -942,14 +920,11 @@ public abstract class AbstractInteropTest {
     assumeEnoughMemory();
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[unaryPayloadLength()])))
         .setResponseSize(10)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[10])))
         .build();
 
@@ -961,11 +936,9 @@ public abstract class AbstractInteropTest {
     assumeEnoughMemory();
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseSize(unaryPayloadLength())
-        .setResponseType(PayloadType.COMPRESSABLE)
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[unaryPayloadLength()])))
         .build();
 
@@ -984,8 +957,8 @@ public abstract class AbstractInteropTest {
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
     stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
-    AtomicReference<Metadata> trailersCapture = new AtomicReference<Metadata>();
-    AtomicReference<Metadata> headersCapture = new AtomicReference<Metadata>();
+    AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
+    AtomicReference<Metadata> headersCapture = new AtomicReference<>();
     stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
 
     assertNotNull(stub.emptyCall(EMPTY));
@@ -1007,14 +980,13 @@ public abstract class AbstractInteropTest {
     fixedHeaders.put(Util.METADATA_KEY, contextValue);
     stub = MetadataUtils.attachHeaders(stub, fixedHeaders);
     // .. and expect it to be echoed back in trailers
-    AtomicReference<Metadata> trailersCapture = new AtomicReference<Metadata>();
-    AtomicReference<Metadata> headersCapture = new AtomicReference<Metadata>();
+    AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
+    AtomicReference<Metadata> headersCapture = new AtomicReference<>();
     stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
 
     List<Integer> responseSizes = Arrays.asList(50, 100, 150, 200);
     Messages.StreamingOutputCallRequest.Builder streamingOutputBuilder =
         Messages.StreamingOutputCallRequest.newBuilder();
-    streamingOutputBuilder.setResponseType(COMPRESSABLE);
     for (Integer size : responseSizes) {
       streamingOutputBuilder.addResponseParameters(
           ResponseParameters.newBuilder().setSize(size).setIntervalUs(0));
@@ -1107,7 +1079,6 @@ public abstract class AbstractInteropTest {
         .setSize(1)
         .setIntervalUs(10000);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
-        .setResponseType(PayloadType.COMPRESSABLE)
         .addResponseParameters(responseParameters)
         .addResponseParameters(responseParameters)
         .addResponseParameters(responseParameters)
@@ -1189,7 +1160,7 @@ public abstract class AbstractInteropTest {
     MethodDescriptor<StreamingOutputCallRequest, StreamingOutputCallResponse> md =
         TestServiceGrpc.getStreamingOutputCallMethod();
     ByteSizeMarshaller<StreamingOutputCallResponse> mar =
-        new ByteSizeMarshaller<StreamingOutputCallResponse>(md.getResponseMarshaller());
+        new ByteSizeMarshaller<>(md.getResponseMarshaller());
     blockingServerStreamingCall(
         blockingStub.getChannel(),
         md.toBuilder(md.getRequestMarshaller(), mar).build(),
@@ -1214,7 +1185,7 @@ public abstract class AbstractInteropTest {
     MethodDescriptor<StreamingOutputCallRequest, StreamingOutputCallResponse> md =
         TestServiceGrpc.getStreamingOutputCallMethod();
     ByteSizeMarshaller<StreamingOutputCallRequest> mar =
-        new ByteSizeMarshaller<StreamingOutputCallRequest>(md.getRequestMarshaller());
+        new ByteSizeMarshaller<>(md.getRequestMarshaller());
     blockingServerStreamingCall(
         blockingStub.getChannel(),
         md.toBuilder(mar, md.getResponseMarshaller()).build(),
@@ -1246,7 +1217,7 @@ public abstract class AbstractInteropTest {
     MethodDescriptor<StreamingOutputCallRequest, StreamingOutputCallResponse> md =
         TestServiceGrpc.getStreamingOutputCallMethod();
     ByteSizeMarshaller<StreamingOutputCallRequest> mar =
-        new ByteSizeMarshaller<StreamingOutputCallRequest>(md.getRequestMarshaller());
+        new ByteSizeMarshaller<>(md.getRequestMarshaller());
     blockingServerStreamingCall(
         blockingStub.getChannel(),
         md.toBuilder(mar, md.getResponseMarshaller()).build(),
@@ -1273,7 +1244,7 @@ public abstract class AbstractInteropTest {
     MethodDescriptor<StreamingOutputCallRequest, StreamingOutputCallResponse> md =
         TestServiceGrpc.getStreamingOutputCallMethod();
     ByteSizeMarshaller<StreamingOutputCallRequest> mar =
-        new ByteSizeMarshaller<StreamingOutputCallRequest>(md.getRequestMarshaller());
+        new ByteSizeMarshaller<>(md.getRequestMarshaller());
     blockingServerStreamingCall(
         blockingStub.getChannel(),
         md.toBuilder(mar, md.getResponseMarshaller()).build(),
@@ -1322,22 +1293,19 @@ public abstract class AbstractInteropTest {
     final List<StreamingOutputCallResponse> goldenResponses = Arrays.asList(
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[3])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[1])))
             .build(),
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-                .setType(PayloadType.COMPRESSABLE)
                 .setBody(ByteString.copyFrom(new byte[4])))
             .build());
 
     final ArrayBlockingQueue<StreamingOutputCallResponse> responses =
-        new ArrayBlockingQueue<StreamingOutputCallResponse>(3);
+        new ArrayBlockingQueue<>(3);
     final SettableFuture<Void> completed = SettableFuture.create();
     final SettableFuture<Void> errorSeen = SettableFuture.create();
     StreamObserver<StreamingOutputCallResponse> responseObserver =
@@ -1384,24 +1352,20 @@ public abstract class AbstractInteropTest {
     final int requestSize = 271828;
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseSize(responseSize)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[requestSize])))
         .build();
     final StreamingOutputCallRequest streamingRequest = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder().setSize(responseSize))
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[requestSize])))
         .build();
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[responseSize])))
         .build();
     final StreamingOutputCallResponse goldenStreamingResponse =
         StreamingOutputCallResponse.newBuilder()
             .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[responseSize])))
         .build();
     final byte[] trailingBytes =
@@ -1413,8 +1377,8 @@ public abstract class AbstractInteropTest {
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
     TestServiceGrpc.TestServiceBlockingStub blockingStub = this.blockingStub;
     blockingStub = MetadataUtils.attachHeaders(blockingStub, metadata);
-    AtomicReference<Metadata> headersCapture = new AtomicReference<Metadata>();
-    AtomicReference<Metadata> trailersCapture = new AtomicReference<Metadata>();
+    AtomicReference<Metadata> headersCapture = new AtomicReference<>();
+    AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
     blockingStub = MetadataUtils.captureMetadata(blockingStub, headersCapture, trailersCapture);
     SimpleResponse response = blockingStub.unaryCall(request);
 
@@ -1432,8 +1396,8 @@ public abstract class AbstractInteropTest {
     metadata.put(Util.ECHO_TRAILING_METADATA_KEY, trailingBytes);
     TestServiceGrpc.TestServiceStub stub = asyncStub;
     stub = MetadataUtils.attachHeaders(stub, metadata);
-    headersCapture = new AtomicReference<Metadata>();
-    trailersCapture = new AtomicReference<Metadata>();
+    headersCapture = new AtomicReference<>();
+    trailersCapture = new AtomicReference<>();
     stub = MetadataUtils.captureMetadata(stub, headersCapture, trailersCapture);
 
     StreamRecorder<Messages.StreamingOutputCallResponse> recorder = StreamRecorder.create();
@@ -1632,14 +1596,13 @@ public abstract class AbstractInteropTest {
     // cast to ServiceAccountCredentials to double-check the right type of object was created.
     GoogleCredentials credentials =
         ServiceAccountCredentials.class.cast(GoogleCredentials.fromStream(credentialsStream));
-    credentials = credentials.createScoped(Arrays.<String>asList(authScope));
+    credentials = credentials.createScoped(Arrays.asList(authScope));
     TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
         .withCallCredentials(MoreCallCredentials.from(credentials));
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setFillOauthScope(true)
         .setResponseSize(314159)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
         .build();
@@ -1656,7 +1619,6 @@ public abstract class AbstractInteropTest {
         .setOauthScope(response.getOauthScope())
         .setUsername(response.getUsername())
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
     assertEquals(goldenResponse, response);
@@ -1671,7 +1633,6 @@ public abstract class AbstractInteropTest {
         .setFillUsername(true)
         .setFillOauthScope(true)
         .setResponseSize(314159)
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
         .build();
@@ -1686,7 +1647,6 @@ public abstract class AbstractInteropTest {
         .setOauthScope(response.getOauthScope())
         .setUsername(response.getUsername())
         .setPayload(Payload.newBuilder()
-            .setType(PayloadType.COMPRESSABLE)
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
     assertEquals(goldenResponse, response);
@@ -1695,7 +1655,6 @@ public abstract class AbstractInteropTest {
   /** Test JWT-based auth. */
   public void jwtTokenCreds(InputStream serviceAccountJson) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
-        .setResponseType(PayloadType.COMPRESSABLE)
         .setResponseSize(314159)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
@@ -1716,7 +1675,7 @@ public abstract class AbstractInteropTest {
       throws Exception {
     GoogleCredentials utilCredentials =
         GoogleCredentials.fromStream(credentialsStream);
-    utilCredentials = utilCredentials.createScoped(Arrays.<String>asList(authScope));
+    utilCredentials = utilCredentials.createScoped(Arrays.asList(authScope));
     AccessToken accessToken = utilCredentials.refreshAccessToken();
 
     OAuth2Credentials credentials = OAuth2Credentials.create(accessToken);
@@ -1779,7 +1738,7 @@ public abstract class AbstractInteropTest {
 
     stub.unaryCall(SimpleRequest.getDefaultInstance());
 
-    List<Certificate> certificates = Lists.newArrayList();
+    List<Certificate> certificates;
     SSLSession sslSession =
         serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
     try {
