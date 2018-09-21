@@ -513,12 +513,14 @@ final class BinlogHelper {
           String methodOrSvc = configMatcher.group(1);
           String binlogOptionStr = configMatcher.group(2);
           if (methodOrSvc.equals("*")) {
+            // parse config for "*"
             checkState(
                 globalLog == null,
                 "Duplicate entry, this is fatal: " + configuration);
             globalLog = createBinaryLog(sink, binlogOptionStr);
             logger.log(Level.INFO, "Global binlog: {0}", binlogOptionStr);
           } else if (isServiceGlob(methodOrSvc)) {
+            // parse config for a service, e.g. "service/*"
             String service = MethodDescriptor.extractFullServiceName(methodOrSvc);
             checkState(
                 !perServiceLogs.containsKey(service),
@@ -529,6 +531,7 @@ final class BinlogHelper {
                 "Service binlog: service={0} config={1}",
                 new Object[] {service, binlogOptionStr});
           } else if (methodOrSvc.startsWith("-")) {
+            // parse config for a method, e.g. "-service/method"
             String blacklistedMethod = methodOrSvc.substring(1);
             if (blacklistedMethod.length() == 0) {
               continue;
@@ -541,7 +544,7 @@ final class BinlogHelper {
                 "Duplicate entry, this is fatal: " + configuration);
             blacklistedMethods.add(blacklistedMethod);
           } else {
-            // assume fully qualified method name
+            // parse config for a fully qualified method, e.g "serice/method"
             checkState(
                 !perMethodLogs.containsKey(methodOrSvc),
                 "Duplicate entry, this is fatal: " + configuration);
