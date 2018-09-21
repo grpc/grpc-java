@@ -135,8 +135,6 @@ public class CodedInputStreamBenchmark {
 
   private interface Strategy {
     CodedInputStream newCodedInput();
-
-    void reset();
   }
 
   private static final class ArrayStrategy implements Strategy {
@@ -150,11 +148,6 @@ public class CodedInputStreamBenchmark {
     public CodedInputStream newCodedInput() {
       return CodedInputStream.newInstance(message);
     }
-
-    @Override
-    public void reset() {
-      // Nothing to do.
-    }
   }
 
   private static final class StreamStrategy implements Strategy {
@@ -167,10 +160,6 @@ public class CodedInputStreamBenchmark {
     @Override
     public CodedInputStream newCodedInput() {
       return CodedInputStream.newInstance(new ByteArrayInputStream(data));
-    }
-
-    @Override
-    public void reset() {
     }
   }
 
@@ -190,11 +179,6 @@ public class CodedInputStreamBenchmark {
     @Override
     public CodedInputStream newCodedInput() {
       return CodedInputStream.newInstance(buffer);
-    }
-
-    @Override
-    public void reset() {
-      buffer.clear();
     }
   }
 
@@ -221,11 +205,6 @@ public class CodedInputStreamBenchmark {
     @Override
     public CodedInputStream newCodedInput() {
       return CodedInputStream.newInstance(input);
-    }
-
-    @Override
-    public void reset() {
-      // Nothing to do
     }
   }
 }
