@@ -7,8 +7,4 @@ coverage:
       default:
         target: auto
         threshold: 1
-    changes:
-      default:
-        branches:
-          - nonExistantBranchToDisableTheFeature
 comment: off
