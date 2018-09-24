@@ -30,6 +30,7 @@ public final class GoogleDefaultChannelBuilderTest {
   @Test
   public void buildsNettyChannel() throws Exception {
     GoogleDefaultChannelBuilder builder = GoogleDefaultChannelBuilder.forTarget("localhost:8080");
+    builder.build();
 
     ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
     assertThat(protocolNegotiator).isInstanceOf(GoogleDefaultProtocolNegotiator.class);

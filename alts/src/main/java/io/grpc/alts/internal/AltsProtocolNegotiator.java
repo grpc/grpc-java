@@ -29,7 +29,7 @@ import io.grpc.Status;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.alts.internal.TsiHandshakeHandler.TsiHandshakeCompletionEvent;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiator;
+import io.grpc.netty.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
