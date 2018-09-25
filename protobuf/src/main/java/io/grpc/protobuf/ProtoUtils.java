@@ -41,7 +41,7 @@ public final class ProtoUtils {
    * <p>If you need custom parsing behavior for protos, you will need to make your own
    * {@code MethodDescriptor.Marshaller} for the time being.
    *
-   * @since 1.0.0
+   * @since 1.16.0
    */
   public static void setExtensionRegistry(ExtensionRegistry registry) {
     ProtoLiteUtils.setExtensionRegistry(registry);
