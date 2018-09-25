@@ -24,8 +24,7 @@ import javax.annotation.Nullable;
 
 /** Handshaker options for creating ALTS client channel. */
 public final class AltsClientOptions extends AltsHandshakerOptions {
-  // targetName is the server service account name for secure name checking. This field is not yet
-  // supported.
+  // targetName is the server service account name for secure name checking.
   @Nullable private final String targetName;
   // targetServiceAccounts contains a list of expected target service accounts. One of these service
   // accounts should match peer service account in the handshaker result. Otherwise, the handshake

@@ -35,20 +35,19 @@ public final class AltsChannelBuilderTest {
         AltsChannelBuilder.forTarget("localhost:8080").enableUntrustedAltsForTesting();
 
     ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
-    AltsClientOptions altsClientOptions = builder.getAltsClientOptionsForTest();
-
+    AltsClientOptions.Builder altsClientOptionsBuilder;
+  
     assertThat(protocolNegotiator).isNull();
-    assertThat(altsClientOptions).isNull();
 
     builder.build();
 
     protocolNegotiator = builder.getProtocolNegotiatorForTest();
-    altsClientOptions = builder.getAltsClientOptionsForTest();
+    altsClientOptionsBuilder = builder.getAltsClientOptionsBuilderForTest();
 
     assertThat(protocolNegotiator).isNotNull();
     assertThat(protocolNegotiator).isInstanceOf(AltsProtocolNegotiator.class);
 
-    assertThat(altsClientOptions).isNotNull();
+    assertThat(altsClientOptionsBuilder).isNotNull();
     RpcProtocolVersions expectedVersions =
         RpcProtocolVersions.newBuilder()
             .setMaxRpcVersion(
@@ -56,6 +55,7 @@ public final class AltsChannelBuilderTest {
             .setMinRpcVersion(
                 RpcProtocolVersions.Version.newBuilder().setMajor(2).setMinor(1).build())
             .build();
-    assertThat(altsClientOptions.getRpcProtocolVersions()).isEqualTo(expectedVersions);
+    assertThat(altsClientOptionsBuilder.build().getRpcProtocolVersions())
+        .isEqualTo(expectedVersions);
   }
 }
