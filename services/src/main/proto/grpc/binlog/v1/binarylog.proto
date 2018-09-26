@@ -12,15 +12,22 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-// Service exported by server reflection
+
+// The canonical version of this proto can be found at
+// https://github.com/grpc/grpc-proto/blob/master/grpc/binlog/v1/binarylog.proto
 
 syntax = "proto3";
+
 package grpc.binarylog.v1;
+
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+
+option go_package = "google.golang.org/grpc/binarylog/grpc_binarylog_v1";
 option java_multiple_files = true;
 option java_package = "io.grpc.binarylog.v1";
 option java_outer_classname = "BinaryLogProto";
+
 // Log entry we store in binary logs
 message GrpcLogEntry {
   // Enumerates the type of event
@@ -54,27 +61,33 @@ message GrpcLogEntry {
     // may arrive even though the application requested to cancel the RPC.
     EVENT_TYPE_CANCEL = 7;
   }
+
   // Enumerates the entity that generates the log entry
   enum Logger {
     LOGGER_UNKNOWN = 0;
     LOGGER_CLIENT = 1;
     LOGGER_SERVER = 2;
   }
+
   // The timestamp of the binary log message
   google.protobuf.Timestamp timestamp = 1;
+
   // Uniquely identifies a call. The value must not be 0 in order to disambiguate
   // from an unset value.
   // Each call may have several log entries, they will all have the same call_id.
   // Nothing is guaranteed about their value other than they are unique across
   // different RPCs in the same gRPC process.
   uint64 call_id = 2;
+
   // The entry sequence id for this call. The first GrpcLogEntry has a
   // value of 1, to disambiguate from an unset value. The purpose of
   // this field is to detect missing entries in environments where
   // durability or ordering is not guaranteed.
   uint64 sequence_id_within_call = 3;
+
   EventType type = 4;
   Logger logger = 5;  // One of the above Logger enum
+
   // The logger uses one of the following fields to record the payload,
   // according to the type of the log entry.
   oneof payload {
@@ -84,8 +97,10 @@ message GrpcLogEntry {
     Message message = 8;
     Trailer trailer = 9;
   }
+
   // true if payload does not represent the full message or metadata.
   bool payload_truncated = 10;
+
   // Peer address information, will only be recorded on the first
   // incoming event. On client side, peer is logged on
   // EVENT_TYPE_SERVER_HEADER normally or EVENT_TYPE_SERVER_TRAILER in
@@ -93,38 +108,48 @@ message GrpcLogEntry {
   // logged on EVENT_TYPE_CLIENT_HEADER.
   Address peer = 11;
 };
+
 message ClientHeader {
   // This contains only the metadata from the application.
   Metadata metadata = 1;
+
   // The name of the RPC method, which looks something like:
   // /<service>/<method>
   // Note the leading "/" character.
   string method_name = 2;
+
   // A single process may be used to run multiple virtual
   // servers with different identities.
   // The authority is the name of such a server identitiy.
   // It is typically a portion of the URI in the form of
   // <host> or <host>:<port> .
   string authority = 3;
+
   // the RPC timeout
   google.protobuf.Duration timeout = 4;
 }
+
 message ServerHeader {
   // This contains only the metadata from the application.
   Metadata metadata = 1;
 }
+
 message Trailer {
   // This contains only the metadata from the application.
   Metadata metadata = 1;
+
   // The gRPC status code.
   uint32 status_code = 2;
+
   // An original status message before any transport specific
   // encoding.
   string status_message = 3;
+
   // The value of the 'grpc-status-details-bin' metadata key. If
   // present, this is always an encoded 'google.rpc.Status' message.
   bytes status_details = 4;
 }
+
 // Message payload, used by CLIENT_MESSAGE and SERVER_MESSAGE
 message Message {
   // Length of the message. It may not be the same as the length of the
@@ -133,6 +158,7 @@ message Message {
   // May be truncated or omitted.
   bytes data = 2;
 }
+
 // A list of metadata pairs, used in the payload of client header,
 // server header, and server trailer.
 // Implementations may omit some entries to honor the header limits
@@ -149,15 +175,21 @@ message Message {
 // - entries added for call credentials
 //
 // Implementations must always log grpc-trace-bin if it is present.
-// The pair will count towards the size limit,
+// Practically speaking it will only be visible on server side because
+// grpc-trace-bin is managed by low level client side mechanisms
+// inaccessible from the application level. On server side, the
+// header is just a normal metadata key.
+// The pair will not count towards the size limit.
 message Metadata {
   repeated MetadataEntry entry = 1;
 }
+
 // A metadata key value pair
 message MetadataEntry {
   string key = 1;
   bytes value = 2;
 }
+
 // Address information
 message Address {
   enum Type {

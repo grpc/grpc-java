@@ -27,8 +27,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Duration;
-import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Durations;
+import com.google.protobuf.util.Timestamps;
 import com.google.re2j.Matcher;
 import com.google.re2j.Pattern;
 import io.grpc.Attributes;
@@ -120,10 +120,7 @@ final class BinlogHelper {
 
     GrpcLogEntry.Builder newTimestampedBuilder() {
       long epochNanos = timeProvider.currentTimeNanos();
-      return GrpcLogEntry.newBuilder()
-          .setTimestamp(Timestamp.newBuilder()
-              .setSeconds(epochNanos / NANOS_PER_SECOND)
-              .setNanos((int) (epochNanos % NANOS_PER_SECOND)));
+      return GrpcLogEntry.newBuilder().setTimestamp(Timestamps.fromNanos(epochNanos));
     }
 
     @Override
@@ -139,9 +136,10 @@ final class BinlogHelper {
         // null on client side
         @Nullable SocketAddress peerAddress) {
       Preconditions.checkArgument(methodName != null, "methodName can not be null");
-      // Java does not include the leading '/'. To be consistent with the rest of gRPC we must
-      // include the '/' in the fully qualified name for binlogs.
-      Preconditions.checkArgument(!methodName.startsWith("/"));
+      Preconditions.checkArgument(
+          !methodName.startsWith("/"),
+          "in grpc-java method names should not have a leading '/'. However this class will "
+              + "add one to be consistent with language agnostic conventions.");
       Preconditions.checkArgument(
           peerAddress == null || logger == GrpcLogEntry.Logger.LOGGER_SERVER,
           "peerSocket can only be specified for server");
@@ -392,12 +390,9 @@ final class BinlogHelper {
     long currentTimeNanos();
 
     TimeProvider SYSTEM_TIME_PROVIDER = new TimeProvider() {
-      final long offsetNanos =
-          TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis()) - System.nanoTime();
-
       @Override
       public long currentTimeNanos() {
-        return System.nanoTime() + offsetNanos;
+        return TimeUnit.MILLISECONDS.toNanos(System.currentTimeMillis());
       }
     };
   }
