@@ -55,7 +55,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
   private static final Logger logger = Logger.getLogger(AltsChannelBuilder.class.getName());
   private final NettyChannelBuilder delegate;
   private final ImmutableList.Builder<String> targetServiceAccountsBuilder =
-      new ImmutableList.Builder<>();
+      ImmutableList.builder();
   private ObjectPool<ManagedChannel> handshakerChannelPool =
       SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
   private boolean enableUntrustedAlts;
@@ -156,7 +156,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
                       .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
                       .setTargetServiceAccounts(targetServiceAccounts)
                       .setTargetName(authority)
-                      .build(); 
+                      .build();
               return AltsTsiHandshaker.newClient(
                   HandshakerServiceGrpc.newStub(handshakerChannelPool.getObject()),
                   handshakerOptions);
