@@ -159,6 +159,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Only null after channel is terminated. Must be assigned from the channelExecutor.
   private NameResolver nameResolver;
 
+  // Set when the NameResolver is initially created. When we create a new NameResolver for the same
+  // target, the new instance must have the same value.
+  private final String cachedAuthority;
+
   // Must be accessed from the channelExecutor.
   private boolean nameResolverStarted;
 
@@ -552,6 +556,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    this.cachedAuthority = checkNotNull(nameResolver.getServiceAuthority(), "serviceAuthority");
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
     if (maxTraceEvents > 0) {
@@ -798,7 +803,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   @Override
   public String authority() {
-    return interceptorChannel.authority();
+    return checkNotNull(cachedAuthority, "cachedAuthority");
   }
 
   private Executor getCallExecutor(CallOptions callOptions) {
@@ -828,8 +833,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public String authority() {
-      String authority = nameResolver.getServiceAuthority();
-      return checkNotNull(authority, "authority");
+      return checkNotNull(cachedAuthority, "cachedAuthority");
     }
   }
 

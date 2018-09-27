@@ -2801,6 +2801,14 @@ public class ManagedChannelImplTest {
     mychannel.shutdownNow();
   }
 
+  @Test
+  public void getAuthorityAfterShutdown() {
+    createChannel();
+    assertEquals(SERVICE_NAME, channel.authority());
+    channel.shutdownNow();
+    assertEquals(SERVICE_NAME, channel.authority());
+  }
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 
