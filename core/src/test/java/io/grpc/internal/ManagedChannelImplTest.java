@@ -2802,10 +2802,10 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void getAuthorityAfterShutdown() {
+  public void getAuthorityAfterShutdown() throws Exception {
     createChannel();
     assertEquals(SERVICE_NAME, channel.authority());
-    channel.shutdownNow();
+    channel.shutdownNow().awaitTermination(1, TimeUnit.SECONDS);
     assertEquals(SERVICE_NAME, channel.authority());
   }
 
