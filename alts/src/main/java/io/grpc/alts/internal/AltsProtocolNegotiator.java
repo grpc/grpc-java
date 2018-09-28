@@ -19,6 +19,7 @@ package io.grpc.alts.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.Any;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.Grpc;
@@ -41,18 +42,11 @@ import io.netty.util.AsciiString;
  */
 public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
-  private static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
-  private static final Attributes.Key<AltsAuthContext> ALTS_CONTEXT_KEY =
-      Attributes.Key.create("ALTS_CONTEXT_KEY");
+  public static final AttributeMap.Key<Grpc.TransportAttr, TsiPeer> TSI_PEER_KEY =
+      AttributeMap.Key.define("TSI_PEER");
+  public static final AttributeMap.Key<Grpc.TransportAttr, AltsAuthContext> ALTS_CONTEXT_KEY =
+      AttributeMap.Key.define("ALTS_CONTEXT_KEY");
   private static final AsciiString scheme = AsciiString.of("https");
-
-  public static Attributes.Key<TsiPeer> getTsiPeerAttributeKey() {
-    return TSI_PEER_KEY;
-  }
-
-  public static Attributes.Key<AltsAuthContext> getAltsAuthContextAttributeKey() {
-    return ALTS_CONTEXT_KEY;
-  }
 
   /** Creates a negotiator used for ALTS client. */
   public static AltsProtocolNegotiator createClientNegotiator(
@@ -137,7 +131,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
               fail(ctx, Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException());
             }
             grpcHandler.handleProtocolNegotiationCompleted(
-                Attributes.newBuilder()
+                AttributeMap.<Grpc.TransportAttr>newBuilder()
                     .set(TSI_PEER_KEY, altsEvt.peer())
                     .set(ALTS_CONTEXT_KEY, altsContext)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())

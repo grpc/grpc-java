@@ -17,6 +17,8 @@
 package io.grpc;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.AttributeMap;
+import io.grpc.Grpc;
 import javax.annotation.Nullable;
 
 /**
@@ -55,8 +57,14 @@ abstract class PartialForwardingClientCall<ReqT, RespT> extends ClientCall<ReqT,
   }
 
   @Override
+  @Deprecated
   public Attributes getAttributes() {
     return delegate().getAttributes();
+  }
+
+  @Override
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
+    return delegate().getTransportAttrs();
   }
 
   @Override

@@ -23,11 +23,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.ForwardingTestUtil;
+import io.grpc.Grpc;
 import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
@@ -148,9 +150,9 @@ public class ForwardingClientStreamTest {
   }
 
   @Test
-  public void getAttributesTest() {
-    Attributes attr = Attributes.newBuilder().build();
-    when(mock.getAttributes()).thenReturn(attr);
-    assertSame(attr, forward.getAttributes());
+  public void getTransportAttrsTest() {
+    AttributeMap<Grpc.TransportAttr> attr = AttributeMap.<Grpc.TransportAttr>newBuilder().build();
+    when(mock.getTransportAttrs()).thenReturn(attr);
+    assertSame(attr, forward.getTransportAttrs());
   }
 }

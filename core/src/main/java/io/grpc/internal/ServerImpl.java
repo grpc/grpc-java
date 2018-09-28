@@ -29,12 +29,14 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ServerStats;
@@ -364,7 +366,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final class ServerTransportListenerImpl implements ServerTransportListener {
     private final ServerTransport transport;
     private Future<?> handshakeTimeoutFuture;
-    private Attributes attributes;
+    private AttributeMap<Grpc.TransportAttr> attributes;
 
     ServerTransportListenerImpl(ServerTransport transport) {
       this.transport = transport;
@@ -390,13 +392,17 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     @Override
-    public Attributes transportReady(Attributes attributes) {
+    public AttributeMap<Grpc.TransportAttr> transportReady(
+        AttributeMap<Grpc.TransportAttr> attributes) {
       handshakeTimeoutFuture.cancel(false);
       handshakeTimeoutFuture = null;
 
       for (ServerTransportFilter filter : transportFilters) {
-        attributes = Preconditions.checkNotNull(filter.transportReady(attributes),
-            "Filter %s returned null", filter);
+        attributes =
+            AttributeMap.fromAttributes(
+                Preconditions.checkNotNull(
+                    filter.transportReady(Attributes.fromAttributeMap(attributes)),
+                    "Filter %s returned null", filter));
       }
       this.attributes = attributes;
       return attributes;
@@ -409,7 +415,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         handshakeTimeoutFuture = null;
       }
       for (ServerTransportFilter filter : transportFilters) {
-        filter.transportTerminated(attributes);
+        filter.transportTerminated(Attributes.fromAttributeMap(attributes));
       }
       transportClosed(transport);
     }

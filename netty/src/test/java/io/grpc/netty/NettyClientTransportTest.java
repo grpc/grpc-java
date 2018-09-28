@@ -37,6 +37,7 @@ import static org.junit.Assert.fail;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
@@ -507,7 +508,7 @@ public class NettyClientTransportTest {
     NettyClientTransport transport = newTransport(new NoopProtocolNegotiator());
     callMeMaybe(transport.start(clientTransportListener));
 
-    assertEquals(Attributes.EMPTY, transport.getAttributes());
+    assertEquals(AttributeMap.<Grpc.TransportAttr>getEmptyInstance(), transport.getAttributes());
   }
 
   @Test
@@ -534,8 +535,8 @@ public class NettyClientTransportTest {
     Rpc rpc = new Rpc(transport).halfClose();
     rpc.waitForResponse();
 
-    assertNotNull(rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION));
-    assertEquals(address, rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+    assertNotNull(rpc.stream.getTransportAttrs().get(Grpc.TRANSPORT_ATTR_SSL_SESSION));
+    assertEquals(address, rpc.stream.getTransportAttrs().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 
   @Test
@@ -768,7 +769,8 @@ public class NettyClientTransportTest {
         }
 
         @Override
-        public Attributes transportReady(Attributes transportAttrs) {
+        public AttributeMap<Grpc.TransportAttr> transportReady(
+            AttributeMap<Grpc.TransportAttr> transportAttrs) {
           return transportAttrs;
         }
 

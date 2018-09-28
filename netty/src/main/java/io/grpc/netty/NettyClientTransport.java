@@ -24,8 +24,10 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -316,7 +318,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getAttributes() {
     return handler.getAttributes();
   }
 

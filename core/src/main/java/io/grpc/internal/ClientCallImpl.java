@@ -30,7 +30,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.Codec;
@@ -41,6 +41,7 @@ import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.InternalDecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -448,11 +449,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
     if (stream != null) {
-      return stream.getAttributes();
+      return stream.getTransportAttrs();
     }
-    return Attributes.EMPTY;
+    return AttributeMap.getEmptyInstance();
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {

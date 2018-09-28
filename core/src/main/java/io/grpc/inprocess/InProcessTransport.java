@@ -23,7 +23,9 @@ import static java.lang.Math.max;
 import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Compressor;
@@ -127,13 +129,15 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     }
     return new Runnable() {
       @Override
-      @SuppressWarnings("deprecation")
       public void run() {
         synchronized (InProcessTransport.this) {
-          Attributes serverTransportAttrs = Attributes.newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InProcessSocketAddress(name))
-              .build();
-          serverStreamAttributes = serverTransportListener.transportReady(serverTransportAttrs);
+          AttributeMap<Grpc.TransportAttr> serverTransportAttrs =
+              AttributeMap.<Grpc.TransportAttr>newBuilder()
+                  .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InProcessSocketAddress(name))
+                  .build();
+          serverStreamAttributes =
+              Attributes.fromAttributeMap(
+                  serverTransportListener.transportReady(serverTransportAttrs));
           clientTransportListener.transportReady();
         }
       }
@@ -228,8 +232,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   }
 
   @Override
-  public Attributes getAttributes() {
-    return attributes;
+  public AttributeMap<Grpc.TransportAttr> getAttributes() {
+    return AttributeMap.fromAttributes(attributes);
   }
 
   @Override
@@ -659,8 +663,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      public Attributes getAttributes() {
-        return Attributes.EMPTY;
+      public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
+        return AttributeMap.getEmptyInstance();
       }
 
       @Override

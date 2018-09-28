@@ -268,7 +268,12 @@ public abstract class ClientCall<ReqT, RespT> {
    * @throws IllegalStateException (optional) if called before permitted
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2607")
+  @Deprecated
   public Attributes getAttributes() {
-    return Attributes.EMPTY;
+    return Attributes.fromAttributeMap(getTransportAttrs());
+  }
+
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
+    return AttributeMap.getEmptyInstance();
   }
 }

@@ -16,8 +16,6 @@
 
 package io.grpc;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.base.Objects;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -33,14 +31,22 @@ import javax.annotation.concurrent.Immutable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1764")
 @Immutable
-public final class Attributes {
+public final class AttributeMap<AT> {
 
-  final Map<AttributeMap.Key<?, ?>, Object> data;
+  // TODO(zhangkun83): to be accessible from Attributes only.
+  // Make this private after Attributes is deleted.
+  final Map<Key<? extends AT, ?>, Object> data;
 
-  public static final Attributes EMPTY =
-      new Attributes(Collections.<AttributeMap.Key<?, ?>, Object>emptyMap());
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private static final AttributeMap EMPTY =
+      new AttributeMap(Collections.<Key<?, ?>, Object>emptyMap());
 
-  private Attributes(Map<AttributeMap.Key<?, ?>, Object> data) {
+  @SuppressWarnings("unchecked")
+  public static <AT> AttributeMap<AT> getEmptyInstance() {
+    return EMPTY;
+  }
+
+  private AttributeMap(Map<Key<? extends AT, ?>, Object> data) {
     assert data != null;
     this.data = Collections.unmodifiableMap(data);
   }
@@ -50,62 +56,50 @@ public final class Attributes {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public <T> T get(AttributeMap.Key<?, T> key) {
+  public final <T> T get(Key<? extends AT, T> key) {
     return (T) data.get(key);
   }
 
-  Set<AttributeMap.Key<?, ?>> keysForTest() {
+  Set<Key<? extends AT, ?>> keysForTest() {
     return data.keySet();
-  }
-
-  /**
-   * Create a new builder that is pre-populated with the content from a given container.
-   * @deprecated Use {@link Attributes#toBuilder()} on the {@link Attributes} instance instead.
-   *     This method will be removed in the future.
-   */
-  @Deprecated
-  public static Builder newBuilder(Attributes base) {
-    checkNotNull(base, "base");
-    return new Builder(base);
   }
 
   /**
    * Create a new builder.
    */
-  public static Builder newBuilder() {
-    return new Builder(EMPTY);
+  @SuppressWarnings("unchecked")
+  public static <AT> Builder<AT> newBuilder() {
+    return new Builder<AT>((AttributeMap<AT>) EMPTY);
+  }
+
+  @SuppressWarnings({"unchecked", "rawtypes"})
+  public static <AT> AttributeMap<AT> fromAttributes(Attributes attrs) {
+    return new AttributeMap(attrs.data);
   }
 
   /**
    * Creates a new builder that is pre-populated with the content of this container.
    * @return a new builder.
    */
-  public Builder toBuilder() {
-    return new Builder(this);
+  public Builder<AT> toBuilder() {
+    return new Builder<AT>(this);
   }
 
-  @SuppressWarnings("unchecked")
-  public static Attributes fromAttributeMap(AttributeMap<?> am) {
-    return new Attributes((Map<AttributeMap.Key<?, ?>, Object>) am.data);
-  }
-
+  /**
+   * Key for an key-value pair.
+   * @param <T> type of the value in the key-value pair
+   */
   @Immutable
-  public static final class Key<T> extends AttributeMap.Key<Object, T> {
-    private Key(String debugString) {
-      super(debugString);
+  public static class Key<AT, T> {
+    private final String debugString;
+
+    protected Key(String debugString) {
+      this.debugString = debugString;
     }
 
-    /**
-     * Factory method for creating instances of {@link Key}.
-     *
-     * @param debugString a string used to describe the key, used for debugging.
-     * @param <T> Key type
-     * @return Key object
-     * @deprecated use {@link #create} instead. This method will be removed in the future.
-     */
-    @Deprecated
-    public static <T> Key<T> of(String debugString) {
-      return new Key<T>(debugString);
+    @Override
+    public String toString() {
+      return debugString;
     }
 
     /**
@@ -115,8 +109,8 @@ public final class Attributes {
      * @param <T> Key type
      * @return Key object
      */
-    public static <T> Key<T> create(String debugString) {
-      return new Key<T>(debugString);
+    public static <AT, T> Key<AT, T> define(String debugString) {
+      return new Key<AT, T>(debugString);
     }
   }
 
@@ -126,7 +120,7 @@ public final class Attributes {
   }
 
   /**
-   * Returns true if the given object is also a {@link Attributes} with an equal attribute values.
+   * Returns true if the given object is also a {@link AttributeMap} with an equal attribute values.
    *
    * <p>Note that if a stored values are mutable, it is possible for two objects to be considered
    * equal at one point in time and not equal at another (due to concurrent mutation of attribute
@@ -135,9 +129,10 @@ public final class Attributes {
    * <p>This method is not implemented efficiently and is meant for testing.
    *
    * @param o an object.
-   * @return true if the given object is a {@link Attributes} equal attributes.
+   * @return true if the given object is a {@link AttributeMap} equal attributes.
    */
   @Override
+  @SuppressWarnings("rawtypes")
   public boolean equals(Object o) {
     if (this == o) {
       return true;
@@ -145,11 +140,11 @@ public final class Attributes {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    Attributes that = (Attributes) o;
+    AttributeMap that = (AttributeMap) o;
     if (data.size() != that.data.size()) {
       return false;
     }
-    for (Entry<AttributeMap.Key<?, ?>, Object> e : data.entrySet()) {
+    for (Entry<Key<? extends AT, ?>, Object> e : data.entrySet()) {
       if (!that.data.containsKey(e.getKey())) {
         return false;
       }
@@ -172,37 +167,37 @@ public final class Attributes {
   @Override
   public int hashCode() {
     int hashCode = 0;
-    for (Entry<AttributeMap.Key<?, ?>, Object> e : data.entrySet()) {
+    for (Entry<Key<? extends AT, ?>, Object> e : data.entrySet()) {
       hashCode += Objects.hashCode(e.getKey(), e.getValue());
     }
     return hashCode;
   }
 
   /**
-   * The helper class to build an Attributes instance.
+   * The helper class to build an AttributeMap instance.
    */
-  public static final class Builder {
-    private Attributes base;
-    private Map<AttributeMap.Key<?, ?>, Object> newdata;
+  public static final class Builder<AT> {
+    private AttributeMap<AT> base;
+    private Map<Key<? extends AT, ?>, Object> newdata;
 
-    private Builder(Attributes base) {
+    private Builder(AttributeMap<AT> base) {
       assert base != null;
       this.base = base;
     }
 
-    private Map<AttributeMap.Key<?, ?>, Object> data(int size) {
+    private Map<Key<? extends AT, ?>, Object> data(int size) {
       if (newdata == null) {
-        newdata = new IdentityHashMap<AttributeMap.Key<?, ?>, Object>(size);
+        newdata = new IdentityHashMap<Key<? extends AT, ?>, Object>(size);
       }
       return newdata;
     }
 
-    public <T> Builder set(AttributeMap.Key<?, T> key, T value) {
+    public <T> Builder<AT> set(Key<? extends AT, T> key, T value) {
       data(1).put(key, value);
       return this;
     }
 
-    public <T> Builder setAll(Attributes other) {
+    public <T> Builder<AT> setAll(AttributeMap<? extends AT> other) {
       data(other.data.size()).putAll(other.data);
       return this;
     }
@@ -210,14 +205,14 @@ public final class Attributes {
     /**
      * Build the attributes.
      */
-    public Attributes build() {
+    public AttributeMap<AT> build() {
       if (newdata != null) {
-        for (Entry<AttributeMap.Key<?, ?>, Object> entry : base.data.entrySet()) {
+        for (Entry<Key<? extends AT, ?>, Object> entry : base.data.entrySet()) {
           if (!newdata.containsKey(entry.getKey())) {
             newdata.put(entry.getKey(), entry.getValue());
           }
         }
-        base = new Attributes(newdata);
+        base = new AttributeMap<AT>(newdata);
         newdata = null;
       }
       return base;

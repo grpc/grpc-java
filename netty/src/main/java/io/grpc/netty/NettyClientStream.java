@@ -23,7 +23,9 @@ import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.InternalKnownTransport;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.Metadata;
@@ -102,7 +104,7 @@ class NettyClientStream extends AbstractClientStream {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
     return state.handler.getAttributes();
   }
 

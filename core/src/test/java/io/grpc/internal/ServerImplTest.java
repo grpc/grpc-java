@@ -47,6 +47,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.Channel;
@@ -408,7 +409,7 @@ public class ServerImplTest {
     createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(
@@ -435,7 +436,7 @@ public class ServerImplTest {
     createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(MESSAGE_ENCODING_KEY, decompressorName);
     StatsTraceContext statsTraceCtx =
@@ -488,7 +489,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     Metadata requestHeaders = new Metadata();
     requestHeaders.put(metadataKey, "value");
@@ -623,10 +624,11 @@ public class ServerImplTest {
     createAndStartServer();
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    Attributes transportAttrs = transportListener.transportReady(Attributes.newBuilder()
+    AttributeMap<Grpc.TransportAttr> transportAttrs = transportListener.transportReady(
+        AttributeMap.<Grpc.TransportAttr>newBuilder()
         .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, remoteAddr).build());
 
-    assertEquals(expectedTransportAttrs, transportAttrs);
+    assertEquals(expectedTransportAttrs, Attributes.fromAttributeMap(transportAttrs));
 
     server.shutdown();
     server.awaitTermination();
@@ -695,7 +697,7 @@ public class ServerImplTest {
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -740,7 +742,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -902,7 +904,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
@@ -968,7 +970,7 @@ public class ServerImplTest {
             }).build());
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
@@ -1074,7 +1076,7 @@ public class ServerImplTest {
 
     ServerTransportListener transportListener
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
-    transportListener.transportReady(Attributes.EMPTY);
+    transportListener.transportReady(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     Metadata requestHeaders = new Metadata();
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waiter/serve", requestHeaders);

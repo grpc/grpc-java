@@ -51,7 +51,9 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.truth.Truth;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
@@ -114,7 +116,6 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
 
   private static final AsciiString HTTP_FAKE_METHOD = AsciiString.of("FAKE");
 
-
   @Mock
   private ServerStreamListener streamListener;
 
@@ -148,8 +149,9 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     }
 
     @Override
-    public Attributes transportReady(Attributes attributes) {
-      return Attributes.EMPTY;
+    public AttributeMap<Grpc.TransportAttr> transportReady(
+        AttributeMap<Grpc.TransportAttr> attributes) {
+      return AttributeMap.<Grpc.TransportAttr>getEmptyInstance();
     }
 
     @Override
@@ -193,7 +195,8 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
     handler().setKeepAliveManagerForTest(spyKeepAliveManager);
 
     // Simulate receipt of the connection preface
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
+    handler().handleProtocolNegotiationCompleted(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance(), /*securityInfo=*/ null);
     channelRead(Http2CodecUtil.connectionPrefaceBuf());
     // Simulate receipt of initial remote settings.
     ByteBuf serializedSettings = serializeSettings(new Http2Settings());
@@ -201,16 +204,18 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void transportReadyDelayedUntilConnectionPreface() throws Exception {
     initChannel(new GrpcHttp2ServerHeadersDecoder(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE));
 
-    handler().handleProtocolNegotiationCompleted(Attributes.EMPTY, /*securityInfo=*/ null);
-    verify(transportListener, never()).transportReady(any(Attributes.class));
+    handler().handleProtocolNegotiationCompleted(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance(), /*securityInfo=*/ null);
+    verify(transportListener, never()).transportReady(any(AttributeMap.class));
 
     // Simulate receipt of the connection preface
     channelRead(Http2CodecUtil.connectionPrefaceBuf());
     channelRead(serializeSettings(new Http2Settings()));
-    verify(transportListener).transportReady(any(Attributes.class));
+    verify(transportListener).transportReady(any(AttributeMap.class));
   }
 
   @Test

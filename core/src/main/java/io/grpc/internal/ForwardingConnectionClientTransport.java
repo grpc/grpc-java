@@ -18,8 +18,9 @@ package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.util.concurrent.ListenableFuture;
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -60,7 +61,7 @@ abstract class ForwardingConnectionClientTransport implements ConnectionClientTr
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getAttributes() {
     return delegate().getAttributes();
   }
 

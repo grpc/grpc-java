@@ -21,6 +21,7 @@ import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.Grpc;
@@ -88,7 +89,7 @@ public final class ProtocolNegotiators {
           @Override
           public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
             // Set sttributes before replace to be sure we pass it before accepting any requests.
-            handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
+            handler.handleProtocolNegotiationCompleted(AttributeMap.<Grpc.TransportAttr>newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                 .build(),
                 /*securityInfo=*/ null);
@@ -154,7 +155,7 @@ public final class ProtocolNegotiators {
             // Successfully negotiated the protocol.
             // Notify about completion and pass down SSLSession in attributes.
             grpcHandler.handleProtocolNegotiationCompleted(
-                Attributes.newBuilder()
+                AttributeMap.<Grpc.TransportAttr>newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .build(),
@@ -648,7 +649,7 @@ public final class ProtocolNegotiators {
             // Successfully negotiated the protocol.
             // Notify about completion and pass down SSLSession in attributes.
             grpcHandler.handleProtocolNegotiationCompleted(
-                Attributes.newBuilder()
+                AttributeMap.<Grpc.TransportAttr>newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                     .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
@@ -696,8 +697,8 @@ public final class ProtocolNegotiators {
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
       writeBufferedAndRemove(ctx);
       handler.handleProtocolNegotiationCompleted(
-          Attributes
-              .newBuilder()
+          AttributeMap
+              .<Grpc.TransportAttr>newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
               .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
               .build(),
@@ -739,8 +740,8 @@ public final class ProtocolNegotiators {
       if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         writeBufferedAndRemove(ctx);
         grpcHandler.handleProtocolNegotiationCompleted(
-            Attributes
-                .newBuilder()
+            AttributeMap
+                .<Grpc.TransportAttr>newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
                 .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
                 .build(),

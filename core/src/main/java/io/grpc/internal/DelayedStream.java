@@ -20,11 +20,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.Metadata;
+import io.grpc.Grpc;
 import io.grpc.Status;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -212,9 +213,9 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
     checkState(passThrough, "Called getAttributes before attributes are ready");
-    return realStream.getAttributes();
+    return realStream.getTransportAttrs();
   }
 
   @Override

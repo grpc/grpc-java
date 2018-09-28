@@ -21,7 +21,9 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 
 import com.google.common.io.BaseEncoding;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -58,7 +60,7 @@ class OkHttpClientStream extends AbstractClientStream {
   private volatile int id = ABSENT_ID;
   private final TransportState state;
   private final Sink sink = new Sink();
-  private final Attributes attributes;
+  private final AttributeMap<Grpc.TransportAttr> attributes;
 
   private boolean useGet = false;
 
@@ -127,7 +129,7 @@ class OkHttpClientStream extends AbstractClientStream {
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
     return attributes;
   }
 
