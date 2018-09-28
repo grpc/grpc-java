@@ -35,7 +35,7 @@ public final class AttributeMap<AT> {
 
   // TODO(zhangkun83): to be accessible from Attributes only.
   // Make this private after Attributes is deleted.
-  final Map<Key<? super AT, ?>, Object> data;
+  final Map<Key<? extends AT, ?>, Object> data;
 
   @SuppressWarnings({"rawtypes", "unchecked"})
   private static final AttributeMap EMPTY =
@@ -46,7 +46,7 @@ public final class AttributeMap<AT> {
     return EMPTY;
   }
 
-  private AttributeMap(Map<Key<? super AT, ?>, Object> data) {
+  private AttributeMap(Map<Key<? extends AT, ?>, Object> data) {
     assert data != null;
     this.data = Collections.unmodifiableMap(data);
   }
@@ -56,11 +56,11 @@ public final class AttributeMap<AT> {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public final <T> T get(Key<? super AT, T> key) {
+  public final <T> T get(Key<? extends AT, T> key) {
     return (T) data.get(key);
   }
 
-  Set<Key<? super AT, ?>> keysForTest() {
+  Set<Key<? extends AT, ?>> keysForTest() {
     return data.keySet();
   }
 
@@ -144,7 +144,7 @@ public final class AttributeMap<AT> {
     if (data.size() != that.data.size()) {
       return false;
     }
-    for (Entry<Key<? super AT, ?>, Object> e : data.entrySet()) {
+    for (Entry<Key<? extends AT, ?>, Object> e : data.entrySet()) {
       if (!that.data.containsKey(e.getKey())) {
         return false;
       }
@@ -167,7 +167,7 @@ public final class AttributeMap<AT> {
   @Override
   public int hashCode() {
     int hashCode = 0;
-    for (Entry<Key<? super AT, ?>, Object> e : data.entrySet()) {
+    for (Entry<Key<? extends AT, ?>, Object> e : data.entrySet()) {
       hashCode += Objects.hashCode(e.getKey(), e.getValue());
     }
     return hashCode;
@@ -178,26 +178,26 @@ public final class AttributeMap<AT> {
    */
   public static final class Builder<AT> {
     private AttributeMap<AT> base;
-    private Map<Key<? super AT, ?>, Object> newdata;
+    private Map<Key<? extends AT, ?>, Object> newdata;
 
     private Builder(AttributeMap<AT> base) {
       assert base != null;
       this.base = base;
     }
 
-    private Map<Key<? super AT, ?>, Object> data(int size) {
+    private Map<Key<? extends AT, ?>, Object> data(int size) {
       if (newdata == null) {
-        newdata = new IdentityHashMap<Key<? super AT, ?>, Object>(size);
+        newdata = new IdentityHashMap<Key<? extends AT, ?>, Object>(size);
       }
       return newdata;
     }
 
-    public <T> Builder<AT> set(Key<? super AT, T> key, T value) {
+    public <T> Builder<AT> set(Key<? extends AT, T> key, T value) {
       data(1).put(key, value);
       return this;
     }
 
-    public <T> Builder<AT> setAll(AttributeMap<? super AT> other) {
+    public <T> Builder<AT> setAll(AttributeMap<? extends AT> other) {
       data(other.data.size()).putAll(other.data);
       return this;
     }
@@ -207,7 +207,7 @@ public final class AttributeMap<AT> {
      */
     public AttributeMap<AT> build() {
       if (newdata != null) {
-        for (Entry<Key<? super AT, ?>, Object> entry : base.data.entrySet()) {
+        for (Entry<Key<? extends AT, ?>, Object> entry : base.data.entrySet()) {
           if (!newdata.containsKey(entry.getKey())) {
             newdata.put(entry.getKey(), entry.getValue());
           }
