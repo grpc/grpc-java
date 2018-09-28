@@ -39,6 +39,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.Attributes.Key;
 import io.grpc.CallOptions;
@@ -49,6 +50,7 @@ import io.grpc.Context;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -935,15 +937,16 @@ public class ClientCallImplTest {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
         method, MoreExecutors.directExecutor(), baseCallOptions, provider,
         deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
-    Attributes attrs =
-        Attributes.newBuilder().set(Key.<String>create("fake key"), "fake value").build();
-    when(stream.getAttributes()).thenReturn(attrs);
+    AttributeMap<Grpc.TransportAttr> attrs =
+        AttributeMap.<Grpc.TransportAttr>newBuilder().set(
+            AttributeMap.Key.<Grpc.TransportAttr, String>define("fake key"), "fake value").build();
+    when(stream.getTransportAttrs()).thenReturn(attrs);
 
-    assertNotEquals(attrs, call.getAttributes());
+    assertNotEquals(attrs, call.getTransportAttrs());
 
     call.start(callListener, new Metadata());
 
-    assertEquals(attrs, call.getAttributes());
+    assertEquals(attrs, call.getTransportAttrs());
   }
 
   private static void assertTimeoutBetween(long timeout, long from, long to) {

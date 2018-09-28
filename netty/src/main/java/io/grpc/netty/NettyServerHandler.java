@@ -30,7 +30,9 @@ import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAU
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
 import io.grpc.InternalStatus;
@@ -112,7 +114,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
   /** Incomplete attributes produced by negotiator. */
-  private Attributes negotiationAttributes;
+  private AttributeMap<Grpc.TransportAttr> negotiationAttributes;
   private InternalChannelz.Security securityInfo;
   /** Completed attributes produced by transportReady. */
   private Attributes attributes;
@@ -507,7 +509,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attrs, InternalChannelz.Security securityInfo) {
+      AttributeMap<Grpc.TransportAttr> attrs, InternalChannelz.Security securityInfo) {
     negotiationAttributes = attrs;
     this.securityInfo = securityInfo;
   }
@@ -711,7 +713,8 @@ class NettyServerHandler extends AbstractNettyHandler {
         firstSettings = false;
         // Delay transportReady until we see the client's HTTP handshake, for coverage with
         // handshakeTimeout
-        attributes = transportListener.transportReady(negotiationAttributes);
+        attributes =
+            Attributes.fromAttributeMap(transportListener.transportReady(negotiationAttributes));
       }
     }
 

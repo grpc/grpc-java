@@ -17,10 +17,11 @@
 package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Status;
 import java.io.InputStream;
 
@@ -103,8 +104,8 @@ abstract class ForwardingClientStream implements ClientStream {
   }
 
   @Override
-  public Attributes getAttributes() {
-    return delegate().getAttributes();
+  public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
+    return delegate().getTransportAttrs();
   }
 
   @Override

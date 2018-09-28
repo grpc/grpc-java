@@ -23,7 +23,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -106,7 +108,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private final String authority;
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private Attributes attributes = Attributes.EMPTY;
+  private AttributeMap<Grpc.TransportAttr> attributes = AttributeMap.getEmptyInstance();
   private InternalChannelz.Security securityInfo;
 
   static NettyClientHandler newHandler(
@@ -283,10 +285,9 @@ class NettyClientHandler extends AbstractNettyHandler {
   }
 
   /**
-   * The protocol negotiation attributes, available once the protocol negotiation completes;
-   * otherwise returns {@code Attributes.EMPTY}.
+   * The protocol negotiation attributes, available once the protocol negotiation completes.
    */
-  Attributes getAttributes() {
+  AttributeMap<Grpc.TransportAttr> getAttributes() {
     return attributes;
   }
 
@@ -426,7 +427,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   @Override
   public void handleProtocolNegotiationCompleted(
-      Attributes attributes, InternalChannelz.Security securityInfo) {
+      AttributeMap<Grpc.TransportAttr> attributes, InternalChannelz.Security securityInfo) {
     this.attributes = attributes;
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);

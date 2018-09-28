@@ -31,10 +31,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.Attributes.Key;
 import io.grpc.Codec;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.testing.SingleMessageProducer;
@@ -180,22 +182,23 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void setStream_getAttributes() {
-    Attributes attributes =
-        Attributes.newBuilder().set(Key.<String>create("fakeKey"), "fakeValue").build();
-    when(realStream.getAttributes()).thenReturn(attributes);
+  public void setStream_getTransportAttrs() {
+    AttributeMap<Grpc.TransportAttr> attributes =
+        AttributeMap.<Grpc.TransportAttr>newBuilder().set(
+            AttributeMap.Key.<Grpc.TransportAttr, String>define("fakeKey"), "fakeValue").build();
+    when(realStream.getTransportAttrs()).thenReturn(attributes);
 
     stream.start(listener);
 
     try {
-      stream.getAttributes(); // expect to throw IllegalStateException, otherwise fail()
+      stream.getTransportAttrs(); // expect to throw IllegalStateException, otherwise fail()
       fail();
     } catch (IllegalStateException expected) {
       // ignore
     }
 
     stream.setStream(realStream);
-    assertEquals(attributes, stream.getAttributes());
+    assertEquals(attributes, stream.getTransportAttrs());
   }
 
   @Test

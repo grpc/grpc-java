@@ -28,10 +28,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -121,7 +123,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void parameterPropagation_base() {
     Attributes transportAttrs = Attributes.newBuilder().set(ATTR_KEY, ATTR_VALUE).build();
-    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>fromAttributes(transportAttrs));
 
     transport.newStream(method, origHeaders, callOptions);
 
@@ -141,7 +144,8 @@ public class CallCredentialsApplyingTest {
         .set(CallCredentials.ATTR_AUTHORITY, "transport-override-authority")
         .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY)
         .build();
-    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>fromAttributes(transportAttrs));
 
     transport.newStream(method, origHeaders, callOptions);
 
@@ -161,7 +165,8 @@ public class CallCredentialsApplyingTest {
         .set(CallCredentials.ATTR_AUTHORITY, "transport-override-authority")
         .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.INTEGRITY)
         .build();
-    when(mockTransport.getAttributes()).thenReturn(transportAttrs);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>fromAttributes(transportAttrs));
     Executor anotherExecutor = mock(Executor.class);
 
     transport.newStream(method, origHeaders,
@@ -179,7 +184,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void credentialThrows() {
     final RuntimeException ex = new RuntimeException();
-    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     doThrow(ex).when(mockCreds).applyRequestMetadata(
         same(method), any(Attributes.class), same(mockExecutor), any(MetadataApplier.class));
 
@@ -193,7 +199,8 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void applyMetadata_inline() {
-    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -217,7 +224,8 @@ public class CallCredentialsApplyingTest {
   @Test
   public void fail_inline() {
     final Status error = Status.FAILED_PRECONDITION.withDescription("channel not secure for creds");
-    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -237,7 +245,8 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void applyMetadata_delayed() {
-    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions);
@@ -259,7 +268,8 @@ public class CallCredentialsApplyingTest {
 
   @Test
   public void fail_delayed() {
-    when(mockTransport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(mockTransport.getAttributes()).thenReturn(
+        AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
 
     // Will call applyRequestMetadata(), which is no-op.
     DelayedStream stream = (DelayedStream) transport.newStream(method, origHeaders, callOptions);

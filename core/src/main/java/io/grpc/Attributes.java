@@ -33,17 +33,16 @@ import javax.annotation.concurrent.Immutable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1764")
 @Immutable
-@Deprecated
 public final class Attributes {
 
-  private final Map<AttributeMap.Key<?, ?>, Object> data;
+  final Map<AttributeMap.Key<?, ?>, Object> data;
 
   public static final Attributes EMPTY =
       new Attributes(Collections.<AttributeMap.Key<?, ?>, Object>emptyMap());
 
   private Attributes(Map<AttributeMap.Key<?, ?>, Object> data) {
     assert data != null;
-    this.data = data;
+    this.data = Collections.unmodifiableMap(data);
   }
 
   /**
@@ -56,7 +55,7 @@ public final class Attributes {
   }
 
   Set<AttributeMap.Key<?, ?>> keysForTest() {
-    return Collections.unmodifiableSet(data.keySet());
+    return data.keySet();
   }
 
   /**
@@ -85,6 +84,7 @@ public final class Attributes {
     return new Builder(this);
   }
 
+  @SuppressWarnings("unchecked")
   public static Attributes fromAttributeMap(AttributeMap<?> am) {
     return new Attributes((Map<AttributeMap.Key<?, ?>, Object>) am.data);
   }
@@ -115,7 +115,6 @@ public final class Attributes {
      * @param <T> Key type
      * @return Key object
      */
-    @Deprecated
     public static <T> Key<T> create(String debugString) {
       return new Key<T>(debugString);
     }

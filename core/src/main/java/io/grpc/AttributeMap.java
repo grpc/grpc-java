@@ -37,10 +37,11 @@ public class AttributeMap<AT> {
   // Make this private after Attributes is deleted.
   final Map<Key<AT, ?>, Object> data;
 
-  @SuppressWarnings("rawtypes")
+  @SuppressWarnings({"rawtypes", "unchecked"})
   private static final AttributeMap EMPTY =
       new AttributeMap(Collections.<Key<?, ?>, Object>emptyMap());
 
+  @SuppressWarnings("unchecked")
   public static <AT> AttributeMap<AT> getEmptyInstance() {
     return EMPTY;
   }
@@ -60,14 +61,20 @@ public class AttributeMap<AT> {
   }
 
   Set<Key<AT, ?>> keysForTest() {
-    return Collections.unmodifiableSet(data.keySet());
+    return data.keySet();
   }
 
   /**
    * Create a new builder.
    */
-  public static <AT extends AttributeMap> Builder<AT> newBuilder() {
+  @SuppressWarnings("unchecked")
+  public static <AT> Builder<AT> newBuilder() {
     return new Builder<AT>((AttributeMap<AT>) EMPTY);
+  }
+
+  @SuppressWarnings({"unchecked", "rawtypes"})
+  public static <AT> AttributeMap<AT> fromAttributes(Attributes attrs) {
+    return new AttributeMap(attrs.data);
   }
 
   /**
@@ -125,6 +132,7 @@ public class AttributeMap<AT> {
    * @return true if the given object is a {@link AttributeMap} equal attributes.
    */
   @Override
+  @SuppressWarnings("rawtypes")
   public boolean equals(Object o) {
     if (this == o) {
       return true;
@@ -184,12 +192,12 @@ public class AttributeMap<AT> {
       return newdata;
     }
 
-    public <T> Builder set(Key<AT, T> key, T value) {
+    public <T> Builder<AT> set(Key<AT, T> key, T value) {
       data(1).put(key, value);
       return this;
     }
 
-    public <T> Builder setAll(AttributeMap<AT> other) {
+    public <T> Builder<AT> setAll(AttributeMap<AT> other) {
       data(other.data.size()).putAll(other.data);
       return this;
     }
@@ -204,7 +212,7 @@ public class AttributeMap<AT> {
             newdata.put(entry.getKey(), entry.getValue());
           }
         }
-        base = new AttributeMap(newdata);
+        base = new AttributeMap<AT>(newdata);
         newdata = null;
       }
       return base;

@@ -21,12 +21,13 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -502,11 +503,11 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public final Attributes getAttributes() {
+  public final AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
     if (state.winningSubstream != null) {
-      return state.winningSubstream.stream.getAttributes();
+      return state.winningSubstream.stream.getTransportAttrs();
     }
-    return Attributes.EMPTY;
+    return AttributeMap.getEmptyInstance();
   }
 
   private static Random random = new Random();

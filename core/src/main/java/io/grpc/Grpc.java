@@ -38,9 +38,12 @@ public final class Grpc {
    * Attribute key for SSL session of a transport.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
-  public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
-          Attributes.Key.create("ssl-session");
+  public static final AttributeMap.Key<TransportAttr, SSLSession> TRANSPORT_ATTR_SSL_SESSION =
+          AttributeMap.Key.define("ssl-session");
 
+  /**
+   * The marker type for transport attribute keys.
+   */
   @ExperimentalApi("TODO")
   public static final class TransportAttr {}
 }

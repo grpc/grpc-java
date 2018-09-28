@@ -16,7 +16,8 @@
 
 package io.grpc.internal;
 
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
+import io.grpc.Grpc;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -28,5 +29,5 @@ public interface ConnectionClientTransport extends ManagedClientTransport {
    * Returns a set of attributes, which may vary depending on the state of the transport. The keys
    * should define in what states they will be present.
    */
-  Attributes getAttributes();
+  AttributeMap<Grpc.TransportAttr> getAttributes();
 }

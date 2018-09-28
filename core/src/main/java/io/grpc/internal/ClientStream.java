@@ -16,9 +16,10 @@
 
 package io.grpc.internal;
 
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Status;
 import javax.annotation.Nonnull;
 
@@ -94,7 +95,7 @@ public interface ClientStream extends Stream {
   void setDeadline(@Nonnull Deadline deadline);
 
   /**
-   * Attributes that the stream holds at the current moment.
+   * Transport attributes that the stream holds at the current moment.
    */
-  Attributes getAttributes();
+  AttributeMap<Grpc.TransportAttr> getTransportAttrs();
 }

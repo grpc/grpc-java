@@ -54,6 +54,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
@@ -68,6 +69,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.Grpc;
 import io.grpc.IntegerMarshaller;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ChannelStats;
@@ -1423,7 +1425,7 @@ public class ManagedChannelImplTest {
         .newClientTransport(same(socketAddress), eq(clientTransportOptions));
     MockClientTransportInfo transportInfo = transports.poll();
     final ConnectionClientTransport transport = transportInfo.transport;
-    when(transport.getAttributes()).thenReturn(Attributes.EMPTY);
+    when(transport.getAttributes()).thenReturn(AttributeMap.<Grpc.TransportAttr>getEmptyInstance());
     doAnswer(new Answer<ClientStream>() {
         @Override
         public ClientStream answer(InvocationOnMock in) throws Throwable {

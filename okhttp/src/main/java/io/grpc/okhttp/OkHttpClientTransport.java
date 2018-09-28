@@ -30,6 +30,7 @@ import com.squareup.okhttp.Credentials;
 import com.squareup.okhttp.HttpUrl;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.internal.http.StatusLine;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -157,7 +158,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private int connectionUnacknowledgedBytesRead;
   private ClientFrameHandler clientFrameHandler;
   // Caution: Not synchronized, new value can only be safely read after the connection is complete.
-  private Attributes attributes = Attributes.EMPTY;
+  private AttributeMap<Grpc.TransportAttr> attributes = AttributeMap.getEmptyInstance();
   /**
    * Indicates the transport is in go-away state: no new streams will be processed, but existing
    * streams may continue.
@@ -481,8 +482,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           source = Okio.buffer(Okio.source(sock));
           sink = Okio.buffer(Okio.sink(sock));
           // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-          attributes = Attributes
-              .newBuilder()
+          attributes = AttributeMap
+              .<Grpc.TransportAttr>newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
               .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
               .set(CallCredentials.ATTR_SECURITY_LEVEL,
@@ -701,7 +702,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  public Attributes getAttributes() {
+  public AttributeMap<Grpc.TransportAttr> getAttributes() {
     return attributes;
   }
 

@@ -16,7 +16,9 @@
 
 package io.grpc;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes.Key;
+import io.grpc.Grpc;
 import java.util.concurrent.Executor;
 
 /**
@@ -42,8 +44,8 @@ public interface CallCredentials {
    * overridden by the transport.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public static final Key<SecurityLevel> ATTR_SECURITY_LEVEL =
-      Key.create("io.grpc.CallCredentials.securityLevel");
+  public static final AttributeMap.Key<Grpc.TransportAttr, SecurityLevel> ATTR_SECURITY_LEVEL =
+      AttributeMap.Key.define("io.grpc.CallCredentials.securityLevel");
 
   /**
    * The authority string used to authenticate the server. Usually it's the server's host name. It

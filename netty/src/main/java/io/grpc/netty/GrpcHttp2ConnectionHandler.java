@@ -16,7 +16,9 @@
 
 package io.grpc.netty;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
+import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz;
 import io.netty.channel.ChannelPromise;
@@ -45,18 +47,6 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
   }
 
   /**
-   * Same as {@link #handleProtocolNegotiationCompleted(
-   *   Attributes, io.grpc.InternalChannelz.Security)}
-   * but with no {@link io.grpc.InternalChannelz.Security}.
-   *
-   * @deprecated Use the two argument method instead.
-   */
-  @Deprecated
-  public void handleProtocolNegotiationCompleted(Attributes attrs) {
-    handleProtocolNegotiationCompleted(attrs, /*securityInfo=*/ null);
-  }
-
-  /**
    * Triggered on protocol negotiation completion.
    *
    * <p>It must me called after negotiation is completed but before given handler is added to the
@@ -66,7 +56,7 @@ public abstract class GrpcHttp2ConnectionHandler extends Http2ConnectionHandler 
    * @param securityInfo informs channelz about the security protocol.
    */
   public void handleProtocolNegotiationCompleted(
-      Attributes attrs, InternalChannelz.Security securityInfo) {
+      AttributeMap<Grpc.TransportAttr> attrs, InternalChannelz.Security securityInfo) {
   }
 
   /**

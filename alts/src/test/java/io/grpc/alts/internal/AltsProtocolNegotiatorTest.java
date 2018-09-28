@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.Grpc;
@@ -339,9 +340,9 @@ public class AltsProtocolNegotiatorTest {
   public void peerPropagated() throws Exception {
     doHandshake();
 
-    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.getTsiPeerAttributeKey()))
+    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.TSI_PEER_KEY))
         .isEqualTo(mockedTsiPeer);
-    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.getAltsAuthContextAttributeKey()))
+    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.ALTS_CONTEXT_KEY))
         .isEqualTo(mockedAltsContext);
     assertThat(grpcHandler.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString())
         .isEqualTo("embedded");
@@ -394,7 +395,7 @@ public class AltsProtocolNegotiatorTest {
   }
 
   private final class CapturingGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
-    private Attributes attrs;
+    private AttributeMap<Grpc.TransportAttr> attrs;
 
     private CapturingGrpcHttp2ConnectionHandler(
         Http2ConnectionDecoder decoder,
@@ -405,7 +406,7 @@ public class AltsProtocolNegotiatorTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(
-        Attributes attrs, InternalChannelz.Security securityInfo) {
+        AttributeMap<Grpc.TransportAttr> attrs, InternalChannelz.Security securityInfo) {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;

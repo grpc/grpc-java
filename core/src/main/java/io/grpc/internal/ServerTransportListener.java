@@ -16,7 +16,8 @@
 
 package io.grpc.internal;
 
-import io.grpc.Attributes;
+import io.grpc.AttributeMap;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 
 /**
@@ -40,7 +41,7 @@ public interface ServerTransportListener {
    *
    * @return the effective transport attributes that is used as the basis of call attributes
    */
-  Attributes transportReady(Attributes attributes);
+  AttributeMap<Grpc.TransportAttr> transportReady(AttributeMap<Grpc.TransportAttr> attributes);
 
   /**
    * The transport completed shutting down. All resources have been released.

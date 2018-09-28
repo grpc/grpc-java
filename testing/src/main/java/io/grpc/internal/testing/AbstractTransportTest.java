@@ -43,6 +43,7 @@ import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
@@ -98,8 +99,8 @@ import org.mockito.Matchers;
 public abstract class AbstractTransportTest {
   private static final int TIMEOUT_MS = 1000;
 
-  private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
-      Attributes.Key.create("additional-attr");
+  private static final AttributeMap.Key<Grpc.TransportAttr, String> ADDITIONAL_TRANSPORT_ATTR_KEY =
+      AttributeMap.Key.define("additional-attr");
 
   protected final TransportTracer.Factory fakeClockTransportTracer = new TransportTracer.Factory(
       new TimeProvider() {
@@ -1715,7 +1716,8 @@ public abstract class AbstractTransportTest {
         = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     ServerStream serverStream = serverStreamCreation.stream;
 
-    SocketAddress serverAddress = clientStream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+    SocketAddress serverAddress =
+        clientStream.getTransportAttrs().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
     SocketAddress clientAddress = serverStream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
 
     SocketStats clientSocketStats = client.getStats().get();
@@ -1862,8 +1864,9 @@ public abstract class AbstractTransportTest {
     }
 
     @Override
-    public Attributes transportReady(Attributes attributes) {
-      return Attributes.newBuilder()
+    public AttributeMap<Grpc.TransportAttr> transportReady(
+        AttributeMap<Grpc.TransportAttr> attributes) {
+      return AttributeMap.<Grpc.TransportAttr>newBuilder()
           .setAll(attributes)
           .set(ADDITIONAL_TRANSPORT_ATTR_KEY, "additional attribute value")
           .build();

@@ -33,9 +33,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import io.grpc.AttributeMap;
 import io.grpc.Attributes;
 import io.grpc.Codec;
 import io.grpc.Deadline;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -504,8 +506,8 @@ public class AbstractClientStreamTest {
     public void setMaxOutboundMessageSize(int maxSize) {}
 
     @Override
-    public Attributes getAttributes() {
-      return Attributes.EMPTY;
+    public AttributeMap<Grpc.TransportAttr> getTransportAttrs() {
+      return AttributeMap.getEmptyInstance();
     }
   }
 
