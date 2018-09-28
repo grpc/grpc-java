@@ -269,6 +269,10 @@ public abstract class ClientCall<ReqT, RespT> {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2607")
   public Attributes getAttributes() {
-    return Attributes.EMPTY;
+    return Attributes.fromAttributeMap(getTransportAttributes());
+  }
+
+  public AttributeMap<Grpc.TransportAttr> getTransportAttributes() {
+    return AttributeMap.getEmptyInstance();
   }
 }

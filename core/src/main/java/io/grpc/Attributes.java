@@ -51,7 +51,7 @@ public final class Attributes {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public <T> T get(Key<T> key) {
+  public <T> T get(AttributeMap.Key<?, T> key) {
     return (T) data.get(key);
   }
 
@@ -83,6 +83,10 @@ public final class Attributes {
    */
   public Builder toBuilder() {
     return new Builder(this);
+  }
+
+  public static Attributes fromAttributeMap(AttributeMap<?> am) {
+    return new Attributes((Map<AttributeMap.Key<?, ?>, Object>) am.data);
   }
 
   @Immutable
@@ -194,7 +198,7 @@ public final class Attributes {
       return newdata;
     }
 
-    public <T> Builder set(Key<T> key, T value) {
+    public <T> Builder set(AttributeMap.Key<?, T> key, T value) {
       data(1).put(key, value);
       return this;
     }

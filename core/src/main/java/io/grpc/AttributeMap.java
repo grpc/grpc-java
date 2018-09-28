@@ -33,15 +33,21 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public class AttributeMap<AT> {
 
-  private final Map<Key<AT, ?>, Object> data;
+  // TODO(zhangkun83): to be accessible from Attributes only.
+  // Make this private after Attributes is deleted.
+  final Map<Key<AT, ?>, Object> data;
 
   @SuppressWarnings("rawtypes")
-  public static final AttributeMap EMPTY =
+  private static final AttributeMap EMPTY =
       new AttributeMap(Collections.<Key<?, ?>, Object>emptyMap());
+
+  public static <AT> AttributeMap<AT> getEmptyInstance() {
+    return EMPTY;
+  }
 
   private AttributeMap(Map<Key<AT, ?>, Object> data) {
     assert data != null;
-    this.data = data;
+    this.data = Collections.unmodifiableMap(data);
   }
 
   /**
@@ -49,7 +55,7 @@ public class AttributeMap<AT> {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public final <AT, T> T get(Key<AT, T> key) {
+  public final <T> T get(Key<AT, T> key) {
     return (T) data.get(key);
   }
 
