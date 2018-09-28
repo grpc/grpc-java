@@ -37,8 +37,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.AsciiString;
 
 /**
- * A client-side GRPC {@link ProtocolNegotiator} for ALTS. This class creates a Netty handler that
- * provides ALTS security on the wire, similar to Netty's {@code SslHandler}.
+ * A GRPC {@link ProtocolNegotiator} for ALTS. This class creates a Netty handler that provides ALTS
+ * security on the wire, similar to Netty's {@code SslHandler}.
  */
 public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
@@ -48,14 +48,31 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       AttributeMap.Key.define("ALTS_CONTEXT_KEY");
   private static final AsciiString scheme = AsciiString.of("https");
 
-  /** Creates a negotiator used for ALTS. */
-  public static AltsProtocolNegotiator create(final TsiHandshakerFactory handshakerFactory) {
+  /** Creates a negotiator used for ALTS client. */
+  public static AltsProtocolNegotiator createClientNegotiator(
+      final TsiHandshakerFactory handshakerFactory) {
     return new AltsProtocolNegotiator() {
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
-            new TsiHandshakeHandler(new NettyTsiHandshaker(handshakerFactory.newHandshaker())),
+            new TsiHandshakeHandler(
+                new NettyTsiHandshaker(
+                    handshakerFactory.newHandshaker(grpcHandler.getAuthority()))),
+            new TsiFrameHandler());
+      }
+    };
+  }
+
+  /** Creates a negotiator used for ALTS server. */
+  public static AltsProtocolNegotiator createServerNegotiator(
+      final TsiHandshakerFactory handshakerFactory) {
+    return new AltsProtocolNegotiator() {
+      @Override
+      public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        return new BufferUntilAltsNegotiatedHandler(
+            grpcHandler,
+            new TsiHandshakeHandler(new NettyTsiHandshaker(handshakerFactory.newHandshaker(null))),
             new TsiFrameHandler());
       }
     };
