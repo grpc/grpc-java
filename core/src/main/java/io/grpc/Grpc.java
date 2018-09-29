@@ -16,6 +16,11 @@
 
 package io.grpc;
 
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.net.SocketAddress;
 import javax.net.ssl.SSLSession;
 
@@ -31,6 +36,7 @@ public final class Grpc {
    * Attribute key for the remote address of a transport.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
+  @TransportAttr
   public static final Attributes.Key<SocketAddress> TRANSPORT_ATTR_REMOTE_ADDR =
           Attributes.Key.create("remote-addr");
 
@@ -38,6 +44,17 @@ public final class Grpc {
    * Attribute key for SSL session of a transport.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
+  @TransportAttr
   public static final Attributes.Key<SSLSession> TRANSPORT_ATTR_SSL_SESSION =
           Attributes.Key.create("ssl-session");
+
+  /**
+   * Annotation for transport attribute Keys.
+   *
+   * <p>Click "USE" on the navigation bars of the javadoc page to see annotated keys.
+   */
+  @Retention(RetentionPolicy.SOURCE)
+  @Documented
+  @Target(ElementType.FIELD)
+  public @interface TransportAttr {}
 }

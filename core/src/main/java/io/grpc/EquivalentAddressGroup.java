@@ -17,6 +17,11 @@
 package io.grpc;
 
 import com.google.common.base.Preconditions;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -28,6 +33,9 @@ import java.util.List;
  * <p>Usually the addresses are addresses resolved from the same host name, and connecting to any of
  * them is equally sufficient. They do have order. An address appears earlier on the list is likely
  * to be tried earlier.
+ *
+ * <p>An {@code EquivalentAddressGroup} object is associated with an {@link Attributes} object.
+ * Keys that it may contain are annotated with {@link EquivalentAddressGroup.Attr} by convention.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
@@ -127,4 +135,14 @@ public final class EquivalentAddressGroup {
     }
     return true;
   }
+
+  /**
+   * Annotates keys that may appear in the attributes of an {@link EquivalentAddressGroup}.
+   *
+   * <p>Click "USE" on the navigation bars of the javadoc page to see annotated keys.
+   */
+  @Retention(RetentionPolicy.SOURCE)
+  @Documented
+  @Target(ElementType.FIELD)
+  public @interface Attr {}
 }

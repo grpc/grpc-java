@@ -262,7 +262,8 @@ public abstract class ClientCall<ReqT, RespT> {
    * or {@link Listener#onClose}. If called prematurely, the implementation may throw {@code
    * IllegalStateException} or return arbitrary {@code Attributes}.
    *
-   * <p>{@link Grpc} defines commonly used attributes, but they are not guaranteed to be present.
+   * <p>Keys that it may contain are annotated with {@link Grpc.TransportAttr} by convention, but
+   * they are not guaranteed to be present.
    *
    * @return non-{@code null} attributes
    * @throws IllegalStateException (optional) if called before permitted
