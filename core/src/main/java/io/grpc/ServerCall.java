@@ -193,12 +193,10 @@ public abstract class ServerCall<ReqT, RespT> {
    *
    * <p>Attributes originate from the transport and can be altered by {@link ServerTransportFilter}.
    *
-   * <p>Keys that it may contain are annotated with {@link Grpc.TransportAttr} by convention, but
-   * they are not guaranteed to be present.
-   *
    * @return non-{@code null} Attributes container
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1779")
+  @Grpc.TransportAttr
   public Attributes getAttributes() {
     return Attributes.EMPTY;
   }

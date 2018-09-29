@@ -107,12 +107,12 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code servers}.
    *
    * @param servers the resolved server addresses, never empty.
-   * @param attributes extra information from naming system.  Keys that it may contain are
-   *                   annotated with {@link NameResolver.ResolutionResultAttr} by convention.
+   * @param attributes extra information from naming system.
    * @since 1.2.0
    */
   public abstract void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes);
+      List<EquivalentAddressGroup> servers,
+      @NameResolver.ResolutionResultAttr Attributes attributes);
 
   /**
    * Handles an error from the name resolution system.

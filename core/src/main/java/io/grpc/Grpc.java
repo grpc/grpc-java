@@ -17,10 +17,8 @@
 package io.grpc;
 
 import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
 import java.net.SocketAddress;
 import javax.net.ssl.SSLSession;
 
@@ -49,12 +47,10 @@ public final class Grpc {
           Attributes.Key.create("ssl-session");
 
   /**
-   * Annotation for transport attribute Keys.
-   *
-   * <p>Click "USE" on the navigation bars of the javadoc page to see annotated keys.
+   * Annotation for transport attributes. It follows the annotation semantics defined
+   * by {@link Attributes}.
    */
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  @Target(ElementType.FIELD)
   public @interface TransportAttr {}
 }

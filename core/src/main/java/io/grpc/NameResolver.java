@@ -17,10 +17,8 @@
 package io.grpc;
 
 import java.lang.annotation.Documented;
-import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
 import java.net.URI;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -139,11 +137,11 @@ public abstract class NameResolver {
      * <p>Implementations will not modify the given {@code servers}.
      *
      * @param servers the resolved server addresses. An empty list will trigger {@link #onError}
-     * @param attributes extra information from naming system.  Keys that it may contain are
-     *                   annotated with {@link ResolutionResultAttr} by convention.
+     * @param attributes extra information from naming system.
      * @since 1.3.0
      */
-    void onAddresses(List<EquivalentAddressGroup> servers, Attributes attributes);
+    void onAddresses(
+        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes);
 
     /**
      * Handles an error from the resolver. The listener is responsible for eventually invoking
@@ -156,12 +154,10 @@ public abstract class NameResolver {
   }
 
   /**
-   * Annotation for attribute keys for name resolution result.
-   *
-   * <p>Click "USE" on the navigation bars of the javadoc page to see annotated keys.
+   * Annotation for name resolution result attributes. It follows the annotation semantics defined
+   * by {@link Attributes}.
    */
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  @Target(ElementType.FIELD)
   public @interface ResolutionResultAttr {}
 }
