@@ -29,8 +29,11 @@ import io.grpc.Status;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.logging.Logger;
 
 final class CallCredentialsApplyingTransportFactory implements ClientTransportFactory {
+  private static final Logger logger =
+      Logger.getLogger(CallCredentialsApplyingTransportFactory.class.getName());
   private final ClientTransportFactory delegate;
   private final Executor appExecutor;
 
@@ -73,21 +76,40 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
 
     @Override
     public ClientStream newStream(
-        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
             delegate, method, headers, callOptions);
-        Attributes.Builder effectiveAttrsBuilder = Attributes.newBuilder()
-            .set(CallCredentials.ATTR_AUTHORITY, authority)
-            .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
-            .setAll(delegate.getAttributes());
-        if (callOptions.getAuthority() != null) {
-          effectiveAttrsBuilder.set(CallCredentials.ATTR_AUTHORITY, callOptions.getAuthority());
+        final Attributes transportAttrs = delegate.getAttributes();
+        final SecurityLevel securityLevel = transportAttrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL);
+        if (securityLevel == null) {
+          logger.warning(delegate + " didn't set ATTR_SECURITY_LEVEL. Assuming level to be NONE.");
         }
+        CallCredentials.RequestInfo requestInfo = new CallCredentials.RequestInfo() {
+            @Override
+            public MethodDescriptor<?, ?> getMethodDescriptor() {
+              return method;
+            }
+
+            @Override
+            public SecurityLevel getSecurityLevel() {
+              return firstNonNull(securityLevel, SecurityLevel.NONE);
+            }
+
+            @Override
+            public String getAuthority() {
+              return firstNonNull(callOptions.getAuthority(), authority);
+            }
+
+            @Override
+            public Attributes getTransportAttrs() {
+              return transportAttrs;
+            }
+          };
         try {
-          creds.applyRequestMetadata(method, effectiveAttrsBuilder.build(),
-              firstNonNull(callOptions.getExecutor(), appExecutor), applier);
+          creds.applyRequestMetadata(
+              requestInfo, firstNonNull(callOptions.getExecutor(), appExecutor), applier);
         } catch (Throwable t) {
           applier.fail(Status.UNAUTHENTICATED
               .withDescription("Credentials should use fail() instead of throwing exceptions")
