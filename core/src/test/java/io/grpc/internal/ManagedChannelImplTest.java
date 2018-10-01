@@ -58,6 +58,7 @@ import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
+import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -1402,8 +1403,7 @@ public class ManagedChannelImplTest {
           return null;
         }
       }).when(creds).applyRequestMetadata(
-          any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
-          any(MetadataApplier.class));
+          any(RequestInfo.class), any(Executor.class), any(MetadataApplier.class));
 
     // First call will be on delayed transport.  Only newCall() is run within the expected context,
     // so that we can verify that the context is explicitly attached before calling newStream() and
@@ -1434,8 +1434,7 @@ public class ManagedChannelImplTest {
           any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
     verify(creds, never()).applyRequestMetadata(
-        any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
-        any(MetadataApplier.class));
+        any(RequestInfo.class), any(Executor.class), any(MetadataApplier.class));
 
     // applyRequestMetadata() is called after the transport becomes ready.
     transportInfo.listener.transportReady();
@@ -1443,14 +1442,15 @@ public class ManagedChannelImplTest {
         .thenReturn(PickResult.withSubchannel(subchannel));
     helper.updateBalancingState(READY, mockPicker);
     executor.runDueTasks();
-    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(Attributes.class);
-    ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(MetadataApplier.class);
-    verify(creds).applyRequestMetadata(same(method), attrsCaptor.capture(),
+    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(null);
+    verify(creds).applyRequestMetadata(infoCaptor.capture(),
         same(executor.getScheduledExecutorService()), applierCaptor.capture());
+    RequestInfo info = infoCaptor.getValue();
+    assertSame(method, info.getMethodDescriptor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
-    assertEquals(AUTHORITY, attrsCaptor.getValue().get(CallCredentials.ATTR_AUTHORITY));
-    assertEquals(SecurityLevel.NONE,
-        attrsCaptor.getValue().get(CallCredentials.ATTR_SECURITY_LEVEL));
+    assertEquals(AUTHORITY, info.getAuthority());
+    assertEquals(SecurityLevel.NONE, info.getSecurityLevel());
     verify(transport, never()).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
@@ -1468,12 +1468,13 @@ public class ManagedChannelImplTest {
     ctx.detach(origCtx);
     call.start(mockCallListener, new Metadata());
 
-    verify(creds, times(2)).applyRequestMetadata(same(method), attrsCaptor.capture(),
+    verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
         same(executor.getScheduledExecutorService()), applierCaptor.capture());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
-    assertEquals(AUTHORITY, attrsCaptor.getValue().get(CallCredentials.ATTR_AUTHORITY));
-    assertEquals(SecurityLevel.NONE,
-        attrsCaptor.getValue().get(CallCredentials.ATTR_SECURITY_LEVEL));
+    info = infoCaptor.getValue();
+    assertSame(method, info.getMethodDescriptor());
+    assertEquals(AUTHORITY, info.getAuthority());
+    assertEquals(SecurityLevel.NONE, info.getSecurityLevel());
     // This is from the first call
     verify(transport).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
