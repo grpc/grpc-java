@@ -97,7 +97,7 @@ final class GoogleAuthLibraryCallCredentials extends CallCredentials {
       return;
     }
 
-    String authority = checkNotNull(info.getAuthority());
+    String authority = checkNotNull(info.getAuthority(), "authority");
     final URI uri;
     try {
       uri = serviceUri(authority, info.getMethodDescriptor());

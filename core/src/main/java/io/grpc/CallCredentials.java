@@ -104,6 +104,7 @@ public abstract class CallCredentials {
     /**
      * Returns the transport attributes.
      */
+    @Grpc.TransportAttr
     public abstract Attributes getTransportAttrs();
   }
 }
