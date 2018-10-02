@@ -40,11 +40,15 @@ public interface CallCredentials {
    * The security level of the transport. It is guaranteed to be present in the {@code attrs} passed
    * to {@link #applyRequestMetadata}. It is by default {@link SecurityLevel#NONE} but can be
    * overridden by the transport.
+   *
+   * @deprecated transport implementations should use {@code
+   * io.grpc.internal.GrpcAttributes.ATTR_SECURITY_LEVEL} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   @Grpc.TransportAttr
+  @Deprecated
   public static final Key<SecurityLevel> ATTR_SECURITY_LEVEL =
-      Key.create("io.grpc.CallCredentials.securityLevel");
+      Key.create("io.grpc.internal.GrpcAttributes.securityLevel");
 
   /**
    * The authority string used to authenticate the server. Usually it's the server's host name. It
@@ -54,6 +58,7 @@ public interface CallCredentials {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   @Grpc.TransportAttr
+  @Deprecated
   public static final Key<String> ATTR_AUTHORITY = Key.create("io.grpc.CallCredentials.authority");
 
   /**
@@ -75,6 +80,7 @@ public interface CallCredentials {
    *        method returns.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
+  @Deprecated
   void applyRequestMetadata(
       MethodDescriptor<?, ?> method, Attributes attrs,
       Executor appExecutor, MetadataApplier applier);
@@ -92,16 +98,16 @@ public interface CallCredentials {
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public interface MetadataApplier {
+  public abstract class MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
      * headers.
      */
-    void apply(Metadata headers);
+    public abstract void apply(Metadata headers);
 
     /**
      * Called when there has been an error when preparing the headers. This will fail the RPC.
      */
-    void fail(Status status);
+    public abstract void fail(Status status);
   }
 }
