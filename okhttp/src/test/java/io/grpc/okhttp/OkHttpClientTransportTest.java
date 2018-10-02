@@ -44,7 +44,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
@@ -52,9 +51,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.collect.ImmutableList;
-import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
-import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalChannelz.TransportStats;
@@ -101,7 +98,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.annotation.Nullable;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSocketFactory;
 import okio.Buffer;
@@ -154,8 +150,6 @@ public class OkHttpClientTransportTest {
   private MockFrameReader frameReader;
   private ExecutorService executor = Executors.newCachedThreadPool();
   private long nanoTime; // backs a ticker, for testing ping round-trip time measurement
-  private SettableFuture<Void> connectedFuture;
-  private DelayConnectedCallback delayConnectedCallback;
   private Runnable tooManyPingsRunnable = new Runnable() {
     @Override public void run() {
       throw new AssertionError();
@@ -175,30 +169,16 @@ public class OkHttpClientTransportTest {
     executor.shutdownNow();
   }
 
-  private void initTransport() throws Exception {
-    startTransport(
-        DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, null);
+  private void initTransport() {
+    startTransport(DEFAULT_START_STREAM_ID, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, null);
   }
 
-  private void initTransport(int startId) throws Exception {
-    startTransport(startId, null, true, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, null);
+  private void initTransport(int startId) {
+    startTransport(startId, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, null);
   }
 
-  private void initTransportAndDelayConnected() throws Exception {
-    delayConnectedCallback = new DelayConnectedCallback();
-    startTransport(
-        DEFAULT_START_STREAM_ID,
-        delayConnectedCallback,
-        false,
-        DEFAULT_MAX_MESSAGE_SIZE,
-        INITIAL_WINDOW_SIZE,
-        null);
-  }
-
-  private void startTransport(int startId, @Nullable Runnable connectingCallback,
-      boolean waitingForConnected, int maxMessageSize, int initialWindowSize, String userAgent)
-      throws Exception {
-    connectedFuture = SettableFuture.create();
+  private void startTransport(
+      int startId, int maxMessageSize, int initialWindowSize, String userAgent) {
     final Ticker ticker = new Ticker() {
       @Override
       public long read() {
@@ -219,16 +199,11 @@ public class OkHttpClientTransportTest {
         startId,
         new MockSocket(frameReader),
         stopwatchSupplier,
-        connectingCallback,
-        connectedFuture,
         maxMessageSize,
         initialWindowSize,
         tooManyPingsRunnable,
         new TransportTracer());
     clientTransport.start(transportListener);
-    if (waitingForConnected) {
-      connectedFuture.get(TIME_OUT_MS, TimeUnit.MILLISECONDS);
-    }
   }
 
   @Test
@@ -256,7 +231,7 @@ public class OkHttpClientTransportTest {
   @Test
   public void maxMessageSizeShouldBeEnforced() throws Exception {
     // Allow the response payloads of up to 1 byte.
-    startTransport(3, null, true, 1, INITIAL_WINDOW_SIZE, null);
+    startTransport(3, 1, INITIAL_WINDOW_SIZE, null);
 
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -514,7 +489,7 @@ public class OkHttpClientTransportTest {
 
   @Test
   public void overrideDefaultUserAgent() throws Exception {
-    startTransport(3, null, true, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "fakeUserAgent");
+    startTransport(3, DEFAULT_MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "fakeUserAgent");
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
@@ -695,8 +670,7 @@ public class OkHttpClientTransportTest {
   }
 
   private void outboundFlowControl(int windowSize) throws Exception {
-    startTransport(
-        DEFAULT_START_STREAM_ID, null, true, DEFAULT_MAX_MESSAGE_SIZE, windowSize, null);
+    startTransport(DEFAULT_START_STREAM_ID, DEFAULT_MAX_MESSAGE_SIZE, windowSize, null);
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
@@ -1440,72 +1414,6 @@ public class OkHttpClientTransportTest {
   }
 
   @Test
-  public void writeBeforeConnected() throws Exception {
-    initTransportAndDelayConnected();
-    final String message = "Hello Server";
-    MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream =
-        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
-    stream.start(listener);
-    InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
-    stream.writeMessage(input);
-    stream.flush();
-    // The message should be queued.
-    verifyNoMoreInteractions(frameWriter);
-
-    allowTransportConnected();
-
-    // The queued message should be sent out.
-    ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
-    verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), captor.capture(), eq(12 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
-    assertEquals(createMessageFrame(message), sentFrame);
-    stream.cancel(Status.CANCELLED);
-    shutdownAndVerify();
-  }
-
-  @Test
-  public void cancelBeforeConnected() throws Exception {
-    initTransportAndDelayConnected();
-    final String message = "Hello Server";
-    MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream =
-        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
-    stream.start(listener);
-    InputStream input = new ByteArrayInputStream(message.getBytes(UTF_8));
-    stream.writeMessage(input);
-    stream.flush();
-    stream.cancel(Status.CANCELLED);
-    verifyNoMoreInteractions(frameWriter);
-
-    allowTransportConnected();
-    verifyNoMoreInteractions(frameWriter);
-    shutdownAndVerify();
-  }
-
-  @Test
-  public void shutdownDuringConnecting() throws Exception {
-    initTransportAndDelayConnected();
-    MockStreamListener listener = new MockStreamListener();
-    OkHttpClientStream stream =
-        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
-    stream.start(listener);
-    clientTransport.shutdown(SHUTDOWN_REASON);
-    allowTransportConnected();
-
-    // The new stream should be failed, but not the pending stream.
-    assertNewStreamFail();
-    verify(frameWriter, timeout(TIME_OUT_MS))
-        .synStream(anyBoolean(), anyBoolean(), eq(3), anyInt(), anyListHeader());
-    assertEquals(1, activeStreamCount());
-    stream.cancel(Status.CANCELLED);
-    listener.waitUntilStreamClosed();
-    assertEquals(Status.CANCELLED.getCode(), listener.status.getCode());
-    shutdownAndVerify();
-  }
-
-  @Test
   public void invalidAuthorityPropagates() {
     clientTransport = new OkHttpClientTransport(
         new InetSocketAddress("host", 1234),
@@ -1578,7 +1486,12 @@ public class OkHttpClientTransportTest {
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
-    clientTransport.start(transportListener);
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        clientTransport.start(transportListener);
+      }
+    });
 
     Socket sock = serverSocket.accept();
     serverSocket.close();
@@ -1630,7 +1543,12 @@ public class OkHttpClientTransportTest {
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
-    clientTransport.start(transportListener);
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        clientTransport.start(transportListener);
+      }
+    });
 
     Socket sock = serverSocket.accept();
     serverSocket.close();
@@ -1681,7 +1599,12 @@ public class OkHttpClientTransportTest {
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
-    clientTransport.start(transportListener);
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        clientTransport.start(transportListener);
+      }
+    });
 
     Socket sock = serverSocket.accept();
     serverSocket.close();
@@ -2080,33 +2003,17 @@ public class OkHttpClientTransportTest {
     }
   }
 
-  private void allowTransportConnected() {
-    delayConnectedCallback.allowConnected();
-  }
-
   private void shutdownAndVerify() {
     clientTransport.shutdown(SHUTDOWN_REASON);
     assertEquals(0, activeStreamCount());
     try {
-      verify(frameWriter, timeout(TIME_OUT_MS)).close();
+      transportListener.transportReady();
+      frameWriter.close();
     } catch (IOException e) {
       throw new RuntimeException(e);
 
     }
     frameReader.assertClosed();
-  }
-
-  private static class DelayConnectedCallback implements Runnable {
-    SettableFuture<Void> delayed = SettableFuture.create();
-
-    @Override
-    public void run() {
-      Futures.getUnchecked(delayed);
-    }
-
-    void allowConnected() {
-      delayed.set(null);
-    }
   }
 
   private static TransportStats getTransportStats(InternalInstrumented<SocketStats> obj)

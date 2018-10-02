@@ -60,7 +60,7 @@ public class OkHttpClientStreamTest {
   private static final int INITIAL_WINDOW_SIZE = 65535;
 
   @Mock private MethodDescriptor.Marshaller<Void> marshaller;
-  @Mock private AsyncFrameWriter frameWriter;
+  @Mock private DelegatingFrameWriter frameWriter;
   @Mock private OkHttpClientTransport transport;
   @Mock private OutboundFlowController flowController;
   @Captor private ArgumentCaptor<List<Header>> headersCaptor;
