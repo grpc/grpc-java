@@ -28,7 +28,7 @@ import java.util.concurrent.Executor;
  * replaces {@link CallCredentials} in short-term.  THIS CLASS SHOULD ONLY BE REFERENCED BY
  * IMPLEMENTIONS.  All consumers should still reference {@link CallCredentials}.
  */
-@Internal
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4901")
 public abstract class CallCredentials2 implements CallCredentials {
   /**
    * Pass the credential data to the given {@link CallCredentials.MetadataApplier}, which will
