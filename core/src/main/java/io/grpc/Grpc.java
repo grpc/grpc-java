@@ -39,6 +39,14 @@ public final class Grpc {
           Attributes.Key.create("remote-addr");
 
   /**
+   * Attribute key for the local address of a transport.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
+  @TransportAttr
+  public static final Attributes.Key<SocketAddress> TRANSPORT_ATTR_LOCAL_ADDR =
+          Attributes.Key.create("local-addr");
+
+  /**
    * Attribute key for SSL session of a transport.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
