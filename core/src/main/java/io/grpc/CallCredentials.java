@@ -78,6 +78,8 @@ public interface CallCredentials {
    *        needs to perform blocking operations.
    * @param applier The outlet of the produced headers. It can be called either before or after this
    *        method returns.
+   *
+   * @deprecated implement {@link CallCredentials2} instead.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
   @Deprecated

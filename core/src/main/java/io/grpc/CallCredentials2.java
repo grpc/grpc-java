@@ -25,7 +25,7 @@ import java.util.concurrent.Executor;
  * The new interface for {@link CallCredentials}.
  *
  * <p>THIS CLASS IS MEANT TO BE REFERENCED BY IMPLEMENTIONS ONLY.  All users should reference {@link
- * Credentials}.
+ * CallCredentials}.
  */
 public abstract class CallCredentials2 implements CallCredentials {
   /**
