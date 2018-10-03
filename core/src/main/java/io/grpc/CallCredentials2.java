@@ -24,9 +24,11 @@ import java.util.concurrent.Executor;
 /**
  * The new interface for {@link CallCredentials}.
  *
- * <p>THIS CLASS IS MEANT TO BE REFERENCED BY IMPLEMENTIONS ONLY.  All users should reference {@link
- * CallCredentials}.
+ * <p>THIS CLASS NAME IS TEMPORARY and is part of a migration. This class will BE DELETED as it
+ * replaces {@link CallCredentials} in short-term.  THIS CLASS SHOULD ONLY BE REFERENCED BY
+ * IMPLEMENTIONS.  All consumers should still reference {@link CallCredentials}.
  */
+@Internal
 public abstract class CallCredentials2 implements CallCredentials {
   /**
    * Pass the credential data to the given {@link CallCredentials.MetadataApplier}, which will
