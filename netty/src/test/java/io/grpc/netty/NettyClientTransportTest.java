@@ -544,7 +544,7 @@ public class NettyClientTransportTest {
     assertNotNull(serverTransportAttrs);
     SocketAddress clientAddr = serverTransportAttrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
     assertNotNull(clientAddr);
-    assertEquals(clientAddr,  rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR));
+    assertEquals(clientAddr, rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR));
   }
 
   @Test
