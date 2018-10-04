@@ -80,6 +80,7 @@ public final class NettyChannelBuilder
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
   private boolean keepAliveWithoutCalls;
   private ProtocolNegotiatorFactory protocolNegotiatorFactory;
+  private LocalSocketPicker localSocketPicker;
 
   /**
    * Creates a new builder with the given server address. This factory method is primarily intended
@@ -326,6 +327,28 @@ public final class NettyChannelBuilder
     return this;
   }
 
+
+  /**
+   * If non-{@code null}, attempts to create connections bound to a local port.
+   */
+  public NettyChannelBuilder localSocketPicker(@Nullable LocalSocketPicker localSocketPicker) {
+    this.localSocketPicker = localSocketPicker;
+    return this;
+  }
+
+  @ExperimentalApi("FIXME")
+  public interface LocalSocketPicker {
+
+    /**
+     * Called by gRPC to pick local socket to bind to.  This may be called multiple times.
+     *
+     * @param remoteAddress the remote address to connect to.
+     * @param attrs the Attributes present on the {@link io.grpc.EquivalentAddressGroup} associated
+     *        with the address.
+     */
+    @Nullable SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs);
+  }
+
   @Override
   @CheckReturnValue
   @Internal
@@ -348,7 +371,7 @@ public final class NettyChannelBuilder
         negotiator, channelType, channelOptions,
         eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory.create());
+        transportTracerFactory.create(), localSocketPicker);
   }
 
   @Override
@@ -457,6 +480,7 @@ public final class NettyChannelBuilder
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer transportTracer;
+    private final LocalSocketPicker localSocketPicker;
 
     private boolean closed;
 
@@ -464,7 +488,7 @@ public final class NettyChannelBuilder
         Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
         EventLoopGroup group, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
       this.channelType = channelType;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -475,6 +499,8 @@ public final class NettyChannelBuilder
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.transportTracer = transportTracer;
+      this.localSocketPicker =
+          localSocketPicker != null ? localSocketPicker : DefaultLocalSocketPicker.INSTANCE;
 
       usingSharedGroup = group == null;
       if (usingSharedGroup) {
@@ -505,12 +531,14 @@ public final class NettyChannelBuilder
           keepAliveTimeNanosState.backoff();
         }
       };
+
       NettyClientTransport transport = new NettyClientTransport(
           serverAddress, channelType, channelOptions, group,
           localNegotiator, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
-          tooManyPingsRunnable, transportTracer, options.getEagAttributes());
+          tooManyPingsRunnable, transportTracer, options.getEagAttributes(),
+          localSocketPicker);
       return transport;
     }
 
@@ -530,6 +558,16 @@ public final class NettyChannelBuilder
       if (usingSharedGroup) {
         SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, group);
       }
+    }
+  }
+
+  private static final class DefaultLocalSocketPicker implements LocalSocketPicker {
+    static final LocalSocketPicker INSTANCE = new DefaultLocalSocketPicker();
+
+    @Nullable
+    @Override
+    public SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs) {
+      return null;
     }
   }
 }

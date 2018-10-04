@@ -61,6 +61,7 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -77,6 +78,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -85,6 +87,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -175,7 +178,7 @@ public class NettyClientTransportTest {
         address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
         KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority, null /* user agent */,
-        tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY);
+        tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -415,7 +418,7 @@ public class NettyClientTransportTest {
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
-        null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY);
+        null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker());
     transports.add(transport);
 
     // Should not throw
@@ -593,7 +596,7 @@ public class NettyClientTransportTest {
         DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes);
+        new TransportTracer(), eagAttributes, new SocketPicker());
     transports.add(transport);
     return transport;
   }
@@ -824,5 +827,14 @@ public class NettyClientTransportTest {
 
     @Override
     public void close() {}
+  }
+
+  private static final class SocketPicker implements LocalSocketPicker {
+
+    @Nullable
+    @Override
+    public SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs) {
+      return null;
+    }
   }
 }
