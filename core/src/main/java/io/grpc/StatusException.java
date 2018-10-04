@@ -30,7 +30,7 @@ public class StatusException extends Exception {
   private final boolean fillInStackTrace;
 
   /**
-   * Constructs an exception with both a status.  See also {@link Status#asException()}.
+   * Constructs an exception with a status.  See also {@link Status#asException()}.
    *
    * @since 1.0.0
    */
