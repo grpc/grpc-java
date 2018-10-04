@@ -26,6 +26,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
@@ -336,17 +337,30 @@ public final class NettyChannelBuilder
     return this;
   }
 
+  /**
+   * This class is meant to be overriden with a custom implementation of
+   * {@link #createSocketAddress}.  The default implementation is a no-op.
+   *
+   * @since 1.16.0
+   */
   @ExperimentalApi("FIXME")
-  public interface LocalSocketPicker {
+  public static class LocalSocketPicker {
 
     /**
      * Called by gRPC to pick local socket to bind to.  This may be called multiple times.
+     * Subclasses are expected to override this method.
      *
      * @param remoteAddress the remote address to connect to.
      * @param attrs the Attributes present on the {@link io.grpc.EquivalentAddressGroup} associated
      *        with the address.
+     * @return a {@link SocketAddress} suitable for binding, or else {@code null}.
+     * @since 1.16.0
      */
-    @Nullable SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs);
+    @Nullable
+    public SocketAddress createSocketAddress(
+        SocketAddress remoteAddress, @EquivalentAddressGroup.Attr Attributes attrs) {
+      return null;
+    }
   }
 
   @Override
@@ -500,7 +514,7 @@ public final class NettyChannelBuilder
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.transportTracer = transportTracer;
       this.localSocketPicker =
-          localSocketPicker != null ? localSocketPicker : DefaultLocalSocketPicker.INSTANCE;
+          localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
 
       usingSharedGroup = group == null;
       if (usingSharedGroup) {
@@ -558,16 +572,6 @@ public final class NettyChannelBuilder
       if (usingSharedGroup) {
         SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, group);
       }
-    }
-  }
-
-  private static final class DefaultLocalSocketPicker implements LocalSocketPicker {
-    static final LocalSocketPicker INSTANCE = new DefaultLocalSocketPicker();
-
-    @Nullable
-    @Override
-    public SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs) {
-      return null;
     }
   }
 }

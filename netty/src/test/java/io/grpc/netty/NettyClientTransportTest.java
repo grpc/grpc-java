@@ -829,7 +829,7 @@ public class NettyClientTransportTest {
     public void close() {}
   }
 
-  private static final class SocketPicker implements LocalSocketPicker {
+  private static final class SocketPicker extends LocalSocketPicker {
 
     @Nullable
     @Override
