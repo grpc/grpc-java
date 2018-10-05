@@ -14,11 +14,18 @@
  * limitations under the License.
  */
 
-package io.grpc;
+package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
+import io.grpc.Attributes;
+import io.grpc.ConnectivityState;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer;
+import io.grpc.ManagedChannel;
+import io.grpc.NameResolver;
 import java.util.List;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
