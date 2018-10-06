@@ -343,7 +343,7 @@ public final class NettyChannelBuilder
    *
    * @since 1.16.0
    */
-  @ExperimentalApi("FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4917")
   public static class LocalSocketPicker {
 
     /**
