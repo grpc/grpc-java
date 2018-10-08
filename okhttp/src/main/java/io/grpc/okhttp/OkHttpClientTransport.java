@@ -496,6 +496,26 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
               sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
           .build();
+      socket = Preconditions.checkNotNull(sock, "socket");
+      maxConcurrentStreams = Integer.MAX_VALUE;
+      if (sslSession != null) {
+        securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
+      }
+
+      FrameWriter rawFrameWriter = variant.newWriter(sink, true);
+      // Do these with the raw FrameWriter, so that they will be done in this thread,
+      // and before any possible pending stream operations.
+      try {
+        rawFrameWriter.connectionPreface();
+        Settings settings = new Settings();
+        rawFrameWriter.settings(settings);
+      } catch (IOException e) {
+        onException(e);
+        return null;
+      }
+      frameWriter = new DelegatingFrameWriter(rawFrameWriter, socket, this);
+      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+      startPendingStreams();
     } catch (StatusException e) {
       startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
       return null;
@@ -506,27 +526,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
       executor.execute(clientFrameHandler);
     }
-
-    socket = Preconditions.checkNotNull(sock, "socket");
-    maxConcurrentStreams = Integer.MAX_VALUE;
-    if (sslSession != null) {
-      securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
-    }
-
-    FrameWriter rawFrameWriter = variant.newWriter(sink, true);
-    frameWriter = new DelegatingFrameWriter(rawFrameWriter, socket, this);
-    outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
-
-    try {
-      // Do these with the raw FrameWriter, so that they will be done in this thread,
-      // and before any possible pending stream operations.
-      rawFrameWriter.connectionPreface();
-      Settings settings = new Settings();
-      rawFrameWriter.settings(settings);
-    } catch (Exception e) {
-      onException(e);
-    }
-    startPendingStreams();
     return null;
   }
 

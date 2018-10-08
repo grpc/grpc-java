@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.internal.SerializingExecutor;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
@@ -30,7 +31,7 @@ import okio.Timeout;
  * A sink that asynchronously write / flushes a buffer internally. AsyncSink provides flush
  * coalescing to minimize network packing transmit.
  */
-class AsyncSink implements Sink {
+final class AsyncSink implements Sink {
 
   private final Object lock = new Object();
   @GuardedBy("lock")
@@ -39,7 +40,8 @@ class AsyncSink implements Sink {
   private final SerializingExecutor serializingExecutor;
   private final AtomicLong flushVersion = new AtomicLong();
   private boolean closed = false;
-  private IOException exception;
+  @Nullable
+  private volatile IOException exception = null;
 
   private AsyncSink(Sink sink, SerializingExecutor executor) {
     this.sink = checkNotNull(sink, "sink");
@@ -54,7 +56,7 @@ class AsyncSink implements Sink {
   public void write(final Buffer source, final long byteCount) throws IOException {
     checkNotNull(source, "source");
     if (closed) {
-      throw new IOException("closed");
+      throw new IOException("closed", exception);
     }
     if (exception != null) {
       closed = true;
@@ -82,7 +84,7 @@ class AsyncSink implements Sink {
   @Override
   public void flush() throws IOException {
     if (closed) {
-      throw new IOException("closed");
+      throw new IOException("closed", exception);
     }
     if (exception != null) {
       closed = true;
@@ -110,7 +112,7 @@ class AsyncSink implements Sink {
 
   @Override
   public void close() {
-    if (closed || exception == null) {
+    if (closed || exception != null) {
       return;
     }
     closed = true;

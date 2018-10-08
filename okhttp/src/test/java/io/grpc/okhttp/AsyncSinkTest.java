@@ -16,10 +16,14 @@
 
 package io.grpc.okhttp;
 
+import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 
 import com.google.common.base.Charsets;
@@ -119,6 +123,90 @@ public class AsyncSinkTest {
     inOrder.verify(mockedSink)
         .write(any(Buffer.class), eq((long) firstData.length + secondData.length));
     inOrder.verify(mockedSink).flush();
+  }
+
+  @Test
+  public void write_shouldCachePreviousException() throws IOException {
+    Exception ioException = new IOException("some exception");
+    doThrow(ioException)
+        .when(mockedSink).write(any(Buffer.class), anyLong());
+    Buffer buffer = new Buffer();
+    buffer.writeUtf8("any message");
+    sink.write(buffer, buffer.size());
+    queueingExecutor.runAll();
+    try {
+      sink.write(buffer, buffer.size());
+      queueingExecutor.runAll();
+      fail("should fail");
+    } catch (IOException e) {
+      assertThat(e).isEqualTo(ioException);
+    }
+  }
+
+  @Test
+  public void close_writeShouldThrowException() throws IOException {
+    sink.close();
+    queueingExecutor.runAll();
+    try {
+      sink.write(new Buffer(), 0);
+      queueingExecutor.runAll();
+      fail("should fail");
+    } catch (IOException e) {
+      assertThat(e).hasMessageThat().contains("closed");
+    }
+  }
+
+  @Test
+  public void write_shouldThrowIfAlreadyClosed() throws IOException {
+    Exception ioException = new IOException("some exception");
+    doThrow(ioException)
+        .when(mockedSink).write(any(Buffer.class), anyLong());
+    Buffer buffer = new Buffer();
+    buffer.writeUtf8("any message");
+    sink.write(buffer, buffer.size());
+    sink.close();
+    queueingExecutor.runAll();
+    try {
+      sink.write(buffer, buffer.size());
+      queueingExecutor.runAll();
+      fail("should fail");
+    } catch (IOException e) {
+      assertThat(e).hasMessageThat().contains("closed");
+      assertThat(e).hasCauseThat().isEqualTo(ioException);
+    }
+  }
+
+  @Test
+  public void close_flushShouldThrowException() throws IOException {
+    sink.close();
+    queueingExecutor.runAll();
+    try {
+      sink.flush();
+      queueingExecutor.runAll();
+      fail("should fail");
+    } catch (IOException e) {
+      assertThat(e).hasMessageThat().contains("closed");
+    }
+  }
+
+  @Test
+  public void flush_shouldThrowIfAlreadyClosed() throws IOException {
+    Exception ioException = new IOException("some exception");
+    doThrow(ioException)
+        .when(mockedSink).write(any(Buffer.class), anyLong());
+    Buffer buffer = new Buffer();
+    buffer.writeUtf8("any message");
+    sink.write(buffer, buffer.size());
+    sink.close();
+    queueingExecutor.runAll();
+    try {
+      sink.flush();
+      queueingExecutor.runAll();
+      fail("should fail");
+    } catch (IOException e) {
+      assertThat(e).hasMessageThat().contains("closed");
+      assertThat(e).hasCauseThat().isEqualTo(ioException);
+    }
   }
 
   /**

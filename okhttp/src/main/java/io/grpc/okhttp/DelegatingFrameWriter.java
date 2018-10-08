@@ -35,7 +35,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
 
-class DelegatingFrameWriter implements FrameWriter {
+final class DelegatingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   // Some exceptions are not very useful and add too much noise to the log
@@ -93,7 +93,10 @@ class DelegatingFrameWriter implements FrameWriter {
   }
 
   @Override
-  public void synStream(boolean outFinished, boolean inFinished, int streamId,
+  public void synStream(
+      boolean outFinished,
+      boolean inFinished,
+      int streamId,
       int associatedStreamId,
       List<Header> headerBlock) {
     try {
@@ -204,7 +207,6 @@ class DelegatingFrameWriter implements FrameWriter {
         && t.getMessage() != null
         && QUIET_ERRORS.contains(t.getMessage())) {
       return Level.FINE;
-
     }
     return Level.INFO;
   }
