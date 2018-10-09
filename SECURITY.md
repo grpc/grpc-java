@@ -297,17 +297,46 @@ Server server = NettyServerBuilder.forPort(8443)
 Negotiated client certificates are available in the SSLSession, which is found in the `TRANSPORT_ATTR_SSL_SESSION` attribute of <a href="https://github.com/grpc/grpc-java/blob/master/core/src/main/java/io/grpc/Grpc.java">Grpc</a>.  A server interceptor can provide details in the current Context.
 
 ```java
-public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("SSLSession");
+import static io.grpc.Grpc.TRANSPORT_ATTR_SSL_SESSION;
 
-@Override
-public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<RespT> call, 
-    Metadata headers, ServerCallHandler<ReqT, RespT> next) {
-    SSLSession sslSession = call.attributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION);
+import javax.net.ssl.SSLSession;
+
+import io.grpc.Context;
+import io.grpc.Contexts;
+import io.grpc.Metadata;
+import io.grpc.ServerCall;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+
+/**
+ * A ServerInterceptor which for each call, adds to the current context the sslContext featuring client authentication stuff.
+ * The Key for this is SSL_SESSION_CONTEXT, and its type is SSLSession.
+ */
+public class MutualTLSContextInterceptor implements ServerInterceptor {
+
+  /** The key for the SSLSession (featuring client authentication stuff) in the gRPC current context */
+  public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("SSLSession");
+
+  /**
+   * For each call made to the server, extract the sslSession, and add it to the gRPC current context.
+   * @param call object to receive response messages
+   * @param  headers which can contain extra call metadata from
+   *                 ClientCall.start(io.grpc.ClientCall.Listener<RespT>, io.grpc.Metadata),
+   *                 e.g. authentication credentials.
+   * @param next - next processor in the interceptor chain
+   * @return listener for processing incoming messages for call, never null.
+   */
+  @Override
+  public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, 
+                                                               Metadata headers,
+                                                               ServerCallHandler<ReqT, RespT> next) {
+    SSLSession sslSession = call.getAttributes().get(TRANSPORT_ATTR_SSL_SESSION);
     if (sslSession == null) {
-        return next.startCall(call, headers)
+      return next.startCall(call, headers);
     }
     return Contexts.interceptCall(
-        Context.current().withValue(SSL_SESSION_CONTEXT, clientContext), call, headers, next);
+      Context.current().withValue(SSL_SESSION_CONTEXT, sslSession), call, headers, next);
+  }
 }
 ```
 
