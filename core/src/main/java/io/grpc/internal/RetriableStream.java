@@ -194,15 +194,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Metadata newHeaders = updateHeaders(headers, previousAttempts);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(tracerFactory, newHeaders);
-    if (isHedging()) {
-      synchronized (lock) {
-        activeHedges.add(sub);
-      }
-    }
-    return sub;
-  }
 
-  private boolean isHedging() {
     if (hedgingPolicy == null) {
       // TODO(zdapeng): if substream is a DelayedStream, do this when name resolution finishes
       hedgingPolicy = hedgingPolicyProvider.get();
@@ -214,7 +206,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
       }
     }
-    return isHedging;
+    if (isHedging) {
+      synchronized (lock) {
+        activeHedges.add(sub);
+      }
+    }
+    return sub;
   }
 
   /**
