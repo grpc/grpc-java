@@ -84,12 +84,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final Throttle throttle;
 
   @GuardedBy("lock")
-  private Set<Substream> activeHedges; // not null and unchanged once isHedging = true
+  private Set<Substream> activeHedges; // not null once isHedging = true
   @GuardedBy("lock")
   private int latestAttempt;
   @GuardedBy("lock")
   private boolean hedgingFrozen; // no more hedging due to events like drop or pushback
-  private ConcurrentRescheduler rescheduler; // not null and unchanged once isHedging = true
+  private ConcurrentRescheduler rescheduler; // not null once isHedging = true
 
   private volatile State state = new State(
       new ArrayList<BufferEntry>(8), Collections.<Substream>emptyList(), null, false, false);
