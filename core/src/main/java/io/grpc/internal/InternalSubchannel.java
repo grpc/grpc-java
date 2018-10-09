@@ -215,6 +215,21 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     return null;
   }
 
+  /**
+   * Returns a READY transport if there is any, without trying to connect.
+   */
+  @Nullable
+  ClientTransport getTransport() {
+    return activeTransport;
+  }
+
+  /**
+   * Returns the authority string associated with this Subchannel.
+   */
+  String getAuthority() {
+    return authority;
+  }
+
   @GuardedBy("lock")
   private void startNewTransport() {
     Preconditions.checkState(reconnectTask == null, "Should have no reconnectTask scheduled");

@@ -121,7 +121,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
-  private final ObjectPool<? extends Executor> oobExecutorPool;
+  private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
@@ -515,7 +515,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       AbstractManagedChannelImplBuilder<?> builder,
       ClientTransportFactory clientTransportFactory,
       BackoffPolicy.Provider backoffPolicyProvider,
-      ObjectPool<? extends Executor> oobExecutorPool,
+      ObjectPool<? extends Executor> balancerRpcExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
@@ -537,7 +537,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.loadBalancerFactory = builder.loadBalancerFactory;
     }
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
-    this.oobExecutorPool = checkNotNull(oobExecutorPool, "oobExecutorPool");
+    this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport(this.executor, this.channelExecutor);
     this.delayedTransport.start(delayedTransportListener);
@@ -1153,7 +1153,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         oobChannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "OobChannel");
       }
       final OobChannel oobChannel = new OobChannel(
-          authority, oobExecutorPool, transportFactory.getScheduledExecutorService(),
+          authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
           channelExecutor, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       if (channelTracer != null) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()

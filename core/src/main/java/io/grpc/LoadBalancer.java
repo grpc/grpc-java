@@ -655,6 +655,18 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract Attributes getAttributes();
+
+    /**
+     * Returns a {@link Channel} that is backed by this Subchannel.  This allows a LoadBalancer to
+     * issue its own RPCs, e.g., health-checking RPCs, to load-balanced servers.
+     *
+     * <p>This Channel can issue RPCs only if the Subchannel is {@code READY}. If {@link
+     * Channel#newCall} is called when the Subchannel is not {@code READY}, the RPC will fail
+     * immediately.
+     */
+    public Channel asChannel() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
