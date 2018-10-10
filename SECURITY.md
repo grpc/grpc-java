@@ -309,12 +309,12 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 
 /**
- * A ServerInterceptor which for each call, adds to the current context the sslContext featuring client authentication stuff.
- * The Key for this is SSL_SESSION_CONTEXT, and its type is SSLSession.
+ * A ServerInterceptor which for each call, adds to the current context the
+ * sslContext featuring client authentication info.
  */
 public class MutualTLSContextInterceptor implements ServerInterceptor {
 
-  /** The key for the SSLSession (featuring client authentication stuff) in the gRPC current context */
+  /** The key for the SSLSession in the gRPC current context */
   public final static Context.Key<SSLSession> SSL_SESSION_CONTEXT = Context.key("SSLSession");
 
   /**
@@ -328,14 +328,13 @@ public class MutualTLSContextInterceptor implements ServerInterceptor {
    */
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, 
-                                                               Metadata headers,
-                                                               ServerCallHandler<ReqT, RespT> next) {
+      Metadata headers, ServerCallHandler<ReqT, RespT> next) {
     SSLSession sslSession = call.getAttributes().get(TRANSPORT_ATTR_SSL_SESSION);
     if (sslSession == null) {
-      return next.startCall(call, headers);
+        return next.startCall(call, headers);
     }
     return Contexts.interceptCall(
-      Context.current().withValue(SSL_SESSION_CONTEXT, sslSession), call, headers, next);
+        Context.current().withValue(SSL_SESSION_CONTEXT, sslSession), call, headers, next);
   }
 }
 ```
