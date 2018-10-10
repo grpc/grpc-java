@@ -23,7 +23,6 @@ import io.grpc.BindableService;
 import io.grpc.Context.CancellableContext;
 import io.grpc.Context;
 import io.grpc.Status;
-import io.grpc.StatusException;
 import io.grpc.StatusRuntimeException;
 import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
@@ -33,6 +32,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcServerRule;
 import java.util.ArrayDeque;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -57,6 +57,12 @@ public class HealthStatusManagerTest {
     grpcServerRule.getServiceRegistry().addService(service);
     stub = HealthGrpc.newStub(grpcServerRule.getChannel());
     blockingStub = HealthGrpc.newBlockingStub(grpcServerRule.getChannel());
+  }
+
+  @After
+  public void teardown() {
+    // Health-check streams are usually not closed in the tests.  Force closing for clean up.
+    grpcServerRule.getServer().shutdownNow();
   }
 
   @Test
@@ -182,7 +188,7 @@ public class HealthStatusManagerTest {
     RespObserver respObs1b = new RespObserver();
     stub.watch(HealthCheckRequest.newBuilder().setService(SERVICE1).build(), respObs1b);
     RespObserver respObs2 = new RespObserver();
-    stub.watch(HealthCheckRequest.newBuilder().setService(SERVICE2).build(), respObs1);
+    stub.watch(HealthCheckRequest.newBuilder().setService(SERVICE2).build(), respObs2);
 
     assertThat(respObs1.responses.poll()).isEqualTo(
         HealthCheckResponse.newBuilder().setStatus(ServingStatus.SERVICE_UNKNOWN).build());
