@@ -328,7 +328,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         @Override
         @GuardedBy("RetriableStream.this.lock")
         public boolean met() {
-          return hasPotentialHedging() && (throttle == null || throttle.isAboveThreshold());
+          return hasPotentialHedging(state, attemptCount, hedgingFrozen)
+              && (throttle == null || throttle.isAboveThreshold());
         }
       };
       rescheduler = new ConcurrentRescheduler(
@@ -591,13 +592,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   /**
    * Whether there is any potential hedge at the moment. A false return value implies there is
-   * absolutely no potential hedge, the latestSubstream _is_ the last possible hedge. At least one
-   * of the hedges will observe a false return value when calling this method, unless otherwise the
-   * rpc is committed.
+   * absolutely no potential hedge. At least one of the hedges will observe a false return value
+   * when calling this method, unless otherwise the rpc is committed.
    */
   // only called when isHedging is true
   @GuardedBy("lock")
-  private boolean hasPotentialHedging() {
+  private boolean hasPotentialHedging(State state, int attemptCount, boolean hedgingFrozen) {
     return state.winningSubstream == null
         && attemptCount < hedgingPolicy.maxAttempts
         && !hedgingFrozen;
@@ -661,7 +661,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
               activeHedges.remove(substream);
 
               // optimization for early commit
-              if (!hasPotentialHedging() && activeHedges.size() == 1) {
+              if (!hasPotentialHedging(state, attemptCount, hedgingFrozen)
+                  && activeHedges.size() == 1) {
                 commit = true;
               }
             }
@@ -727,7 +728,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           synchronized (lock) {
             activeHedges.remove(substream);
             if (!isFatal) {
-              if (hasPotentialHedging()) {
+              if (hasPotentialHedging(state, attemptCount, hedgingFrozen)) {
                 return;
               }
 
