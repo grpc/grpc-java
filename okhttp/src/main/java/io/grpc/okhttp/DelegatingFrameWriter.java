@@ -19,7 +19,6 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
@@ -209,14 +208,6 @@ final class DelegatingFrameWriter implements FrameWriter {
       return Level.FINE;
     }
     return Level.INFO;
-  }
-
-  @Override
-  public String toString() {
-    return MoreObjects.toStringHelper(this)
-        .add("frameWriter", frameWriter)
-        .add("socket", socket)
-        .toString();
   }
 
   /** A class that handles transport exception. */
