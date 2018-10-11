@@ -81,31 +81,4 @@ public abstract class CallCredentials2 implements CallCredentials {
       };
     applyRequestMetadata(requestInfo, appExecutor, applier);
   }
-
-  /**
-   * The request-related information passed to {@link #applyRequestMetadata}.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public abstract static class RequestInfo {
-    /**
-     * The method descriptor of this RPC.
-     */
-    public abstract MethodDescriptor<?, ?> getMethodDescriptor();
-
-    /**
-     * The security level on the transport.
-     */
-    public abstract SecurityLevel getSecurityLevel();
-
-    /**
-     * Returns the authority string used to authenticate the server for this call.
-     */
-    public abstract String getAuthority();
-
-    /**
-     * Returns the transport attributes.
-     */
-    @Grpc.TransportAttr
-    public abstract Attributes getTransportAttrs();
-  }
 }
