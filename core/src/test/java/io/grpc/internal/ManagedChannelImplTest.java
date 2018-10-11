@@ -759,7 +759,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverReturnsEmptySubLists() {
-    String errorDescription = "NameResolver returned an empty list";
+    String errorDescription = "returned an empty list";
 
     // Pass a FakeNameResolverFactory with an empty list
     createChannel();
