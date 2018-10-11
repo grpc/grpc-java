@@ -61,6 +61,7 @@ import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
+import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -77,14 +78,17 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLHandshakeException;
 import org.junit.After;
 import org.junit.Before;
@@ -105,6 +109,8 @@ public class NettyClientTransportTest {
   private ManagedClientTransport.Listener clientTransportListener;
 
   private final List<NettyClientTransport> transports = new ArrayList<>();
+  private final LinkedBlockingQueue<Attributes> serverTransportAttributesList =
+      new LinkedBlockingQueue<>();
   private final NioEventLoopGroup group = new NioEventLoopGroup(1);
   private final EchoServerListener serverListener = new EchoServerListener();
   private final InternalChannelz channelz = new InternalChannelz();
@@ -175,7 +181,7 @@ public class NettyClientTransportTest {
         address, NioSocketChannel.class, channelOptions, group, newNegotiator(),
         DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE,
         KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority, null /* user agent */,
-        tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY);
+        tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker());
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -415,7 +421,7 @@ public class NettyClientTransportTest {
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
-        null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY);
+        null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker());
     transports.add(transport);
 
     // Should not throw
@@ -536,6 +542,11 @@ public class NettyClientTransportTest {
 
     assertNotNull(rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_SSL_SESSION));
     assertEquals(address, rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+    Attributes serverTransportAttrs = serverTransportAttributesList.poll(1, TimeUnit.SECONDS);
+    assertNotNull(serverTransportAttrs);
+    SocketAddress clientAddr = serverTransportAttrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+    assertNotNull(clientAddr);
+    assertEquals(clientAddr, rpc.stream.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR));
   }
 
   @Test
@@ -593,7 +604,7 @@ public class NettyClientTransportTest {
         DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes);
+        new TransportTracer(), eagAttributes, new SocketPicker());
     transports.add(transport);
     return transport;
   }
@@ -749,7 +760,7 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static final class EchoServerListener implements ServerListener {
+  private final class EchoServerListener implements ServerListener {
     final List<NettyServerTransport> transports = new ArrayList<>();
     final List<EchoServerStreamListener> streamListeners =
             Collections.synchronizedList(new ArrayList<EchoServerStreamListener>());
@@ -769,6 +780,7 @@ public class NettyClientTransportTest {
 
         @Override
         public Attributes transportReady(Attributes transportAttrs) {
+          serverTransportAttributesList.add(transportAttrs);
           return transportAttrs;
         }
 
@@ -820,6 +832,18 @@ public class NettyClientTransportTest {
     public Handler newHandler(final GrpcHttp2ConnectionHandler grpcHandler) {
       this.grpcHandler = grpcHandler;
       return handler = new NoopHandler(grpcHandler);
+    }
+
+    @Override
+    public void close() {}
+  }
+
+  private static final class SocketPicker extends LocalSocketPicker {
+
+    @Nullable
+    @Override
+    public SocketAddress createSocketAddress(SocketAddress remoteAddress, Attributes attrs) {
+      return null;
     }
   }
 }
