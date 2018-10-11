@@ -279,7 +279,7 @@ def io_netty_tcnative_boringssl_static():
     native.maven_jar(
         name = "io_netty_netty_tcnative_boringssl_static",
         artifact = "io.netty:netty-tcnative-boringssl-static:2.0.17.Final",
-        sha1 = "b884be1450a7fd0854b98743836b11cb0dfd75a4",
+        sha1 = "b1e5acbde8c444c656131238ac6ab9e73f694300",
     )
 
 def io_netty_transport():
