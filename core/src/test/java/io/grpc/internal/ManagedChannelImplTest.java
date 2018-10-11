@@ -51,6 +51,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -759,7 +760,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverReturnsEmptySubLists() {
-    String errorDescription = "NameResolver returned an empty list";
+    String errorDescription = "returned an empty list";
 
     // Pass a FakeNameResolverFactory with an empty list
     createChannel();
@@ -769,7 +770,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).handleNameResolutionError(statusCaptor.capture());
     Status status = statusCaptor.getValue();
     assertSame(Status.Code.UNAVAILABLE, status.getCode());
-    assertEquals(errorDescription, status.getDescription());
+    Truth.assertThat(status.getDescription()).contains(errorDescription);
   }
 
   @Test
@@ -1388,6 +1389,7 @@ public class ManagedChannelImplTest {
    * propagated to newStream() and applyRequestMetadata().
    */
   @Test
+  @SuppressWarnings("deprecation")
   public void informationPropagatedToNewStreamAndCallCredentials() {
     createChannel();
     CallOptions callOptions = CallOptions.DEFAULT.withCallCredentials(creds);
@@ -1401,7 +1403,7 @@ public class ManagedChannelImplTest {
           credsApplyContexts.add(Context.current());
           return null;
         }
-      }).when(creds).applyRequestMetadata(
+      }).when(creds).applyRequestMetadata(  // TODO(zhangkun83): remove suppression of deprecations
           any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
           any(MetadataApplier.class));
 
