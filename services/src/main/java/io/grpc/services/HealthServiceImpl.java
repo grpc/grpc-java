@@ -17,8 +17,6 @@
 package io.grpc.services;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Context;
@@ -29,22 +27,30 @@ import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.health.v1.HealthGrpc;
 import io.grpc.stub.StreamObserver;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
 
-  /* Due to the latency of rpc calls, synchronization of the map does not help with consistency.
-   * However, need use ConcurrentHashMap to allow concurrent reading by check() */
+  // Due to the latency of rpc calls, synchronization of the map does not help with consistency.
+  // However, need use ConcurrentHashMap to allow concurrent reading by check().
   private final ConcurrentHashMap<String, ServingStatus> statusMap =
       new ConcurrentHashMap<String, ServingStatus>();
 
   private final Object watchLock = new Object();
 
+  // Technically a Multimap<String, StreamObserver<HealthCheckResponse>>.  The Boolean value is not
+  // used.  The StreamObservers need to be kept in a identity-equality set, to make sure
+  // user-defined equals() doesn't confuse our book-keeping of the StreamObservers.  Constructing
+  // such Multimap would require extra lines and the end result is not significally simpler, thus I
+  // would rather not have the Guava collections dependency.
   @GuardedBy("watchLock")
-  private final Multimap<String, StreamObserver<HealthCheckResponse>> watchers =
-      HashMultimap.create();
+  private final HashMap<String, IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean>>
+      watchers =
+          new HashMap<String, IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean>>();
 
   @Override
   public void check(HealthCheckRequest request,
@@ -67,7 +73,13 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
     synchronized (watchLock) {
       ServingStatus status = statusMap.get(service);
       responseObserver.onNext(getResponseForWatch(status));
-      watchers.put(service, responseObserver);
+      IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+          watchers.get(service);
+      if (serviceWatchers == null) {
+        serviceWatchers = new IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean>();
+        watchers.put(service, serviceWatchers);
+      }
+      serviceWatchers.put(responseObserver, Boolean.TRUE);
     }
     Context.current().addListener(
         new CancellationListener() {
@@ -75,7 +87,14 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
           // Called when the client has closed the stream
           public void cancelled(Context context) {
             synchronized (watchLock) {
-              watchers.remove(service, responseObserver);
+              IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+                  watchers.get(service);
+              if (serviceWatchers != null) {
+                serviceWatchers.remove(responseObserver);
+                if (serviceWatchers.isEmpty()) {
+                  watchers.remove(service);
+                }
+              }
             }
           }
         },
@@ -103,15 +122,24 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
   @VisibleForTesting
   int numWatchersForTest(String service) {
     synchronized (watchLock) {
-      return watchers.get(service).size();
+      IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+          watchers.get(service);
+      if (serviceWatchers == null) {
+        return 0;
+      }
+      return serviceWatchers.size();
     }
   }
 
   @GuardedBy("watchLock")
   private void notifyWatchers(String service, @Nullable ServingStatus status) {
     HealthCheckResponse response = getResponseForWatch(status);
-    for (StreamObserver<HealthCheckResponse> responseObserver : watchers.get(service)) {
-      responseObserver.onNext(response);
+    IdentityHashMap<StreamObserver<HealthCheckResponse>, Boolean> serviceWatchers =
+        watchers.get(service);
+    if (serviceWatchers != null) {
+      for (StreamObserver<HealthCheckResponse> responseObserver : serviceWatchers.keySet()) {
+        responseObserver.onNext(response);
+      }
     }
   }
 
