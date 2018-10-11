@@ -100,7 +100,7 @@ public interface CallCredentials {
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public abstract class MetadataApplier {
+  public abstract static class MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
      * headers.
