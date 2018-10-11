@@ -40,6 +40,8 @@ final class ConcurrentRescheduler {
   @GuardedBy("lock")
   @Nullable
   private final Precondition precondition;
+  @GuardedBy("lock")
+  private boolean cancelled;
 
   // Represents the currently scheduled task.
   // Set to null when the task is cancelled;
@@ -68,11 +70,14 @@ final class ConcurrentRescheduler {
   }
 
   /** Schedules a new one or reschedules an existing one. */
-  void reschedule(long delay, TimeUnit timeUnit) {
+  void scheduleNewOrReschedule(long delay, TimeUnit timeUnit) {
     Future<?> existingTask = null;
     FutureRunnable newWakeUp;
 
     synchronized (lock) {
+      if (cancelled) {
+        return;
+      }
       FutureRunnable existingWakeUp = wakeUp;
       if (existingWakeUp != null) {
         // cancel the existing one and schedule new one
@@ -96,7 +101,7 @@ final class ConcurrentRescheduler {
     FutureRunnable newWakeUp;
 
     synchronized (lock) {
-      if (wakeUp == null) {
+      if (!cancelled && wakeUp == null) {
         if (precondition != null && !precondition.met()) {
           return;
         }
@@ -110,10 +115,14 @@ final class ConcurrentRescheduler {
     schedule(newWakeUp, delay, timeUnit);
   }
 
+  /**
+   * Cancels permanently. Pending task will be cancelled and no new task will be scheduled.
+   */
   void cancel() {
     Future<?> existingTask;
 
     synchronized (lock) {
+      cancelled = true;
       FutureRunnable existingWakeUp = wakeUp;
       if (existingWakeUp == null) {
         return;
@@ -134,7 +143,7 @@ final class ConcurrentRescheduler {
     boolean cancelled;
 
     synchronized (lock) {
-      cancelled = newWakeUp.cancelled;
+      cancelled = newWakeUp.cancelled || this.cancelled;
       if (!cancelled) {
         newWakeUp.task = task;
       }
@@ -147,6 +156,7 @@ final class ConcurrentRescheduler {
 
   /** Wrapper of a future and a cancelled flag. */
   private final class FutureRunnable implements Runnable {
+    // canclled because rescheduler.cancel() is called or the task is rescheduled with a replacement
     // @GuardedBy("lock")
     boolean cancelled;
     // @GuardedBy("lock")

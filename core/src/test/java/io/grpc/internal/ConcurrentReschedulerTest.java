@@ -64,7 +64,7 @@ public class ConcurrentReschedulerTest {
 
   @Test
   public void reschedule() {
-    rescheduler.reschedule(100, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(100, TimeUnit.NANOSECONDS);
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1);
 
     fakeClock.forwardNanos(50);
@@ -100,7 +100,7 @@ public class ConcurrentReschedulerTest {
   @Test
   public void scheduleNewThenRescheduleEarlier() {
     rescheduler.scheduleNewOrNoop(100, TimeUnit.NANOSECONDS);
-    rescheduler.reschedule(50, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(50, TimeUnit.NANOSECONDS);
 
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1);
 
@@ -111,7 +111,7 @@ public class ConcurrentReschedulerTest {
   @Test
   public void scheduleNewThenRescheduleLater() {
     rescheduler.scheduleNewOrNoop(100, TimeUnit.NANOSECONDS);
-    rescheduler.reschedule(150, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(150, TimeUnit.NANOSECONDS);
 
     fakeClock.forwardNanos(100);
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1);
@@ -122,8 +122,8 @@ public class ConcurrentReschedulerTest {
 
   @Test
   public void rescheduleThenRescheduleEarlier() {
-    rescheduler.reschedule(100, TimeUnit.NANOSECONDS);
-    rescheduler.reschedule(50, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(100, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(50, TimeUnit.NANOSECONDS);
 
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1);
 
@@ -134,7 +134,7 @@ public class ConcurrentReschedulerTest {
   @Test
   public void rescheduleThenRescheduleLater() {
     rescheduler.scheduleNewOrNoop(100, TimeUnit.NANOSECONDS);
-    rescheduler.reschedule(150, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(150, TimeUnit.NANOSECONDS);
 
     fakeClock.forwardNanos(100);
     assertThat(fakeClock.numPendingTasks()).isEqualTo(1);
@@ -154,7 +154,7 @@ public class ConcurrentReschedulerTest {
 
   @Test
   public void reschedulehenCancel() {
-    rescheduler.reschedule(100, TimeUnit.NANOSECONDS);
+    rescheduler.scheduleNewOrReschedule(100, TimeUnit.NANOSECONDS);
     fakeClock.forwardNanos(50);
     rescheduler.cancel();
 
