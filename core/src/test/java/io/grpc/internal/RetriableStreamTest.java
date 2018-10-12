@@ -1856,8 +1856,6 @@ public class RetriableStreamTest {
     sublistenerCaptor5.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
     inOrder.verifyNoMoreInteractions();
     sublistenerCaptor6.getValue().closed(NON_FATAL_STATUS_CODE_1.toStatus(), new Metadata());
-
-    inOrder.verify(retriableStreamRecorder).postCommit();
     inOrder.verifyNoMoreInteractions();
 
     hedgingStream.sendMessage("msg1 after commit");
@@ -1866,6 +1864,7 @@ public class RetriableStreamTest {
 
     Metadata heders = new Metadata();
     sublistenerCaptor3.getValue().headersRead(heders);
+    inOrder.verify(retriableStreamRecorder).postCommit();
     inOrder.verify(masterListener).headersRead(heders);
     inOrder.verifyNoMoreInteractions();
   }
@@ -1953,24 +1952,14 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream3).start(sublistenerCaptor3.capture());
     inOrder.verifyNoMoreInteractions();
 
-    fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
-    assertEquals(1, fakeClock.numPendingTasks());
-    ArgumentCaptor<ClientStreamListener> sublistenerCaptor4 =
-        ArgumentCaptor.forClass(ClientStreamListener.class);
-    inOrder.verify(mockStream4).start(sublistenerCaptor4.capture());
-    inOrder.verifyNoMoreInteractions();
-
     // a random one of the hedges receives a negative pushback
     Metadata headers = new Metadata();
     headers.put(RetriableStream.GRPC_RETRY_PUSHBACK_MS, "-1");
     sublistenerCaptor2.getValue().closed(Status.fromCode(NON_FATAL_STATUS_CODE_1), headers);
     assertEquals(0, fakeClock.numPendingTasks());
 
-    // all but one of the hedges fail
-    sublistenerCaptor1.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
-    inOrder.verifyNoMoreInteractions();
-    sublistenerCaptor4.getValue().closed(NON_FATAL_STATUS_CODE_2.toStatus(), new Metadata());
-    inOrder.verify(retriableStreamRecorder).postCommit();
+    fakeClock.forwardTime(HEDGING_DELAY_IN_SECONDS, TimeUnit.SECONDS);
+    assertEquals(0, fakeClock.numPendingTasks());
     inOrder.verifyNoMoreInteractions();
   }
 

@@ -651,6 +651,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           if (isHedging) {
             boolean commit = false;
             synchronized (lock) {
+              // this operation does not change the size() of activeHedges, so even it is not atomic
+              // with noMoreTransparentRetry.compareAndSet(false, true), neither does it affect the
+              // commitment decision of other threads, nor do other threads affect itself.
               state = state.replaceActiveHedge(substream, newSubstream);
 
               // optimization for early commit
@@ -717,26 +720,17 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         }
 
         if (isHedging) {
-          Substream sub = null;
           synchronized (lock) {
             state = state.removeActiveHedge(substream);
             if (!isFatal) {
               if (hasPotentialHedging(state)) {
                 return;
               }
-
-              if (state.activeHedges.size() == 1) {
-                // optimization for early commit
-                sub = state.activeHedges.iterator().next();
-              } else if (!state.activeHedges.isEmpty()) {
+              if (!state.activeHedges.isEmpty()) {
                 return;
-              } // else, all hedges are closed, try to commit, one will win
-            }
-          }
-
-          if (sub != null && !sub.closed) {
-            commitAndRun(sub);
-            return;
+              }
+              // else, no activeHedges, no new hedges possible, try to commit
+            } // else, fatal, try to commit
           }
         }
       }
