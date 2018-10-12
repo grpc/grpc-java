@@ -19,9 +19,9 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
@@ -33,34 +33,38 @@ import okio.Timeout;
  */
 final class AsyncSink implements Sink {
 
+  /**
+   * When internal buffer exceeds the size of FLUSH_THRESHOLD, AsyncSink asynchronously flushes to
+   * sink.
+   */
+  private static final long FLUSH_THRESHOLD = 8192L;
+
   private final Object lock = new Object();
   @GuardedBy("lock")
   private final Buffer buffer = new Buffer();
   private final Sink sink;
   private final SerializingExecutor serializingExecutor;
   private final AtomicLong flushVersion = new AtomicLong();
+  private final TransportExceptionHandler transportExceptionHandler;
   private boolean closed = false;
-  @Nullable
-  private volatile IOException exception = null;
 
-  private AsyncSink(Sink sink, SerializingExecutor executor) {
+  private AsyncSink(
+      Sink sink, SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
     this.sink = checkNotNull(sink, "sink");
     this.serializingExecutor = checkNotNull(executor, "executor");
+    this.transportExceptionHandler = exceptionHandler;
   }
 
-  static AsyncSink sink(Sink sink, SerializingExecutor executor) {
-    return new AsyncSink(sink, executor);
+  static AsyncSink sink(
+      Sink sink, SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
+    return new AsyncSink(sink, executor, exceptionHandler);
   }
 
   @Override
   public void write(final Buffer source, final long byteCount) throws IOException {
     checkNotNull(source, "source");
     if (closed) {
-      throw new IOException("closed", exception);
-    }
-    if (exception != null) {
-      closed = true;
-      throw exception;
+      throw new IOException("closed");
     }
     synchronized (lock) {
       buffer.write(source, byteCount);
@@ -68,14 +72,18 @@ final class AsyncSink implements Sink {
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
-        try {
-          synchronized (lock) {
-            if (buffer.size() > 0) {
-              sink.write(buffer, buffer.size());
-            }
+        Buffer buf = new Buffer();
+        synchronized (lock) {
+          while (buffer.size() > FLUSH_THRESHOLD) {
+            buf.write(buffer, FLUSH_THRESHOLD);
           }
-        } catch (IOException e) {
-          exception = e;
+        }
+        if (buf.size() > 0) {
+          try {
+            sink.write(buf, buf.size());
+          } catch (IOException e) {
+            transportExceptionHandler.onException(e);
+          }
         }
       }
     });
@@ -84,11 +92,7 @@ final class AsyncSink implements Sink {
   @Override
   public void flush() throws IOException {
     if (closed) {
-      throw new IOException("closed", exception);
-    }
-    if (exception != null) {
-      closed = true;
-      throw exception;
+      throw new IOException("closed");
     }
     final long version = flushVersion.incrementAndGet();
     serializingExecutor.execute(new Runnable() {
@@ -96,10 +100,17 @@ final class AsyncSink implements Sink {
       public void run() {
         try {
           if (version == flushVersion.get()) {
+            Buffer buf = new Buffer();
+            synchronized (lock) {
+              buf.write(buffer, buffer.size());
+            }
+            if (buf.size() > 0) {
+              sink.write(buf, buf.size());
+            }
             sink.flush();
           }
         } catch (IOException e) {
-          exception = e;
+          transportExceptionHandler.onException(e);
         }
       }
     });
@@ -107,12 +118,12 @@ final class AsyncSink implements Sink {
 
   @Override
   public Timeout timeout() {
-    return sink.timeout();
+    return Timeout.NONE;
   }
 
   @Override
   public void close() {
-    if (closed || exception != null) {
+    if (closed) {
       return;
     }
     closed = true;
@@ -124,7 +135,7 @@ final class AsyncSink implements Sink {
           try {
             sink.close();
           } catch (IOException e) {
-            exception = e;
+            transportExceptionHandler.onException(e);
           }
         }
       }

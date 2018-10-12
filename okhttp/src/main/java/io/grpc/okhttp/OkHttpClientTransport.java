@@ -57,7 +57,7 @@ import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
-import io.grpc.okhttp.DelegatingFrameWriter.TransportExceptionHandler;
+import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameReader;
@@ -144,7 +144,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final int initialWindowSize;
   private Listener listener;
   private FrameReader testFrameReader;
-  private DelegatingFrameWriter frameWriter;
+  private ExceptionHandlingFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
   private final Object lock = new Object();
   private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
@@ -427,106 +427,108 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   @Override
-  @GuardedBy("lock")
   public Runnable start(Listener listener) {
-    this.listener = Preconditions.checkNotNull(listener, "listener");
+    synchronized (lock) {
+      this.listener = Preconditions.checkNotNull(listener, "listener");
 
-    if (enableKeepAlive) {
-      scheduler = SharedResourceHolder.get(TIMER_SERVICE);
-      keepAliveManager = new KeepAliveManager(
-          new ClientKeepAlivePinger(this), scheduler, keepAliveTimeNanos, keepAliveTimeoutNanos,
-          keepAliveWithoutCalls);
-      keepAliveManager.onTransportStarted();
-    }
-
-    if (isForTest()) {
-      maxConcurrentStreams = Integer.MAX_VALUE;
-      frameWriter = new DelegatingFrameWriter(testFrameWriter, socket, this);
-      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
-
-      startPendingStreams();
-      clientFrameHandler = new ClientFrameHandler(testFrameReader);
-      executor.execute(clientFrameHandler);
-      return null;
-    }
-
-    // Use closed source on failure so that the reader immediately shuts down.
-    BufferedSource source = Okio.buffer(new Source() {
-      @Override
-      public long read(Buffer sink, long byteCount) {
-        return -1;
+      if (enableKeepAlive) {
+        scheduler = SharedResourceHolder.get(TIMER_SERVICE);
+        keepAliveManager = new KeepAliveManager(
+            new ClientKeepAlivePinger(this), scheduler, keepAliveTimeNanos, keepAliveTimeoutNanos,
+            keepAliveWithoutCalls);
+        keepAliveManager.onTransportStarted();
       }
 
-      @Override
-      public Timeout timeout() {
-        return Timeout.NONE;
-      }
+      if (isForTest()) {
+        maxConcurrentStreams = Integer.MAX_VALUE;
+        frameWriter = new ExceptionHandlingFrameWriter(testFrameWriter, socket, this);
+        outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
 
-      @Override
-      public void close() {}
-    });
-    Variant variant = new Http2();
-    BufferedSink sink;
-    Socket sock;
-    SSLSession sslSession = null;
-    try {
-      if (proxy == null) {
-        sock = new Socket(address.getAddress(), address.getPort());
-      } else {
-        sock = createHttpProxySocket(
-            address, proxy.proxyAddress, proxy.username, proxy.password);
-      }
-
-      if (sslSocketFactory != null) {
-        SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
-            sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
-            connectionSpec);
-        sslSession = sslSocket.getSession();
-        sock = sslSocket;
-      }
-      sock.setTcpNoDelay(true);
-      source = Okio.buffer(Okio.source(sock));
-      sink = Okio.buffer(AsyncSink.sink(Okio.sink(sock), serializingExecutor));
-      // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-      attributes = Attributes
-          .newBuilder()
-          .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
-          .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
-          .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
-          .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
-              sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
-          .build();
-      socket = Preconditions.checkNotNull(sock, "socket");
-      maxConcurrentStreams = Integer.MAX_VALUE;
-      if (sslSession != null) {
-        securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
-      }
-
-      FrameWriter rawFrameWriter = variant.newWriter(sink, true);
-      // Do these with the raw FrameWriter, so that they will be done in this thread,
-      // and before any possible pending stream operations.
-      try {
-        rawFrameWriter.connectionPreface();
-        Settings settings = new Settings();
-        rawFrameWriter.settings(settings);
-      } catch (IOException e) {
-        onException(e);
+        startPendingStreams();
+        clientFrameHandler = new ClientFrameHandler(testFrameReader);
+        executor.execute(clientFrameHandler);
         return null;
       }
-      frameWriter = new DelegatingFrameWriter(rawFrameWriter, socket, this);
-      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
-      startPendingStreams();
-    } catch (StatusException e) {
-      startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+
+      // Use closed source on failure so that the reader immediately shuts down.
+      BufferedSource source = Okio.buffer(new Source() {
+        @Override
+        public long read(Buffer sink, long byteCount) {
+          return -1;
+        }
+
+        @Override
+        public Timeout timeout() {
+          return Timeout.NONE;
+        }
+
+        @Override
+        public void close() {
+        }
+      });
+      Variant variant = new Http2();
+      BufferedSink sink;
+      Socket sock;
+      SSLSession sslSession = null;
+      try {
+        if (proxy == null) {
+          sock = new Socket(address.getAddress(), address.getPort());
+        } else {
+          sock = createHttpProxySocket(
+              address, proxy.proxyAddress, proxy.username, proxy.password);
+        }
+
+        if (sslSocketFactory != null) {
+          SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
+              sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
+              connectionSpec);
+          sslSession = sslSocket.getSession();
+          sock = sslSocket;
+        }
+        sock.setTcpNoDelay(true);
+        source = Okio.buffer(Okio.source(sock));
+        sink = Okio.buffer(AsyncSink.sink(Okio.sink(sock), serializingExecutor, this));
+        // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+        attributes = Attributes
+            .newBuilder()
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
+            .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
+            .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
+                sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
+            .build();
+        socket = Preconditions.checkNotNull(sock, "socket");
+        maxConcurrentStreams = Integer.MAX_VALUE;
+        if (sslSession != null) {
+          securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
+        }
+
+        FrameWriter rawFrameWriter = variant.newWriter(sink, true);
+        // Do these with the raw FrameWriter, so that they will be done in this thread,
+        // and before any possible pending stream operations.
+        try {
+          rawFrameWriter.connectionPreface();
+          Settings settings = new Settings();
+          rawFrameWriter.settings(settings);
+        } catch (IOException e) {
+          onException(e);
+          return null;
+        }
+        frameWriter = new ExceptionHandlingFrameWriter(rawFrameWriter, socket, this);
+        outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+        startPendingStreams();
+      } catch (StatusException e) {
+        startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+        return null;
+      } catch (Exception e) {
+        onException(e);
+        return null;
+      } finally {
+        clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
+        executor.execute(clientFrameHandler);
+      }
       return null;
-    } catch (Exception e) {
-      onException(e);
-      return null;
-    } finally {
-      clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-      executor.execute(clientFrameHandler);
     }
-    return null;
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,

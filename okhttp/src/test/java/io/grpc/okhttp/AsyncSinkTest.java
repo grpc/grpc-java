@@ -25,9 +25,13 @@ import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.verify;
 
 import com.google.common.base.Charsets;
 import io.grpc.internal.SerializingExecutor;
+import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -40,7 +44,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.InOrder;
-import org.mockito.Mockito;
 
 /** Tests for {@link AsyncSink}. */
 @RunWith(JUnit4.class)
@@ -49,12 +52,14 @@ public class AsyncSinkTest {
   private Sink mockedSink;
   private QueueingExecutor queueingExecutor;
   private Sink sink;
+  private TransportExceptionHandler exceptionHandler;
 
   @Before
   public void setUp() throws Exception {
-    mockedSink = Mockito.mock(VoidSink.class, CALLS_REAL_METHODS);
+    mockedSink = mock(VoidSink.class, CALLS_REAL_METHODS);
     queueingExecutor = new QueueingExecutor();
-    sink = AsyncSink.sink(mockedSink, new SerializingExecutor(queueingExecutor));
+    exceptionHandler = mock(TransportExceptionHandler.class);
+    sink = AsyncSink.sink(mockedSink, new SerializingExecutor(queueingExecutor), exceptionHandler);
   }
 
   @Test
@@ -133,14 +138,12 @@ public class AsyncSinkTest {
     Buffer buffer = new Buffer();
     buffer.writeUtf8("any message");
     sink.write(buffer, buffer.size());
+    sink.flush();
     queueingExecutor.runAll();
-    try {
-      sink.write(buffer, buffer.size());
-      queueingExecutor.runAll();
-      fail("should fail");
-    } catch (IOException e) {
-      assertThat(e).isEqualTo(ioException);
-    }
+    sink.write(buffer, buffer.size());
+    queueingExecutor.runAll();
+
+    verify(exceptionHandler, timeout(1000)).onException(ioException);
   }
 
   @Test
@@ -149,8 +152,7 @@ public class AsyncSinkTest {
     queueingExecutor.runAll();
     try {
       sink.write(new Buffer(), 0);
-      queueingExecutor.runAll();
-      fail("should fail");
+      fail("should throw ioException");
     } catch (IOException e) {
       assertThat(e).hasMessageThat().contains("closed");
     }
@@ -169,10 +171,9 @@ public class AsyncSinkTest {
     try {
       sink.write(buffer, buffer.size());
       queueingExecutor.runAll();
-      fail("should fail");
+      fail("should throw ioException");
     } catch (IOException e) {
       assertThat(e).hasMessageThat().contains("closed");
-      assertThat(e).hasCauseThat().isEqualTo(ioException);
     }
   }
 
@@ -191,9 +192,6 @@ public class AsyncSinkTest {
 
   @Test
   public void flush_shouldThrowIfAlreadyClosed() throws IOException {
-    Exception ioException = new IOException("some exception");
-    doThrow(ioException)
-        .when(mockedSink).write(any(Buffer.class), anyLong());
     Buffer buffer = new Buffer();
     buffer.writeUtf8("any message");
     sink.write(buffer, buffer.size());
@@ -205,7 +203,6 @@ public class AsyncSinkTest {
       fail("should fail");
     } catch (IOException e) {
       assertThat(e).hasMessageThat().contains("closed");
-      assertThat(e).hasCauseThat().isEqualTo(ioException);
     }
   }
 

@@ -34,7 +34,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
 
-final class DelegatingFrameWriter implements FrameWriter {
+final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
   // Some exceptions are not very useful and add too much noise to the log
@@ -46,7 +46,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   private FrameWriter frameWriter;
   private Socket socket;
 
-  DelegatingFrameWriter(
+  ExceptionHandlingFrameWriter(
       FrameWriter frameWriter, Socket socket, TransportExceptionHandler transportExceptionHandler) {
     this.frameWriter = checkNotNull(frameWriter, "frameWriter");
     // the socket is needed for closing.
@@ -59,7 +59,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void connectionPreface() {
     try {
       frameWriter.connectionPreface();
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -68,7 +68,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void ackSettings(Settings peerSettings) {
     try {
       frameWriter.ackSettings(peerSettings);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -77,7 +77,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void pushPromise(int streamId, int promisedStreamId, List<Header> requestHeaders) {
     try {
       frameWriter.pushPromise(streamId, promisedStreamId, requestHeaders);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -86,7 +86,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void flush() {
     try {
       frameWriter.flush();
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -100,7 +100,7 @@ final class DelegatingFrameWriter implements FrameWriter {
       List<Header> headerBlock) {
     try {
       frameWriter.synStream(outFinished, inFinished, streamId, associatedStreamId, headerBlock);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -110,7 +110,7 @@ final class DelegatingFrameWriter implements FrameWriter {
       List<Header> headerBlock) {
     try {
       frameWriter.synReply(outFinished, streamId, headerBlock);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -119,7 +119,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void headers(int streamId, List<Header> headerBlock) {
     try {
       frameWriter.headers(streamId, headerBlock);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -128,7 +128,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void rstStream(int streamId, ErrorCode errorCode) {
     try {
       frameWriter.rstStream(streamId, errorCode);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -142,7 +142,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void data(boolean outFinished, int streamId, Buffer source, int byteCount) {
     try {
       frameWriter.data(outFinished, streamId, source, byteCount);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -151,7 +151,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void settings(Settings okHttpSettings) {
     try {
       frameWriter.settings(okHttpSettings);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -160,7 +160,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void ping(boolean ack, int payload1, int payload2) {
     try {
       frameWriter.ping(ack, payload1, payload2);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -172,7 +172,7 @@ final class DelegatingFrameWriter implements FrameWriter {
       frameWriter.goAway(lastGoodStreamId, errorCode, debugData);
       // Flush it since after goAway, we are likely to close this writer.
       frameWriter.flush();
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }
@@ -181,7 +181,7 @@ final class DelegatingFrameWriter implements FrameWriter {
   public void windowUpdate(int streamId, long windowSizeIncrement) {
     try {
       frameWriter.windowUpdate(streamId, windowSizeIncrement);
-    } catch (Exception e) {
+    } catch (IOException e) {
       transportExceptionHandler.onException(e);
     }
   }

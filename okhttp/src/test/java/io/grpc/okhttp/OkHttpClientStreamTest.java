@@ -65,7 +65,7 @@ public class OkHttpClientStreamTest {
 
   @Mock private MethodDescriptor.Marshaller<Void> marshaller;
   @Mock private FrameWriter mockedFrameWriter;
-  private DelegatingFrameWriter frameWriter;
+  private ExceptionHandlingFrameWriter frameWriter;
   @Mock private OkHttpClientTransport transport;
   @Mock private OutboundFlowController flowController;
   @Captor private ArgumentCaptor<List<Header>> headersCaptor;
@@ -86,7 +86,8 @@ public class OkHttpClientStreamTest {
         .setResponseMarshaller(marshaller)
         .build();
 
-    frameWriter = new DelegatingFrameWriter(mockedFrameWriter, mock(Socket.class), transport);
+    frameWriter =
+        new ExceptionHandlingFrameWriter(mockedFrameWriter, mock(Socket.class), transport);
     stream = new OkHttpClientStream(
         methodDescriptor,
         new Metadata(),
