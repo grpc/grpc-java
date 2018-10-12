@@ -128,6 +128,16 @@ public final class InProcessChannelBuilder extends
     return this;
   }
 
+  @Override
+  public void setStatsEnabled(boolean value) {
+    super.setStatsEnabled(value);
+  }
+
+  @Override
+  public void setTracingEnabled(boolean value) {
+    super.setTracingEnabled(value);
+  }
+
   /**
    * Provides a custom scheduled executor service.
    *
