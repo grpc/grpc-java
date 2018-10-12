@@ -26,6 +26,7 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -204,6 +205,40 @@ public class AsyncSinkTest {
     } catch (IOException e) {
       assertThat(e).hasMessageThat().contains("closed");
     }
+  }
+
+  @Test
+  public void write_callSinkIfBufferIsLargerThanSegmentSize() throws IOException {
+    Buffer buffer = new Buffer();
+    int threshold = (int) AsyncSink.COMPLETE_SEGMENT_SIZE;
+    buffer.write(new byte[threshold]);
+
+    sink.write(buffer, threshold / 2);
+    queueingExecutor.runAll();
+    verify(mockedSink, never()).write(any(Buffer.class), anyInt());
+    assertThat(buffer.size()).isEqualTo((long) (threshold - threshold / 2));
+
+    sink.write(buffer, buffer.size());
+    queueingExecutor.runAll();
+    verify(mockedSink).write(any(Buffer.class), eq(AsyncSink.COMPLETE_SEGMENT_SIZE));
+  }
+
+  @Test
+  public void flush_writeRemainingBuffer() throws IOException {
+    Buffer buffer = new Buffer();
+    long leftOverBytes = 10;
+
+    buffer.write(new byte[(int) (AsyncSink.COMPLETE_SEGMENT_SIZE + leftOverBytes)]);
+    sink.write(buffer, buffer.size());
+    queueingExecutor.runAll();
+
+    verify(mockedSink).write(any(Buffer.class), eq(AsyncSink.COMPLETE_SEGMENT_SIZE));
+
+    sink.flush();
+    queueingExecutor.runAll();
+    InOrder inOrder = inOrder(mockedSink);
+    inOrder.verify(mockedSink).write(any(Buffer.class), eq(leftOverBytes));
+    inOrder.verify(mockedSink).flush();
   }
 
   /**

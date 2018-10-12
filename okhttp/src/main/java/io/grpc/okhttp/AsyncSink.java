@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
@@ -34,10 +35,11 @@ import okio.Timeout;
 final class AsyncSink implements Sink {
 
   /**
-   * When internal buffer exceeds the size of FLUSH_THRESHOLD, AsyncSink asynchronously flushes to
-   * sink.
+   * When internal buffer exceeds the size of COMPLETE_SEGMENT_SIZE, AsyncSink asynchronously
+   * writes to the sink.
    */
-  private static final long FLUSH_THRESHOLD = 8192L;
+  @VisibleForTesting
+  static final long COMPLETE_SEGMENT_SIZE = 8192L;
 
   private final Object lock = new Object();
   @GuardedBy("lock")
@@ -74,8 +76,8 @@ final class AsyncSink implements Sink {
       public void run() {
         Buffer buf = new Buffer();
         synchronized (lock) {
-          while (buffer.size() > FLUSH_THRESHOLD) {
-            buf.write(buffer, FLUSH_THRESHOLD);
+          while (buffer.size() >= COMPLETE_SEGMENT_SIZE) {
+            buf.write(buffer, COMPLETE_SEGMENT_SIZE);
           }
         }
         if (buf.size() > 0) {
