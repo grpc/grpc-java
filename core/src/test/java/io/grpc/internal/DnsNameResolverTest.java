@@ -248,7 +248,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_androidNeverCache() throws Exception {
-    resolve_neverCache(false);
+    resolve_neverCache(true);
   }
 
   @Test
@@ -391,7 +391,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void resolve_androidCacheExpired() throws Exception {
-    resolve_cacheExpired(false);
+    resolve_cacheExpired(true);
   }
 
   @Test
@@ -403,7 +403,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_androidInvalidTtlPropertyValue() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "not_a_number");
-    resolveDefaultValue(false);
+    resolveDefaultValue(true);
   }
 
   @Test
@@ -415,7 +415,7 @@ public class DnsNameResolverTest {
   @Test
   public void resolve_androidNoPropertyValue() throws Exception {
     System.clearProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    resolveDefaultValue(false);
+    resolveDefaultValue(true);
   }
 
   private void resolveDefaultValue(boolean isAndroid) throws Exception {

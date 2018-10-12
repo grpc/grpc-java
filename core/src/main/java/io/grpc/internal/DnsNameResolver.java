@@ -135,7 +135,6 @@ final class DnsNameResolver extends NameResolver {
   private final Resource<ExecutorService> executorResource;
   private final long networkAddressCacheTtlNanos;
   private final Stopwatch stopwatch;
-  private final boolean isAndroid;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
@@ -172,8 +171,7 @@ final class DnsNameResolver extends NameResolver {
     }
     this.proxyDetector = proxyDetector;
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
-    this.networkAddressCacheTtlNanos = getNetworkAddressCacheTtlNanos();
-    this.isAndroid = isAndroid;
+    this.networkAddressCacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
   }
 
   @Override
@@ -290,7 +288,7 @@ final class DnsNameResolver extends NameResolver {
     };
 
   /** Returns value of network address cache ttl property. */
-  private long getNetworkAddressCacheTtlNanos() {
+  private static long getNetworkAddressCacheTtlNanos(boolean isAndroid) {
     String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
     long cacheTtl =
         isAndroid ? DEFAULT_ANDROID_NETWORK_CACHE_TTL_SECONDS : DEFAULT_NETWORK_CACHE_TTL_SECONDS;
