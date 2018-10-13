@@ -61,6 +61,8 @@ import javax.net.ssl.TrustManagerFactory;
 public class OkHttpChannelBuilder extends
         AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
 
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+
   /** Identifies the negotiation used for starting up HTTP/2. */
   private enum NegotiationType {
     /** Uses TLS ALPN/NPN negotiation, assumes an SSL connection. */
@@ -157,6 +159,7 @@ public class OkHttpChannelBuilder extends
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
+  private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
 
   protected OkHttpChannelBuilder(String host, int port) {
@@ -270,6 +273,16 @@ public class OkHttpChannelBuilder extends
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutNanos = KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutNanos);
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. If not called, the default value
+   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   */
+  public OkHttpChannelBuilder flowControlWindow(int flowControlWindow) {
+    Preconditions.checkState(flowControlWindow > 0, "flowControlWindow must be positive");
+    this.flowControlWindow = flowControlWindow;
     return this;
   }
 
@@ -398,8 +411,8 @@ public class OkHttpChannelBuilder extends
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(transportExecutor, scheduledExecutorService,
         createSocketFactory(), hostnameVerifier, connectionSpec, maxInboundMessageSize(),
-        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory);
+        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, flowControlWindow,
+        keepAliveWithoutCalls, transportTracerFactory);
   }
 
   @Override
@@ -478,6 +491,7 @@ public class OkHttpChannelBuilder extends
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
     private final ScheduledExecutorService timeoutService;
+    private final int flowControlWindow;
     private boolean closed;
 
     private OkHttpTransportFactory(Executor executor,
@@ -489,6 +503,7 @@ public class OkHttpChannelBuilder extends
         boolean enableKeepAlive,
         long keepAliveTimeNanos,
         long keepAliveTimeoutNanos,
+        int flowControlWindow,
         boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory) {
       usingSharedScheduler = timeoutService == null;
@@ -502,6 +517,7 @@ public class OkHttpChannelBuilder extends
       this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
+      this.flowControlWindow = flowControlWindow;
 
       usingSharedExecutor = executor == null;
       this.transportTracerFactory =
@@ -537,6 +553,7 @@ public class OkHttpChannelBuilder extends
           hostnameVerifier,
           connectionSpec,
           maxMessageSize,
+          flowControlWindow,
           options.getProxyParameters(),
           tooManyPingsRunnable,
           transportTracerFactory.create());
