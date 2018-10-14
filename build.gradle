@@ -29,11 +29,9 @@ subprojects {
     apply plugin: "ru.vyarus.animalsniffer"
 
     apply plugin: "net.ltgt.errorprone"
-    // jdk10 not supported by errorprone: https://github.com/google/error-prone/issues/860
-    if (!JavaVersion.current().isJava10Compatible() &&
-        rootProject.properties.get('errorProne', true)) {
+    if (rootProject.properties.get('errorProne', true)) {
         dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.3.1'
+            errorprone 'com.google.errorprone:error_prone_core:2.3.2'
             errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
 
             annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
