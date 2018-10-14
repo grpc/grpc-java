@@ -148,9 +148,9 @@ sourceSets {
 
 compileTestJava {
     options.compilerArgs += [
-        "-Xlint:-cast",
-        "-XepExcludedPaths:.*/build/generated/source/proto/.*",
+        "-Xlint:-cast"
     ]
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 compileTestLiteJava {
@@ -161,10 +161,12 @@ compileTestLiteJava {
         "-Xlint:-unchecked",
         "-Xlint:-fallthrough"
     ]
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 compileTestNanoJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 protobuf {

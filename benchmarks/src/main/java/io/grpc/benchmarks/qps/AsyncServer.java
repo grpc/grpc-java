@@ -76,6 +76,7 @@ public class AsyncServer {
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
+      @SuppressWarnings("CatchAndPrintStackTrace")
       public void run() {
         try {
           System.out.println("QPS Server shutting down");
