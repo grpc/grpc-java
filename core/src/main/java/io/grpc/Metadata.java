@@ -668,11 +668,11 @@ public final class Metadata {
      * Returns true if the two objects are both Keys, and their names match (case insensitive).
      */
     @Override
-    public boolean equals(Object o) {
+    public final boolean equals(Object o) {
       if (this == o) {
         return true;
       }
-      if (o == null || getClass() != o.getClass()) {
+      if (!(o instanceof Key)) {
         return false;
       }
       Key<?> key = (Key<?>) o;
@@ -680,7 +680,7 @@ public final class Metadata {
     }
 
     @Override
-    public int hashCode() {
+    public final int hashCode() {
       return name.hashCode();
     }
 
