@@ -23,6 +23,10 @@ subprojects {
     apply plugin: "signing"
     apply plugin: "jacoco"
 
+    jacoco {
+      toolVersion = "0.8.2"
+    }
+
     apply plugin: "me.champeau.gradle.jmh"
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
