@@ -131,12 +131,12 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
   private final InUseStateAggregator<ConnectionClientTransport> inUseStateAggregator =
       new InUseStateAggregator<ConnectionClientTransport>() {
         @Override
-        void handleInUse() {
+        protected void handleInUse() {
           callback.onInUse(InternalSubchannel.this);
         }
 
         @Override
-        void handleNotInUse() {
+        protected void handleNotInUse() {
           callback.onNotInUse(InternalSubchannel.this);
         }
       };

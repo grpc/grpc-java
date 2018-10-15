@@ -121,7 +121,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
-  private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
+  private final ExecutorHolder balancerRpcExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
@@ -537,7 +537,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.loadBalancerFactory = builder.loadBalancerFactory;
     }
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
-    this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
+    this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport(this.executor, this.channelExecutor);
     this.delayedTransport.start(delayedTransportListener);
@@ -835,6 +835,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       terminated = true;
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
+      balancerRpcExecutorHolder.release();
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }
@@ -1153,7 +1154,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         oobChannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "OobChannel");
       }
       final OobChannel oobChannel = new OobChannel(
-          authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
+          authority, balancerRpcExecutorHolder.getExecutor(),
+          transportFactory.getScheduledExecutorService(),
           channelExecutor, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       if (channelTracer != null) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
@@ -1455,6 +1457,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public String toString() {
       return subchannel.getLogId().toString();
     }
+
+    @Override
+    public Channel asChannel() {
+      return new SubchannelChannel(
+          subchannel, balancerRpcExecutorHolder.getExecutor(),
+          transportFactory.getScheduledExecutorService(),
+          callTracerFactory.create());
+    }
   }
 
   @Override
@@ -1510,16 +1520,41 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   private final class IdleModeStateAggregator extends InUseStateAggregator<Object> {
     @Override
-    void handleInUse() {
+    protected void handleInUse() {
       exitIdleMode();
     }
 
     @Override
-    void handleNotInUse() {
+    protected void handleNotInUse() {
       if (shutdown.get()) {
         return;
       }
       rescheduleIdleTimer();
+    }
+  }
+
+  /**
+   * Lazily request for Executor from an executor pool.
+   */
+  private static final class ExecutorHolder {
+    private final ObjectPool<? extends Executor> pool;
+    private Executor executor;
+
+    ExecutorHolder(ObjectPool<? extends Executor> executorPool) {
+      this.pool = checkNotNull(executorPool, "executorPool");
+    }
+
+    synchronized Executor getExecutor() {
+      if (executor == null) {
+        executor = checkNotNull(pool.getObject(), "%s.getObject()", executor);
+      }
+      return executor;
+    }
+
+    synchronized void release() {
+      if (executor != null) {
+        executor = pool.returnObject(executor);
+      }
     }
   }
 }

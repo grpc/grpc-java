@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import com.google.common.base.Preconditions;
+import io.grpc.CallOptions;
 import io.netty.handler.codec.http2.Http2Headers;
 
 /**
@@ -27,16 +28,21 @@ class CreateStreamCommand extends WriteQueue.AbstractQueuedCommand {
   private final Http2Headers headers;
   private final NettyClientStream.TransportState stream;
   private final boolean get;
+  private final CallOptions callOptions;
 
-  CreateStreamCommand(Http2Headers headers,
-                      NettyClientStream.TransportState stream) {
-    this(headers, stream, false);
+  CreateStreamCommand(
+      Http2Headers headers,
+      NettyClientStream.TransportState stream) {
+    this(headers, stream, CallOptions.DEFAULT, false);
   }
 
-  CreateStreamCommand(Http2Headers headers,
-                      NettyClientStream.TransportState stream, boolean get) {
+  CreateStreamCommand(
+      Http2Headers headers,
+      NettyClientStream.TransportState stream,
+      CallOptions callOptions, boolean get) {
     this.stream = Preconditions.checkNotNull(stream, "stream");
     this.headers = Preconditions.checkNotNull(headers, "headers");
+    this.callOptions = Preconditions.checkNotNull(callOptions, "callOptions");
     this.get = get;
   }
 
@@ -46,6 +52,10 @@ class CreateStreamCommand extends WriteQueue.AbstractQueuedCommand {
 
   Http2Headers headers() {
     return headers;
+  }
+
+  CallOptions callOptions() {
+    return callOptions;
   }
 
   boolean isGet() {

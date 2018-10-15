@@ -25,6 +25,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -95,6 +96,7 @@ public abstract class AbstractClientStream extends AbstractStream
 
   private final TransportTracer transportTracer;
   private final Framer framer;
+  private final CallOptions callOptions;
   private boolean useGet;
   private Metadata headers;
   /**
@@ -109,9 +111,11 @@ public abstract class AbstractClientStream extends AbstractStream
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
       Metadata headers,
+      CallOptions callOptions,
       boolean useGet) {
     checkNotNull(headers, "headers");
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
+    this.callOptions = checkNotNull(callOptions, "callOptions");
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -170,6 +174,13 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   protected final Framer framer() {
     return framer;
+  }
+
+  /**
+   * Returns the CallOptions for this stream.
+   */
+  public final CallOptions callOptions() {
+    return callOptions;
   }
 
   @Override
