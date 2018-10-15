@@ -32,12 +32,6 @@ class CreateStreamCommand extends WriteQueue.AbstractQueuedCommand {
 
   CreateStreamCommand(
       Http2Headers headers,
-      NettyClientStream.TransportState stream) {
-    this(headers, stream, CallOptions.DEFAULT, false);
-  }
-
-  CreateStreamCommand(
-      Http2Headers headers,
       NettyClientStream.TransportState stream,
       CallOptions callOptions, boolean get) {
     this.stream = Preconditions.checkNotNull(stream, "stream");
