@@ -672,6 +672,9 @@ public abstract class LoadBalancer {
      * you make long-running RPCs, you need to make sure they will finish in time after the
      * Subchannel has transitioned away from {@code READY} state
      * (notified through {@link #handleSubchannelState}).
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue.
      */
     @Internal
     public Channel asChannel() {
