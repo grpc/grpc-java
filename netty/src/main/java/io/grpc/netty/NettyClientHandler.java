@@ -538,9 +538,9 @@ class NettyClientHandler extends AbstractNettyHandler {
                     stream.getStatsTraceContext().clientOutboundHeaders();
                     http2Stream.setProperty(streamKey, stream);
 
-                    // This delays the inUse state until the I/O completes, which technically may be
-                    // later than we would like.
-                    if (GrpcUtil.shouldBeCountedForInUse(command.callOptions())) {
+                    // This delays the in-use state until the I/O completes, which technically may
+                    // be later than we would like.
+                    if (command.shouldBeCountedForInUse()) {
                       inUseState.updateObjectInUse(http2Stream, true);
                     }
 

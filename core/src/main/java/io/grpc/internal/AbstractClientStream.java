@@ -96,7 +96,7 @@ public abstract class AbstractClientStream extends AbstractStream
 
   private final TransportTracer transportTracer;
   private final Framer framer;
-  private final CallOptions callOptions;
+  private boolean shouldBeCountedForInUse;
   private boolean useGet;
   private Metadata headers;
   /**
@@ -115,7 +115,7 @@ public abstract class AbstractClientStream extends AbstractStream
       boolean useGet) {
     checkNotNull(headers, "headers");
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
-    this.callOptions = checkNotNull(callOptions, "callOptions");
+    this.shouldBeCountedForInUse = GrpcUtil.shouldBeCountedForInUse(callOptions);
     this.useGet = useGet;
     if (!useGet) {
       framer = new MessageFramer(this, bufferAllocator, statsTraceCtx);
@@ -177,10 +177,11 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   /**
-   * Returns the CallOptions for this stream.
+   * Returns true if this stream should be counted when determining the in-use state of the
+   * transport.
    */
-  public final CallOptions callOptions() {
-    return callOptions;
+  public final boolean shouldBeCountedForInUse() {
+    return shouldBeCountedForInUse;
   }
 
   @Override

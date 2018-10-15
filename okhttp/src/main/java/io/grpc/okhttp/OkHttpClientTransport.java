@@ -889,7 +889,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         }
       }
     }
-    if (GrpcUtil.shouldBeCountedForInUse(stream.callOptions())) {
+    if (stream.shouldBeCountedForInUse()) {
       inUseState.updateObjectInUse(stream, false);
     }
   }
@@ -906,7 +906,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         keepAliveManager.onTransportActive();
       }
     }
-    if (GrpcUtil.shouldBeCountedForInUse(stream.callOptions())) {
+    if (stream.shouldBeCountedForInUse()) {
       inUseState.updateObjectInUse(stream, true);
     }
   }

@@ -156,7 +156,7 @@ class NettyClientStream extends AbstractClientStream {
 
       // Write the command requesting the creation of the stream.
       writeQueue.enqueue(
-          new CreateStreamCommand(http2Headers, transportState(), callOptions(), get),
+          new CreateStreamCommand(http2Headers, transportState(), shouldBeCountedForInUse(), get),
           !method.getType().clientSendsOneMessage() || get).addListener(failureListener);
     }
 
