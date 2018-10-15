@@ -32,6 +32,7 @@ dependencies {
         // prefer 20.0 from libraries instead of 19.0
         exclude group: 'com.google.guava', module: 'guava'
     }
+    compileOnly libraries.javax_annotation
     runtime project(':grpc-grpclb')
     testCompile libraries.guava,
             libraries.guava_testlib,
@@ -45,13 +46,15 @@ dependencies {
 
 configureProtoCompilation()
 
+import net.ltgt.gradle.errorprone.CheckSeverity
+
 [compileJava, compileTestJava].each() {
-    // ALTS retuns a lot of futures that we mostly don't care about.
     // protobuf calls valueof. Will be fixed in next release (google/protobuf#4046)
     it.options.compilerArgs += [
-        "-Xlint:-deprecation",
-        "-Xep:FutureReturnValueIgnored:OFF"
+        "-Xlint:-deprecation"
     ]
+    // ALTS returns a lot of futures that we mostly don't care about.
+    it.options.errorprone.check("FutureReturnValueIgnored", CheckSeverity.OFF)
 }
 
 javadoc { exclude 'io/grpc/alts/internal/**' }

@@ -131,10 +131,13 @@ configurations {
 dependencies {
     testCompile project(':grpc-protobuf'),
             project(':grpc-stub')
+    testCompileOnly libraries.javax_annotation
     testLiteCompile project(':grpc-protobuf-lite'),
             project(':grpc-stub')
+    testLiteCompileOnly libraries.javax_annotation
     testNanoCompile project(':grpc-protobuf-nano'),
             project(':grpc-stub')
+    testNanoCompileOnly libraries.javax_annotation
 }
 
 sourceSets {
@@ -148,9 +151,9 @@ sourceSets {
 
 compileTestJava {
     options.compilerArgs += [
-        "-Xlint:-cast",
-        "-XepExcludedPaths:.*/build/generated/source/proto/.*",
+        "-Xlint:-cast"
     ]
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 compileTestLiteJava {
@@ -161,10 +164,12 @@ compileTestLiteJava {
         "-Xlint:-unchecked",
         "-Xlint:-fallthrough"
     ]
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 compileTestNanoJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
+    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
 protobuf {

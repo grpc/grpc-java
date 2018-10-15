@@ -70,6 +70,13 @@
       <version>${protobuf.version}</version>
     </dependency>
     <dependency>
+      <!-- JDK 11 no longer have javax.annotation.Generated -->
+      <groupId>javax.annotation</groupId>
+      <artifactId>javax.annotation-api</artifactId>
+      <version>1.2</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.12</version>
