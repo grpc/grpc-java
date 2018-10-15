@@ -668,6 +668,10 @@ public abstract class LoadBalancer {
      *   will fail immediately.</li>
      * </ol>
      *
+     * <p>RPCs made on this Channel is not counted when determining ManagedChannel's {@link
+     * ManagedChannelBuilder#idleTimeout idle mode}.  In other words, they won't prevent
+     * ManagedChannel from entering idle mode.
+     *
      * <p>Warning: RPCs made on this channel will prevent a shut-down transport from terminating. If
      * you make long-running RPCs, you need to make sure they will finish in time after the
      * Subchannel has transitioned away from {@code READY} state
