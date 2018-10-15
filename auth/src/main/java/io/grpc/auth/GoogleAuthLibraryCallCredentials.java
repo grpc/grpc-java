@@ -23,7 +23,6 @@ import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallCredentials;
-import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
