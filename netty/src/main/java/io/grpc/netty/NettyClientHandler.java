@@ -278,6 +278,9 @@ class NettyClientHandler extends AbstractNettyHandler {
 
       @Override
       public void onStreamClosed(Http2Stream stream) {
+        // Although streams with CALL_OPTIONS_RPC_OWNED_BY_BALANCER are not marked as "in-use" in
+        // the first place, we don't propagate that option here, and it's safe to reset the in-use
+        // state for them, which will be a cheap no-op.
         inUseState.updateObjectInUse(stream, false);
         if (connection().numActiveStreams() == 0
             && NettyClientHandler.this.keepAliveManager != null) {
