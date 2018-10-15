@@ -74,6 +74,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   private final String authority;
   private final DelayedClientTransport delayedTransport;
   private final InternalChannelz channelz;
+  private final ObjectPool<? extends Executor> executorPool;
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -100,12 +101,13 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   };
 
   OobChannel(
-      String authority, Executor executor,
+      String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, ChannelExecutor channelExecutor,
       CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, InternalChannelz channelz,
       TimeProvider timeProvider) {
     this.authority = checkNotNull(authority, "authority");
-    this.executor = checkNotNull(executor, "executor");
+    this.executorPool = checkNotNull(executorPool, "executorPool");
+    this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.deadlineCancellationExecutor = checkNotNull(
         deadlineCancellationExecutor, "deadlineCancellationExecutor");
     this.delayedTransport = new DelayedClientTransport(executor, channelExecutor);
@@ -273,6 +275,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     channelz.removeSubchannel(this);
     // When delayedTransport is terminated, it shuts down subchannel.  Therefore, at this point
     // both delayedTransport and subchannel have terminated.
+    executorPool.returnObject(executor);
     terminatedLatch.countDown();
   }
 

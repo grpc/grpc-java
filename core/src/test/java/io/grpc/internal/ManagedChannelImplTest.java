@@ -1170,9 +1170,8 @@ public class ManagedChannelImplTest {
     createChannel();
 
     ManagedChannel oob1 = helper.createOobChannel(addressGroup, "oob1authority");
-    verify(balancerRpcExecutorPool).getObject();
     ManagedChannel oob2 = helper.createOobChannel(addressGroup, "oob2authority");
-    verifyNoMoreInteractions(balancerRpcExecutorPool);
+    verify(balancerRpcExecutorPool, times(2)).getObject();
 
     assertEquals("oob1authority", oob1.authority());
     assertEquals("oob2authority", oob2.authority());
@@ -1228,7 +1227,7 @@ public class ManagedChannelImplTest {
     assertTrue(oob1.isShutdown());
     assertTrue(oob2.isShutdown());
     assertTrue(oob2.isTerminated());
-    verify(balancerRpcExecutorPool, never()).returnObject(anyObject());
+    verify(balancerRpcExecutorPool).returnObject(balancerRpcExecutor.getScheduledExecutorService());
 
     // New RPCs will be rejected.
     assertEquals(0, balancerRpcExecutor.numPendingTasks());
@@ -1259,12 +1258,12 @@ public class ManagedChannelImplTest {
     // Delayed transport has already terminated.  Terminating the transport terminates the
     // subchannel, which in turn terimates the OOB channel, which terminates the channel.
     assertFalse(oob1.isTerminated());
-    // balancerRpcExecutor is returned only after the channel is terminated.
-    verify(balancerRpcExecutorPool, never()).returnObject(anyObject());
+    verify(balancerRpcExecutorPool).returnObject(balancerRpcExecutor.getScheduledExecutorService());
     transportInfo.listener.transportTerminated();
     assertTrue(oob1.isTerminated());
     assertTrue(channel.isTerminated());
-    verify(balancerRpcExecutorPool).returnObject(balancerRpcExecutor.getScheduledExecutorService());
+    verify(balancerRpcExecutorPool, times(2))
+        .returnObject(balancerRpcExecutor.getScheduledExecutorService());
   }
 
   @Test

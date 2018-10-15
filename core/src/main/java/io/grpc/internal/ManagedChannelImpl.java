@@ -121,6 +121,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ClientTransportFactory transportFactory;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
+  private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
   private final ExecutorHolder balancerRpcExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
@@ -537,6 +538,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       this.loadBalancerFactory = builder.loadBalancerFactory;
     }
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
+    this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
     this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport(this.executor, this.channelExecutor);
@@ -1154,8 +1156,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         oobChannelTracer = new ChannelTracer(maxTraceEvents, oobChannelCreationTime, "OobChannel");
       }
       final OobChannel oobChannel = new OobChannel(
-          authority, balancerRpcExecutorHolder.getExecutor(),
-          transportFactory.getScheduledExecutorService(),
+          authority, balancerRpcExecutorPool, transportFactory.getScheduledExecutorService(),
           channelExecutor, callTracerFactory.create(), oobChannelTracer, channelz, timeProvider);
       if (channelTracer != null) {
         channelTracer.reportEvent(new ChannelTrace.Event.Builder()
