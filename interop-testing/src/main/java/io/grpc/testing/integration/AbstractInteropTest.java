@@ -1670,10 +1670,12 @@ public abstract class AbstractInteropTest {
   }
 
   /** Sends a large unary rpc with compute engine credentials. */
-  public void computeEngineCreds(String serviceAccount, String oauthScope) throws Exception {
-    ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
-    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withCallCredentials(MoreCallCredentials.from(credentials));
+  public void computeEngineCreds(String serviceAccount, String oauthScope, boolean usingGoogleDefaultCreds) throws Exception {
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub;
+    if (!usingGoogleDefaultCreds) {
+      ComputeEngineCredentials credentials = ComputeEngineCredentials.create();
+      stub = blockingStub.withCallCredentials(MoreCallCredentials.from(credentials));
+    }
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setFillOauthScope(true)
@@ -1700,7 +1702,7 @@ public abstract class AbstractInteropTest {
   }
 
   /** Test JWT-based auth. */
-  public void jwtTokenCreds(InputStream serviceAccountJson) throws Exception {
+  public void jwtTokenCreds(InputStream serviceAccountJson, boolean usingGoogleDefaultCreds) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setResponseType(PayloadType.COMPRESSABLE)
         .setResponseSize(314159)
@@ -1711,8 +1713,10 @@ public abstract class AbstractInteropTest {
 
     ServiceAccountCredentials credentials = (ServiceAccountCredentials)
         GoogleCredentials.fromStream(serviceAccountJson);
-    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
-        .withCallCredentials(MoreCallCredentials.from(credentials));
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub;
+    if (!usingGoogleDefaultCreds) {
+      stub = stub.withCallCredentials(MoreCallCredentials.from(credentials));
+    }
     SimpleResponse response = stub.unaryCall(request);
     assertEquals(credentials.getClientEmail(), response.getUsername());
     assertEquals(314159, response.getPayload().getBody().size());
