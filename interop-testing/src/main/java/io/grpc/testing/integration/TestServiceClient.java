@@ -267,7 +267,11 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CREDS:
-        tester.computeEngineCreds(defaultServiceAccount, oauthScope);
+        if ("google_default_credentials".equals(customCredentialsType)) {
+          tester.computeEngineCreds(defaultServiceAccount, oauthScope, true);
+        } else {
+          tester.computeEngineCreds(defaultServiceAccount, oauthScope, false);
+        }
         break;
 
       case SERVICE_ACCOUNT_CREDS: {
@@ -279,7 +283,11 @@ public class TestServiceClient {
 
       case JWT_TOKEN_CREDS: {
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
-        tester.jwtTokenCreds(credentialsStream);
+        if ("google_default_credentials".equals(customCredentialsType)) {
+          tester.jwtTokenCreds(credentialsStream, true);
+        } else {
+          tester.jwtTokenCreds(credentialsStream, false);
+        }
         break;
       }
 
