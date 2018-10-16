@@ -462,12 +462,9 @@ public abstract class LoadBalancer {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      *
-     * <p>The default implementation calls {@link #createSubchannel(List, Attributes)}.
-     * Implementations should not override this method.
-     *
      * @since 1.2.0
      */
-    public Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
+    public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
       Preconditions.checkNotNull(addrs, "addrs");
       return createSubchannel(Collections.singletonList(addrs), attrs);
     }
@@ -493,14 +490,11 @@ public abstract class LoadBalancer {
      * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
      * continue using an existing connection.
      *
-     * <p>The default implementation calls {@link #updateSubchannelAddresses(
-     * LoadBalancer.Subchannel, List)}. Implementations should not override this method.
-     *
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel}
      * @since 1.4.0
      */
-    public void updateSubchannelAddresses(
+    public final void updateSubchannelAddresses(
         Subchannel subchannel, EquivalentAddressGroup addrs) {
       Preconditions.checkNotNull(addrs, "addrs");
       updateSubchannelAddresses(subchannel, Collections.singletonList(addrs));
@@ -625,14 +619,11 @@ public abstract class LoadBalancer {
      * Returns the addresses that this Subchannel is bound to. The default implementation calls
      * getAllAddresses().
      *
-     * <p>The default implementation calls {@link #getAllAddresses()}. Implementations should not
-     * override this method.
-     *
      * @throws IllegalStateException if this subchannel has more than one EquivalentAddressGroup.
      *     Use getAllAddresses() instead
      * @since 1.2.0
      */
-    public EquivalentAddressGroup getAddresses() {
+    public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
       Preconditions.checkState(groups.size() == 1, "Does not have exactly one group");
       return groups.get(0);
