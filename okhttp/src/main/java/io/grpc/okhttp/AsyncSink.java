@@ -70,6 +70,9 @@ final class AsyncSink implements Sink {
     }
     synchronized (lock) {
       buffer.write(source, byteCount);
+      if (buffer.size() < COMPLETE_SEGMENT_SIZE) {
+        return;
+      }
     }
     serializingExecutor.execute(new Runnable() {
       @Override
