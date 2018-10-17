@@ -93,12 +93,12 @@ class OkHttpClientStream extends AbstractClientStream {
     this.state =
         new TransportState(
             maxMessageSize,
-            initialWindowSize,
             statsTraceCtx,
             lock,
             frameWriter,
             outboundFlow,
-            transport);
+            transport,
+            initialWindowSize);
   }
 
   @Override
@@ -215,20 +215,20 @@ class OkHttpClientStream extends AbstractClientStream {
 
     public TransportState(
         int maxMessageSize,
-        int initialWindowSize,
         StatsTraceContext statsTraceCtx,
         Object lock,
         AsyncFrameWriter frameWriter,
         OutboundFlowController outboundFlow,
-        OkHttpClientTransport transport) {
+        OkHttpClientTransport transport,
+        int initialWindowSize) {
       super(maxMessageSize, statsTraceCtx, OkHttpClientStream.this.getTransportTracer());
       this.lock = checkNotNull(lock, "lock");
       this.frameWriter = frameWriter;
       this.outboundFlow = outboundFlow;
       this.transport = transport;
-      this.initialWindowSize = initialWindowSize;
       this.window = initialWindowSize;
       this.processedWindow = initialWindowSize;
+      this.initialWindowSize = initialWindowSize;
     }
 
     @GuardedBy("lock")

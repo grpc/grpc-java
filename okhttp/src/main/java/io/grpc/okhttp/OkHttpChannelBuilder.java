@@ -489,9 +489,9 @@ public class OkHttpChannelBuilder extends
     private final boolean enableKeepAlive;
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
+    private final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
     private final ScheduledExecutorService timeoutService;
-    private final int flowControlWindow;
     private boolean closed;
 
     private OkHttpTransportFactory(Executor executor,
@@ -516,8 +516,8 @@ public class OkHttpChannelBuilder extends
       this.enableKeepAlive = enableKeepAlive;
       this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
-      this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.flowControlWindow = flowControlWindow;
+      this.keepAliveWithoutCalls = keepAliveWithoutCalls;
 
       usingSharedExecutor = executor == null;
       this.transportTracerFactory =
