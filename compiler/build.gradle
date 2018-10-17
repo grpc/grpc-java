@@ -103,7 +103,7 @@ model {
                     // Link other (system) libraries dynamically.
                     // Clang under OSX doesn't support these options.
                     linker.args "-Wl,-Bstatic", "-lprotoc", "-lprotobuf", "-static-libgcc",
-                            "-static-libstdc++",
+                            "-static-libstdc++", "-fstack-protector",
                             "-Wl,-Bdynamic", "-lpthread", "-s"
                 }
                 addEnvArgs("LDFLAGS", linker.args)
