@@ -85,6 +85,8 @@ final class DnsNameResolver extends NameResolver {
 
   private static final String JNDI_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
+  private static final String JNDI_LOCALHOST_PROPERTY =
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
   private static final String JNDI_SRV_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "true");
   private static final String JNDI_TXT_PROPERTY =
@@ -92,6 +94,8 @@ final class DnsNameResolver extends NameResolver {
 
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
+  @VisibleForTesting
+  static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
   @VisibleForTesting
   static boolean enableSrv = Boolean.parseBoolean(JNDI_SRV_PROPERTY);
   @VisibleForTesting
@@ -230,7 +234,7 @@ final class DnsNameResolver extends NameResolver {
       ResolutionResults resolutionResults;
       try {
         ResourceResolver resourceResolver = null;
-        if (enableJndi) {
+        if (enableJndi && !likelyIpAddressOrLocalhost(resolver.host, !enableJndiLocalhost)) {
           resourceResolver = resolver.getResourceResolver();
         }
         resolutionResults = resolveAll(
@@ -624,5 +628,14 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     return localHostname;
+  }
+
+  @VisibleForTesting
+  static boolean likelyIpAddressOrLocalhost(String target, boolean ignoreLocalhost) {
+    if ("localhost".equals(target)) {
+      return ignoreLocalhost;
+    }
+    return target.contains(":")
+        || (target.length() > 0 && Character.isDigit(target.charAt(target.length() - 1)));
   }
 }
