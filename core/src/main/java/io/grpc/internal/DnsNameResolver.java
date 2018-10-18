@@ -234,7 +234,7 @@ final class DnsNameResolver extends NameResolver {
       ResolutionResults resolutionResults;
       try {
         ResourceResolver resourceResolver = null;
-        if (enableJndi && !likelyIpAddressOrLocalhost(resolver.host, !enableJndiLocalhost)) {
+        if (shouldUseJndi(enableJndi, enableJndiLocalhost, resolver.host)) {
           resourceResolver = resolver.getResourceResolver();
         }
         resolutionResults = resolveAll(
@@ -631,11 +631,26 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @VisibleForTesting
-  static boolean likelyIpAddressOrLocalhost(String target, boolean ignoreLocalhost) {
-    if ("localhost".equals(target)) {
-      return ignoreLocalhost;
+  static boolean shouldUseJndi(boolean jndiEnabled, boolean jndiLocalhostEnabled, String target) {
+    if (!jndiEnabled) {
+      return false;
     }
-    return target.contains(":")
-        || (target.length() > 0 && Character.isDigit(target.charAt(target.length() - 1)));
+    if ("localhost".equals(target)) {
+      return jndiLocalhostEnabled;
+    }
+    // Check if this name looks like IPv6
+    if (target.contains(":")) {
+      return false;
+    }
+    // Check if this might be IPv4.  Such addresses have no alphabetic characters.  This also
+    // checks the target is empty.
+    boolean alldigits = true;
+    for (int i = 0; i < target.length(); i++) {
+      char c = target.charAt(i);
+      if (c != '.') {
+        alldigits &= (c >= '0' && c <= '9');
+      }
+    }
+    return !alldigits;
   }
 }
