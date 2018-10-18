@@ -38,19 +38,21 @@ final class ControlPlaneSchedulerImpl extends ControlPlaneScheduler {
   }
 
   @Override
-  public final ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
+  public ScheduledContext scheduleNow(Runnable task) {
     final ManagedRunnable runnable = new ManagedRunnable(task);
-    ScheduledFuture<?> future = null;
-    if (delay <= 0) {
-      channelExecutor.executeLater(runnable).drain();
-    } else {
-      future = timerService.schedule(new Runnable() {
+    channelExecutor.executeLater(runnable).drain();
+    return new ScheduledContextImpl(runnable, null);
+  }
+
+  @Override
+  public ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
+    final ManagedRunnable runnable = new ManagedRunnable(task);
+    ScheduledFuture<?> future = timerService.schedule(new Runnable() {
         @Override
         public void run() {
           channelExecutor.executeLater(runnable).drain();
         }
       }, delay, unit);
-    }
     return new ScheduledContextImpl(runnable, future);
   }
 

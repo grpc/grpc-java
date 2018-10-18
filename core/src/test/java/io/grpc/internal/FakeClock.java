@@ -70,28 +70,33 @@ public final class FakeClock {
       };
 
   private final ControlPlaneScheduler controlPlaneScheduler = new ControlPlaneScheduler() {
-    @Override
-    public ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
-      final ScheduledTask future =
-          (ScheduledTask) scheduledExecutorService.schedule(task, delay, unit);
-      return new ScheduledContext() {
-        @Override
-        public void cancel() {
-          future.cancel(false);
-        }
+      @Override
+      public ScheduledContext scheduleNow(Runnable task) {
+        return schedule(task, 0, TimeUnit.NANOSECONDS);
+      }
 
-        @Override
-        public boolean isPending() {
-          return !(future.hasRun || future.isCancelled());
-        }
-      };
-    }
+      @Override
+      public ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
+        final ScheduledTask future =
+            (ScheduledTask) scheduledExecutorService.schedule(task, delay, unit);
+        return new ScheduledContext() {
+          @Override
+          public void cancel() {
+            future.cancel(false);
+          }
 
-    @Override
-    public long currentTimeNanos() {
-      return currentTimeNanos;
-    }
-  };
+          @Override
+          public boolean isPending() {
+            return !(future.hasRun || future.isCancelled());
+          }
+        };
+      }
+
+      @Override
+      public long currentTimeNanos() {
+        return currentTimeNanos;
+      }
+    };
 
   private long currentTimeNanos;
 

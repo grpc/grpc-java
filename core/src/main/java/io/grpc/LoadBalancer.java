@@ -576,6 +576,11 @@ public abstract class LoadBalancer {
       // TODO(zhangkun): make getScheduler() abstract after runSerialized() is deleted
       return new ControlPlaneScheduler() {
         @Override
+        public ScheduledContext scheduleNow(Runnable task) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
         public ScheduledContext schedule(Runnable task, long delay, TimeUnit unit) {
           throw new UnsupportedOperationException();
         }

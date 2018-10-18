@@ -31,20 +31,18 @@ public abstract class ControlPlaneScheduler {
   /**
    * Schedules a task to run as soon as poassible.
    *
-   * <p>Non-reentrency is guaranteed.  If this method is called from within an operation in the
-   * synchronization context, the task will be queued and run after the current operation has
-   * finished, rather than running inline.
+   * <p>Non-reentrency is guaranteed.  Although task may run inline, but if this method is called
+   * from within an operation in the synchronization context, the task will be queued and run after
+   * the current operation has finished, rather than running inline.
    *
    * <p>Ordering is guaranteed.  Tasks are guaranteed to run in the same order as they are
    * submitted.
    */
-  public final ScheduledContext scheduleNow(Runnable task) {
-    return schedule(task, 0, TimeUnit.NANOSECONDS);
-  }
+  public abstract ScheduledContext scheduleNow(Runnable task);
 
   /**
-   * Schedules a task to be run after a delay.  If delay is not positive, this is equivalent to
-   * {@link #scheduleNow}.
+   * Schedules a task to be run after a delay.  Unlike {@link #scheduleNow}, the task will typically
+   * run from a different thread.
    */
   public abstract ScheduledContext schedule(Runnable task, long delay, TimeUnit unit);
 
