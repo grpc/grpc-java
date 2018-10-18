@@ -252,16 +252,21 @@ public final class FakeClock {
    */
   public int runDueTasks() {
     int count = 0;
-    for (Iterator<ScheduledTask> it = tasks.iterator(); it.hasNext();) {
-      ScheduledTask task = it.next();
-      if (task.dueTimeNanos <= currentTimeNanos) {
-        it.remove();
-        task.hasRun = true;
-        task.command.run();
-        task.complete();
-        count++;
+    boolean hasRunTasks;
+    do {
+      hasRunTasks = false;
+      for (Iterator<ScheduledTask> it = tasks.iterator(); it.hasNext();) {
+        ScheduledTask task = it.next();
+        if (task.dueTimeNanos <= currentTimeNanos) {
+          it.remove();
+          task.hasRun = true;
+          task.command.run();
+          task.complete();
+          count++;
+          hasRunTasks = true;
+        }
       }
-    }
+    } while (hasRunTasks);
     return count;
   }
 
