@@ -19,9 +19,6 @@ package io.grpc.grpclb;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourcePool;
-import io.grpc.internal.TimeProvider;
 
 /**
  * A factory for {@link LoadBalancer}s that uses the GRPCLB protocol.

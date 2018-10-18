@@ -30,7 +30,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
@@ -38,7 +37,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.SerializingExecutor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

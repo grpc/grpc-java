@@ -16,13 +16,11 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkState;
-
-import io.grpc.ControlPlaneScheduler;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
+import io.grpc.ControlPlaneScheduler;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -54,8 +52,7 @@ public final class FakeClock {
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
-  // Must keep the order of tasks because tests that use FakeClock-backed ControlPlaneScheduler
-  // schedule operations and expect them to be run in the same order.
+  // Must keep the ordering of tasks as they are required by ControlPlaneScheduler.scheduleNow().
   private final LinkedBlockingQueue<ScheduledTask> tasks = new LinkedBlockingQueue<>();
 
   private final Ticker ticker =
