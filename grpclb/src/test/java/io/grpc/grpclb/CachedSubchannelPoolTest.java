@@ -32,10 +32,10 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
+import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelScheduledTask;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.SerializingExecutor;
@@ -60,18 +60,17 @@ public class CachedSubchannelPoolTest {
   private static final Attributes.Key<String> ATTR_KEY = Attributes.Key.create("test-attr");
   private static final Attributes ATTRS1 = Attributes.newBuilder().set(ATTR_KEY, "1").build();
   private static final Attributes ATTRS2 = Attributes.newBuilder().set(ATTR_KEY, "2").build();
-  private static final FakeClock.TaskFilter SHUTDOWN_SCHEDULED_TASK_FILTER =
+  private static final FakeClock.TaskFilter SHUTDOWN_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command instanceof ShutdownSubchannelScheduledTask;
+          return command instanceof ShutdownSubchannelTask;
         }
       };
 
-  private final SerializingExecutor channelExecutor =
-      new SerializingExecutor(MoreExecutors.directExecutor());
   private final Helper helper = mock(Helper.class);
   private final FakeClock clock = new FakeClock();
+  private final ControlPlaneScheduler scheduler = clock.getControlPlaneScheduler();
   private final CachedSubchannelPool pool = new CachedSubchannelPool();
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
 
@@ -91,15 +90,8 @@ public class CachedSubchannelPoolTest {
           return subchannel;
         }
       }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          Runnable task = (Runnable) invocation.getArguments()[0];
-          channelExecutor.execute(task);
-          return null;
-        }
-      }).when(helper).runSerialized(any(Runnable.class));
-    pool.init(helper, clock.getScheduledExecutorService());
+    when(helper.getScheduler()).thenReturn(scheduler);
+    pool.init(helper);
   }
 
   @After
@@ -138,7 +130,6 @@ public class CachedSubchannelPoolTest {
     verify(subchannel2).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, times(2)).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
@@ -182,7 +173,6 @@ public class CachedSubchannelPoolTest {
     verify(subchannel1a).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, times(2)).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
@@ -192,26 +182,25 @@ public class CachedSubchannelPoolTest {
     Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS1);
     assertThat(subchannel1).isNotSameAs(subchannel2);
 
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).isEmpty();
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).isEmpty();
     pool.returnSubchannel(subchannel2);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(1);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(1);
 
     // If the subchannel being returned has an address that is the same as a subchannel in the pool,
     // the returned subchannel will be shut down.
     verify(subchannel1, never()).shutdown();
     pool.returnSubchannel(subchannel1);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(1);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(1);
     verify(subchannel1).shutdown();
 
     pool.returnSubchannel(subchannel3);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(2);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(2);
     // Returning the same subchannel twice has no effect.
     pool.returnSubchannel(subchannel3);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(2);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(2);
 
     verify(subchannel2, never()).shutdown();
     verify(subchannel3, never()).shutdown();
-    verify(helper, never()).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
@@ -231,6 +220,5 @@ public class CachedSubchannelPoolTest {
 
     verify(subchannel3, never()).shutdown();
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, never()).runSerialized(any(ShutdownSubchannelTask.class));
   }
 }

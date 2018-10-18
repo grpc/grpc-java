@@ -19,6 +19,7 @@ package io.grpc.util;
 import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
+import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer.Subchannel;
@@ -63,6 +64,7 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
+  @Deprecated
   public void runSerialized(Runnable task) {
     delegate().runSerialized(task);
   }
@@ -75,6 +77,11 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public String getAuthority() {
     return delegate().getAuthority();
+  }
+
+  @Override
+  public ControlPlaneScheduler getScheduler() {
+    return delegate().getScheduler();
   }
 
   @Override

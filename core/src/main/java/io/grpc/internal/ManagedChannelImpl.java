@@ -42,6 +42,7 @@ import io.grpc.CompressorRegistry;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
+import io.grpc.ControlPlaneScheduler;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
@@ -127,6 +128,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final int maxTraceEvents;
 
   private final ChannelExecutor channelExecutor = new PanicChannelExecutor();
+  private final ControlPlaneSchedulerImpl controlPlaneScheduler;
 
   private boolean fullStreamDecompression;
 
@@ -546,6 +548,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
+    this.controlPlaneScheduler = new ControlPlaneSchedulerImpl(
+        transportFactory.getScheduledExecutorService(), channelExecutor, timeProvider);
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
@@ -1102,7 +1106,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      runSerialized(new AddSubchannel());
+      controlPlaneScheduler.scheduleNow(new AddSubchannel());
       return subchannel;
     }
 
@@ -1134,7 +1138,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      runSerialized(new UpdateBalancingState());
+      controlPlaneScheduler.scheduleNow(new UpdateBalancingState());
     }
 
     @Override
@@ -1218,7 +1222,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      runSerialized(new AddOobChannel());
+      controlPlaneScheduler.scheduleNow(new AddOobChannel());
       return oobChannel;
     }
 
@@ -1240,8 +1244,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void runSerialized(Runnable task) {
-      channelExecutor.executeLater(task).drain();
+    public ControlPlaneScheduler getScheduler() {
+      return controlPlaneScheduler;
     }
   }
 
@@ -1312,7 +1316,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      helper.runSerialized(new NamesResolved());
+      controlPlaneScheduler.scheduleNow(new NamesResolved());
     }
 
     @Override

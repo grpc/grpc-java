@@ -25,6 +25,7 @@ import static org.mockito.Mockito.mock;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.LoadBalancer;
@@ -37,6 +38,7 @@ import io.grpc.PickFirstBalancerFactory;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbLoadBalancerFactory;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.RoundRobinLoadBalancerFactory;
 import java.net.SocketAddress;
 import java.util.Collections;
@@ -298,6 +300,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
         // noop
       }
+
+      @Override
+      public ControlPlaneScheduler getScheduler() {
+        return mock(ControlPlaneScheduler.class);
+      }
     };
     int prevNumOfEvents = statsBuilder.build().channelTrace.events.size();
 
@@ -369,50 +376,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     }
   }
 
-  public static class ForwardingLoadBalancerHelper extends Helper {
-
-    private final Helper delegate;
-
-    public ForwardingLoadBalancerHelper(Helper delegate) {
-      this.delegate = delegate;
-    }
-
-    protected Helper delegate() {
-      return delegate;
-    }
-
-    @Override
-    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-      return delegate().createSubchannel(addrs, attrs);
-    }
-
-    @Override
-    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-      return delegate().createOobChannel(eag, authority);
-    }
-
-    @Override
-    public void updateBalancingState(
-        @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker) {
-      delegate().updateBalancingState(newState, newPicker);
-    }
-
-    @Override
-    public void runSerialized(Runnable task) {
-      delegate().runSerialized(task);
-    }
-
-    @Override
-    public Factory getNameResolverFactory() {
-      return delegate().getNameResolverFactory();
-    }
-
-    @Override
-    public String getAuthority() {
-      return delegate().getAuthority();
-    }
-  }
-
   private static class TestLoadBalancer extends ForwardingLoadBalancer {
     TestLoadBalancer() {
       super(null);
@@ -420,8 +383,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   private static class TestHelper extends ForwardingLoadBalancerHelper {
-    TestHelper() {
-      super(null);
+    @Override
+    protected Helper delegate() {
+      return null;
     }
   }
 

@@ -16,17 +16,21 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkState;
+
+import io.grpc.ControlPlaneScheduler;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.Future;
-import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -50,8 +54,9 @@ public final class FakeClock {
 
   private final ScheduledExecutorService scheduledExecutorService = new ScheduledExecutorImpl();
 
-  private final PriorityBlockingQueue<ScheduledTask> tasks =
-      new PriorityBlockingQueue<ScheduledTask>();
+  // Must keep the order of tasks because tests that use FakeClock-backed ControlPlaneScheduler
+  // schedule operations and expect them to be run in the same order.
+  private final LinkedBlockingQueue<ScheduledTask> tasks = new LinkedBlockingQueue<>();
 
   private final Ticker ticker =
       new Ticker() {
@@ -67,11 +72,36 @@ public final class FakeClock {
         }
       };
 
+  private final ControlPlaneScheduler controlPlaneScheduler = new ControlPlaneScheduler() {
+    @Override
+    public ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
+      final ScheduledTask future =
+          (ScheduledTask) scheduledExecutorService.schedule(task, delay, unit);
+      return new ScheduledContext() {
+        @Override
+        public void cancel() {
+          future.cancel(false);
+        }
+
+        @Override
+        public boolean isPending() {
+          return !(future.hasRun || future.isCancelled());
+        }
+      };
+    }
+
+    @Override
+    public long currentTimeNanos() {
+      return currentTimeNanos;
+    }
+  };
+
   private long currentTimeNanos;
 
   public class ScheduledTask extends AbstractFuture<Void> implements ScheduledFuture<Void> {
     public final Runnable command;
     public final long dueTimeNanos;
+    private boolean hasRun;
 
     ScheduledTask(long dueTimeNanos, Runnable command) {
       this.dueTimeNanos = dueTimeNanos;
@@ -195,6 +225,13 @@ public final class FakeClock {
   }
 
   /**
+   * Provides a {@link ControlPlaneScheduler} that is backed by this fake clock.
+   */
+  public ControlPlaneScheduler getControlPlaneScheduler() {
+    return controlPlaneScheduler;
+  }
+
+  /**
    * Provides a stopwatch instance that uses the fake clock ticker.
    */
   public Supplier<Stopwatch> getStopwatchSupplier() {
@@ -209,18 +246,17 @@ public final class FakeClock {
   }
 
   /**
-   * Run all due tasks.
+   * Run all due tasks. Immediately due tasks that are queued during the process also get executed.
    *
    * @return the number of tasks run by this call
    */
   public int runDueTasks() {
     int count = 0;
-    while (true) {
-      ScheduledTask task = tasks.peek();
-      if (task == null || task.dueTimeNanos > currentTimeNanos) {
-        break;
-      }
-      if (tasks.remove(task)) {
+    for (Iterator<ScheduledTask> it = tasks.iterator(); it.hasNext();) {
+      ScheduledTask task = it.next();
+      if (task.dueTimeNanos <= currentTimeNanos) {
+        it.remove();
+        task.hasRun = true;
         task.command.run();
         task.complete();
         count++;

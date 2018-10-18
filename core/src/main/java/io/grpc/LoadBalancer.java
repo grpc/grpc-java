@@ -21,6 +21,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -558,8 +559,31 @@ public abstract class LoadBalancer {
      * callback methods on the {@link LoadBalancer} interface.
      *
      * @since 1.2.0
+     * @deprecated use/implement {@code getScheduler()} instead
      */
-    public abstract void runSerialized(Runnable task);
+    @Deprecated
+    public void runSerialized(Runnable task) {
+      getScheduler().scheduleNow(task);
+    }
+
+    /**
+     * Returns a {@link ControlPlaneScheduler} that runs tasks in the same synchronization context
+     * as that the callback methods on the {@link LoadBalancer} interface are run in.
+     */
+    public ControlPlaneScheduler getScheduler() {
+      // TODO(zhangkun): make getScheduler() abstract after runSerialized() is deleted
+      return new ControlPlaneScheduler() {
+        @Override
+        public ScheduledContext schedule(Runnable task, long delay, TimeUnit unit) {
+          throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public long currentTimeNanos() {
+          throw new UnsupportedOperationException();
+        }
+      };
+    }
 
     /**
      * Returns the NameResolver of the channel.
