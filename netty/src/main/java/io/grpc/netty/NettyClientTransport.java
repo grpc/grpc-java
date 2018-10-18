@@ -219,11 +219,6 @@ class NettyClientTransport implements ConnectionClientTransport {
       // so it is safe to pass the key-value pair to b.option().
       b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
     }
-    SocketAddress localAddress =
-        localSocketPicker.createSocketAddress(remoteAddress, eagAttributes);
-    if (localAddress != null) {
-      b.localAddress(localAddress);
-    }
 
     /**
      * We don't use a ChannelInitializer in the client bootstrap because its "initChannel" method
@@ -272,7 +267,13 @@ class NettyClientTransport implements ConnectionClientTransport {
       }
     });
     // Start the connection operation to the server.
-    channel.connect(remoteAddress);
+    SocketAddress localAddress =
+        localSocketPicker.createSocketAddress(remoteAddress, eagAttributes);
+    if (localAddress != null) {
+      channel.connect(remoteAddress, localAddress);
+    } else {
+      channel.connect(remoteAddress);
+    }
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
