@@ -667,6 +667,7 @@ public final class Metadata {
     /**
      * Returns true if the two objects are both Keys, and their names match (case insensitive).
      */
+    @SuppressWarnings("EqualsGetClass")
     @Override
     public final boolean equals(Object o) {
       if (this == o) {
