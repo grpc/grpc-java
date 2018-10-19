@@ -672,7 +672,7 @@ public final class Metadata {
       if (this == o) {
         return true;
       }
-      if (!(o instanceof Key)) {
+      if (o == null || getClass() != o.getClass()) {
         return false;
       }
       Key<?> key = (Key<?>) o;
