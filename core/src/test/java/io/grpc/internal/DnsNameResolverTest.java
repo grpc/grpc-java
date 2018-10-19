@@ -636,9 +636,9 @@ public class DnsNameResolverTest {
   public void shouldUseJndi_falseIfDisabledForLocalhost() {
     boolean enableJndi = true;
     boolean enableJndiLocalhost = false;
-    String host = "localhost";
-
-    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, host));
+    
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "localhost"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "LOCALHOST"));
   }
 
   @Test

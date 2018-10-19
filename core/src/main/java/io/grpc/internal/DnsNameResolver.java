@@ -635,7 +635,7 @@ final class DnsNameResolver extends NameResolver {
     if (!jndiEnabled) {
       return false;
     }
-    if ("localhost".equals(target)) {
+    if ("localhost".equalsIgnoreCase(target)) {
       return jndiLocalhostEnabled;
     }
     // Check if this name looks like IPv6
