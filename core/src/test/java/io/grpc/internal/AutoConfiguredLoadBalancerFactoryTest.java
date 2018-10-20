@@ -315,7 +315,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     channelTracer.updateBuilder(statsBuilder);
     assertThat(statsBuilder.build().channelTrace.events).hasSize(prevNumOfEvents + 1);
     assertThat(statsBuilder.build().channelTrace.events.get(prevNumOfEvents).description)
-        .isEqualTo("Load balancer changed from PickFirstBalancer to RoundRobinLoadBalancer");
+        .isEqualTo("Load balancer changed from PickFirstLoadBalancer to RoundRobinLoadBalancer");
     prevNumOfEvents = statsBuilder.build().channelTrace.events.size();
 
     serviceConfig.put("loadBalancingPolicy", "round_robin");

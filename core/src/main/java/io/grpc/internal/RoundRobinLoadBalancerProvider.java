@@ -19,7 +19,7 @@ package io.grpc.internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 
-public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
+public final class RoundRobinLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public boolean isAvailable() {
     return true;
@@ -32,11 +32,11 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "pick-first";  // TODO(zhangkun): maybe "default"?
+    return "round-robin";
   }
 
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
-    return new PickFirstLoadBalancer(helper);
+    return new RoundRobinLoadBalancer(helper);
   }
 }

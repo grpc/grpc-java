@@ -30,6 +30,7 @@ import io.grpc.internal.TimeProvider;
  * available yet. Right now it's only good for internal testing.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1782")
+@Deprecated
 public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
 
   private static final GrpclbLoadBalancerFactory INSTANCE = new GrpclbLoadBalancerFactory();
