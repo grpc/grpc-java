@@ -32,8 +32,11 @@ import java.util.List;
  * A {@link LoadBalancer} that provides no load balancing mechanism over the
  * addresses from the {@link NameResolver}.  The channel's default behavior
  * (currently pick-first) is used for all addresses found.
+ *
+ * @deprecated this is the default balancer and should not be referenced to
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+@Deprecated
 public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
 
   private static final PickFirstBalancerFactory INSTANCE = new PickFirstBalancerFactory();
