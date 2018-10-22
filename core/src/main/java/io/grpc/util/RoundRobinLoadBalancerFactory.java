@@ -16,17 +16,18 @@
 
 package io.grpc.util;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
-import io.grpc.internal.RoundRobinLoadBalancerProvider;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 
 /**
  * A {@link LoadBalancer} that provides round-robin load balancing mechanism over the
- * addresses from the {@link NameResolver}.  The sub-lists received from the name resolver
- * are considered to be an {@link EquivalentAddressGroup} and each of these sub-lists is
- * what is then balanced across.
+ * addresses.
  *
- * @deprecated use {@link io.grpc.LoadBalancerProvider#getProvider} with "round-robin" policy.  This
+ * @deprecated use {@link io.grpc.LoadBalancerRegistry#getProvider} with "round-robin" policy.  This
  *             class will be deleted soon.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
@@ -35,10 +36,11 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   private static RoundRobinLoadBalancerFactory INSTANCE = new RoundRobinLoadBalancerFactory();
 
-  private final RoundRobinLoadBalancerProvider provider;
+  private final LoadBalancerProvider provider;
 
   private RoundRobinLoadBalancerFactory() {
-    provider = new RoundRobinLoadBalancerProvider();
+    provider = checkNotNull(
+        LoadBalancerRegistry.getProvider("round-robin"), "round-robin balancer not available");
   }
 
   /**

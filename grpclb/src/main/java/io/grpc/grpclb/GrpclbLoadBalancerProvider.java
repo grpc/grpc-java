@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 The gRPC Authors
+ * Copyright 2018 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,35 +16,34 @@
 
 package io.grpc.grpclb;
 
-import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TimeProvider;
 
 /**
- * A factory for {@link LoadBalancer}s that uses the GRPCLB protocol.
+ * The provider for a {@link LoadBalancer} that uses the GRPCLB protocol.
  *
  * <p><b>Experimental:</b>This only works with the GRPCLB load-balancer service, which is not
- * available yet. Right now it's only good for internal testing.
- *
- * @deprecated The "grpclb" policy will be selected when environment is set up correctly, thus no
- *             need to directly reference the factory.  If explicit selection is needed, use {@link
- *             io.grpc.LoadBalancerRegistry#getProvider} with "grpclb" policy.  This class will be
- *             deleted soon.
+ * available external yet. Right now it's only good for internal testing.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1782")
-@Deprecated
-public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
+public class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
-  private static final GrpclbLoadBalancerFactory INSTANCE = new GrpclbLoadBalancerFactory();
-
-  private GrpclbLoadBalancerFactory() {
+  @Override
+  public boolean isAvailable() {
+    return true;
   }
 
-  public static GrpclbLoadBalancerFactory getInstance() {
-    return INSTANCE;
+  @Override
+  public int getPriority() {
+    return 5;
+  }
+
+  @Override
+  public String getPolicyName() {
+    return "grpclb";
   }
 
   @Override

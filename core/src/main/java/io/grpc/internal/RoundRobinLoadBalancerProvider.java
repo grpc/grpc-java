@@ -32,7 +32,7 @@ public final class RoundRobinLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "round-robin";
+    return "round_robin";
   }
 
   @Override

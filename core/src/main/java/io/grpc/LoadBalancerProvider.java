@@ -39,8 +39,11 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
 
   /**
    * Returns the load-balancing policy name associated with this provider, which makes it selectable
-   * via {@link #getProvider}.  This is called only when the class is loaded. It shouldn't change,
-   * and there is no point doing so.
+   * via {@link LoadBalancerRegistry#getProvider}.  This is called only when the class is loaded. It
+   * shouldn't change, and there is no point doing so.
+   *
+   * <p>The policy name should consist of only lower case letters letters, underscore and digits,
+   * and can only start with letters.
    */
   public abstract String getPolicyName();
 
