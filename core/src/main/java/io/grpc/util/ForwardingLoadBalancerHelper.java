@@ -19,7 +19,6 @@ package io.grpc.util;
 import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
-import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer.Subchannel;
@@ -27,7 +26,9 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
+import io.grpc.SynchronizationContext;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
@@ -80,8 +81,13 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
-  public ControlPlaneScheduler getScheduler() {
-    return delegate().getScheduler();
+  public SynchronizationContext getSynchronizationContext() {
+    return delegate().getSynchronizationContext();
+  }
+
+  @Override
+  public ScheduledExecutorService getScheduledExecutorService() {
+    return delegate().getScheduledExecutorService();
   }
 
   @Override

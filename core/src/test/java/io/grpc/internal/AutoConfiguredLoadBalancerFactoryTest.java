@@ -25,7 +25,6 @@ import static org.mockito.Mockito.mock;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
 import io.grpc.LoadBalancer;
@@ -35,6 +34,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.PickFirstBalancerFactory;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.GrpclbLoadBalancerFactory;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -44,6 +44,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
@@ -265,13 +266,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void channelTracing_lbPolicyChanged() {
     ChannelTracer channelTracer = new ChannelTracer(100, 1000, "dummy_type");
-    TimeProvider timeProvider = new TimeProvider() {
-      @Override
-      public long currentTimeNanos() {
-        return 101;
-      }
-    };
-
+    final FakeClock clock = new FakeClock();
     InternalChannelz.ChannelStats.Builder statsBuilder
         = new InternalChannelz.ChannelStats.Builder();
     channelTracer.updateBuilder(statsBuilder);
@@ -300,14 +295,20 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       }
 
       @Override
-      public ControlPlaneScheduler getScheduler() {
-        return mock(ControlPlaneScheduler.class);
+      public SynchronizationContext getSynchronizationContext() {
+        return new SynchronizationContext();
+      }
+
+      @Override
+      public ScheduledExecutorService getScheduledExecutorService() {
+        return clock.getScheduledExecutorService();
       }
     };
     int prevNumOfEvents = statsBuilder.build().channelTrace.events.size();
 
     LoadBalancer lb =
-        new AutoConfiguredLoadBalancerFactory(channelTracer, timeProvider).newLoadBalancer(helper);
+        new AutoConfiguredLoadBalancerFactory(channelTracer, clock.getTimeProvider())
+        .newLoadBalancer(helper);
     lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
     channelTracer.updateBuilder(statsBuilder);
     assertThat(statsBuilder.build().channelTrace.events).hasSize(prevNumOfEvents);

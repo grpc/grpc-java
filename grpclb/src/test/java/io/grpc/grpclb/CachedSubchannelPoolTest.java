@@ -31,10 +31,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
-import io.grpc.ControlPlaneScheduler;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
 import java.util.ArrayList;
@@ -62,13 +62,15 @@ public class CachedSubchannelPoolTest {
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command instanceof ShutdownSubchannelTask;
+          // The task is wrapped by SynchronizationContext, so we can't compare the type
+          // directly.
+          return command.toString().contains(ShutdownSubchannelTask.class.getSimpleName());
         }
       };
 
   private final Helper helper = mock(Helper.class);
   private final FakeClock clock = new FakeClock();
-  private final ControlPlaneScheduler scheduler = clock.getControlPlaneScheduler();
+  private final SynchronizationContext syncContext = new SynchronizationContext();
   private final CachedSubchannelPool pool = new CachedSubchannelPool();
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
 
@@ -88,7 +90,8 @@ public class CachedSubchannelPoolTest {
           return subchannel;
         }
       }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
-    when(helper.getScheduler()).thenReturn(scheduler);
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
     pool.init(helper);
   }
 

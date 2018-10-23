@@ -21,10 +21,10 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
-import io.grpc.ControlPlaneScheduler.ScheduledContext;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -73,8 +73,10 @@ final class CachedSubchannelPool implements SubchannelPool {
       return;
     }
     final ShutdownSubchannelTask shutdownTask = new ShutdownSubchannelTask(subchannel);
-    ScheduledContext shutdownTimer =
-        helper.getScheduler().schedule(shutdownTask, SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    ScheduledHandle shutdownTimer =
+        helper.getSynchronizationContext().schedule(
+            shutdownTask, SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS,
+            helper.getScheduledExecutorService());
     CacheEntry entry = new CacheEntry(subchannel, shutdownTimer);
     cache.put(subchannel.getAddresses(), entry);
   }
@@ -107,9 +109,9 @@ final class CachedSubchannelPool implements SubchannelPool {
 
   private static class CacheEntry {
     final Subchannel subchannel;
-    final ScheduledContext shutdownTimer;
+    final ScheduledHandle shutdownTimer;
 
-    CacheEntry(Subchannel subchannel, ScheduledContext shutdownTimer) {
+    CacheEntry(Subchannel subchannel, ScheduledHandle shutdownTimer) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
       this.shutdownTimer = checkNotNull(shutdownTimer, "shutdownTimer");
     }

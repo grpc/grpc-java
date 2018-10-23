@@ -20,7 +20,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
-import io.grpc.ControlPlaneScheduler;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -69,34 +68,13 @@ public final class FakeClock {
         }
       };
 
-  private final ControlPlaneScheduler controlPlaneScheduler = new ControlPlaneScheduler() {
-      @Override
-      public ScheduledContext scheduleNow(Runnable task) {
-        return schedule(task, 0, TimeUnit.NANOSECONDS);
-      }
-
-      @Override
-      public ScheduledContext schedule(final Runnable task, long delay, TimeUnit unit) {
-        final ScheduledTask future =
-            (ScheduledTask) scheduledExecutorService.schedule(task, delay, unit);
-        return new ScheduledContext() {
-          @Override
-          public void cancel() {
-            future.cancel(false);
-          }
-
-          @Override
-          public boolean isPending() {
-            return !(future.hasRun || future.isCancelled());
-          }
-        };
-      }
-
-      @Override
-      public long currentTimeNanos() {
-        return currentTimeNanos;
-      }
-    };
+  private final TimeProvider timeProvider =
+      new TimeProvider() {
+        @Override
+        public long currentTimeNanos() {
+          return currentTimeNanos;
+        }
+      };
 
   private long currentTimeNanos;
 
@@ -227,10 +205,10 @@ public final class FakeClock {
   }
 
   /**
-   * Provides a {@link ControlPlaneScheduler} that is backed by this fake clock.
+   * Provides a {@link TimeProvider} that is backed by this FakeClock.
    */
-  public ControlPlaneScheduler getControlPlaneScheduler() {
-    return controlPlaneScheduler;
+  public TimeProvider getTimeProvider() {
+    return timeProvider;
   }
 
   /**

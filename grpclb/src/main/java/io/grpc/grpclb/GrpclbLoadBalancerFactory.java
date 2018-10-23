@@ -19,6 +19,7 @@ package io.grpc.grpclb;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.TimeProvider;
 
 /**
  * A factory for {@link LoadBalancer}s that uses the GRPCLB protocol.
@@ -41,6 +42,7 @@ public class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new GrpclbLoadBalancer(
-        helper, new CachedSubchannelPool(), new ExponentialBackoffPolicy.Provider());
+        helper, new CachedSubchannelPool(), TimeProvider.SYSTEM_TIME_PROVIDER,
+        new ExponentialBackoffPolicy.Provider());
   }
 }

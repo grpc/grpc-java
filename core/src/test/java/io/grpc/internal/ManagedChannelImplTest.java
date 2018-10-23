@@ -215,17 +215,11 @@ public class ManagedChannelImplTest {
 
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
-    TimeProvider fakeClockTimeProvider = new TimeProvider() {
-      @Override
-      public long currentTimeNanos() {
-        return timer.getTicker().read();
-      }
-    };
 
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
-        fakeClockTimeProvider);
+        timer.getTimeProvider());
 
     if (requestConnection) {
       int numExpectedTasks = 0;

@@ -22,6 +22,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 
+import io.grpc.SynchronizationContext;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -39,14 +40,14 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 /**
- * Unit tests for {@link ChannelExecutor}.
+ * Unit tests for {@link SynchronizationContext}.
  */
 @RunWith(JUnit4.class)
-public class ChannelExecutorTest {
+public class SynchronizationContextTest {
   private final BlockingQueue<Throwable> uncaughtErrors = new LinkedBlockingQueue<Throwable>();
-  private final ChannelExecutor executor = new ChannelExecutor() {
+  private final SynchronizationContext executor = new SynchronizationContext() {
       @Override
-      void handleUncaughtThrowable(Throwable t) {
+      protected void handleUncaughtThrowable(Throwable t) {
         uncaughtErrors.add(t);
       }
     };

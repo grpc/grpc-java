@@ -21,7 +21,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -37,10 +37,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>A LoadBalancer typically implements three interfaces:
  * <ol>
  *   <li>{@link LoadBalancer} is the main interface.  All methods on it are invoked sequentially
- *       in the same <strong>synchronization context</strong> (see next section) as provided by the
- *       {@link io.grpc.LoadBalancer.Helper#getScheduler scheduler}.  It receives the results from
- *       the {@link NameResolver}, updates of subchannels' connectivity states, and the channel's
- *       request for the LoadBalancer to shutdown.</li>
+ *       in the same <strong>synchronization context</strong> (see next section) as returned by
+ *       {@link io.grpc.LoadBalancer.Helper#getSynchronizationContext}.  It receives the results
+ *       from the {@link NameResolver}, updates of subchannels' connectivity states, and the
+ *       channel's request for the LoadBalancer to shutdown.</li>
  *   <li>{@link SubchannelPicker SubchannelPicker} does the actual load-balancing work.  It selects
  *       a {@link Subchannel Subchannel} for each new RPC.</li>
  *   <li>{@link Factory Factory} creates a new {@link LoadBalancer} instance.
@@ -50,11 +50,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * Factory}. It provides functionalities that a {@code LoadBalancer} implementation would typically
  * need.
  *
- * <h3>The Synchronization Context and the Scheduler</h3>
+ * <h3>The Synchronization Context</h3>
  *
  * <p>All methods on the {@link LoadBalancer} interface are called from a Synchronization Context,
  * meaning they are serialized, thus the balancer implementation doesn't need to worry about
- * synchronization among them.  The {@link io.grpc.LoadBalancer.Helper#getScheduler scheduler}
+ * synchronization among them.  {@link io.grpc.LoadBalancer.Helper#getSynchronizationContext}
  * allows implementations to schedule tasks to be run in the same Synchronization Context, with or
  * without a delay, thus those tasks don't need to worry about synchronizing with the balancer
  * methods.
@@ -561,35 +561,33 @@ public abstract class LoadBalancer {
      * callback methods on the {@link LoadBalancer} interface.
      *
      * @since 1.2.0
-     * @deprecated use/implement {@code getScheduler()} instead
+     * @deprecated use/implement {@code getSynchronizationContext()} instead
      */
     @Deprecated
     public void runSerialized(Runnable task) {
-      getScheduler().scheduleNow(task);
+      getSynchronizationContext().execute(task);
     }
 
     /**
-     * Returns a {@link ControlPlaneScheduler} that runs tasks in the same Synchronization Context
+     * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
      */
-    public ControlPlaneScheduler getScheduler() {
-      // TODO(zhangkun): make getScheduler() abstract after runSerialized() is deleted
-      return new ControlPlaneScheduler() {
-        @Override
-        public ScheduledContext scheduleNow(Runnable task) {
-          throw new UnsupportedOperationException();
-        }
+    public SynchronizationContext getSynchronizationContext() {
+      // TODO(zhangkun): make getSynchronizationContext() abstract after runSerialized() is deleted
+      throw new UnsupportedOperationException();
+    }
 
-        @Override
-        public ScheduledContext schedule(Runnable task, long delay, TimeUnit unit) {
-          throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public long currentTimeNanos() {
-          throw new UnsupportedOperationException();
-        }
-      };
+    /**
+     * Returns a {@link ScheduledExecutorService} for scheduling delayed tasks.
+     *
+     * <p>This service is a shared resource and is only meant for quick tasks.  DO NOT block or run
+     * time-consuming tasks.
+     *
+     * <p>The returned service doesn't support {@link ScheduledExecutorService#shutdown shutdown()}
+     * and {@link ScheduledExecutorService#shutdownNow shutdownNow()}.  They will throw if called.
+     */
+    public ScheduledExecutorService getScheduledExecutorService() {
+      throw new UnsupportedOperationException();
     }
 
     /**

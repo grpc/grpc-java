@@ -209,7 +209,7 @@ public class LoadBalancerTest {
     public void updateBalancingState(
         ConnectivityState newState, LoadBalancer.SubchannelPicker newPicker) {}
 
-    @Override public ControlPlaneScheduler getScheduler() {
+    @Override public SynchronizationContext getSynchronizationContext() {
       return null;
     }
 

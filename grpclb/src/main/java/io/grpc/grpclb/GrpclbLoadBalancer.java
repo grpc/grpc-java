@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,13 +52,15 @@ class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
   GrpclbLoadBalancer(
       Helper helper,
       SubchannelPool subchannelPool,
+      TimeProvider time,
       BackoffPolicy.Provider backoffPolicyProvider) {
     checkNotNull(helper, "helper");
+    checkNotNull(time, "time provider");
     checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.subchannelPool.init(helper);
     grpclbState =
-        new GrpclbState(helper, subchannelPool, backoffPolicyProvider, logId);
+        new GrpclbState(helper, subchannelPool, time, backoffPolicyProvider, logId);
   }
 
   @Override
