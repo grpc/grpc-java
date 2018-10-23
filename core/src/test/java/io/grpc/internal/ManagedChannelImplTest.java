@@ -31,6 +31,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
@@ -108,6 +109,7 @@ import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -1406,6 +1408,33 @@ public class ManagedChannelImplTest {
     assertEquals(1, balancerRpcExecutor.runDueTasks());
     verify(mockCallListener).onClose(
         same(SubchannelChannel.WAIT_FOR_READY_ERROR), any(Metadata.class));
+  }
+
+  @Test
+  public void lbHelper_getScheduledExecutorService() {
+    createChannel();
+
+    ScheduledExecutorService ses = helper.getScheduledExecutorService();
+    Runnable task = mock(Runnable.class);
+    helper.getSynchronizationContext().schedule(task, 110, TimeUnit.NANOSECONDS, ses);
+    timer.forwardNanos(109);
+    verify(task, never()).run();
+    timer.forwardNanos(1);
+    verify(task).run();
+
+    try {
+      ses.shutdown();
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
+
+    try {
+      ses.shutdownNow();
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // exepcted
+    }
   }
 
   @Test

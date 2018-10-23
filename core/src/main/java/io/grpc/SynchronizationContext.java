@@ -34,7 +34,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * guarantees:
  *
  * <ul>
- *    <li>Ordering.  Tasks are run in the same order as they are submitted.</li>
+ *    <li>Ordering.  Tasks are run in the same order as they are submitted via {@link #execute}
+ *        and {@link #executeLater}.</li>
  *    <li>Serialization.  Tasks are run in sequence and establish a happens-before relationship
  *        between them. </li>
  *    <li>Non-reentrancy.  If a task running in a synchronization context executes or schedules
@@ -92,7 +93,7 @@ public class SynchronizationContext implements Executor {
   }
 
   /**
-   * Enqueues a task that will be run when {@link #drain} is called.
+   * Adds a task that will be run when {@link #drain} is called.
    */
   public final void executeLater(Runnable runnable) {
     synchronized (lock) {
@@ -101,10 +102,10 @@ public class SynchronizationContext implements Executor {
   }
 
   /**
-   * Execute a task in this synchronization context as soon as poassible.  The task may run inline.
-   * If there are tasks that are previously queued by {@link #executeLater} but have not been run,
-   * this method will trigger them to be run before the given task.  This is equivalent to calling
-   * {@link #executeLater} immediately followed by {@link #drain}.
+   * Adds a task and run it in this synchronization context as soon as poassible.  The task may run
+   * inline.  If there are tasks that are previously queued by {@link #executeLater} but have not
+   * been run, this method will trigger them to be run before the given task.  This is equivalent to
+   * calling {@link #executeLater} immediately followed by {@link #drain}.
    */
   @Override
   public final void execute(Runnable task) {
@@ -113,7 +114,7 @@ public class SynchronizationContext implements Executor {
   }
 
   /**
-   * Schedules a task to be run via {@link #execute} after a delay.
+   * Schedules a task to be added and run via {@link #execute} after a delay.
    *
    * @param task the task being scheduled
    * @param delay the delay

@@ -21,6 +21,8 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.SynchronizationContext;
 import java.util.concurrent.BlockingQueue;
@@ -45,7 +47,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class SynchronizationContextTest {
   private final BlockingQueue<Throwable> uncaughtErrors = new LinkedBlockingQueue<Throwable>();
-  private final SynchronizationContext executor = new SynchronizationContext() {
+  private final SynchronizationContext syncContext = new SynchronizationContext() {
       @Override
       protected void handleUncaughtThrowable(Throwable t) {
         uncaughtErrors.add(t);
@@ -71,17 +73,17 @@ public class SynchronizationContextTest {
 
   @Test
   public void singleThread() {
-    executor.executeLater(task1);
-    executor.executeLater(task2);
+    syncContext.executeLater(task1);
+    syncContext.executeLater(task2);
     InOrder inOrder = inOrder(task1, task2, task3);
     inOrder.verifyNoMoreInteractions();
-    executor.drain();
+    syncContext.drain();
     inOrder.verify(task1).run();
     inOrder.verify(task2).run();
 
-    executor.executeLater(task3);
+    syncContext.executeLater(task3);
     inOrder.verifyNoMoreInteractions();
-    executor.drain();
+    syncContext.drain();
     inOrder.verify(task3).run();
   }
 
@@ -121,19 +123,19 @@ public class SynchronizationContextTest {
     Thread sideThread = new Thread() {
         @Override
         public void run() {
-          executor.executeLater(task1);
+          syncContext.executeLater(task1);
           task1Added.countDown();
-          executor.drain();
+          syncContext.drain();
           sideThreadDone.countDown();
         }
       };
     sideThread.start();
 
     assertTrue(task1Added.await(5, TimeUnit.SECONDS));
-    executor.executeLater(task2);
+    syncContext.executeLater(task2);
     assertTrue(task1Running.await(5, TimeUnit.SECONDS));
     // This will do nothing because task1 is running until task1Proceed is set
-    executor.drain();
+    syncContext.drain();
 
     inOrder.verify(task1).run();
     inOrder.verifyNoMoreInteractions();
@@ -157,14 +159,36 @@ public class SynchronizationContextTest {
           throw e;
         }
       }).when(task2).run();
-    executor.executeLater(task1);
-    executor.executeLater(task2);
-    executor.executeLater(task3);
-    executor.drain();
+    syncContext.executeLater(task1);
+    syncContext.executeLater(task2);
+    syncContext.executeLater(task3);
+    syncContext.drain();
     inOrder.verify(task1).run();
     inOrder.verify(task2).run();
     inOrder.verify(task3).run();
     assertThat(uncaughtErrors).containsExactly(e);
     uncaughtErrors.clear();
+  }
+
+  @Test
+  public void schedule() {
+    FakeClock clock = new FakeClock();
+    syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    assertThat(clock.runDueTasks()).isEqualTo(0);
+    assertThat(clock.forwardNanos(109)).isEqualTo(0);
+    verify(task1, never()).run();
+
+    assertThat(clock.forwardNanos(1)).isEqualTo(1);
+    verify(task1).run();
+  }
+
+  @Test
+  public void scheduleDueImmediately() {
+    FakeClock clock = new FakeClock();
+    syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    verify(task1, never()).run();
+
+    assertThat(clock.runDueTasks()).isEqualTo(1);
+    verify(task1).run();
   }
 }
