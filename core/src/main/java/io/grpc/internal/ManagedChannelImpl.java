@@ -133,7 +133,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
-  private final SynchronizationContext syncContext = new PanicSynchronizationContext();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          logger.log(
+              Level.SEVERE,
+              "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
+              e);
+          panic(e);
+        }
+      });
 
   private boolean fullStreamDecompression;
 
@@ -1479,14 +1489,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         .add("logId", logId.getId())
         .add("target", target)
         .toString();
-  }
-
-  private final class PanicSynchronizationContext extends SynchronizationContext {
-    @Override
-    protected void handleUncaughtThrowable(Throwable t) {
-      super.handleUncaughtThrowable(t);
-      panic(t);
-    }
   }
 
   /**

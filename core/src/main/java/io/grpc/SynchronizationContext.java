@@ -18,13 +18,13 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
 import javax.annotation.concurrent.ThreadSafe;
@@ -43,21 +43,36 @@ import javax.annotation.concurrent.ThreadSafe;
  *        inline.  It will instead be queued and run only after the current task has returned.</li>
  * </ul>
  *
- * <p>It doesn't own any thread, and doesn't guarantee which thread the tasks will run on.
+ * <p>It doesn't own any thread.  Tasks are run from caller's or caller-provided threads.
  *
  * <p>This class is thread-safe.
+ *
+ * @since 1.17.0
  */
 @ThreadSafe
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4984")
-public class SynchronizationContext implements Executor {
+public final class SynchronizationContext implements Executor {
   private static final Logger log = Logger.getLogger(SynchronizationContext.class.getName());
 
   private final Object lock = new Object();
+  private final UncaughtExceptionHandler uncaughtExceptionHandler;
 
   @GuardedBy("lock")
   private final Queue<Runnable> queue = new ArrayDeque<Runnable>();
   @GuardedBy("lock")
   private boolean draining;
+
+  /**
+   * Creates a SynchronizationContext.
+   *
+   * @param uncaughtExceptionHandler handles exceptions thrown out of the tasks.  Different from
+   *        what's documented on {@link UncaughtExceptionHandler#uncaughtException}, the thread is
+   *        not terminated when the handler is called.
+   */
+  public SynchronizationContext(UncaughtExceptionHandler uncaughtExceptionHandler) {
+    this.uncaughtExceptionHandler =
+        checkNotNull(uncaughtExceptionHandler, "uncaughtExceptionHandler");
+  }
 
   /**
    * Run all tasks in the queue in the current thread, if no other thread is running this method.
@@ -87,13 +102,17 @@ public class SynchronizationContext implements Executor {
       try {
         runnable.run();
       } catch (Throwable t) {
-        handleUncaughtThrowable(t);
+        uncaughtExceptionHandler.uncaughtException(Thread.currentThread(), t);
       }
     }
   }
 
   /**
    * Adds a task that will be run when {@link #drain} is called.
+   *
+   * <p>This is useful for cases where you want to enqueue a task while under a lock of your own,
+   * but don't want the tasks to be run under your lock (for fear of deadlock).  You can call {@link
+   * #executeLater} in the lock, and call {@link #drain} outside the lock.
    */
   public final void executeLater(Runnable runnable) {
     synchronized (lock) {
@@ -191,14 +210,5 @@ public class SynchronizationContext implements Executor {
     public boolean isPending() {
       return !(runnable.hasStarted || runnable.isCancelled);
     }
-  }
-
-  /**
-   * Handle a throwable from a task.
-   *
-   * <p>The default implementation logs a warning.
-   */
-  protected void handleUncaughtThrowable(Throwable t) {
-    log.log(Level.WARNING, "Runnable threw exception in SynchronizationContext", t);
   }
 }

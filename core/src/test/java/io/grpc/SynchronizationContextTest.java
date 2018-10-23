@@ -46,13 +46,14 @@ import org.mockito.stubbing.Answer;
  */
 @RunWith(JUnit4.class)
 public class SynchronizationContextTest {
-  private final BlockingQueue<Throwable> uncaughtErrors = new LinkedBlockingQueue<Throwable>();
-  private final SynchronizationContext syncContext = new SynchronizationContext() {
-      @Override
-      protected void handleUncaughtThrowable(Throwable t) {
-        uncaughtErrors.add(t);
-      }
-    };
+  private final BlockingQueue<Throwable> uncaughtErrors = new LinkedBlockingQueue<>();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          uncaughtErrors.add(e);
+        }
+      });
 
   @Mock
   private Runnable task1;

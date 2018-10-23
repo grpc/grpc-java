@@ -152,7 +152,13 @@ public class GrpclbLoadBalancerTest {
   private final ArrayList<Subchannel> subchannelTracker = new ArrayList<>();
   private final ArrayList<ManagedChannel> oobChannelTracker = new ArrayList<>();
   private final ArrayList<String> failingLbAuthorities = new ArrayList<>();
-  private final SynchronizationContext syncContext = new SynchronizationContext();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;

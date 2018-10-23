@@ -85,7 +85,13 @@ public class InternalSubchannelTest {
   private final FakeClock fakeClock = new FakeClock();
   // For syncContext
   private final FakeClock fakeExecutor = new FakeClock();
-  private final SynchronizationContext syncContext = new SynchronizationContext();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
 
   private final InternalChannelz channelz = new InternalChannelz();
 

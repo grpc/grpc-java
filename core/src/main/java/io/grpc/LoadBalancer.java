@@ -571,6 +571,12 @@ public abstract class LoadBalancer {
     /**
      * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
      * as that the callback methods on the {@link LoadBalancer} interface are run in.
+     *
+     * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
+     * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
+     * convenience.
+     *
+     * @since 1.17.0
      */
     public SynchronizationContext getSynchronizationContext() {
       // TODO(zhangkun): make getSynchronizationContext() abstract after runSerialized() is deleted
@@ -585,6 +591,8 @@ public abstract class LoadBalancer {
      *
      * <p>The returned service doesn't support {@link ScheduledExecutorService#shutdown shutdown()}
      * and {@link ScheduledExecutorService#shutdownNow shutdownNow()}.  They will throw if called.
+     *
+     * @since 1.17.0
      */
     public ScheduledExecutorService getScheduledExecutorService() {
       throw new UnsupportedOperationException();

@@ -70,7 +70,13 @@ public class CachedSubchannelPoolTest {
 
   private final Helper helper = mock(Helper.class);
   private final FakeClock clock = new FakeClock();
-  private final SynchronizationContext syncContext = new SynchronizationContext();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final CachedSubchannelPool pool = new CachedSubchannelPool();
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
 

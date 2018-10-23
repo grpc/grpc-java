@@ -296,7 +296,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
       @Override
       public SynchronizationContext getSynchronizationContext() {
-        return new SynchronizationContext();
+        return new SynchronizationContext(
+            new Thread.UncaughtExceptionHandler() {
+              @Override
+              public void uncaughtException(Thread t, Throwable e) {
+                throw new AssertionError(e);
+              }
+            });
       }
 
       @Override
