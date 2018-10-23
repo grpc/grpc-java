@@ -153,7 +153,7 @@ public final class SynchronizationContext implements Executor {
 
         @Override
         public String toString() {
-          return task.toString() + "(scheduled in " + SynchronizationContext.this + ")";
+          return task.toString() + "(scheduled in SynchronizationContext)";
         }
       }, delay, unit);
     return new ScheduledHandle(runnable, future);
