@@ -44,6 +44,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   private final ChannelTracer channelTracer;
   @Nullable
   private final TimeProvider timeProvider;
+  private static final LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
 
   AutoConfiguredLoadBalancerFactory(
       @Nullable ChannelTracer channelTracer, @Nullable TimeProvider timeProvider) {
@@ -85,7 +86,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     AutoConfiguredLoadBalancer(
         Helper helper, @Nullable ChannelTracer channelTracer, @Nullable TimeProvider timeProvider) {
       this.helper = helper;
-      delegateProvider = LoadBalancerRegistry.getProvider(DEFAULT_POLICY);
+      delegateProvider = registry.getProvider(DEFAULT_POLICY);
       delegate = delegateProvider.newLoadBalancer(helper);
       this.channelTracer = channelTracer;
       this.timeProvider = timeProvider;
@@ -207,7 +208,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
 
   private static LoadBalancerProvider getProviderOrThrow(String policy, String reason)
       throws PolicyNotFoundException {
-    LoadBalancerProvider provider = LoadBalancerRegistry.getProvider(policy);
+    LoadBalancerProvider provider = registry.getProvider(policy);
     if (provider == null) {
       throw new PolicyNotFoundException(policy, reason);
     }

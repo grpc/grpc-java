@@ -35,7 +35,8 @@ public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
 
   private PickFirstBalancerFactory() {
     provider = checkNotNull(
-        LoadBalancerRegistry.getProvider("pick-first"), "pick-first balancer not available");
+        LoadBalancerRegistry.getDefaultRegistry().getProvider("pick-first"),
+        "pick-first balancer not available");
   }
 
   /**

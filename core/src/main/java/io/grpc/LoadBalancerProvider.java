@@ -20,6 +20,8 @@ import com.google.common.base.MoreObjects;
 
 /**
  * Provider of {@link LoadBalancer}s.  Each provider is bounded to a load-balancing policy name.
+ *
+ * @since 1.17.0
  */
 @ExperimentalApi("TODO")
 public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
@@ -27,7 +29,7 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * Whether this provider is available for use, taking the current environment into consideration.
    * If {@code false}, no other methods are safe to be called.
    */
-  protected abstract boolean isAvailable();
+  public abstract boolean isAvailable();
 
   /**
    * A priority, from 0 to 10 that this provider should be used, taking the current environment into
@@ -35,7 +37,7 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * detection. A priority of 0 does not imply that the provider wouldn't work; just that it should
    * be last in line.
    */
-  protected abstract int getPriority();
+  public abstract int getPriority();
 
   /**
    * Returns the load-balancing policy name associated with this provider, which makes it selectable

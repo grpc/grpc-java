@@ -28,22 +28,35 @@ import javax.annotation.Nullable;
 /**
  * Registry of {@link LoadBalancerProvider}s.  Providers are loaded at runtime through the Java
  * service provider mechanism.
+ *
+ * @since 1.17.0
  */
 @ExperimentalApi("TODO")
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
+  private static final LoadBalancerRegistry instance;
   @VisibleForTesting
   static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
-  private static final Map<String, LoadBalancerProvider> providers;
-  
+
+  private final Map<String, LoadBalancerProvider> providers;
+
   static {
     List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(
         LoadBalancerProvider.class,
         HARDCODED_CLASSES,
         LoadBalancerProvider.class.getClassLoader(),
         new LoadBalancerPriorityAccessor());
+    instance = new LoadBalancerRegistry(providerList);
+  }
+
+  @VisibleForTesting
+  LoadBalancerRegistry(List<LoadBalancerProvider> providerList) {
     HashMap<String, LoadBalancerProvider> providerMap = new HashMap<>();
     for (LoadBalancerProvider provider : providerList) {
+      if (!provider.isAvailable()) {
+        logger.fine(provider + " found but no available");
+        continue;
+      }
       String policy = provider.getPolicyName();
       LoadBalancerProvider existing = providerMap.get(policy);
       if (existing == null) {
@@ -68,12 +81,19 @@ public final class LoadBalancerRegistry {
   }
 
   /**
+   * Returns the default registry that loads providers via the Java service loader mechanism.
+   */
+  public static LoadBalancerRegistry getDefaultRegistry() {
+    return instance;
+  }
+
+  /**
    * Returns the provider for the given load-balancing policy, or {@code null} if no suitable
    * provider can be found.  Each provider declares its policy name via {@link
    * LoadBalancerProvider#getPolicyName}.
    */
   @Nullable
-  public static LoadBalancerProvider getProvider(String policy) {
+  public LoadBalancerProvider getProvider(String policy) {
     return providers.get(policy);
   }
 
@@ -81,12 +101,12 @@ public final class LoadBalancerRegistry {
    * Returns effective providers.
    */
   @VisibleForTesting
-  static Map<String, LoadBalancerProvider> providers() {
+  Map<String, LoadBalancerProvider> providers() {
     return providers;
   }
 
   @VisibleForTesting
-  static final List<Class<?>> getHardCodedClasses() {
+  static List<Class<?>> getHardCodedClasses() {
     // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
     // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
     // https://sourceforge.net/p/proguard/bugs/418/
@@ -114,6 +134,4 @@ public final class LoadBalancerRegistry {
       return provider.getPriority();
     }
   }
-
-  private LoadBalancerRegistry() {}
 }

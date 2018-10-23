@@ -40,7 +40,8 @@ public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
   private RoundRobinLoadBalancerFactory() {
     provider = checkNotNull(
-        LoadBalancerRegistry.getProvider("round-robin"), "round-robin balancer not available");
+        LoadBalancerRegistry.getDefaultRegistry().getProvider("round-robin"),
+        "round-robin balancer not available");
   }
 
   /**
