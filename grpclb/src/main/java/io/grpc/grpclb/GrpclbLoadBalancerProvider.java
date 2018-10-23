@@ -19,8 +19,6 @@ package io.grpc.grpclb;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TimeProvider;
 
 /**
@@ -49,13 +47,7 @@ public class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new GrpclbLoadBalancer(
-        helper, new CachedSubchannelPool(),
-        // TODO(zhangkun83): balancer sends load reporting RPCs from it, which also involves
-        // channelExecutor thus may also run other tasks queued in the channelExecutor.  If such
-        // load should not be on the shared scheduled executor, we should use a combination of the
-        // scheduled executor and the default app executor.
-        SharedResourcePool.forResource(GrpcUtil.TIMER_SERVICE),
-        TimeProvider.SYSTEM_TIME_PROVIDER,
+        helper, new CachedSubchannelPool(), TimeProvider.SYSTEM_TIME_PROVIDER,
         new ExponentialBackoffPolicy.Provider());
   }
 }

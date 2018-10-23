@@ -31,6 +31,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
@@ -59,7 +60,6 @@ import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
-import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -108,6 +108,7 @@ import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -215,17 +216,11 @@ public class ManagedChannelImplTest {
 
   private void createChannel(ClientInterceptor... interceptors) {
     checkState(channel == null);
-    TimeProvider fakeClockTimeProvider = new TimeProvider() {
-      @Override
-      public long currentTimeNanos() {
-        return timer.getTicker().read();
-      }
-    };
 
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
-        fakeClockTimeProvider);
+        timer.getTimeProvider());
 
     if (requestConnection) {
       int numExpectedTasks = 0;
@@ -321,8 +316,6 @@ public class ManagedChannelImplTest {
     createChannel();
     verify(executorPool).getObject();
     verify(executorPool, never()).returnObject(anyObject());
-    verify(mockTransportFactory).getScheduledExecutorService();
-    verifyNoMoreInteractions(mockTransportFactory);
     channel.shutdown();
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
@@ -1417,6 +1410,33 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void lbHelper_getScheduledExecutorService() {
+    createChannel();
+
+    ScheduledExecutorService ses = helper.getScheduledExecutorService();
+    Runnable task = mock(Runnable.class);
+    helper.getSynchronizationContext().schedule(task, 110, TimeUnit.NANOSECONDS, ses);
+    timer.forwardNanos(109);
+    verify(task, never()).run();
+    timer.forwardNanos(1);
+    verify(task).run();
+
+    try {
+      ses.shutdown();
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
+
+    try {
+      ses.shutdownNow();
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // exepcted
+    }
+  }
+
+  @Test
   public void refreshNameResolutionWhenSubchannelConnectionFailed() {
     subtestRefreshNameResolutionWhenConnectionFailed(false);
   }
@@ -1478,6 +1498,7 @@ public class ManagedChannelImplTest {
    * propagated to newStream() and applyRequestMetadata().
    */
   @Test
+  @SuppressWarnings("deprecation")
   public void informationPropagatedToNewStreamAndCallCredentials() {
     createChannel();
     CallOptions callOptions = CallOptions.DEFAULT.withCallCredentials(creds);
@@ -1491,8 +1512,9 @@ public class ManagedChannelImplTest {
           credsApplyContexts.add(Context.current());
           return null;
         }
-      }).when(creds).applyRequestMetadata(
-          any(RequestInfo.class), any(Executor.class), any(MetadataApplier.class));
+      }).when(creds).applyRequestMetadata(  // TODO(zhangkun83): remove suppression of deprecations
+          any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
+          any(MetadataApplier.class));
 
     // First call will be on delayed transport.  Only newCall() is run within the expected context,
     // so that we can verify that the context is explicitly attached before calling newStream() and
@@ -1523,7 +1545,8 @@ public class ManagedChannelImplTest {
           any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
     verify(creds, never()).applyRequestMetadata(
-        any(RequestInfo.class), any(Executor.class), any(MetadataApplier.class));
+        any(MethodDescriptor.class), any(Attributes.class), any(Executor.class),
+        any(MetadataApplier.class));
 
     // applyRequestMetadata() is called after the transport becomes ready.
     transportInfo.listener.transportReady();
@@ -1531,15 +1554,14 @@ public class ManagedChannelImplTest {
         .thenReturn(PickResult.withSubchannel(subchannel));
     helper.updateBalancingState(READY, mockPicker);
     executor.runDueTasks();
-    ArgumentCaptor<RequestInfo> infoCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(Attributes.class);
     ArgumentCaptor<MetadataApplier> applierCaptor = ArgumentCaptor.forClass(MetadataApplier.class);
-    verify(creds).applyRequestMetadata(infoCaptor.capture(),
+    verify(creds).applyRequestMetadata(same(method), attrsCaptor.capture(),
         same(executor.getScheduledExecutorService()), applierCaptor.capture());
-    RequestInfo info = infoCaptor.getValue();
-    assertSame(method, info.getMethodDescriptor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
-    assertEquals(AUTHORITY, info.getAuthority());
-    assertEquals(SecurityLevel.NONE, info.getSecurityLevel());
+    assertEquals(AUTHORITY, attrsCaptor.getValue().get(CallCredentials.ATTR_AUTHORITY));
+    assertEquals(SecurityLevel.NONE,
+        attrsCaptor.getValue().get(CallCredentials.ATTR_SECURITY_LEVEL));
     verify(transport, never()).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
 
@@ -1557,13 +1579,12 @@ public class ManagedChannelImplTest {
     ctx.detach(origCtx);
     call.start(mockCallListener, new Metadata());
 
-    verify(creds, times(2)).applyRequestMetadata(infoCaptor.capture(),
+    verify(creds, times(2)).applyRequestMetadata(same(method), attrsCaptor.capture(),
         same(executor.getScheduledExecutorService()), applierCaptor.capture());
-    info = infoCaptor.getValue();
-    assertSame(method, info.getMethodDescriptor());
     assertEquals("testValue", testKey.get(credsApplyContexts.poll()));
-    assertEquals(AUTHORITY, info.getAuthority());
-    assertEquals(SecurityLevel.NONE, info.getSecurityLevel());
+    assertEquals(AUTHORITY, attrsCaptor.getValue().get(CallCredentials.ATTR_AUTHORITY));
+    assertEquals(SecurityLevel.NONE,
+        attrsCaptor.getValue().get(CallCredentials.ATTR_SECURITY_LEVEL));
     // This is from the first call
     verify(transport).newStream(
         any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
