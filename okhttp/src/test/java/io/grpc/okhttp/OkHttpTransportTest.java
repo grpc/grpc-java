@@ -20,6 +20,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
@@ -41,6 +42,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
           .forAddress("localhost", 0)
           .usePlaintext()
           .setTransportTracerFactory(fakeClockTransportTracer)
+          .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
           .buildTransportFactory();
 
   @After
@@ -97,5 +99,12 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected boolean haveTransportTracer() {
     return true;
+  }
+
+  @Override
+  @org.junit.Test
+  @org.junit.Ignore
+  public void clientChecksInboundMetadataSize_trailer() {
+    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
   }
 }

@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
 import io.grpc.Attributes;
@@ -44,6 +45,7 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -85,13 +87,32 @@ final class DnsNameResolver extends NameResolver {
 
   private static final String JNDI_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
+  private static final String JNDI_LOCALHOST_PROPERTY =
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
   private static final String JNDI_SRV_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "false");
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "true");
   private static final String JNDI_TXT_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_service_config", "false");
 
+  /**
+   * Java networking system properties name for caching DNS result.
+   *
+   * <p>Default value is -1 (cache forever) if security manager is installed. If security manager is
+   * not installed, the ttl value is {@code null} which falls back to {@link
+   * #DEFAULT_NETWORK_CACHE_TTL_SECONDS gRPC default value}.
+   *
+   * <p>For android, gRPC doesn't attempt to cache; this property value will be ignored.
+   */
+  @VisibleForTesting
+  static final String NETWORKADDRESS_CACHE_TTL_PROPERTY = "networkaddress.cache.ttl";
+  /** Default DNS cache duration if network cache ttl value is not specified ({@code null}). */
+  @VisibleForTesting
+  static final long DEFAULT_NETWORK_CACHE_TTL_SECONDS = 30;
+
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
+  @VisibleForTesting
+  static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
   @VisibleForTesting
   static boolean enableSrv = Boolean.parseBoolean(JNDI_SRV_PROPERTY);
   @VisibleForTesting
@@ -124,11 +145,11 @@ final class DnsNameResolver extends NameResolver {
   @GuardedBy("this")
   private Listener listener;
 
-  private final Runnable resolveRunnable = new Resolve(this);
+  private final Runnable resolveRunnable;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
-      Resource<ExecutorService> executorResource,
-      ProxyDetector proxyDetector) {
+      Resource<ExecutorService> executorResource, ProxyDetector proxyDetector,
+      Stopwatch stopwatch, boolean isAndroid) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -151,6 +172,7 @@ final class DnsNameResolver extends NameResolver {
       port = nameUri.getPort();
     }
     this.proxyDetector = proxyDetector;
+    this.resolveRunnable = new Resolve(this, stopwatch, getNetworkAddressCacheTtlNanos(isAndroid));
   }
 
   @Override
@@ -176,9 +198,14 @@ final class DnsNameResolver extends NameResolver {
   static final class Resolve implements Runnable {
 
     private final DnsNameResolver resolver;
+    private final Stopwatch stopwatch;
+    private final long cacheTtlNanos;
+    private ResolutionResults cachedResolutionResults = null;
 
-    Resolve(DnsNameResolver resolver) {
+    Resolve(DnsNameResolver resolver, Stopwatch stopwatch, long cacheTtlNanos) {
       this.resolver = resolver;
+      this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
+      this.cacheTtlNanos = cacheTtlNanos;
     }
 
     @Override
@@ -188,7 +215,7 @@ final class DnsNameResolver extends NameResolver {
       }
       Listener savedListener;
       synchronized (resolver) {
-        if (resolver.shutdown) {
+        if (resolver.shutdown || !cacheRefreshRequired()) {
           return;
         }
         savedListener = resolver.listener;
@@ -201,6 +228,12 @@ final class DnsNameResolver extends NameResolver {
           resolver.resolving = false;
         }
       }
+    }
+
+    private boolean cacheRefreshRequired() {
+      return cachedResolutionResults == null
+          || cacheTtlNanos == 0
+          || (cacheTtlNanos > 0 && stopwatch.elapsed(TimeUnit.NANOSECONDS) > cacheTtlNanos);
     }
 
     @VisibleForTesting
@@ -230,7 +263,7 @@ final class DnsNameResolver extends NameResolver {
       ResolutionResults resolutionResults;
       try {
         ResourceResolver resourceResolver = null;
-        if (enableJndi) {
+        if (shouldUseJndi(enableJndi, enableJndiLocalhost, resolver.host)) {
           resourceResolver = resolver.getResourceResolver();
         }
         resolutionResults = resolveAll(
@@ -239,6 +272,10 @@ final class DnsNameResolver extends NameResolver {
             enableSrv,
             enableTxt,
             resolver.host);
+        cachedResolutionResults = resolutionResults;
+        if (cacheTtlNanos > 0) {
+          stopwatch.reset().start();
+        }
         if (logger.isLoggable(Level.FINER)) {
           logger.finer("Found DNS results " + resolutionResults + " for " + resolver.host);
         }
@@ -436,6 +473,31 @@ final class DnsNameResolver extends NameResolver {
   }
 
   /**
+   * Returns value of network address cache ttl property if not Android environment. For android,
+   * DnsNameResolver does not cache the dns lookup result.
+   */
+  private static long getNetworkAddressCacheTtlNanos(boolean isAndroid) {
+    if (isAndroid) {
+      // on Android, ignore dns cache.
+      return 0;
+    }
+
+    String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    long cacheTtl = DEFAULT_NETWORK_CACHE_TTL_SECONDS;
+    if (cacheTtlPropertyValue != null) {
+      try {
+        cacheTtl = Long.parseLong(cacheTtlPropertyValue);
+      } catch (NumberFormatException e) {
+        logger.log(
+            Level.WARNING,
+            "Property({0}) valid is not valid number format({1}), fall back to default({2})",
+            new Object[] {NETWORKADDRESS_CACHE_TTL_PROPERTY, cacheTtlPropertyValue, cacheTtl});
+      }
+    }
+    return cacheTtl > 0 ? TimeUnit.SECONDS.toNanos(cacheTtl) : cacheTtl;
+  }
+
+  /**
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md">
@@ -624,5 +686,29 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     return localHostname;
+  }
+
+  @VisibleForTesting
+  static boolean shouldUseJndi(boolean jndiEnabled, boolean jndiLocalhostEnabled, String target) {
+    if (!jndiEnabled) {
+      return false;
+    }
+    if ("localhost".equalsIgnoreCase(target)) {
+      return jndiLocalhostEnabled;
+    }
+    // Check if this name looks like IPv6
+    if (target.contains(":")) {
+      return false;
+    }
+    // Check if this might be IPv4.  Such addresses have no alphabetic characters.  This also
+    // checks the target is empty.
+    boolean alldigits = true;
+    for (int i = 0; i < target.length(); i++) {
+      char c = target.charAt(i);
+      if (c != '.') {
+        alldigits &= (c >= '0' && c <= '9');
+      }
+    }
+    return !alldigits;
   }
 }

@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.TIMER_SERVICE;
+import static io.grpc.okhttp.Utils.DEFAULT_WINDOW_UPDATE_RATIO;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -140,6 +141,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final Random random = new Random();
   // Returns new unstarted stopwatches
   private final Supplier<Stopwatch> stopwatchFactory;
+  private final int initialWindowSize;
   private Listener listener;
   private FrameReader testFrameReader;
   private AsyncFrameWriter frameWriter;
@@ -190,6 +192,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private long keepAliveTimeoutNanos;
   private boolean keepAliveWithoutCalls;
   private final Runnable tooManyPingsRunnable;
+  private final int maxInboundMetadataSize;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   @GuardedBy("lock")
@@ -220,11 +223,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
       Executor executor, @Nullable SSLSocketFactory sslSocketFactory,
       @Nullable HostnameVerifier hostnameVerifier, ConnectionSpec connectionSpec,
-      int maxMessageSize, @Nullable ProxyParameters proxy, Runnable tooManyPingsRunnable,
-      TransportTracer transportTracer) {
+      int maxMessageSize, int initialWindowSize, @Nullable ProxyParameters proxy,
+      Runnable tooManyPingsRunnable, int maxInboundMetadataSize, TransportTracer transportTracer) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
+    this.initialWindowSize = initialWindowSize;
     this.executor = Preconditions.checkNotNull(executor, "executor");
     serializingExecutor = new SerializingExecutor(executor);
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
@@ -238,6 +242,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.proxy = proxy;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
+    this.maxInboundMetadataSize = maxInboundMetadataSize;
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
     initTransportTracer();
   }
@@ -257,10 +262,12 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       @Nullable Runnable connectingCallback,
       SettableFuture<Void> connectedFuture,
       int maxMessageSize,
+      int initialWindowSize,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer) {
     address = null;
     this.maxMessageSize = maxMessageSize;
+    this.initialWindowSize = initialWindowSize;
     defaultAuthority = "notarealauthority:80";
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.executor = Preconditions.checkNotNull(executor, "executor");
@@ -276,6 +283,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.proxy = null;
     this.tooManyPingsRunnable =
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
+    this.maxInboundMetadataSize = Integer.MAX_VALUE;
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     initTransportTracer();
   }
@@ -350,19 +358,23 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     Preconditions.checkNotNull(method, "method");
     Preconditions.checkNotNull(headers, "headers");
     StatsTraceContext statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
-    return new OkHttpClientStream(
-        method,
-        headers,
-        frameWriter,
-        OkHttpClientTransport.this,
-        outboundFlow,
-        lock,
-        maxMessageSize,
-        defaultAuthority,
-        userAgent,
-        statsTraceCtx,
-        transportTracer,
-        callOptions);
+    // FIXME: it is likely wrong to pass the transportTracer here as it'll exit the lock's scope
+    synchronized (lock) { // to make @GuardedBy linter happy
+      return new OkHttpClientStream(
+          method,
+          headers,
+          frameWriter,
+          OkHttpClientTransport.this,
+          outboundFlow,
+          lock,
+          maxMessageSize,
+          initialWindowSize,
+          defaultAuthority,
+          userAgent,
+          statsTraceCtx,
+          transportTracer,
+          callOptions);
+    }
   }
 
   @GuardedBy("lock")
@@ -437,7 +449,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     frameWriter = new AsyncFrameWriter(this, serializingExecutor);
-    outboundFlow = new OutboundFlowController(this, frameWriter);
+    outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
     // Connecting in the serializingExecutor, so that some stream operations like synStream
     // will be executed after connected.
     serializingExecutor.execute(new Runnable() {
@@ -1044,7 +1056,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
       // connection window update
       connectionUnacknowledgedBytesRead += length;
-      if (connectionUnacknowledgedBytesRead >= Utils.DEFAULT_WINDOW_SIZE / 2) {
+      if (connectionUnacknowledgedBytesRead >= initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO) {
         frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
         connectionUnacknowledgedBytesRead = 0;
       }
@@ -1061,6 +1073,18 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         List<Header> headerBlock,
         HeadersMode headersMode) {
       boolean unknownStream = false;
+      Status failedStatus = null;
+      if (maxInboundMetadataSize != Integer.MAX_VALUE) {
+        int metadataSize = headerBlockSize(headerBlock);
+        if (metadataSize > maxInboundMetadataSize) {
+          failedStatus = Status.RESOURCE_EXHAUSTED.withDescription(
+              String.format(
+                  "Response %s metadata larger than %d: %d",
+                  inFinished ? "trailer" : "header",
+                  maxInboundMetadataSize,
+                  metadataSize));
+        }
+      }
       synchronized (lock) {
         OkHttpClientStream stream = streams.get(streamId);
         if (stream == null) {
@@ -1070,13 +1094,31 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             unknownStream = true;
           }
         } else {
-          stream.transportState().transportHeadersReceived(headerBlock, inFinished);
+          if (failedStatus == null) {
+            stream.transportState().transportHeadersReceived(headerBlock, inFinished);
+          } else {
+            if (!inFinished) {
+              frameWriter.rstStream(streamId, ErrorCode.CANCEL);
+            }
+            stream.transportState().transportReportStatus(failedStatus, false, new Metadata());
+          }
         }
       }
       if (unknownStream) {
         // We don't expect any server-initiated streams.
         onError(ErrorCode.PROTOCOL_ERROR, "Received header for unknown stream: " + streamId);
       }
+    }
+
+    private int headerBlockSize(List<Header> headerBlock) {
+      // Calculate as defined for SETTINGS_MAX_HEADER_LIST_SIZE in RFC 7540 §6.5.2.
+      long size = 0;
+      for (int i = 0; i < headerBlock.size(); i++) {
+        Header header = headerBlock.get(i);
+        size += 32 + header.name.size() + header.value.size();
+      }
+      size = Math.min(size, Integer.MAX_VALUE);
+      return (int) size;
     }
 
     @Override
