@@ -25,10 +25,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
@@ -174,22 +176,109 @@ public class SynchronizationContextTest {
   @Test
   public void schedule() {
     FakeClock clock = new FakeClock();
-    syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    ScheduledHandle handle =
+        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    assertThat(handle.isPending()).isTrue();
     assertThat(clock.runDueTasks()).isEqualTo(0);
     assertThat(clock.forwardNanos(109)).isEqualTo(0);
+    assertThat(handle.isPending()).isTrue();
     verify(task1, never()).run();
 
     assertThat(clock.forwardNanos(1)).isEqualTo(1);
+    assertThat(handle.isPending()).isFalse();
     verify(task1).run();
   }
 
   @Test
   public void scheduleDueImmediately() {
     FakeClock clock = new FakeClock();
-    syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    ScheduledHandle handle =
+        syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
     verify(task1, never()).run();
+    assertThat(handle.isPending()).isTrue();
 
     assertThat(clock.runDueTasks()).isEqualTo(1);
+    assertThat(handle.isPending()).isFalse();
     verify(task1).run();
+  }
+
+  @Test
+  public void scheduleHandle_cancel() {
+    FakeClock clock = new FakeClock();
+    ScheduledHandle handle =
+        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    assertThat(handle.isPending()).isTrue();
+    assertThat(clock.runDueTasks()).isEqualTo(0);
+    assertThat(handle.isPending()).isTrue();
+
+    handle.cancel();
+    assertThat(handle.isPending()).isFalse();
+    syncContext.drain();
+    assertThat(clock.numPendingTasks()).isEqualTo(0);
+    verify(task1, never()).run();
+  }
+
+  // Test that a scheduled task is cancelled after the timer has expired on the
+  // ScheduledExecutorService, but before the task is run.
+  @Test
+  public void scheduledHandle_cancelRacesWithTimerExpiration() throws Exception {
+    FakeClock clock = new FakeClock();
+
+    final CountDownLatch task1Running = new CountDownLatch(1);
+    final LinkedBlockingQueue<ScheduledHandle> task2HandleQueue = new LinkedBlockingQueue<>();
+    final AtomicBoolean task1Done = new AtomicBoolean();
+    final CountDownLatch sideThreadDone = new CountDownLatch(1);
+
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          task1Running.countDown();
+          try {
+            ScheduledHandle task2Handle;
+            assertThat(task2Handle = task2HandleQueue.poll(5, TimeUnit.SECONDS)).isNotNull();
+            task2Handle.cancel();
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+          task1Done.set(true);
+          return null;
+        }
+      }).when(task1).run();
+
+    Thread sideThread = new Thread() {
+        @Override
+        public void run() {
+          syncContext.execute(task1);
+          sideThreadDone.countDown();
+        }
+      };
+
+    ScheduledHandle handle =
+        syncContext.schedule(task2, 10, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    // This will execute and block in task1
+    sideThread.start();
+
+    // Make sure task1 is running and blocking the execution
+    assertThat(task1Running.await(5, TimeUnit.SECONDS)).isTrue();
+
+    // Timer expires. task2 will be enqueued, but blocked by task1
+    assertThat(clock.forwardNanos(10)).isEqualTo(1);
+    assertThat(clock.numPendingTasks()).isEqualTo(0);
+    assertThat(handle.isPending()).isTrue();
+
+    // Enqueue task3 following task2
+    syncContext.executeLater(task3);
+
+    // Let task1 proceed and cancel task2
+    task2HandleQueue.add(handle);
+
+    // Wait until sideThread is done, which would have finished task1 and task3, while skipping
+    // task2.
+    assertThat(sideThreadDone.await(5, TimeUnit.SECONDS)).isTrue();
+    assertThat(task1Done.get()).isTrue();
+    assertThat(handle.isPending()).isFalse();
+    verify(task2, never()).run();
+    verify(task3).run();
+    assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 }
