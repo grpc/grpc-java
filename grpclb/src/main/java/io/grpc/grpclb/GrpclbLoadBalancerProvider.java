@@ -22,12 +22,12 @@ import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.TimeProvider;
 
 /**
- * The provider for a {@link LoadBalancer} that uses the GRPCLB protocol.
+ * The provider for the "grpclb" balancing policy.
  *
  * <p><b>Experimental:</b>This only works with the GRPCLB load-balancer service, which is not
  * available external yet. Right now it's only good for internal testing.
  */
-public class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
+public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public boolean isAvailable() {

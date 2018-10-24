@@ -35,9 +35,9 @@ import io.grpc.Status;
 import java.util.List;
 
 /**
- * A {@link LoadBalancer} that provides no load balancing mechanism over the
- * addresses from the {@link NameResolver}.  The channel's default behavior
- * (currently pick-first) is used for all addresses found.
+ * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
+ * NameResolver}.  The channel's default behavior is used, which is walking down the address list
+ * and sticking to the first that works.
  */
 final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;

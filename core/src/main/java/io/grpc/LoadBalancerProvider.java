@@ -23,7 +23,7 @@ import com.google.common.base.MoreObjects;
  *
  * @since 1.17.0
  */
-@ExperimentalApi("TODO")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
   /**
    * Whether this provider is available for use, taking the current environment into consideration.

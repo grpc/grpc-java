@@ -26,12 +26,12 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
- * Registry of {@link LoadBalancerProvider}s.  Providers are loaded at runtime through the Java
- * service provider mechanism.
+ * Registry of {@link LoadBalancerProvider}s.  The {@link #getDefaultRegistry default instance}
+ * loads providers at runtime through the Java service provider mechanism.
  *
  * @since 1.17.0
  */
-@ExperimentalApi("TODO")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
   private static final LoadBalancerRegistry instance;

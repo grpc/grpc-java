@@ -61,10 +61,8 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 /**
- * A {@link LoadBalancer} that provides round-robin load balancing mechanism over the
- * addresses from the {@link NameResolver}.  The sub-lists received from the name resolver
- * are considered to be an {@link EquivalentAddressGroup} and each of these sub-lists is
- * what is then balanced across.
+ * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
+ * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 final class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting

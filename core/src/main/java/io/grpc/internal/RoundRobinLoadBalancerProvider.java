@@ -19,6 +19,9 @@ package io.grpc.internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 
+/**
+ * Provider for the "round_robin" balancing policy.
+ */
 public final class RoundRobinLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public boolean isAvailable() {

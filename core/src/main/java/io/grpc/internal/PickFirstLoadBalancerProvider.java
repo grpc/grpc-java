@@ -19,6 +19,12 @@ package io.grpc.internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 
+/**
+ * Provider for the "pick_first" balancing policy.
+ *
+ * <p>This provides no load-balancing over the addresses from the {@link NameResolver}.  It walks
+ * down the address list and sticks to the first that works.
+ */
 public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public boolean isAvailable() {
