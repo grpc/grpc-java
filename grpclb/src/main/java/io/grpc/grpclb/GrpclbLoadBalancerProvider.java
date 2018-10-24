@@ -16,17 +16,18 @@
 
 package io.grpc.grpclb;
 
+import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.TimeProvider;
 
 /**
- * The provider for the "grpclb" balancing policy.
- *
- * <p><b>Experimental:</b>This only works with the GRPCLB load-balancer service, which is not
- * available external yet. Right now it's only good for internal testing.
+ * The provider for the "grpclb" balancing policy.  This class should not be directly referenced in
+ * code.  The policy should be accessed through {@link io.grpc.LoadBalancerRegistry#getProvider}
+ * with the name "grpclb".
  */
+@Internal
 public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override

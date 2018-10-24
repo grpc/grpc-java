@@ -168,7 +168,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
      *   <li>User provided lb on the channel.  This is a degenerate case and not handled here.</li>
      *   <li>"grpclb" if on the class path and any gRPC LB balancer addresses are present</li>
      *   <li>The policy picked by the service config</li>
-     *   <li>"pick-first" if the service config choice does not specify</li>
+     *   <li>"pick_first" if the service config choice does not specify</li>
      * </ol>
      *
      * @param servers The list of servers reported
