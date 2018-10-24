@@ -215,9 +215,6 @@ final class GrpclbState {
     if (usingFallbackBackends) {
       return;
     }
-    if (fallbackTimer != null && !fallbackTimer.discarded) {
-      return;
-    }
     int numReadySubchannels = 0;
     for (Subchannel subchannel : subchannels.values()) {
       if (subchannel.getAttributes().get(STATE_INFO).get().getState() == READY) {
@@ -392,7 +389,6 @@ final class GrpclbState {
   @VisibleForTesting
   class FallbackModeTask implements Runnable {
     private ScheduledFuture<?> scheduledFuture;
-    private boolean discarded;
 
     @Override
     public void run() {
@@ -400,7 +396,6 @@ final class GrpclbState {
           @Override
           public void run() {
             checkState(fallbackTimer == FallbackModeTask.this, "fallback timer mismatch");
-            discarded = true;
             maybeUseFallbackBackends();
             maybeUpdatePicker();
           }
@@ -408,7 +403,6 @@ final class GrpclbState {
     }
 
     void cancel() {
-      discarded = true;
       scheduledFuture.cancel(false);
     }
 
