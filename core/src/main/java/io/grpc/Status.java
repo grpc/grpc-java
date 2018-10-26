@@ -292,6 +292,47 @@ public final class Status {
   public static final Status DATA_LOSS = Code.DATA_LOSS.toStatus();
 
   /**
+   * Returns the {@link Status} for this exception, or else throws.  Unlike
+   * {@link #fromThrowable(Throwable), this does not walk the causal chain.
+   *
+   * @throws NullPointerException if the throwable is null
+   * @throws IllegalArgumentException if the throwable is not a {@link StatusException}
+   * or {@link StatusRuntimeException}
+   */
+  @ExperimentalApi("TODO")
+  public static Status unwrap(Throwable t) {
+    checkNotNull(t, "throwable");
+    if (t instanceof StatusException) {
+      return ((StatusException) t).getStatus();
+    } else if (t instanceof StatusRuntimeException) {
+      return ((StatusRuntimeException) t).getStatus();
+    } else {
+      throw new IllegalArgumentException("Unexpected exception " + t.getClass(), t);
+    }
+  }
+
+  /**
+   * Returns the {@link Metadata} trailers for this exception, or else throws.  Unlike
+   * {@link #trailersFromThrowable(Throwable), this does not walk the causal chain.
+   *
+   * @throws NullPointerException if the throwable is null
+   * @throws IllegalArgumentException if the throwable is not a {@link StatusException}
+   * or {@link StatusRuntimeException}
+   */
+  @ExperimentalApi("TODO")
+  @Nullable
+  public static Metadata unwrapTrailers(Throwable t) {
+    checkNotNull(t, "throwable");
+    if (t instanceof StatusException) {
+      return ((StatusException) t).getTrailers();
+    } else if (t instanceof StatusRuntimeException) {
+      return ((StatusRuntimeException) t).getTrailers();
+    } else {
+      throw new IllegalArgumentException("Unexpected exception " + t.getClass(), t);
+    }
+  }
+
+  /**
    * Return a {@link Status} given a canonical error {@link Code} value.
    */
   public static Status fromCodeValue(int codeValue) {
