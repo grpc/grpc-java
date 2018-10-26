@@ -16,61 +16,125 @@
 
 package io.grpc.services;
 
-import io.grpc.Attributes;
-import io.grpc.LoadBalancer;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 
-public final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factory {
-  private static final Attributes.Key<LoadBalancerImpl.HealthCheckState> KEY_HEALTH_CHECK_STATE =
+import com.google.common.base.Objects;
+import io.grpc.Attributes;
+import io.grpc.CallOptions;
+import io.grpc.ClientCall;
+import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.Factory;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.Metadata;
+import io.grpc.NameResolver;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.health.v1.HealthCheckRequest;
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
+import io.grpc.health.v1.HealthGrpc;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.TimeProvider;
+import io.grpc.util.ForwardingLoadBalancer;
+import io.grpc.util.ForwardingLoadBalancerHelper;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
+
+public final class HealthCheckingLoadBalancerFactory extends Factory {
+  private static final Attributes.Key<HealthCheckState> KEY_HEALTH_CHECK_STATE =
       Attributes.Key.create("io.grpc.services.HealthCheckingLoadBalancerFactory.healthCheckState");
 
-  private final LoadBalancer.Factory delegateFactory;
+  private final Factory delegateFactory;
   private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final TimeProvider time;
 
   public HealthCheckingLoadBalancerFactory(
-      LoadBalancer.Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider) {
+      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider, TimeProvider time) {
     this.delegateFactory = checkNotNull(delegateFactory, "delegateFactory");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.time = checkNotNull(time, "time");
   }
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    LoadBalancer delegateBalancer = delegate.newLoadBalancer(new HelperImpl(helper));
-    return new LoadBalancerImpl(
-        helper.getSynchronizationContext(), helper.getScheduledExecutorService(), delegateBalancer);
+    HelperImpl wrappedHelper = new HelperImpl(helper);
+    LoadBalancer delegateBalancer = delegateFactory.newLoadBalancer(wrappedHelper);
+    wrappedHelper.init(delegateBalancer);
+    return new LoadBalancerImpl(wrappedHelper, delegateBalancer);
   }
 
-  private static final class HelperImpl extends ForwardingLoadBalancerHelper {
-    private final LoadBalancer.Helper delegate;
+  private final class HelperImpl extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    
+    private LoadBalancer delegateBalancer;
+    @Nullable String healthCheckedService;
 
-    HelperImpl(LoadBalancer.Helper delegate) {
+    final HashSet<HealthCheckState> hcStates = new HashSet<HealthCheckState>();
+
+    HelperImpl(Helper delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
+    void init(LoadBalancer delegateBalancer) {
+      checkState(this.delegateBalancer == null, "init() already called");
+      this.delegateBalancer = checkNotNull(delegateBalancer, "delegateBalancer");
+    }
+
     @Override
-    protected LoadBalancer.Helper delegate() {
+    protected Helper delegate() {
       return delegate;
     }
 
     @Override
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-      HealthCheckState hcState = new HealthCheckState();
+      HealthCheckState hcState = new HealthCheckState(
+          delegateBalancer, delegate.getSynchronizationContext(),
+          delegate.getScheduledExecutorService());
+      if (healthCheckedService != null) {
+        hcState.setServiceName(healthCheckedService);
+      }
+      hcStates.add(hcState);
       Subchannel subchannel = super.createSubchannel(
           addrs, attrs.toBuilder().set(KEY_HEALTH_CHECK_STATE, hcState).build());
       hcState.init(subchannel);
       return subchannel;
     }
+
+    void setHealthCheckedService(String service) {
+      healthCheckedService = service;
+      for (HealthCheckState hcState : hcStates) {
+        hcState.setServiceName(service);
+      }
+    }
   }
 
-  private final class LoadBalancerImpl extends ForwardingLoadBalancer {
+  private static final class LoadBalancerImpl extends ForwardingLoadBalancer {
     final LoadBalancer delegate;
+    final HelperImpl helper;
     final SynchronizationContext syncContext;
     final ScheduledExecutorService timerService;
 
-    LoadBalancerImpl(
-        SynchronizationContext syncContext, ScheduledExecutorService timerService,
-        LoadBalancer delegate) {
-      this.syncContext = checkNotNull(syncContext, "syncContext");
-      this.timerService = checkNotNull(timerService, "timerService");
+    LoadBalancerImpl(HelperImpl helper, LoadBalancer delegate) {
+      this.helper = checkNotNull(helper, "helper");
+      this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
+      this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
@@ -80,124 +144,180 @@ public final class HealthCheckingLoadBalancerFactory extends LoadBalancer.Factor
     }
 
     @Override
+    public void handleResolvedAddressGroups(
+        List<EquivalentAddressGroup> servers,
+        @NameResolver.ResolutionResultAttr Attributes attributes) {
+      Map<String, Object> serviceConfig =
+          attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+      String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
+      helper.setHealthCheckedService(serviceName);
+    }
+
+    @Override
     public void handleSubchannelState(
         Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       HealthCheckState hcState =
           checkNotNull(subchannel.getAttributes().get(KEY_HEALTH_CHECK_STATE), "hcState");
-      if (stateInfo.getState().equals(ConnectivityState.READY)) {
-        hcState.makeSureHealthCheckStarted();
-      } else {
-        hcState.makeSureHealthCheckStopped();
-        super.handleSubchannelState(subchannel, stateInfo);
+      hcState.updateRawState(stateInfo);
+
+      if (Objects.equal(stateInfo.getState(), SHUTDOWN)) {
+        helper.hcStates.remove(hcState);
       }
     }
 
-    // All methods are run from syncContext
-    private final class HealthCheckState {
-      final Runnable retryTask = new Runnable() {
+  }
+  // All methods are run from syncContext
+  private final class HealthCheckState {
+    private final Runnable retryTask = new Runnable() {
+        @Override
+        public void run() {
+          startRpc();
+        }
+      };
+
+    private final ClientCall.Listener<HealthCheckResponse> responseListener =
+        new ClientCall.Listener<HealthCheckResponse>() {
           @Override
-          public void run() {
-            startRpc();
+          public void onMessage(final HealthCheckResponse response) {
+            syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleResponse(response);
+                }
+              });
+          }
+
+          @Override
+          public void onClose(final Status status, Metadata trailers) {
+            syncContext.execute(new Runnable() {
+                @Override
+                public void run() {
+                  handleStreamClosed(status);
+                }
+              });
           }
         };
+    private final LoadBalancer delegate;
+    private final SynchronizationContext syncContext;
+    private final ScheduledExecutorService timerService;
 
-      final ClientCall.Listener<HealthCheckResponse> responseListener =
-          new ClientCall.Listener<>() {
-            @Override
-            public void onMessage(final HealthCheckResponse response) {
-              syncContext.execute(new Runnable() {
-                  @Override
-                  public void run() {
-                    handleResponse(response);
-                  }
-                });
-            }
+    private Subchannel subchannel;
+    @Nullable
+    private ClientCall<HealthCheckRequest, HealthCheckResponse> activeCall;
+    private String lastCallServiceName;
+    private long lastCallStartNanos;
+    private String serviceName;
+    private BackoffPolicy backoffPolicy;
+    private ConnectivityStateInfo rawState = ConnectivityStateInfo.forNonError(IDLE);
+    private ConnectivityStateInfo concludedState = ConnectivityStateInfo.forNonError(IDLE);
+    private boolean running;
+    private boolean disabled;
+    private ScheduledHandle retryTimer;
 
-            @Override
-            public void onClose(Status status, Metadata trailers) {
-              syncContext.execute(new Runnable() {
-                  @Override
-                  public void run() {
-                    handleStreamClosed();
-                  }
-                });
-            }
-          };
+    HealthCheckState(
+        LoadBalancer delegate, SynchronizationContext syncContext,
+        ScheduledExecutorService timerService) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.syncContext = checkNotNull(syncContext, "syncContext");
+      this.timerService = checkNotNull(timerService, "timerService");
+    }
 
-      Subchannel subchannel;
-      @Nullable
-      ClientCall<HealthCheckRequest, HealthCheckResponse> activeCall;
-      ConnectivityStateInfo concludedState = ConnectivityStateInfo.forNonError(IDLE);
-      boolean running;
-      ScheduledHandle retryTimer;
-
-      void handleResponse(HealthCheckResponse response) {
-        if (!running) {
-          return;
-        }
-        if (response.getStatus() == ServingStatus.SERVING) {
-          gotoState(ConnectivityStateInfo.forNonError(READY));
-        } else {
-          gotoState(
-              ConnectivityStateInfo.forTransientFailure(
-                  Status.UNAVAILABLE.withDescription(
-                      "Health-check service responded "
-                      + response.getStatus() + " for '" + service + "'")));
-        }
+    void handleResponse(HealthCheckResponse response) {
+      backoffPolicy = null;
+      if (!running) {
+        return;
       }
+      if (Objects.equal(response.getStatus(), ServingStatus.SERVING)) {
+        gotoState(ConnectivityStateInfo.forNonError(READY));
+      } else {
+        gotoState(
+            ConnectivityStateInfo.forTransientFailure(
+                Status.UNAVAILABLE.withDescription(
+                    "Health-check service responded "
+                    + response.getStatus() + " for '" + lastCallServiceName + "'")));
+      }
+    }
 
-      void handleStreamClosed() {
-        activeCall = null;
-        if (running) {
+    void handleStreamClosed(Status status) {
+      activeCall = null;
+      if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
+        // TODO(zhangkun83): record this to channel tracer
+        disabled = true;
+        gotoState(rawState);
+      }
+      if (running) {
+        long delayNanos = 0;
+        if (Objects.equal(lastCallServiceName, serviceName)) {
           if (backoffPolicy == null) {
             backoffPolicy = backoffPolicyProvider.get();
           }
           delayNanos =
-              prevRpcStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
-          if (delayNanos <= 0) {
-            startRpc();
-          } else {
-            retryTimer = syncContext.schedule(retryTask, delayNanos, TimeUnit.NANOSECONDS,
-                timerService);
-          }
+              lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
+        }  // else: if service name has just changed, no backoff
+        if (delayNanos <= 0) {
+          startRpc();
+        } else {
+          retryTimer = syncContext.schedule(
+              retryTask, delayNanos, TimeUnit.NANOSECONDS, timerService);
         }
       }
+    }
 
-      void init(Subchannel subchannel) {
-        checkState(this.subchannel == null, "init() already called");
-        this.subchannel = checkNotNull(subchannel, "subchannel");
+    void init(Subchannel subchannel) {
+      checkState(this.subchannel == null, "init() already called");
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+    }
+
+    void setServiceName(String newServiceName) {
+      checkNotNull(newServiceName, "newServiceName");
+      if (Objects.equal(newServiceName, serviceName)) {
+        return;
       }
+      disabled = false;
+      serviceName = newServiceName;
+      if (activeCall != null) {
+        activeCall.cancel("Switching to new service name: " + newServiceName, null);
+      }
+    }
 
-      void makeSureHealthCheckStarted() {
+    void updateRawState(ConnectivityStateInfo rawState) {
+      this.rawState = rawState;
+      if (!disabled && Objects.equal(rawState.getState(), READY)) {
         running = true;
         if (activeCall == null) {
           gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
           startRpc();
         }
+      } else {
+        makeSureRpcStopped();
+        gotoState(rawState);
       }
+    }
 
-      void makeSureHealthCheckStopped() {
-        if (activeCall != null) {
-          activeCall.cancel("Client stops health check", null);
-        }
-        running = false;
+    private void startRpc() {
+      checkState(activeCall == null, "previous health-checking RPC has not been cleaned up");
+      checkState(subchannel != null, "init() not called");
+      activeCall = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+      lastCallServiceName = serviceName;
+      lastCallStartNanos = time.currentTimeNanos();
+      activeCall.start(responseListener, new Metadata());
+      activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
+      activeCall.request(1);
+    }
+
+    private void makeSureRpcStopped() {
+      if (activeCall != null) {
+        activeCall.cancel("Client stops health check", null);
       }
+      running = false;
+      backoffPolicy = null;
+    }
 
-      private void startRpc() {
-        checkState(activeCall == null, "previous health-checking RPC has not been cleaned up");
-        checkState(subchannel != null, "init() not called");
-        activeCall = subchannel.asChannel().newCall(
-            HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
-        activeCall.start(responseListener);
-        activeCall.request(1);
-      }
-
-      private void gotoState(ConnectivityStateInfo newState) {
-        checkState(subchannel != null, "init() not called");
-        if (concludedState != newState) {
-          concludedState = newState;
-          handleChannelState(subchannel, concludedState);
-        }
+    private void gotoState(ConnectivityStateInfo newState) {
+      checkState(subchannel != null, "init() not called");
+      if (!Objects.equal(concludedState, newState)) {
+        concludedState = newState;
+        delegate.handleSubchannelState(subchannel, concludedState);
       }
     }
   }
