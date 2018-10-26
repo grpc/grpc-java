@@ -184,7 +184,7 @@ public final class ChannelzService extends ChannelzGrpc.ChannelzImplBase {
 
     GetServerSocketsResponse resp;
     try {
-      resp = ChannelzProtoUtil.toGetServerSocketsResponse(serverSockets)
+      resp = ChannelzProtoUtil.toGetServerSocketsResponse(serverSockets);
     } catch (StatusRuntimeException e) {
       responseObserver.onError(e);
       return;
