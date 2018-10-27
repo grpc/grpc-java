@@ -296,7 +296,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // Simulate that the orignal LB creates Subchannels
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
-      // EAG attributes are 
+      // Subchannel attributes set by origLb are correctly plumbed in
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
@@ -392,7 +392,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // We create 2 Subchannels. One of them connects to a server that doesn't implement health check
     for (int i = 0; i < 2; i++) {
-      // EAG attributes are 
       wrappedHelper.createSubchannel(eagLists[i], Attributes.EMPTY);
     }
 
@@ -591,10 +590,55 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Test
   public void serviceConfigHasNoHealthCheckingInitiallyButDoesLater() {
+    // No service config, thus no health check.
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(Attributes.EMPTY));
+    verifyNoMoreInteractions(origLb);
+
+    // First, create Subchannels 0
+    wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+
+    // No health check activity.  Underlying Subchannel states are directly propagated
+    hcLbEventDelivery.handleSubchannelState(
+        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    assertThat(healthImpls[0].calls).isEmpty();
+    verify(origLb).handleSubchannelState(
+        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    verifyNoMoreInteractions(origLb);
+
+    // Service config enables health check
+    Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+
+    // Health check started on existing Subchannel
+    assertThat(healthImpls[0].calls).hasSize(1);
+    verify(origLb).handleSubchannelState(
+        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    verifyNoMoreInteractions(origLb);
+
+    // Start Subchannel 1, which will have health check
+    wrappedHelper.createSubchannel(eagLists[1], Attributes.EMPTY);
+    assertThat(healthImpls[1].calls).isEmpty();
+    hcLbEventDelivery.handleSubchannelState(
+        subchannels[1], ConnectivityStateInfo.forNonError(READY));
+    assertThat(healthImpls[1].calls).hasSize(1);
   }
 
   @Test
-  public void serviceConfigHasHealthCheckingInitiallyButDoesNotLater() {
+  public void serviceConfigDisalbesHealthCheckWhenRpcActive() {
+  }
+
+  @Test
+  public void serviceConfigDisalbesHealthCheckWhenRetryPending() {
+  }
+
+  @Test
+  public void serviceConfigDisalbesHealthCheckWhenRpcInactive() {
   }
 
   @Test
@@ -602,11 +646,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
+  public void serviceConfigChangesServiceNameWhenRetryPending() {
+  }
+
+  @Test
   public void serviceConfigChangesServiceNameWhenRpcInactive() {
   }
 
   @Test
-  public void rpcClosedWhenSubchannelShutdown() {
+  public void rpcClosedAfterSubchannelShutdown() {
   }
 
   @Test

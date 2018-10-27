@@ -108,17 +108,17 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       HealthCheckState hcState = new HealthCheckState(
           delegateBalancer, delegate.getSynchronizationContext(),
           delegate.getScheduledExecutorService());
-      if (healthCheckedService != null) {
-        hcState.setServiceName(healthCheckedService);
-      }
       hcStates.add(hcState);
       Subchannel subchannel = super.createSubchannel(
           addrs, attrs.toBuilder().set(KEY_HEALTH_CHECK_STATE, hcState).build());
       hcState.init(subchannel);
+      if (healthCheckedService != null) {
+        hcState.setServiceName(healthCheckedService);
+      }
       return subchannel;
     }
 
-    void setHealthCheckedService(String service) {
+    void setHealthCheckedService(@Nullable String service) {
       healthCheckedService = service;
       for (HealthCheckState hcState : hcStates) {
         hcState.setServiceName(service);
@@ -224,7 +224,9 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     private BackoffPolicy backoffPolicy;
     private ConnectivityStateInfo rawState = ConnectivityStateInfo.forNonError(IDLE);
     private ConnectivityStateInfo concludedState = ConnectivityStateInfo.forNonError(IDLE);
+    // true if a health check stream should be kept
     private boolean running;
+    // true if server returned UNIMPLEMENTED
     private boolean disabled;
     private ScheduledHandle retryTimer;
 
@@ -290,16 +292,18 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       this.subchannel = checkNotNull(subchannel, "subchannel");
     }
 
-    void setServiceName(String newServiceName) {
-      checkNotNull(newServiceName, "newServiceName");
+    void setServiceName(@Nullable String newServiceName) {
       if (Objects.equal(newServiceName, serviceName)) {
         return;
       }
-      disabled = false;
       serviceName = newServiceName;
-      if (activeCall != null) {
-        activeCall.cancel("Switching to new service name: " + newServiceName, null);
-      }
+      // If service name has changed while there is active RPC, cancel it so that
+      // a new call will be made with the new name.
+      String cancelMsg =
+          serviceName == null ? "Health check disabled by service config"
+          : "Switching to new service name: " + newServiceName;
+      cancelCurrentRpc(cancelMsg);
+      adjustHealthCheck();
     }
 
     void updateRawState(ConnectivityStateInfo rawState) {
@@ -311,19 +315,22 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         // TODO(zhangkun83): record this to channel tracer
       }
       this.rawState = rawState;
-      if (!disabled && Objects.equal(rawState.getState(), READY)) {
+      adjustHealthCheck();
+    }
+
+    // Start or stop health check according to the current states.
+    private void adjustHealthCheck() {
+      if (!disabled && serviceName != null && Objects.equal(rawState.getState(), READY)) {
         running = true;
         if (activeCall == null) {
           gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
           startRpc();
-        }
+        }  // else: activeCall will be cleaned up when it's closed, where it will be retried.
       } else {
         running = false;
         // Prerequisites for health checking not met.
         // Make sure it's stopped.
-        if (activeCall != null) {
-          activeCall.cancel("Client stops health check", null);
-        }
+        cancelCurrentRpc("Client stops health check");
         backoffPolicy = null;
         gotoState(rawState);
       }
@@ -340,6 +347,16 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
       activeCall.halfClose();
       activeCall.request(1);
+    }
+
+    private void cancelCurrentRpc(String msg) {
+      if (activeCall != null) {
+        activeCall.cancel(msg, null);
+      }
+      if (retryTimer != null) {
+        retryTimer.cancel();
+        retryTimer = null;
+      }
     }
 
     private void gotoState(ConnectivityStateInfo newState) {
