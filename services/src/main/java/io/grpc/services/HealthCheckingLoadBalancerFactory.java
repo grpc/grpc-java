@@ -249,6 +249,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
                     "Health-check service responded "
                     + response.getStatus() + " for '" + lastCallServiceName + "'")));
       }
+      activeCall.request(1);
     }
 
     void handleStreamClosed(Status status) {
@@ -257,6 +258,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         // TODO(zhangkun83): record this to channel tracer
         disabled = true;
         gotoState(rawState);
+        return;
       }
       if (running) {
         long delayNanos = 0;
@@ -294,6 +296,13 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     void updateRawState(ConnectivityStateInfo rawState) {
+      if (Objects.equal(this.rawState.getState(), READY)
+          && !Objects.equal(rawState.getState(), READY)) {
+        // A connection was lost.  We will reset disabled flag because health check
+        // may be available on the new connection.
+        disabled = false;
+        // TODO(zhangkun83): record this to channel tracer
+      }
       this.rawState = rawState;
       if (!disabled && Objects.equal(rawState.getState(), READY)) {
         running = true;
@@ -302,7 +311,13 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
           startRpc();
         }
       } else {
-        makeSureRpcStopped();
+        // Prerequisites for health checking not met.
+        // Make sure it's stopped.
+        if (activeCall != null) {
+          activeCall.cancel("Client stops health check", null);
+        }
+        running = false;
+        backoffPolicy = null;
         gotoState(rawState);
       }
     }
@@ -317,14 +332,6 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
       activeCall.halfClose();
       activeCall.request(1);
-    }
-
-    private void makeSureRpcStopped() {
-      if (activeCall != null) {
-        activeCall.cancel("Client stops health check", null);
-      }
-      running = false;
-      backoffPolicy = null;
     }
 
     private void gotoState(ConnectivityStateInfo newState) {
