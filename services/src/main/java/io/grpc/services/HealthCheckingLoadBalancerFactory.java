@@ -315,6 +315,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       lastCallStartNanos = time.currentTimeNanos();
       activeCall.start(responseListener, new Metadata());
       activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
+      activeCall.halfClose();
       activeCall.request(1);
     }
 
