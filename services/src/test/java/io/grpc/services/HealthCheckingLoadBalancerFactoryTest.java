@@ -388,16 +388,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
 
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
-    verify(origHelper, atLeast(0)).getSynchronizationContext();
-    verify(origHelper, atLeast(0)).getScheduledExecutorService();
-    verifyNoMoreInteractions(origHelper);
     verifyNoMoreInteractions(origLb);
 
     // We create 2 Subchannels. One of them connects to a server that doesn't implement health check
     for (int i = 0; i < 2; i++) {
       // EAG attributes are 
       wrappedHelper.createSubchannel(eagLists[i], Attributes.EMPTY);
-      verify(origHelper).createSubchannel(same(eagLists[i]), any(Attributes.class));
     }
 
     InOrder inOrder = inOrder(origLb);
@@ -453,7 +449,144 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void backoffRetriesWhenServerErroneouslyClosesRpc() {
+  public void backoffRetriesWhenServerErroneouslyClosesRpcBeforeAnyResponse() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    assertThat(clock.getPendingTasks()).isEmpty();
+
+    // Server closes the health checking RPC without any response
+    healthImpl.calls.poll().responseObserver.onCompleted();
+
+    // which results in TRANSIENT_FAILURE
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+
+    // Retry with backoff is scheduled
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(clock.getPendingTasks()).hasSize(1);
+
+    verifyRetryAfterNanos(healthImpl, 11);
+    assertThat(clock.getPendingTasks()).isEmpty();
+    
+    // Server closes the health checking RPC without any response
+    healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
+
+    // which also results in TRANSIENT_FAILURE, with a different description
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.CANCELLED
+        + " for 'TeeService'");
+
+    // Retry with backoff
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+
+    verifyRetryAfterNanos(healthImpl, 21);
+    
+    // Server responds this time
+    healthImpl.calls.poll().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
+
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    verifyNoMoreInteractions(origLb, backoffPolicyProvider, backoffPolicy1);
+  }
+
+  @Test
+  public void serverRespondResetsBackoff() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    assertThat(clock.getPendingTasks()).isEmpty();
+
+    // Server closes the health checking RPC without any response
+    healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
+
+    // which results in TRANSIENT_FAILURE
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.CANCELLED
+        + " for 'TeeService'");
+
+    // Retry with backoff is scheduled
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(clock.getPendingTasks()).hasSize(1);
+
+    verifyRetryAfterNanos(healthImpl, 11);
+    assertThat(clock.getPendingTasks()).isEmpty();
+
+    // Server responds
+    healthImpl.calls.peek().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    // then closes the stream
+    healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
+        + " for 'TeeService'");
+
+    // Because server has responded, the first retry is not subject to backoff.
+    // But the backoff policy has been reset.  A new backoff policy will be used for
+    // the next backed-off retry.
+    assertThat(healthImpl.calls).hasSize(1);
+    assertThat(clock.getPendingTasks()).isEmpty();
+    inOrder.verifyNoMoreInteractions();
+
+    // then closes the stream for this retry
+    healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
+        + " for 'TeeService'");
+
+    // New backoff policy is used
+    inOrder.verify(backoffPolicyProvider).get();
+    // Retry with a new backoff policy
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+
+    verifyRetryAfterNanos(healthImpl, 12);
+  }
+
+  private void verifyRetryAfterNanos(HealthImpl impl, long nanos) {
+    assertThat(impl.calls).isEmpty();
+    clock.forwardNanos(nanos - 1);
+    assertThat(impl.calls).isEmpty();
+    clock.forwardNanos(nanos);
+    assertThat(impl.calls).hasSize(1);
   }
 
   @Test

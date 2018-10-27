@@ -219,6 +219,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     private ClientCall<HealthCheckRequest, HealthCheckResponse> activeCall;
     private String lastCallServiceName;
     private long lastCallStartNanos;
+    private boolean lastCallHasResponded;
     private String serviceName;
     private BackoffPolicy backoffPolicy;
     private ConnectivityStateInfo rawState = ConnectivityStateInfo.forNonError(IDLE);
@@ -237,6 +238,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
 
     void handleResponse(HealthCheckResponse response) {
       backoffPolicy = null;
+      lastCallHasResponded = true;
       if (!running) {
         return;
       }
@@ -261,14 +263,19 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         return;
       }
       if (running) {
+        gotoState(
+            ConnectivityStateInfo.forTransientFailure(
+                Status.UNAVAILABLE.withDescription(
+                    "Health-check stream was erroneously closed with "
+                    + status + " for '" + lastCallServiceName + "'")));
         long delayNanos = 0;
-        if (Objects.equal(lastCallServiceName, serviceName)) {
+        if (Objects.equal(lastCallServiceName, serviceName) && !lastCallHasResponded) {
           if (backoffPolicy == null) {
             backoffPolicy = backoffPolicyProvider.get();
           }
           delayNanos =
               lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
-        }  // else: if service name has just changed, no backoff
+        }  // else: if service name has just changed, or last call had a response, no backoff
         if (delayNanos <= 0) {
           startRpc();
         } else {
@@ -311,12 +318,12 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
           startRpc();
         }
       } else {
+        running = false;
         // Prerequisites for health checking not met.
         // Make sure it's stopped.
         if (activeCall != null) {
           activeCall.cancel("Client stops health check", null);
         }
-        running = false;
         backoffPolicy = null;
         gotoState(rawState);
       }
@@ -328,6 +335,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       activeCall = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
       lastCallServiceName = serviceName;
       lastCallStartNanos = time.currentTimeNanos();
+      lastCallHasResponded = false;
       activeCall.start(responseListener, new Metadata());
       activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
       activeCall.halfClose();
@@ -349,6 +357,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
           .add("disabled", disabled)
           .add("hasActiveCall", activeCall != null)
           .add("lastCallServiceName", lastCallServiceName)
+          .add("lastCallHasResponded", lastCallHasResponded)
           .add("serviceName", serviceName)
           .add("rawState", rawState)
           .add("concludedState", concludedState)
