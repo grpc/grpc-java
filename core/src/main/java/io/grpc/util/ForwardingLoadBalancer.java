@@ -1,5 +1,6 @@
 package io.grpc.util;
 
+import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -36,5 +37,10 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     delegate().shutdown();
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }
 }

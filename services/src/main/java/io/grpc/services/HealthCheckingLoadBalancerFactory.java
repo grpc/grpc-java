@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -123,6 +124,11 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         hcState.setServiceName(service);
       }
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
   }
 
   private static final class LoadBalancerImpl extends ForwardingLoadBalancer {
@@ -151,6 +157,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
           attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
       helper.setHealthCheckedService(serviceName);
+      super.handleResolvedAddressGroups(servers, attributes);
     }
 
     @Override
@@ -165,7 +172,13 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       }
     }
 
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
   }
+
+  
   // All methods are run from syncContext
   private final class HealthCheckState {
     private final Runnable retryTask = new Runnable() {
@@ -319,6 +332,19 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         concludedState = newState;
         delegate.handleSubchannelState(subchannel, concludedState);
       }
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("running", running)
+          .add("disabled", disabled)
+          .add("hasActiveCall", activeCall != null)
+          .add("lastCallServiceName", lastCallServiceName)
+          .add("serviceName", serviceName)
+          .add("rawState", rawState)
+          .add("concludedState", concludedState)
+          .toString();
     }
   }
 }
