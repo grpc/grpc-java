@@ -630,15 +630,126 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void serviceConfigDisalbesHealthCheckWhenRpcActive() {
+  public void serviceConfigDisablesHealthCheckWhenRpcActive() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verifyNoMoreInteractions();
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    ServerSideCall serverCall = healthImpl.calls.poll();
+    assertThat(serverCall.cancelled).isFalse();
+
+    // NameResolver gives an update without service config, thus health check will be disabled
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
+
+    // Health check RPC cancelled.
+    assertThat(serverCall.cancelled).isTrue();
+    // Subchannel uses original state
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(Attributes.EMPTY));
+
+    verifyNoMoreInteractions(origLb);
+    assertThat(healthImpl.calls).isEmpty();
   }
 
   @Test
-  public void serviceConfigDisalbesHealthCheckWhenRetryPending() {
+  public void serviceConfigDisablesHealthCheckWhenRetryPending() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verifyNoMoreInteractions();
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+
+    // Server closes the stream without responding.  Client in retry backoff
+    assertThat(clock.getPendingTasks()).isEmpty();
+    healthImpl.calls.poll().responseObserver.onCompleted();
+    assertThat(clock.getPendingTasks()).hasSize(1);
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+
+    // NameResolver gives an update without service config, thus health check will be disabled
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
+
+    // Retry timer is cancelled
+    assertThat(clock.getPendingTasks()).isEmpty();
+
+    // No retry was attempted
+    assertThat(healthImpl.calls).isEmpty();
+
+    // Subchannel uses original state
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(Attributes.EMPTY));
+
+    verifyNoMoreInteractions(origLb);
   }
 
   @Test
-  public void serviceConfigDisalbesHealthCheckWhenRpcInactive() {
+  public void serviceConfigDisablesHealthCheckWhenRpcInactive() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    // Underlying subchannel is not READY initially
+    ConnectivityStateInfo underlyingErrorState =
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("connection refused"));
+    hcLbEventDelivery.handleSubchannelState(subchannel, underlyingErrorState);
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), same(underlyingErrorState));
+    inOrder.verifyNoMoreInteractions();
+
+    // NameResolver gives an update without service config, thus health check will be disabled
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(Attributes.EMPTY));
+
+    // Underlying subchannel is now ready
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+
+    // Since health check is disabled, READY state is propagated directly.
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    // and there is no health check activity.
+    assertThat(healthImpls[0].calls).isEmpty();
+
+    verifyNoMoreInteractions(origLb);
   }
 
   @Test

@@ -151,8 +151,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
 
     @Override
     public void handleResolvedAddressGroups(
-        List<EquivalentAddressGroup> servers,
-        @NameResolver.ResolutionResultAttr Attributes attributes) {
+        List<EquivalentAddressGroup> servers, Attributes attributes) {
       Map<String, Object> serviceConfig =
           attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
