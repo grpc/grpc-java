@@ -65,6 +65,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.stub.StreamObserver;
 import java.net.SocketAddress;
 import java.util.Arrays;
@@ -754,30 +755,179 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Test
   public void serviceConfigChangesServiceNameWhenRpcActive() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    ServerSideCall serverCall = healthImpl.calls.poll();
+    assertThat(serverCall.cancelled).isFalse();
+    assertThat(serverCall.request).isEqualTo(makeRequest("TeeService"));
+
+    // Health check responded
+    serverCall.responseObserver.onNext(makeResponse(ServingStatus.SERVING));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    // Service config returns a different health check name.
+    resolutionAttrs = attrsWithHealthCheckService("FooService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+
+    // Concluded CONNECTING state
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    // Current health check RPC cancelled.
+    assertThat(serverCall.cancelled).isTrue();
+
+    // A second RPC is started immediately
+    assertThat(healthImpl.calls).hasSize(1);
+    serverCall = healthImpl.calls.poll();
+    // with the new service name
+    assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
+
+    verifyNoMoreInteractions(origLb);
   }
 
   @Test
   public void serviceConfigChangesServiceNameWhenRetryPending() {
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    ServerSideCall serverCall = healthImpl.calls.poll();
+    assertThat(serverCall.cancelled).isFalse();
+    assertThat(serverCall.request).isEqualTo(makeRequest("TeeService"));
+
+    // Health check stream closed without responding.  Client in retry backoff.
+    assertThat(clock.getPendingTasks()).isEmpty();
+    serverCall.responseObserver.onCompleted();
+    assertThat(clock.getPendingTasks()).hasSize(1);
+    assertThat(healthImpl.calls).isEmpty();
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
+    verifyUnavailableState(
+        stateCaptor.getValue(),
+        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+
+    // Service config returns a different health check name.
+    resolutionAttrs = attrsWithHealthCheckService("FooService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    // Concluded CONNECTING state
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+
+    // Current retry timer cancelled
+    assertThat(clock.getPendingTasks()).isEmpty();
+
+    // A second RPC is started immediately
+    assertThat(healthImpl.calls).hasSize(1);
+    serverCall = healthImpl.calls.poll();
+    // with the new service name
+    assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
+
+    verifyNoMoreInteractions(origLb);
   }
 
   @Test
   public void serviceConfigChangesServiceNameWhenRpcInactive() {
-  }
+    Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
 
-  @Test
-  public void rpcClosedAfterSubchannelShutdown() {
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
+    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    assertThat(subchannel).isSameAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb);
+
+    // Underlying subchannel is not READY initially
+    ConnectivityStateInfo underlyingErrorState =
+        ConnectivityStateInfo.forTransientFailure(
+            Status.UNAVAILABLE.withDescription("connection refused"));
+    hcLbEventDelivery.handleSubchannelState(subchannel, underlyingErrorState);
+    inOrder.verify(origLb).handleSubchannelState(same(subchannel), same(underlyingErrorState));
+    inOrder.verifyNoMoreInteractions();
+
+    // Service config returns a different health check name.
+    resolutionAttrs = attrsWithHealthCheckService("FooService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+
+    // Underlying subchannel is now ready
+    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+
+    // Concluded CONNECTING state
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    // Health check RPC is started
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    // with the new service name
+    assertThat(healthImpl.calls.poll().request).isEqualTo(makeRequest("FooService"));
+
+    verifyNoMoreInteractions(origLb);
   }
 
   @Test
   public void getHealthCheckedServiceName_nullServiceConfig() {
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(null)).isNull();
   }
 
   @Test
   public void getHealthCheckedServiceName_noHealthCheckConfig() {
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(new HashMap<String, Object>()))
+        .isNull();
   }
 
   @Test
   public void getHealthCheckedServiceName_healthCheckConfigMissingServiceName() {
+    HashMap<String, Object> serviceConfig = new HashMap<String, Object>();
+    HashMap<String, Object> hcConfig = new HashMap<String, Object>();
+    serviceConfig.put("healthCheckConfig", hcConfig);
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig)).isNull();
+  }
+
+  @Test
+  public void getHealthCheckedServiceName_healthCheckConfigHasServiceName() {
+    HashMap<String, Object> serviceConfig = new HashMap<String, Object>();
+    HashMap<String, Object> hcConfig = new HashMap<String, Object>();
+    hcConfig.put("serviceName", "FooService");
+    serviceConfig.put("healthCheckConfig", hcConfig);
+    assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig))
+        .isEqualTo("FooService");
   }
 
   private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {

@@ -264,19 +264,27 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         return;
       }
       if (running) {
-        gotoState(
-            ConnectivityStateInfo.forTransientFailure(
-                Status.UNAVAILABLE.withDescription(
-                    "Health-check stream was erroneously closed with "
-                    + status + " for '" + lastCallServiceName + "'")));
         long delayNanos = 0;
-        if (Objects.equal(lastCallServiceName, serviceName) && !lastCallHasResponded) {
-          if (backoffPolicy == null) {
-            backoffPolicy = backoffPolicyProvider.get();
+        if (Objects.equal(lastCallServiceName, serviceName)) {
+          // Service name has not just changed.
+          gotoState(
+              ConnectivityStateInfo.forTransientFailure(
+                  Status.UNAVAILABLE.withDescription(
+                      "Health-check stream was erroneously closed with "
+                      + status + " for '" + lastCallServiceName + "'")));
+          // Use backoff only when server has not responded for the previous call
+          if (!lastCallHasResponded) {
+            if (backoffPolicy == null) {
+              backoffPolicy = backoffPolicyProvider.get();
+            }
+            delayNanos =
+                lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
           }
-          delayNanos =
-              lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
-        }  // else: if service name has just changed, or last call had a response, no backoff
+        } else {
+          // If service name has just changed, no backoff for reconnect.
+          // Go to CONNECTING state.
+          gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
+        }
         if (delayNanos <= 0) {
           startRpc();
         } else {
