@@ -18,14 +18,11 @@ package io.grpc.util;
 
 import static org.mockito.Mockito.mock;
 
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.LoadBalancer;
 import java.lang.reflect.Method;
 import java.net.SocketAddress;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

@@ -128,7 +128,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         delegate = delegateFactory.newLoadBalancer(helper);
         if (channelTracer != null) {
           channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-              .setDescription("Load balancer changed from " + old + " to " + delegate)
+              .setDescription("Load balancer changed from " + old.getClass().getSimpleName()
+                  + " to " + delegate.getClass().getSimpleName())
               .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
               .setTimestampNanos(timeProvider.currentTimeNanos())
               .build());

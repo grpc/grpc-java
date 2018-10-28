@@ -788,6 +788,13 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
 
+    // Service config returns with the same health check name.
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    // It's delivered to origLb, but nothing else happens
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
@@ -843,6 +850,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
         unavailableStateWithMsg(
             "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
 
+    // Service config returns with the same health check name.
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    // It's delivered to origLb, but nothing else happens
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+    verifyNoMoreInteractions(origLb);
+    assertThat(clock.getPendingTasks()).hasSize(1);
+    assertThat(healthImpl.calls).isEmpty();
+
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
@@ -877,6 +893,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
+    HealthImpl healthImpl = healthImpls[0];
 
     // Underlying subchannel is not READY initially
     ConnectivityStateInfo underlyingErrorState =
@@ -885,6 +902,14 @@ public class HealthCheckingLoadBalancerFactoryTest {
     hcLbEventDelivery.handleSubchannelState(subchannel, underlyingErrorState);
     inOrder.verify(origLb).handleSubchannelState(same(subchannel), same(underlyingErrorState));
     inOrder.verifyNoMoreInteractions();
+
+    // Service config returns with the same health check name.
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    // It's delivered to origLb, but nothing else happens
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
+    assertThat(healthImpl.calls).isEmpty();
+    verifyNoMoreInteractions(origLb);
 
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
@@ -901,7 +926,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
         same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     // Health check RPC is started
-    HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
     // with the new service name
     assertThat(healthImpl.calls.poll().request).isEqualTo(makeRequest("FooService"));

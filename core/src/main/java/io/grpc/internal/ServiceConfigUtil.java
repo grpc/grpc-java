@@ -62,6 +62,9 @@ public final class ServiceConfigUtil {
 
   private ServiceConfigUtil() {}
 
+  /**
+   * Fetch the health-checked service name from service config. {@code null} if can't find one.
+   */
   @Nullable
   public static String getHealthCheckedServiceName(@Nullable Map<String, Object> serviceConfig) {
     String healthCheckKey = "healthCheckConfig";

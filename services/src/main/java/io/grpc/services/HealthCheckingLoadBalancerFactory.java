@@ -58,7 +58,12 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
-public final class HealthCheckingLoadBalancerFactory extends Factory {
+/**
+ * Wraps a {@link LoadBalancer} and implements the client-side health-checking
+ * (https://github.com/grpc/proposal/blob/master/A17-client-side-health-checking.md).  The
+ * Subchannel received by the states wrapped LoadBalancer will be determined by health-checking.
+ */
+final class HealthCheckingLoadBalancerFactory extends Factory {
   private static final Attributes.Key<HealthCheckState> KEY_HEALTH_CHECK_STATE =
       Attributes.Key.create("io.grpc.services.HealthCheckingLoadBalancerFactory.healthCheckState");
 
@@ -336,7 +341,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
         running = true;
         if (activeCall == null) {
           startRpc();
-        }  // else: activeCall will be cleaned up when it's closed, where it will be retried.
+        }
       } else {
         running = false;
         // Prerequisites for health checking not met.
@@ -372,8 +377,6 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     private void gotoState(ConnectivityStateInfo newState) {
-      new Exception("XXX: gotoState: " + newState).printStackTrace();
-
       checkState(subchannel != null, "init() not called");
       if (!Objects.equal(concludedState, newState)) {
         concludedState = newState;
