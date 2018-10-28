@@ -214,16 +214,25 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     private final ScheduledExecutorService timerService;
 
     private Subchannel subchannel;
+
+    // Set when the RPC is started. Cleared when the RPC is fully closed.
     @Nullable
     private ClientCall<HealthCheckRequest, HealthCheckResponse> activeCall;
+
+    // States about the most recently started RPC
     private String lastCallServiceName;
     private long lastCallStartNanos;
     private boolean lastCallHasResponded;
+
+    // The service name should be used for health checking
     private String serviceName;
     private BackoffPolicy backoffPolicy;
+    // The state from the underlying Subchannel
     private ConnectivityStateInfo rawState = ConnectivityStateInfo.forNonError(IDLE);
+    // The state concluded from health checking
     private ConnectivityStateInfo concludedState = ConnectivityStateInfo.forNonError(IDLE);
-    // true if a health check stream should be kept
+    // true if a health check stream should be kept.  Either there is an active RPC, or a retry is
+    // pending.
     private boolean running;
     // true if server returned UNIMPLEMENTED
     private boolean disabled;
@@ -280,11 +289,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
             delayNanos =
                 lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
           }
-        } else {
-          // If service name has just changed, no backoff for reconnect.
-          // Go to CONNECTING state.
-          gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
-        }
+        } // else: If service name has just changed, no backoff for reconnect.
         if (delayNanos <= 0) {
           startRpc();
         } else {
@@ -330,7 +335,6 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
       if (!disabled && serviceName != null && Objects.equal(rawState.getState(), READY)) {
         running = true;
         if (activeCall == null) {
-          gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
           startRpc();
         }  // else: activeCall will be cleaned up when it's closed, where it will be retried.
       } else {
@@ -346,6 +350,7 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     private void startRpc() {
       checkState(activeCall == null, "previous health-checking RPC has not been cleaned up");
       checkState(subchannel != null, "init() not called");
+      gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
       activeCall = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
       lastCallServiceName = serviceName;
       lastCallStartNanos = time.currentTimeNanos();
@@ -367,6 +372,8 @@ public final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     private void gotoState(ConnectivityStateInfo newState) {
+      new Exception("XXX: gotoState: " + newState).printStackTrace();
+
       checkState(subchannel != null, "init() not called");
       if (!Objects.equal(concludedState, newState)) {
         concludedState = newState;

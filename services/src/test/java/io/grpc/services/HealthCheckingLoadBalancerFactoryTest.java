@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
@@ -30,6 +31,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -129,8 +131,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   ArgumentCaptor<Helper> helperCaptor;
   @Captor
   ArgumentCaptor<Attributes> attrsCaptor;
-  @Captor
-  ArgumentCaptor<ConnectivityStateInfo> stateCaptor;
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
@@ -346,14 +346,14 @@ public class HealthCheckingLoadBalancerFactoryTest {
             ServingStatus.UNKNOWN, ServingStatus.NOT_SERVING, ServingStatus.SERVICE_UNKNOWN,
             ServingStatus.SERVING, ServingStatus.NOT_SERVING, ServingStatus.SERVING}) {
         serverCall.responseObserver.onNext(makeResponse(servingStatus));
-        inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
         // SERVING is mapped to READY, while other statuses are mapped to TRANSIENT_FAILURE
         if (servingStatus == ServingStatus.SERVING) {
-          assertThat(stateCaptor.getValue().getState()).isEqualTo(READY);
+          inOrder.verify(origLb).handleSubchannelState(
+              same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
         } else {
-          verifyUnavailableState(
-              stateCaptor.getValue(), 
-              "Health-check service responded " + servingStatus + " for 'FooService'");
+          inOrder.verify(origLb).handleSubchannelState(
+              same(subchannel),unavailableStateWithMsg(
+                  "Health-check service responded " + servingStatus + " for 'FooService'"));
         }
         verifyNoMoreInteractions(origLb);
       }
@@ -419,9 +419,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // subchannels[1] has normal health checking
     serverCall1.responseObserver.onNext(makeResponse(ServingStatus.NOT_SERVING));
-    inOrder.verify(origLb).handleSubchannelState(same(subchannels[1]), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(), "Health-check service responded NOT_SERVING for 'BarService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannels[1]),
+        unavailableStateWithMsg("Health-check service responded NOT_SERVING for 'BarService'"));
 
     // Without health checking, states from underlying Subchannel are delivered directly to origLb
     hcLbEventDelivery.handleSubchannelState(
@@ -440,9 +440,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // Health check now works as normal
     serverCall0.responseObserver.onNext(makeResponse(ServingStatus.SERVICE_UNKNOWN));
-    inOrder.verify(origLb).handleSubchannelState(same(subchannels[0]), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(), "Health-check service responded SERVICE_UNKNOWN for 'BarService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannels[0]),
+        unavailableStateWithMsg("Health-check service responded SERVICE_UNKNOWN for 'BarService'"));
 
     verifyNoMoreInteractions(origLb);
     verifyZeroInteractions(backoffPolicyProvider);
@@ -471,33 +471,33 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.poll().responseObserver.onCompleted();
 
     // which results in TRANSIENT_FAILURE
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
 
     // Retry with backoff is scheduled
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
     
     // Server closes the health checking RPC without any response
     healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
 
     // which also results in TRANSIENT_FAILURE, with a different description
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.CANCELLED
-        + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.CANCELLED
+            + " for 'TeeService'"));
 
     // Retry with backoff
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
 
-    verifyRetryAfterNanos(healthImpl, 21);
+    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 21);
     
     // Server responds this time
     healthImpl.calls.poll().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
@@ -531,18 +531,18 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
 
     // which results in TRANSIENT_FAILURE
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.CANCELLED
-        + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.CANCELLED
+            + " for 'TeeService'"));
 
     // Retry with backoff is scheduled
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
 
     // Server responds
@@ -550,42 +550,50 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
 
+    verifyNoMoreInteractions(origLb);
+
     // then closes the stream
     healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
-        + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
+            + " for 'TeeService'"));
 
     // Because server has responded, the first retry is not subject to backoff.
     // But the backoff policy has been reset.  A new backoff policy will be used for
     // the next backed-off retry.
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     assertThat(healthImpl.calls).hasSize(1);
     assertThat(clock.getPendingTasks()).isEmpty();
     inOrder.verifyNoMoreInteractions();
 
     // then closes the stream for this retry
     healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
-        + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
+            + " for 'TeeService'"));
 
     // New backoff policy is used
     inOrder.verify(backoffPolicyProvider).get();
     // Retry with a new backoff policy
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
 
-    verifyRetryAfterNanos(healthImpl, 12);
+    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 12);
   }
 
-  private void verifyRetryAfterNanos(HealthImpl impl, long nanos) {
+  private void verifyRetryAfterNanos(InOrder inOrder, Subchannel subchannel, HealthImpl impl, long nanos) {
     assertThat(impl.calls).isEmpty();
     clock.forwardNanos(nanos - 1);
     assertThat(impl.calls).isEmpty();
-    clock.forwardNanos(nanos);
+    inOrder.verifyNoMoreInteractions();
+    verifyNoMoreInteractions(origLb);
+    clock.forwardNanos(1);
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     assertThat(impl.calls).hasSize(1);
   }
 
@@ -690,10 +698,10 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(clock.getPendingTasks()).isEmpty();
     healthImpl.calls.poll().responseObserver.onCompleted();
     assertThat(clock.getPendingTasks()).hasSize(1);
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
 
     // NameResolver gives an update without service config, thus health check will be disabled
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
@@ -830,10 +838,10 @@ public class HealthCheckingLoadBalancerFactoryTest {
     serverCall.responseObserver.onCompleted();
     assertThat(clock.getPendingTasks()).hasSize(1);
     assertThat(healthImpl.calls).isEmpty();
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), stateCaptor.capture());
-    verifyUnavailableState(
-        stateCaptor.getValue(),
-        "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'");
+    inOrder.verify(origLb).handleSubchannelState(
+        same(subchannel),
+        unavailableStateWithMsg(
+            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
 
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
@@ -947,11 +955,32 @@ public class HealthCheckingLoadBalancerFactoryTest {
     return HealthCheckResponse.newBuilder().setStatus(status).build();
   }
 
-  private void verifyUnavailableState(ConnectivityStateInfo info, String expectedMsg) {
-    assertThat(info.getState()).isEqualTo(TRANSIENT_FAILURE);
-    Status error = info.getStatus();
-    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
-    assertThat(error.getDescription()).isEqualTo(expectedMsg);
+  private ConnectivityStateInfo unavailableStateWithMsg(final String expectedMsg) {
+    return argThat(new org.hamcrest.BaseMatcher<ConnectivityStateInfo>() {
+        @Override
+        public boolean matches(Object item) {
+          if (!(item instanceof ConnectivityStateInfo)) {
+            return false;
+          }
+          ConnectivityStateInfo info = (ConnectivityStateInfo) item;
+          if (!info.getState().equals(TRANSIENT_FAILURE)) {
+            return false;
+          }
+          Status error = info.getStatus();
+          if (!error.getCode().equals(Code.UNAVAILABLE)) {
+            return false;
+          }
+          if (!error.getDescription().equals(expectedMsg)) {
+            return false;
+          }
+          return true;
+        }
+
+        @Override
+        public void describeTo(org.hamcrest.Description desc) {
+          desc.appendText("Matches unavailable state with msg='" + expectedMsg + "'");
+        }
+      });
   }
 
   private static class HealthImpl extends HealthGrpc.HealthImplBase {
