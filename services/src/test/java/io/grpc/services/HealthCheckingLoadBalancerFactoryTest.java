@@ -31,7 +31,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -39,8 +38,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
-import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
@@ -52,7 +49,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
-import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.Server;
 import io.grpc.Status;
@@ -342,9 +338,10 @@ public class HealthCheckingLoadBalancerFactoryTest {
       verifyNoMoreInteractions(origLb);
 
       // Simulate a series of responses.
-      for (ServingStatus servingStatus : new ServingStatus[] {
-            ServingStatus.UNKNOWN, ServingStatus.NOT_SERVING, ServingStatus.SERVICE_UNKNOWN,
-            ServingStatus.SERVING, ServingStatus.NOT_SERVING, ServingStatus.SERVING}) {
+      for (ServingStatus servingStatus :
+               new ServingStatus[] {
+                 ServingStatus.UNKNOWN, ServingStatus.NOT_SERVING, ServingStatus.SERVICE_UNKNOWN,
+                 ServingStatus.SERVING, ServingStatus.NOT_SERVING, ServingStatus.SERVING}) {
         serverCall.responseObserver.onNext(makeResponse(servingStatus));
         // SERVING is mapped to READY, while other statuses are mapped to TRANSIENT_FAILURE
         if (servingStatus == ServingStatus.SERVING) {
@@ -585,7 +582,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 12);
   }
 
-  private void verifyRetryAfterNanos(InOrder inOrder, Subchannel subchannel, HealthImpl impl, long nanos) {
+  private void verifyRetryAfterNanos(
+      InOrder inOrder, Subchannel subchannel, HealthImpl impl, long nanos) {
     assertThat(impl.calls).isEmpty();
     clock.forwardNanos(nanos - 1);
     assertThat(impl.calls).isEmpty();
