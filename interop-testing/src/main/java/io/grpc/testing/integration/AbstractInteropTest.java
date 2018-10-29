@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -109,6 +110,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -394,7 +396,7 @@ public abstract class AbstractInteropTest {
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(request));
+    assertResponse(goldenResponse, blockingStub.unaryCall(request));
 
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.OK,
         Collections.singleton(request), Collections.singleton(goldenResponse));
@@ -435,7 +437,7 @@ public abstract class AbstractInteropTest {
       assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.INVALID_ARGUMENT);
     }
 
-    assertEquals(
+    assertResponse(
         goldenResponse, blockingStub.withCompression("gzip").unaryCall(expectCompressedRequest));
     assertStatsTrace(
         "grpc.testing.TestService/UnaryCall",
@@ -443,7 +445,7 @@ public abstract class AbstractInteropTest {
         Collections.singleton(expectCompressedRequest),
         Collections.singleton(goldenResponse));
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(expectUncompressedRequest));
+    assertResponse(goldenResponse, blockingStub.unaryCall(expectUncompressedRequest));
     assertStatsTrace(
         "grpc.testing.TestService/UnaryCall",
         Status.Code.OK,
@@ -477,14 +479,14 @@ public abstract class AbstractInteropTest {
             .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[314159])))
             .build();
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(responseShouldBeCompressed));
+    assertResponse(goldenResponse, blockingStub.unaryCall(responseShouldBeCompressed));
     assertStatsTrace(
         "grpc.testing.TestService/UnaryCall",
         Status.Code.OK,
         Collections.singleton(responseShouldBeCompressed),
         Collections.singleton(goldenResponse));
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(responseShouldBeUncompressed));
+    assertResponse(goldenResponse, blockingStub.unaryCall(responseShouldBeUncompressed));
     assertStatsTrace(
         "grpc.testing.TestService/UnaryCall",
         Status.Code.OK,
@@ -526,7 +528,7 @@ public abstract class AbstractInteropTest {
     asyncStub.streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(goldenResponses, recorder.getValues());
+    assertResponses(goldenResponses, recorder.getValues());
   }
 
   @Test
@@ -649,7 +651,7 @@ public abstract class AbstractInteropTest {
     asyncStub.streamingOutputCall(request, recorder);
     recorder.awaitCompletion();
     assertSuccess(recorder);
-    assertEquals(goldenResponses, recorder.getValues());
+    assertResponses(goldenResponses, recorder.getValues());
   }
 
   @Test
@@ -697,7 +699,7 @@ public abstract class AbstractInteropTest {
                 .setBody(ByteString.copyFrom(new byte[58979])))
             .build());
 
-    final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<Object>(5);
+    final ArrayBlockingQueue<Object> queue = new ArrayBlockingQueue<>(5);
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(new StreamObserver<StreamingOutputCallResponse>() {
           @Override
@@ -723,7 +725,7 @@ public abstract class AbstractInteropTest {
       if (actualResponse instanceof Throwable) {
         throw new AssertionError(actualResponse);
       }
-      assertEquals(goldenResponses.get(i), actualResponse);
+      assertResponse(goldenResponses.get(i), (StreamingOutputCallResponse) actualResponse);
     }
     requestObserver.onCompleted();
     assertEquals("Completed", queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
@@ -780,7 +782,7 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onNext(request);
-    assertEquals(goldenResponse, responseObserver.firstValue().get());
+    assertResponse(goldenResponse, responseObserver.firstValue().get());
     requestObserver.onError(new RuntimeException());
     responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
     assertEquals(1, responseObserver.getValues().size());
@@ -897,8 +899,9 @@ public abstract class AbstractInteropTest {
 
     // Time how long it takes to get the first response.
     call.request(1);
-    assertEquals(goldenResponses.get(0),
-        queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
+    Object response = queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+    assertTrue(response instanceof StreamingOutputCallResponse);
+    assertResponse(goldenResponses.get(0), (StreamingOutputCallResponse) response);
     long firstCallDuration = System.nanoTime() - start;
 
     // Without giving additional flow control, make sure that we don't get another response. We wait
@@ -910,8 +913,9 @@ public abstract class AbstractInteropTest {
 
     // Make sure that everything still completes.
     call.request(1);
-    assertEquals(goldenResponses.get(1),
-        queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
+    response = queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS);
+    assertTrue(response instanceof StreamingOutputCallResponse);
+    assertResponse(goldenResponses.get(1), (StreamingOutputCallResponse) response);
     assertEquals(Status.OK, queue.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
   }
 
@@ -928,7 +932,7 @@ public abstract class AbstractInteropTest {
             .setBody(ByteString.copyFrom(new byte[10])))
         .build();
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(request));
+    assertResponse(goldenResponse, blockingStub.unaryCall(request));
   }
 
   @Test
@@ -942,7 +946,7 @@ public abstract class AbstractInteropTest {
             .setBody(ByteString.copyFrom(new byte[unaryPayloadLength()])))
         .build();
 
-    assertEquals(goldenResponse, blockingStub.unaryCall(request));
+    assertResponse(goldenResponse, blockingStub.unaryCall(request));
   }
 
   @Test
@@ -1181,7 +1185,7 @@ public abstract class AbstractInteropTest {
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder().setSize(1))
         .build();
-    
+
     MethodDescriptor<StreamingOutputCallRequest, StreamingOutputCallResponse> md =
         TestServiceGrpc.getStreamingOutputCallMethod();
     ByteSizeMarshaller<StreamingOutputCallRequest> mar =
@@ -1329,16 +1333,16 @@ public abstract class AbstractInteropTest {
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onNext(requests.get(0));
-    assertEquals(
+    assertResponse(
         goldenResponses.get(0), responses.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     // Initiate graceful shutdown.
     channel.shutdown();
     requestObserver.onNext(requests.get(1));
-    assertEquals(
+    assertResponse(
         goldenResponses.get(1), responses.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     // The previous ping-pong could have raced with the shutdown, but this one certainly shouldn't.
     requestObserver.onNext(requests.get(2));
-    assertEquals(
+    assertResponse(
         goldenResponses.get(2), responses.poll(operationTimeoutMillis(), TimeUnit.MILLISECONDS));
     assertFalse(completed.isDone());
     requestObserver.onCompleted();
@@ -1382,7 +1386,7 @@ public abstract class AbstractInteropTest {
     blockingStub = MetadataUtils.captureMetadata(blockingStub, headersCapture, trailersCapture);
     SimpleResponse response = blockingStub.unaryCall(request);
 
-    assertEquals(goldenResponse, response);
+    assertResponse(goldenResponse, response);
     assertEquals("test_initial_metadata_value",
         headersCapture.get().get(Util.ECHO_INITIAL_METADATA_KEY));
     assertTrue(
@@ -1408,7 +1412,7 @@ public abstract class AbstractInteropTest {
     recorder.awaitCompletion();
 
     assertSuccess(recorder);
-    assertEquals(goldenStreamingResponse, recorder.firstValue().get());
+    assertResponse(goldenStreamingResponse, recorder.firstValue().get());
     assertEquals("test_initial_metadata_value",
         headersCapture.get().get(Util.ECHO_INITIAL_METADATA_KEY));
     assertTrue(
@@ -1621,7 +1625,7 @@ public abstract class AbstractInteropTest {
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
-    assertEquals(goldenResponse, response);
+    assertResponse(goldenResponse, response);
   }
 
   /** Sends a large unary rpc with compute engine credentials. */
@@ -1649,7 +1653,7 @@ public abstract class AbstractInteropTest {
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[314159])))
         .build();
-    assertEquals(goldenResponse, response);
+    assertResponse(goldenResponse, response);
   }
 
   /** Test JWT-based auth. */
@@ -1954,7 +1958,7 @@ public abstract class AbstractInteropTest {
     for (MessageLite msg : receivedMessages) {
       assertThat(tracer.nextInboundEvent()).isEqualTo(String.format("inboundMessage(%d)", seqNo));
       assertThat(tracer.nextInboundEvent()).matches(
-          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo)); 
+          String.format("inboundMessageRead\\(%d, -?[0-9]+, -?[0-9]+\\)", seqNo));
       uncompressedReceivedSize += msg.getSerializedSize();
       seqNo++;
     }
@@ -2014,6 +2018,44 @@ public abstract class AbstractInteropTest {
       // check if they are recorded.
       assertNotNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES));
       assertNotNull(record.getMetric(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES));
+    }
+  }
+
+  // Helper methods for responses containing Payload since proto equals does not ignore deprecated
+  // fields (PayloadType).
+  private void assertResponses(
+      Collection<StreamingOutputCallResponse> expected,
+      Collection<StreamingOutputCallResponse> actual) {
+    assertSame(expected.size(), actual.size());
+    Iterator<StreamingOutputCallResponse> expectedIter = expected.iterator();
+    Iterator<StreamingOutputCallResponse> actualIter = actual.iterator();
+
+    while (expectedIter.hasNext()) {
+      assertResponse(expectedIter.next(), actualIter.next());
+    }
+  }
+
+  private void assertResponse(
+      StreamingOutputCallResponse expected, StreamingOutputCallResponse actual) {
+    if (expected == null || actual == null) {
+      assertEquals(expected, actual);
+    } else {
+      assertPayload(expected.getPayload(), actual.getPayload());
+    }
+  }
+
+  private void assertResponse(SimpleResponse expected, SimpleResponse actual) {
+    assertPayload(expected.getPayload(), actual.getPayload());
+    assertEquals(expected.getUsername(), actual.getUsername());
+    assertEquals(expected.getOauthScope(), actual.getOauthScope());
+  }
+
+  private void assertPayload(Payload expected, Payload actual) {
+    // Compare non deprecated fields in Payload, to make this test forward compatible.
+    if (expected == null || actual == null) {
+      assertEquals(expected, actual);
+    } else {
+      assertEquals(expected.getBody(), actual.getBody());
     }
   }
 
