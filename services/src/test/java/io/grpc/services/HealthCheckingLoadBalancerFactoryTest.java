@@ -16,6 +16,8 @@
 
 package io.grpc.services;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -27,10 +29,8 @@ import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
+import io.grpc.Channel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
@@ -67,9 +68,11 @@ import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.stub.StreamObserver;
 import java.net.SocketAddress;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
@@ -83,8 +86,6 @@ import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /** Tests for {@link HealthCheckingLoadBalancerFactory}. */
 @RunWith(JUnit4.class)
@@ -114,17 +115,20 @@ public class HealthCheckingLoadBalancerFactoryTest {
         }
       });
   private final FakeClock clock = new FakeClock();
-
-  @Mock
-  private Factory origLbFactory;
-  @Mock
-  private LoadBalancer origLb;
-  @Mock
-  private Helper origHelper;
+  private final Helper origHelper = spy(new FakeHelper());
   // The helper seen by the origLb
   private Helper wrappedHelper;
-  @Captor
-  ArgumentCaptor<Helper> helperCaptor;
+  private final Factory origLbFactory = spy(new LoadBalancer.Factory() {
+      @Override
+      public LoadBalancer newLoadBalancer(Helper helper) {
+        checkState(wrappedHelper == null, "LoadBalancer already created");
+        wrappedHelper = helper;
+        return origLb;
+      }
+    });
+
+  @Mock
+  private LoadBalancer origLb;
   @Captor
   ArgumentCaptor<Attributes> attrsCaptor;
   @Mock
@@ -143,13 +147,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     MockitoAnnotations.initMocks(this);
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
-      EquivalentAddressGroup eag = new EquivalentAddressGroup(mock(SocketAddress.class));
-      eags[i] = eag;
-      List<EquivalentAddressGroup> eagList = Arrays.asList(eag);
-      eagLists[i] = eagList;
-      final Subchannel subchannel = mock(Subchannel.class);
-      subchannels[i] = subchannel;
-      when(subchannel.getAllAddresses()).thenReturn(eagList);
       HealthImpl healthImpl = new HealthImpl();
       healthImpls[i] = healthImpl;
       Server server =
@@ -158,24 +155,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
       servers[i] = server;
       ManagedChannel channel =
           InProcessChannelBuilder.forName("health-check-test-" + i).directExecutor().build();
-
       channels[i] = channel;
-      when(subchannel.asChannel()).thenReturn(channel);
-      doAnswer(new Answer<Subchannel>() {
-          @Override
-          public Subchannel answer(InvocationOnMock invocation) throws Throwable {
-            Attributes attrs = (Attributes) invocation.getArguments()[1];
-            when(subchannel.getAttributes()).thenReturn(attrs);
-            return subchannel;
-          }
-        }).when(origHelper).createSubchannel(same(eagList), any(Attributes.class));
+
+      EquivalentAddressGroup eag =
+          new EquivalentAddressGroup(new FakeSocketAddress("address-" + i));
+      eags[i] = eag;
+      List<EquivalentAddressGroup> eagList = Arrays.asList(eag);
+      eagLists[i] = eagList;
     }
     resolvedAddressList = Arrays.asList(eags);
     
-    when(origLbFactory.newLoadBalancer(any(Helper.class))).thenReturn(origLb);
-
-    when(origHelper.getSynchronizationContext()).thenReturn(syncContext);
-    when(origHelper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(11L, 21L, 31L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(12L, 22L, 32L);
@@ -217,49 +206,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
           throw new AssertionError("Not supposed to be called");
         }
       };
-    verify(origLbFactory).newLoadBalancer(helperCaptor.capture());
-    final Helper helperSeenByOrigLb = helperCaptor.getValue();
-    // Make sure all calls to helperSeenByOrigLb is from the syncContext
-    wrappedHelper = new Helper() {
-        @Override
-        public Subchannel createSubchannel(
-            final List<EquivalentAddressGroup> addrs, final Attributes attrs) {
-          final AtomicReference<Subchannel> returnedSubchannel = new AtomicReference<Subchannel>();
-          syncContext.execute(new Runnable() {
-              @Override
-              public void run() {
-                returnedSubchannel.set(helperSeenByOrigLb.createSubchannel(addrs, attrs));
-              }
-            });
-          return returnedSubchannel.get();
-        }
-
-        @Override
-        public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
-          throw new AssertionError("Not supposed to be called");
-        }
-
-        @Override
-        public void updateBalancingState(
-            final ConnectivityState newState, final SubchannelPicker newPicker) {
-          syncContext.execute(new Runnable() {
-              @Override
-              public void run() {
-                helperSeenByOrigLb.updateBalancingState(newState, newPicker);
-              }
-            });
-        }
-
-        @Override
-        public NameResolver.Factory getNameResolverFactory() {
-          throw new AssertionError("Not supposed to be called");
-        }
-
-        @Override
-        public String getAuthority() {
-          throw new AssertionError("Not supposed to be called");
-        }
-      };
+    verify(origLbFactory).newLoadBalancer(any(Helper.class));
   }
 
   @After
@@ -298,7 +245,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
       // We don't wrap Subchannels, thus origLb gets the original Subchannels.
-      assertThat(wrappedHelper.createSubchannel(eagLists[i], attrs)).isSameAs(subchannels[i]);
+      assertThat(createSubchannel(i, attrs)).isSameAs(subchannels[i]);
       verify(origHelper).createSubchannel(same(eagLists[i]), attrsCaptor.capture());
       assertThat(attrsCaptor.getValue().get(SUBCHANNEL_ATTR_KEY)).isEqualTo(subchannelAttrValue);
     }
@@ -324,10 +271,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       verifyNoMoreInteractions(origLb);
 
       assertThat(healthImpl.calls).isEmpty();
-      verify(subchannel, never()).asChannel();
-
       hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-      verify(subchannel).asChannel();
       assertThat(healthImpl.calls).hasSize(1);
       ServerSideCall serverCall = healthImpl.calls.peek();
       assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
@@ -366,8 +310,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
       // Subchannel enters SHUTDOWN state as a response to shutdown(), and that will cancel the
       // health check RPC
-      hcLbEventDelivery.handleSubchannelState(
-          subchannel, ConnectivityStateInfo.forNonError(SHUTDOWN));
+      subchannel.shutdown();
       assertThat(serverCall.cancelled).isTrue();
       verify(origLb).handleSubchannelState(
           same(subchannel), eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
@@ -390,7 +333,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // We create 2 Subchannels. One of them connects to a server that doesn't implement health check
     for (int i = 0; i < 2; i++) {
-      wrappedHelper.createSubchannel(eagLists[i], Attributes.EMPTY);
+      createSubchannel(i, Attributes.EMPTY);
     }
 
     InOrder inOrder = inOrder(origLb);
@@ -453,7 +396,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
@@ -513,7 +456,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
@@ -604,7 +547,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     // First, create Subchannels 0
-    wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    createSubchannel(0, Attributes.EMPTY);
 
     // No health check activity.  Underlying Subchannel states are directly propagated
     hcLbEventDelivery.handleSubchannelState(
@@ -629,7 +572,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     // Start Subchannel 1, which will have health check
-    wrappedHelper.createSubchannel(eagLists[1], Attributes.EMPTY);
+    createSubchannel(1, Attributes.EMPTY);
     assertThat(healthImpls[1].calls).isEmpty();
     hcLbEventDelivery.handleSubchannelState(
         subchannels[1], ConnectivityStateInfo.forNonError(READY));
@@ -644,7 +587,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
 
@@ -681,7 +624,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
 
@@ -728,7 +671,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
 
@@ -767,7 +710,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
 
@@ -824,7 +767,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
 
@@ -888,7 +831,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
     verifyNoMoreInteractions(origLb);
 
-    Subchannel subchannel = wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     assertThat(subchannel).isSameAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb);
     HealthImpl healthImpl = healthImpls[0];
@@ -1042,5 +985,116 @@ public class HealthCheckingLoadBalancerFactoryTest {
       this.request = request;
       this.responseObserver = responseObserver;
     }
+  }
+
+  private class FakeSubchannel extends Subchannel {
+    final List<EquivalentAddressGroup> eagList;
+    final Attributes attrs;
+    final Channel channel;
+
+    FakeSubchannel(List<EquivalentAddressGroup> eagList, Attributes attrs, Channel channel) {
+      this.eagList = Collections.unmodifiableList(eagList);
+      this.attrs = checkNotNull(attrs);
+      this.channel = checkNotNull(channel);
+    }
+
+    @Override
+    public void shutdown() {
+      hcLbEventDelivery.handleSubchannelState(this, ConnectivityStateInfo.forNonError(SHUTDOWN));
+    }
+
+    @Override
+    public void requestConnection() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public List<EquivalentAddressGroup> getAllAddresses() {
+      return eagList;
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return attrs;
+    }
+
+    @Override
+    public Channel asChannel() {
+      return channel;
+    }
+  }
+
+  private class FakeHelper extends Helper {
+    @Override
+    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+      int index = -1;
+      for (int i = 0; i < NUM_SUBCHANNELS; i++) {
+        if (eagLists[i] == addrs) {
+          index = i;
+          break;
+        }
+      }
+      checkState(index >= 0, "addrs " + addrs + " not found");
+      Subchannel subchannel = new FakeSubchannel(addrs, attrs, channels[index]);
+      checkState(subchannels[index] == null, "subchannels[" + index + "] already created");
+      subchannels[index] = subchannel;
+      return subchannel;
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
+    @Override
+    public ScheduledExecutorService getScheduledExecutorService() {
+      return clock.getScheduledExecutorService();
+    }
+
+    @Override
+    public NameResolver.Factory getNameResolverFactory() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public String getAuthority() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public ManagedChannel createOobChannel(EquivalentAddressGroup eag, String authority) {
+      throw new AssertionError("Should not be called");
+    }
+  }
+
+  private static class FakeSocketAddress extends SocketAddress {
+    final String name;
+
+    FakeSocketAddress(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public String toString() {
+      return name;
+    }
+  }
+
+  // In reality wrappedHelper.createSubchannel() is always called from syncContext.
+  // Make sure it's the case in the test too.
+  private Subchannel createSubchannel(final int index, final Attributes attrs) {
+    final AtomicReference<Subchannel> returnedSubchannel = new AtomicReference<Subchannel>();
+    syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          returnedSubchannel.set(wrappedHelper.createSubchannel(eagLists[index], attrs));
+        }
+      });
+    return returnedSubchannel.get();
   }
 }
