@@ -24,13 +24,14 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.argThat;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -115,17 +116,18 @@ public class HealthCheckingLoadBalancerFactoryTest {
         }
       });
   private final FakeClock clock = new FakeClock();
-  private final Helper origHelper = spy(new FakeHelper());
+  private final Helper origHelper = mock(Helper.class, delegatesTo(new FakeHelper()));
   // The helper seen by the origLb
   private Helper wrappedHelper;
-  private final Factory origLbFactory = spy(new LoadBalancer.Factory() {
-      @Override
-      public LoadBalancer newLoadBalancer(Helper helper) {
-        checkState(wrappedHelper == null, "LoadBalancer already created");
-        wrappedHelper = helper;
-        return origLb;
-      }
-    });
+  private final Factory origLbFactory =
+      mock(Factory.class, delegatesTo(new Factory() {
+          @Override
+          public LoadBalancer newLoadBalancer(Helper helper) {
+            checkState(wrappedHelper == null, "LoadBalancer already created");
+            wrappedHelper = helper;
+            return origLb;
+          }
+        }));
 
   @Mock
   private LoadBalancer origLb;
