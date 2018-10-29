@@ -20,9 +20,7 @@ package grpc.testing;
 
 option java_package = "io.grpc.testing.integration";
 
-// TODO(dgq): Go back to using well-known types once
-// https://github.com/grpc/grpc/issues/6980 has been fixed.
-// import "google/protobuf/wrappers.proto";
+// TODO(jihuncho): Use well-known types once all languages are synced.
 message BoolValue {
   // The bool value.
   bool value = 1;
