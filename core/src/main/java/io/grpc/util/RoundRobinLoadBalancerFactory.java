@@ -34,21 +34,24 @@ import io.grpc.LoadBalancerRegistry;
 @Deprecated
 public final class RoundRobinLoadBalancerFactory extends LoadBalancer.Factory {
 
-  private static RoundRobinLoadBalancerFactory INSTANCE = new RoundRobinLoadBalancerFactory();
+  private static RoundRobinLoadBalancerFactory instance;
 
   private final LoadBalancerProvider provider;
 
   private RoundRobinLoadBalancerFactory() {
     provider = checkNotNull(
-        LoadBalancerRegistry.getDefaultRegistry().getProvider("round-robin"),
-        "round-robin balancer not available");
+        LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin"),
+        "round_robin balancer not available");
   }
 
   /**
    * Gets the singleton instance of this factory.
    */
-  public static RoundRobinLoadBalancerFactory getInstance() {
-    return INSTANCE;
+  public static synchronized RoundRobinLoadBalancerFactory getInstance() {
+    if (instance == null) {
+      instance = new RoundRobinLoadBalancerFactory();
+    }
+    return instance;
   }
 
   @Override

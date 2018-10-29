@@ -27,7 +27,7 @@ import com.google.common.base.MoreObjects;
 public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
   /**
    * Whether this provider is available for use, taking the current environment into consideration.
-   * If {@code false}, no other methods are safe to be called.
+   * If {@code false}, {@link #newLoadBalancer} is not safe to be called.
    */
   public abstract boolean isAvailable();
 

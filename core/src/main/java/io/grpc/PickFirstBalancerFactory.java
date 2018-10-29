@@ -29,21 +29,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 @Deprecated
 public final class PickFirstBalancerFactory extends LoadBalancer.Factory {
-  private static final PickFirstBalancerFactory INSTANCE = new PickFirstBalancerFactory();
+  private static PickFirstBalancerFactory instance;
 
   private final LoadBalancerProvider provider;
 
   private PickFirstBalancerFactory() {
     provider = checkNotNull(
-        LoadBalancerRegistry.getDefaultRegistry().getProvider("pick-first"),
-        "pick-first balancer not available");
+        LoadBalancerRegistry.getDefaultRegistry().getProvider("pick_first"),
+        "pick_first balancer not available");
   }
 
   /**
    * Gets an instance of this factory.
    */
-  public static PickFirstBalancerFactory getInstance() {
-    return INSTANCE;
+  public static synchronized PickFirstBalancerFactory getInstance() {
+    if (instance == null) {
+      instance = new PickFirstBalancerFactory();
+    }
+    return instance;
   }
 
   @Override

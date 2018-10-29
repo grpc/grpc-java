@@ -38,7 +38,7 @@ public final class PickFirstLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "pick_first";  // TODO(zhangkun): maybe "default"?
+    return "pick_first";
   }
 
   @Override

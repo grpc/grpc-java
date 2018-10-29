@@ -16,9 +16,11 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -34,27 +36,18 @@ import javax.annotation.Nullable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
-  private static final LoadBalancerRegistry instance;
-  @VisibleForTesting
-  static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
+  private static LoadBalancerRegistry instance;
+  private static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
 
   private final Map<String, LoadBalancerProvider> providers;
 
-  static {
-    List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(
-        LoadBalancerProvider.class,
-        HARDCODED_CLASSES,
-        LoadBalancerProvider.class.getClassLoader(),
-        new LoadBalancerPriorityAccessor());
-    instance = new LoadBalancerRegistry(providerList);
-  }
-
   @VisibleForTesting
   LoadBalancerRegistry(List<LoadBalancerProvider> providerList) {
-    HashMap<String, LoadBalancerProvider> providerMap = new HashMap<>();
+    // Use LinkedHashMap to preserve order s othat it's easier to test
+    LinkedHashMap<String, LoadBalancerProvider> providerMap = new LinkedHashMap<>();
     for (LoadBalancerProvider provider : providerList) {
       if (!provider.isAvailable()) {
-        logger.fine(provider + " found but no available");
+        logger.fine(provider + " found but not available");
         continue;
       }
       String policy = provider.getPolicyName();
@@ -69,9 +62,14 @@ public final class LoadBalancerRegistry {
         } else if (existing.getPriority() > provider.getPriority()) {
           logger.fine(provider + " doesn't override " + existing + " because of lower priority");
         } else {
+          LoadBalancerProvider selected = existing;
+          if (existing.getClass().getName().compareTo(provider.getClass().getName()) < 0) {
+            providerMap.put(policy, provider);
+            selected = provider;
+          }
           logger.warning(
               provider + " and " + existing + " has the same priority. "
-              + existing + " is selected for this time, but it may not always be the case. "
+              + selected + " is selected for this time. "
               + "You should make them differ in either policy name or priority, or remove "
               + "one of them from your classpath");
         }
@@ -83,7 +81,15 @@ public final class LoadBalancerRegistry {
   /**
    * Returns the default registry that loads providers via the Java service loader mechanism.
    */
-  public static LoadBalancerRegistry getDefaultRegistry() {
+  public static synchronized LoadBalancerRegistry getDefaultRegistry() {
+    if (instance == null) {
+      List<LoadBalancerProvider> providerList = ServiceProviders.loadAll(
+          LoadBalancerProvider.class,
+          HARDCODED_CLASSES,
+          LoadBalancerProvider.class.getClassLoader(),
+          new LoadBalancerPriorityAccessor());
+      instance = new LoadBalancerRegistry(providerList);
+    }
     return instance;
   }
 
@@ -94,7 +100,7 @@ public final class LoadBalancerRegistry {
    */
   @Nullable
   public LoadBalancerProvider getProvider(String policy) {
-    return providers.get(policy);
+    return providers.get(checkNotNull(policy, "policy"));
   }
 
   /**
