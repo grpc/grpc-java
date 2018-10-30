@@ -29,9 +29,7 @@ public final class Messages {
   }
   /**
    * <pre>
-   * TODO(dgq): Go back to using well-known types once
-   * https://github.com/grpc/grpc/issues/6980 has been fixed.
-   * import "google/protobuf/wrappers.proto";
+   * TODO(jihuncho): Use well-known types once all languages are synced.
    * </pre>
    *
    * Protobuf type {@code grpc.testing.BoolValue}
@@ -276,9 +274,7 @@ public final class Messages {
     }
     /**
      * <pre>
-     * TODO(dgq): Go back to using well-known types once
-     * https://github.com/grpc/grpc/issues/6980 has been fixed.
-     * import "google/protobuf/wrappers.proto";
+     * TODO(jihuncho): Use well-known types once all languages are synced.
      * </pre>
      *
      * Protobuf type {@code grpc.testing.BoolValue}
