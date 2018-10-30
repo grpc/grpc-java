@@ -24,6 +24,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.argThat;
@@ -226,6 +227,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
     }
     for (HealthImpl impl : healthImpls) {
       assertThat(impl.checkCalled).isFalse();
+    }
+  }
+
+  @Test
+  public void createSubchannelThrowsIfCalledOutsideSynchronizationContext() {
+    try {
+      wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
+      fail("Should throw");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).isEqualTo("Not called from the SynchronizationContext");
     }
   }
 

@@ -60,6 +60,9 @@ import javax.annotation.Nullable;
  * Wraps a {@link LoadBalancer} and implements the client-side health-checking
  * (https://github.com/grpc/proposal/blob/master/A17-client-side-health-checking.md).  The
  * Subchannel received by the states wrapped LoadBalancer will be determined by health-checking.
+ *
+ * <p>Note the original LoadBalancer must call {@code Helper.createSubchannel()} from the
+ * SynchronizationContext, or it will throw.
  */
 final class HealthCheckingLoadBalancerFactory extends Factory {
   private static final Attributes.Key<HealthCheckState> KEY_HEALTH_CHECK_STATE =
@@ -86,6 +89,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
   private final class HelperImpl extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
+    private final SynchronizationContext syncContext;
     
     private LoadBalancer delegateBalancer;
     @Nullable String healthCheckedService;
@@ -94,6 +98,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     HelperImpl(Helper delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
+      this.syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
     }
 
     void init(LoadBalancer delegateBalancer) {
@@ -108,9 +113,11 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     @Override
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+      // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
+      // createSubchannel() from the SynchronizationContext.
+      syncContext.throwIfNotInThisSynchronizationContext();
       HealthCheckState hcState = new HealthCheckState(
-          delegateBalancer, delegate.getSynchronizationContext(),
-          delegate.getScheduledExecutorService());
+          delegateBalancer, syncContext, delegate.getScheduledExecutorService());
       hcStates.add(hcState);
       Subchannel subchannel = super.createSubchannel(
           addrs, attrs.toBuilder().set(KEY_HEALTH_CHECK_STATE, hcState).build());
@@ -227,15 +234,15 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private long lastCallStartNanos;
     private boolean lastCallHasResponded;
 
-    // The service name should be used for health checking
+    // The service name that should be used for health checking
     private String serviceName;
     private BackoffPolicy backoffPolicy;
     // The state from the underlying Subchannel
     private ConnectivityStateInfo rawState = ConnectivityStateInfo.forNonError(IDLE);
     // The state concluded from health checking
     private ConnectivityStateInfo concludedState = ConnectivityStateInfo.forNonError(IDLE);
-    // true if a health check stream should be kept.  Either there is an active RPC, or a retry is
-    // pending.
+    // true if a health check stream should be kept.  When true, either there is an active RPC, or a
+    // retry is pending.
     private boolean running;
     // true if server returned UNIMPLEMENTED
     private boolean disabled;
@@ -255,6 +262,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       if (!running) {
         return;
       }
+      // running == true means the Subchannel's state (rawState) is READY
       if (Objects.equal(response.getStatus(), ServingStatus.SERVING)) {
         gotoState(ConnectivityStateInfo.forNonError(READY));
       } else {
