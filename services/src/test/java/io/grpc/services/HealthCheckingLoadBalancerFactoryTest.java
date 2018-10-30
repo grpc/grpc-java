@@ -216,7 +216,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void teardown() throws Exception {
     // All scheduled tasks have been accounted for
     assertThat(clock.getPendingTasks()).isEmpty();
-    // Health-check streams are usually not closed in the tests.  Force closing for clean up.
+    // Health-check streams are usually not closed in the tests because handleSubchannelState() is
+    // faked.  Force closing for clean up.
     for (Server server : servers) {
       server.shutdownNow();
       assertThat(server.awaitTermination(1, TimeUnit.SECONDS)).isTrue();
@@ -427,7 +428,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
 
     // Retry with backoff is scheduled
     inOrder.verify(backoffPolicyProvider).get();
@@ -444,8 +445,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.CANCELLED
-            + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with "
+            + Status.CANCELLED + " for 'TeeService'"));
 
     // Retry with backoff
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
@@ -487,8 +488,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.CANCELLED
-            + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with "
+            + Status.CANCELLED + " for 'TeeService'"));
 
     // Retry with backoff is scheduled
     inOrder.verify(backoffPolicyProvider).get();
@@ -510,8 +511,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
-            + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with "
+            + Status.UNAVAILABLE + " for 'TeeService'"));
 
     // Because server has responded, the first retry is not subject to backoff.
     // But the backoff policy has been reset.  A new backoff policy will be used for
@@ -527,8 +528,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.UNAVAILABLE
-            + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with "
+            + Status.UNAVAILABLE + " for 'TeeService'"));
 
     // New backoff policy is used
     inOrder.verify(backoffPolicyProvider).get();
@@ -655,7 +656,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
 
     // NameResolver gives an update without service config, thus health check will be disabled
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, Attributes.EMPTY);
@@ -802,7 +803,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel),
         unavailableStateWithMsg(
-            "Health-check stream was erroneously closed with " + Status.OK + " for 'TeeService'"));
+            "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
 
     // Service config returns with the same health check name.
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);

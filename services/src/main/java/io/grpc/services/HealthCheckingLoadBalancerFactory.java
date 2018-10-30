@@ -392,7 +392,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         gotoState(
             ConnectivityStateInfo.forTransientFailure(
                 Status.UNAVAILABLE.withDescription(
-                    "Health-check stream was erroneously closed with "
+                    "Health-check stream unexpectedly closed with "
                     + status + " for '" + callServiceName + "'")));
         // Use backoff only when server has not responded for the previous call
         if (!callHasResponded) {
