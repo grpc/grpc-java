@@ -197,42 +197,15 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         }
       };
 
-    private final ClientCall.Listener<HealthCheckResponse> responseListener =
-        new ClientCall.Listener<HealthCheckResponse>() {
-          @Override
-          public void onMessage(final HealthCheckResponse response) {
-            syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleResponse(response);
-                }
-              });
-          }
-
-          @Override
-          public void onClose(final Status status, Metadata trailers) {
-            syncContext.execute(new Runnable() {
-                @Override
-                public void run() {
-                  handleStreamClosed(status);
-                }
-              });
-          }
-        };
     private final LoadBalancer delegate;
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timerService;
 
     private Subchannel subchannel;
 
-    // Set when the RPC is started. Cleared when the RPC is fully closed.
+    // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
-    private ClientCall<HealthCheckRequest, HealthCheckResponse> activeCall;
-
-    // States about the most recently started RPC
-    private String lastCallServiceName;
-    private long lastCallStartNanos;
-    private boolean lastCallHasResponded;
+    private HcStream activeRpc;
 
     // The service name that should be used for health checking
     private String serviceName;
@@ -256,60 +229,6 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       this.timerService = checkNotNull(timerService, "timerService");
     }
 
-    void handleResponse(HealthCheckResponse response) {
-      backoffPolicy = null;
-      lastCallHasResponded = true;
-      if (!running) {
-        return;
-      }
-      // running == true means the Subchannel's state (rawState) is READY
-      if (Objects.equal(response.getStatus(), ServingStatus.SERVING)) {
-        gotoState(ConnectivityStateInfo.forNonError(READY));
-      } else {
-        gotoState(
-            ConnectivityStateInfo.forTransientFailure(
-                Status.UNAVAILABLE.withDescription(
-                    "Health-check service responded "
-                    + response.getStatus() + " for '" + lastCallServiceName + "'")));
-      }
-      activeCall.request(1);
-    }
-
-    void handleStreamClosed(Status status) {
-      activeCall = null;
-      if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
-        // TODO(zhangkun83): record this to channel tracer
-        disabled = true;
-        gotoState(rawState);
-        return;
-      }
-      if (running) {
-        long delayNanos = 0;
-        if (Objects.equal(lastCallServiceName, serviceName)) {
-          // Service name has not just changed.
-          gotoState(
-              ConnectivityStateInfo.forTransientFailure(
-                  Status.UNAVAILABLE.withDescription(
-                      "Health-check stream was erroneously closed with "
-                      + status + " for '" + lastCallServiceName + "'")));
-          // Use backoff only when server has not responded for the previous call
-          if (!lastCallHasResponded) {
-            if (backoffPolicy == null) {
-              backoffPolicy = backoffPolicyProvider.get();
-            }
-            delayNanos =
-                lastCallStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
-          }
-        } // else: If service name has just changed, no backoff for reconnect.
-        if (delayNanos <= 0) {
-          startRpc();
-        } else {
-          retryTimer = syncContext.schedule(
-              retryTask, delayNanos, TimeUnit.NANOSECONDS, timerService);
-        }
-      }
-    }
-
     void init(Subchannel subchannel) {
       checkState(this.subchannel == null, "init() already called");
       this.subchannel = checkNotNull(subchannel, "subchannel");
@@ -325,7 +244,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       String cancelMsg =
           serviceName == null ? "Health check disabled by service config"
           : "Switching to new service name: " + newServiceName;
-      cancelCurrentRpc(cancelMsg);
+      stopRpc(cancelMsg);
       adjustHealthCheck();
     }
 
@@ -341,40 +260,39 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       adjustHealthCheck();
     }
 
+    private boolean isRetryTimerPending() {
+      return retryTimer != null && retryTimer.isPending();
+    }
+
     // Start or stop health check according to the current states.
     private void adjustHealthCheck() {
       if (!disabled && serviceName != null && Objects.equal(rawState.getState(), READY)) {
         running = true;
-        if (activeCall == null) {
+        if (activeRpc == null && !isRetryTimerPending()) {
           startRpc();
         }
       } else {
         running = false;
         // Prerequisites for health checking not met.
         // Make sure it's stopped.
-        cancelCurrentRpc("Client stops health check");
+        stopRpc("Client stops health check");
         backoffPolicy = null;
         gotoState(rawState);
       }
     }
 
     private void startRpc() {
-      checkState(activeCall == null, "previous health-checking RPC has not been cleaned up");
+      checkState(activeRpc == null, "previous health-checking RPC has not been cleaned up");
       checkState(subchannel != null, "init() not called");
       gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
-      activeCall = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
-      lastCallServiceName = serviceName;
-      lastCallStartNanos = time.currentTimeNanos();
-      lastCallHasResponded = false;
-      activeCall.start(responseListener, new Metadata());
-      activeCall.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
-      activeCall.halfClose();
-      activeCall.request(1);
+      activeRpc = new HcStream();
     }
 
-    private void cancelCurrentRpc(String msg) {
-      if (activeCall != null) {
-        activeCall.cancel(msg, null);
+    private void stopRpc(String msg) {
+      if (activeRpc != null) {
+        activeRpc.cancel(msg);
+        // Abandon this RPC.  We are not interested in anything from this RPC any more.
+        activeRpc = null;
       }
       if (retryTimer != null) {
         retryTimer.cancel();
@@ -395,13 +313,112 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       return MoreObjects.toStringHelper(this)
           .add("running", running)
           .add("disabled", disabled)
-          .add("hasActiveCall", activeCall != null)
-          .add("lastCallServiceName", lastCallServiceName)
-          .add("lastCallHasResponded", lastCallHasResponded)
+          .add("activeRpc", activeRpc)
           .add("serviceName", serviceName)
           .add("rawState", rawState)
           .add("concludedState", concludedState)
           .toString();
+    }
+
+    private class HcStream extends ClientCall.Listener<HealthCheckResponse> {
+      private final ClientCall<HealthCheckRequest, HealthCheckResponse> call;
+      private String callServiceName;
+      private long callStartNanos;
+      private boolean callHasResponded;
+
+      HcStream() {
+        callStartNanos = time.currentTimeNanos();
+        call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+        callServiceName = serviceName;
+        call.start(this, new Metadata());
+        call.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
+        call.halfClose();
+        call.request(1);
+      }
+
+      void cancel(String msg) {
+        call.cancel(msg, null);
+      }
+
+      @Override
+      public void onMessage(final HealthCheckResponse response) {
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              if (activeRpc == HcStream.this) {
+                handleResponse(response);
+              }
+            }
+          });
+      }
+
+      @Override
+      public void onClose(final Status status, Metadata trailers) {
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              if (activeRpc == HcStream.this) {
+                activeRpc = null;
+                handleStreamClosed(status);
+              }
+            }
+          });
+      }
+
+      void handleResponse(HealthCheckResponse response) {
+        callHasResponded = true;
+        backoffPolicy = null;
+        // running == true means the Subchannel's state (rawState) is READY
+        if (Objects.equal(response.getStatus(), ServingStatus.SERVING)) {
+          gotoState(ConnectivityStateInfo.forNonError(READY));
+        } else {
+          gotoState(
+              ConnectivityStateInfo.forTransientFailure(
+                  Status.UNAVAILABLE.withDescription(
+                      "Health-check service responded "
+                      + response.getStatus() + " for '" + callServiceName + "'")));
+        }
+        call.request(1);
+      }
+
+      void handleStreamClosed(Status status) {
+        if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
+          // TODO(zhangkun83): record this to channel tracer
+          disabled = true;
+          gotoState(rawState);
+          return;
+        }
+        long delayNanos = 0;
+        gotoState(
+            ConnectivityStateInfo.forTransientFailure(
+                Status.UNAVAILABLE.withDescription(
+                    "Health-check stream was erroneously closed with "
+                    + status + " for '" + callServiceName + "'")));
+        // Use backoff only when server has not responded for the previous call
+        if (!callHasResponded) {
+          if (backoffPolicy == null) {
+            backoffPolicy = backoffPolicyProvider.get();
+          }
+          delayNanos =
+              callStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
+        }
+        if (delayNanos <= 0) {
+          startRpc();
+        } else {
+          checkState(!isRetryTimerPending(), "Retry double scheduled");
+          retryTimer = syncContext.schedule(
+              retryTask, delayNanos, TimeUnit.NANOSECONDS, timerService);
+        }
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("callStarted", call != null)
+            .add("serviceName", callServiceName)
+            .add("hasResponded", callHasResponded)
+            .toString();
+      }
     }
   }
 }

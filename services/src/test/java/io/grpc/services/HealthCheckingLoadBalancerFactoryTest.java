@@ -753,12 +753,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
 
-    inOrder.verify(origLb).handleResolvedAddressGroups(
-        same(resolvedAddressList), same(resolutionAttrs));
-
     // Concluded CONNECTING state
     inOrder.verify(origLb).handleSubchannelState(
         same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
+    inOrder.verify(origLb).handleResolvedAddressGroups(
+        same(resolvedAddressList), same(resolutionAttrs));
 
     // Current health check RPC cancelled.
     assertThat(serverCall.cancelled).isTrue();
