@@ -284,7 +284,13 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private void startRpc() {
       checkState(activeRpc == null, "previous health-checking RPC has not been cleaned up");
       checkState(subchannel != null, "init() not called");
-      gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
+      // Optimization suggested by @markroth: if we are already READY and starting the health
+      // checking RPC, either because health check is just enabled or has switched to a new service
+      // name, we don't go to CONNECTING, otherwise there will be artificial delays on RPCs
+      // waiting for the health check to respond.
+      if (!Objects.equal(concludedState.getState(), READY)) {
+        gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
+      }
       activeRpc = new HcStream();
     }
 

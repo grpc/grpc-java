@@ -580,9 +580,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // Health check started on existing Subchannel
     assertThat(healthImpls[0].calls).hasSize(1);
-    verify(origLb).handleSubchannelState(
-        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
+    // State stays in READY, instead of switching to CONNECTING.
     verifyNoMoreInteractions(origLb);
 
     // Start Subchannel 1, which will have health check
@@ -754,10 +753,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
 
-    // Concluded CONNECTING state
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-
     inOrder.verify(origLb).handleResolvedAddressGroups(
         same(resolvedAddressList), same(resolutionAttrs));
 
@@ -770,6 +765,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // with the new service name
     assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
 
+    // State stays in READY, instead of switching to CONNECTING.
     verifyNoMoreInteractions(origLb);
   }
 
