@@ -376,7 +376,7 @@ class OkHttpClientStream extends AbstractClientStream {
         checkState(id() != ABSENT_ID, "streamId should be set");
         // If buffer > frameWriter.maxDataLength() the flow-controller will ensure that it is
         // properly chunked.
-        outboundFlow.data(endOfStream, id(), buffer, (int) buffer.size(), flush);
+        outboundFlow.data(endOfStream, id(), buffer, flush);
       }
     }
 

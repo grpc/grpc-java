@@ -18,11 +18,9 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
@@ -34,20 +32,17 @@ import okio.Timeout;
  */
 final class AsyncSink implements Sink {
 
-  /**
-   * When internal buffer exceeds the size of COMPLETE_SEGMENT_SIZE, AsyncSink asynchronously
-   * writes to the sink.
-   */
-  @VisibleForTesting
-  static final long COMPLETE_SEGMENT_SIZE = 8192L;
-
   private final Object lock = new Object();
   @GuardedBy("lock")
   private final Buffer buffer = new Buffer();
   private final Sink sink;
   private final SerializingExecutor serializingExecutor;
-  private final AtomicLong flushVersion = new AtomicLong();
   private final TransportExceptionHandler transportExceptionHandler;
+
+  @GuardedBy("lock")
+  private boolean writeEnqueued = false;
+  @GuardedBy("lock")
+  private boolean flushEnqueued = false;
   private boolean closed = false;
 
   private AsyncSink(
@@ -70,18 +65,20 @@ final class AsyncSink implements Sink {
     }
     synchronized (lock) {
       buffer.write(source, byteCount);
-      if (buffer.size() < COMPLETE_SEGMENT_SIZE) {
+      if (writeEnqueued || flushEnqueued || buffer.completeSegmentByteCount() <= 0) {
         return;
       }
+      writeEnqueued = true;
     }
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
         Buffer buf = new Buffer();
         synchronized (lock) {
-          while (buffer.size() >= COMPLETE_SEGMENT_SIZE) {
-            buf.write(buffer, COMPLETE_SEGMENT_SIZE);
+          if (buffer.completeSegmentByteCount() > 0) {
+            buf.write(buffer, buffer.completeSegmentByteCount());
           }
+          writeEnqueued = false;
         }
         if (buf.size() > 0) {
           try {
@@ -99,21 +96,25 @@ final class AsyncSink implements Sink {
     if (closed) {
       throw new IOException("closed");
     }
-    final long version = flushVersion.incrementAndGet();
+    synchronized (lock) {
+      if (flushEnqueued) {
+        return;
+      }
+      flushEnqueued = true;
+    }
     serializingExecutor.execute(new Runnable() {
       @Override
       public void run() {
         try {
-          if (version == flushVersion.get()) {
-            Buffer buf = new Buffer();
-            synchronized (lock) {
-              buf.write(buffer, buffer.size());
-            }
-            if (buf.size() > 0) {
-              sink.write(buf, buf.size());
-            }
-            sink.flush();
+          Buffer buf = new Buffer();
+          synchronized (lock) {
+            buf.write(buffer, buffer.size());
+            flushEnqueued = false;
           }
+          if (buf.size() > 0) {
+            sink.write(buf, buf.size());
+          }
+          sink.flush();
         } catch (IOException e) {
           transportExceptionHandler.onException(e);
         }

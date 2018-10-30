@@ -27,6 +27,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 
@@ -210,35 +211,34 @@ public class AsyncSinkTest {
   @Test
   public void write_callSinkIfBufferIsLargerThanSegmentSize() throws IOException {
     Buffer buffer = new Buffer();
-    int threshold = (int) AsyncSink.COMPLETE_SEGMENT_SIZE;
-    buffer.write(new byte[threshold]);
+    // OkHttp is using 8192 as segment size.
+    int payloadSize = 8192 * 2 - 1;
+    int padding = 10;
+    buffer.write(new byte[payloadSize]);
 
-    sink.write(buffer, threshold / 2);
+    int completeSegmentBytes = (int) buffer.completeSegmentByteCount();
+    assertThat(completeSegmentBytes).isLessThan(payloadSize);
+
+    // first trying to send of all complete segments, but not the padding
+    sink.write(buffer, completeSegmentBytes + padding);
     queueingExecutor.runAll();
-    verify(mockedSink, never()).write(any(Buffer.class), anyInt());
-    assertThat(buffer.size()).isEqualTo((long) (threshold - threshold / 2));
+    verify(mockedSink).write(any(Buffer.class), eq((long) completeSegmentBytes));
+    verify(mockedSink, never()).flush();
+    assertThat(buffer.size()).isEqualTo((long) (payloadSize - completeSegmentBytes - padding));
 
+    // writing smaller than completed segment, shouldn't trigger write to Sink.
+    reset(mockedSink);
     sink.write(buffer, buffer.size());
     queueingExecutor.runAll();
-    verify(mockedSink).write(any(Buffer.class), eq(AsyncSink.COMPLETE_SEGMENT_SIZE));
-  }
+    verify(mockedSink, never()).write(any(Buffer.class), anyLong());
+    verify(mockedSink, never()).flush();
+    assertThat(buffer.exhausted()).isTrue();
 
-  @Test
-  public void flush_writeRemainingBuffer() throws IOException {
-    Buffer buffer = new Buffer();
-    long leftOverBytes = 10;
-
-    buffer.write(new byte[(int) (AsyncSink.COMPLETE_SEGMENT_SIZE + leftOverBytes)]);
-    sink.write(buffer, buffer.size());
-    queueingExecutor.runAll();
-
-    verify(mockedSink).write(any(Buffer.class), eq(AsyncSink.COMPLETE_SEGMENT_SIZE));
-
+    // flush should write everything.
     sink.flush();
     queueingExecutor.runAll();
-    InOrder inOrder = inOrder(mockedSink);
-    inOrder.verify(mockedSink).write(any(Buffer.class), eq(leftOverBytes));
-    inOrder.verify(mockedSink).flush();
+    verify(mockedSink).write(any(Buffer.class),eq((long) payloadSize - completeSegmentBytes));
+    verify(mockedSink).flush();
   }
 
   /**
