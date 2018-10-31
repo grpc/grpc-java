@@ -19,6 +19,7 @@ package io.grpc.okhttp;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
@@ -46,17 +47,27 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   private FrameWriter frameWriter;
   private Socket socket;
 
-  ExceptionHandlingFrameWriter(
-      FrameWriter frameWriter, Socket socket, TransportExceptionHandler transportExceptionHandler) {
-    this.frameWriter = checkNotNull(frameWriter, "frameWriter");
-    // the socket is needed for closing.
-    this.socket = checkNotNull(socket, "socket");
+  ExceptionHandlingFrameWriter(TransportExceptionHandler transportExceptionHandler) {
     this.transportExceptionHandler =
         checkNotNull(transportExceptionHandler, "transportExceptionHandler");
   }
 
+  /**
+   * Set the real frameWriter and the corresponding underlying socket, the socket is needed for
+   * closing.
+   *
+   * <p>should only be called by thread of executor.
+   */
+  void becomeConnected(FrameWriter frameWriter, Socket socket) {
+    Preconditions.checkState(this.frameWriter == null,
+        "ExceptionHandlingFrameWriter's becomeConnected should only be called once.");
+    this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
+    this.socket = Preconditions.checkNotNull(socket, "socket");
+  }
+
   @Override
   public void connectionPreface() {
+    checkInit();
     try {
       frameWriter.connectionPreface();
     } catch (IOException e) {
@@ -64,8 +75,16 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
     }
   }
 
+  private void checkInit() {
+    if (this.frameWriter == null) {
+      transportExceptionHandler.onException(
+          new IOException("Unable to perform write due to unavailable frameWriter."));
+    }
+  }
+
   @Override
   public void ackSettings(Settings peerSettings) {
+    checkInit();
     try {
       frameWriter.ackSettings(peerSettings);
     } catch (IOException e) {
@@ -75,6 +94,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void pushPromise(int streamId, int promisedStreamId, List<Header> requestHeaders) {
+    checkInit();
     try {
       frameWriter.pushPromise(streamId, promisedStreamId, requestHeaders);
     } catch (IOException e) {
@@ -84,6 +104,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void flush() {
+    checkInit();
     try {
       frameWriter.flush();
     } catch (IOException e) {
@@ -98,6 +119,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
       int streamId,
       int associatedStreamId,
       List<Header> headerBlock) {
+    checkInit();
     try {
       frameWriter.synStream(outFinished, inFinished, streamId, associatedStreamId, headerBlock);
     } catch (IOException e) {
@@ -108,6 +130,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   @Override
   public void synReply(boolean outFinished, int streamId,
       List<Header> headerBlock) {
+    checkInit();
     try {
       frameWriter.synReply(outFinished, streamId, headerBlock);
     } catch (IOException e) {
@@ -117,6 +140,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void headers(int streamId, List<Header> headerBlock) {
+    checkInit();
     try {
       frameWriter.headers(streamId, headerBlock);
     } catch (IOException e) {
@@ -126,6 +150,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void rstStream(int streamId, ErrorCode errorCode) {
+    checkInit();
     try {
       frameWriter.rstStream(streamId, errorCode);
     } catch (IOException e) {
@@ -135,11 +160,13 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public int maxDataLength() {
+    checkInit();
     return frameWriter.maxDataLength();
   }
 
   @Override
   public void data(boolean outFinished, int streamId, Buffer source, int byteCount) {
+    checkInit();
     try {
       frameWriter.data(outFinished, streamId, source, byteCount);
     } catch (IOException e) {
@@ -149,6 +176,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void settings(Settings okHttpSettings) {
+    checkInit();
     try {
       frameWriter.settings(okHttpSettings);
     } catch (IOException e) {
@@ -158,6 +186,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void ping(boolean ack, int payload1, int payload2) {
+    checkInit();
     try {
       frameWriter.ping(ack, payload1, payload2);
     } catch (IOException e) {
@@ -168,6 +197,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   @Override
   public void goAway(int lastGoodStreamId, ErrorCode errorCode,
       byte[] debugData) {
+    checkInit();
     try {
       frameWriter.goAway(lastGoodStreamId, errorCode, debugData);
       // Flush it since after goAway, we are likely to close this writer.
@@ -179,6 +209,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void windowUpdate(int streamId, long windowSizeIncrement) {
+    checkInit();
     try {
       frameWriter.windowUpdate(streamId, windowSizeIncrement);
     } catch (IOException e) {
@@ -188,6 +219,9 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void close() {
+    if (frameWriter == null) {
+      return;
+    }
     try {
       frameWriter.close();
       socket.close();

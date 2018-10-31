@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.logging.Level;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,18 +36,20 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ExceptionHandlingFrameWriterTest {
 
-  private FrameWriter mockedFrameWriter;
-  private Socket socket;
-  private TransportExceptionHandler transportExceptionHandler;
-  private ExceptionHandlingFrameWriter exceptionHandlingFrameWriter;
+  private FrameWriter mockedFrameWriter = mock(FrameWriter.class);
+  private Socket socket = mock(Socket.class);
+  private TransportExceptionHandler transportExceptionHandler =
+      mock(TransportExceptionHandler.class);
+  private ExceptionHandlingFrameWriter exceptionHandlingFrameWriter =
+      new ExceptionHandlingFrameWriter(transportExceptionHandler);
 
-  @Before
-  public void setUp() {
-    mockedFrameWriter = mock(FrameWriter.class);
-    socket = mock(Socket.class);
-    transportExceptionHandler = mock(TransportExceptionHandler.class);
-    exceptionHandlingFrameWriter =
-        new ExceptionHandlingFrameWriter(mockedFrameWriter, socket, transportExceptionHandler);
+  private void connectFrameWriter() {
+    exceptionHandlingFrameWriter.becomeConnected(mockedFrameWriter, socket);
+  }
+
+  @Test
+  public void todo() {
+    //TODO(jihuncho) test become connected.
   }
 
   @Test

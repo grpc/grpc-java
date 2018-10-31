@@ -33,9 +33,7 @@ import okio.Timeout;
 final class AsyncSink implements Sink {
 
   private final Object lock = new Object();
-  @GuardedBy("lock")
   private final Buffer buffer = new Buffer();
-  private final Sink sink;
   private final SerializingExecutor serializingExecutor;
   private final TransportExceptionHandler transportExceptionHandler;
 
@@ -44,12 +42,13 @@ final class AsyncSink implements Sink {
   @GuardedBy("lock")
   private boolean flushEnqueued = false;
   private boolean closed = false;
+  private Sink sink;
 
   private AsyncSink(
       Sink sink, SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
     this.sink = checkNotNull(sink, "sink");
     this.serializingExecutor = checkNotNull(executor, "executor");
-    this.transportExceptionHandler = exceptionHandler;
+    this.transportExceptionHandler = checkNotNull(exceptionHandler, "exceptionHandler");
   }
 
   static AsyncSink sink(
@@ -58,7 +57,7 @@ final class AsyncSink implements Sink {
   }
 
   @Override
-  public void write(final Buffer source, final long byteCount) throws IOException {
+  public void write(Buffer source, long byteCount) throws IOException {
     checkNotNull(source, "source");
     if (closed) {
       throw new IOException("closed");
@@ -70,23 +69,15 @@ final class AsyncSink implements Sink {
       }
       writeEnqueued = true;
     }
-    serializingExecutor.execute(new Runnable() {
+    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
       @Override
-      public void run() {
+      public void doRun() throws IOException {
         Buffer buf = new Buffer();
         synchronized (lock) {
-          if (buffer.completeSegmentByteCount() > 0) {
-            buf.write(buffer, buffer.completeSegmentByteCount());
-          }
+          buf.write(buffer, buffer.completeSegmentByteCount());
           writeEnqueued = false;
         }
-        if (buf.size() > 0) {
-          try {
-            sink.write(buf, buf.size());
-          } catch (IOException e) {
-            transportExceptionHandler.onException(e);
-          }
-        }
+        sink.write(buf, buf.size());
       }
     });
   }
@@ -102,22 +93,16 @@ final class AsyncSink implements Sink {
       }
       flushEnqueued = true;
     }
-    serializingExecutor.execute(new Runnable() {
+    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
       @Override
-      public void run() {
-        try {
-          Buffer buf = new Buffer();
-          synchronized (lock) {
-            buf.write(buffer, buffer.size());
-            flushEnqueued = false;
-          }
-          if (buf.size() > 0) {
-            sink.write(buf, buf.size());
-          }
-          sink.flush();
-        } catch (IOException e) {
-          transportExceptionHandler.onException(e);
+      public void doRun() throws IOException {
+        Buffer buf = new Buffer();
+        synchronized (lock) {
+          buf.write(buffer, buffer.size());
+          flushEnqueued = false;
         }
+        sink.write(buf, buf.size());
+        sink.flush();
       }
     });
   }
@@ -133,18 +118,26 @@ final class AsyncSink implements Sink {
       return;
     }
     closed = true;
-    serializingExecutor.execute(new Runnable() {
+    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
       @Override
-      public void run() {
-        synchronized (lock) {
-          buffer.close();
-          try {
-            sink.close();
-          } catch (IOException e) {
-            transportExceptionHandler.onException(e);
-          }
-        }
+      public void doRun() throws IOException {
+        buffer.close();
+        sink.close();
       }
     });
+  }
+
+  private abstract class AsyncSinkTaskRunnable implements Runnable {
+
+    @Override
+    public final void run() {
+      try {
+        doRun();
+      } catch (Exception e) {
+        transportExceptionHandler.onException(e);
+      }
+    }
+
+    public abstract void doRun() throws IOException;
   }
 }

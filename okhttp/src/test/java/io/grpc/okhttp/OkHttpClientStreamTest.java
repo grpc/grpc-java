@@ -87,7 +87,8 @@ public class OkHttpClientStreamTest {
         .build();
 
     frameWriter =
-        new ExceptionHandlingFrameWriter(mockedFrameWriter, mock(Socket.class), transport);
+        new ExceptionHandlingFrameWriter(transport);
+    frameWriter.becomeConnected(mockedFrameWriter, mock(Socket.class));
     stream = new OkHttpClientStream(
         methodDescriptor,
         new Metadata(),
