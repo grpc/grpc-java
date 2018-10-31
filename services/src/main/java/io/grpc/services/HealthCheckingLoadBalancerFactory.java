@@ -292,6 +292,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
       }
       activeRpc = new HcStream();
+      activeRpc.start();
     }
 
     private void stopRpc(String msg) {
@@ -328,14 +329,17 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     private class HcStream extends ClientCall.Listener<HealthCheckResponse> {
       private final ClientCall<HealthCheckRequest, HealthCheckResponse> call;
-      private String callServiceName;
-      private long callStartNanos;
+      private final String callServiceName;
+      private final long callCreationNanos;
       private boolean callHasResponded;
 
       HcStream() {
-        callStartNanos = time.currentTimeNanos();
-        call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+        callCreationNanos = time.currentTimeNanos();
         callServiceName = serviceName;
+        call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
+      }
+
+      void start() {
         call.start(this, new Metadata());
         call.sendMessage(HealthCheckRequest.newBuilder().setService(serviceName).build());
         call.halfClose();
@@ -406,7 +410,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
             backoffPolicy = backoffPolicyProvider.get();
           }
           delayNanos =
-              callStartNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
+              callCreationNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
         }
         if (delayNanos <= 0) {
           startRpc();
