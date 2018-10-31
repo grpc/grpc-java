@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.CheckReturnValue;
 
 /**
  * Common utility methods.
@@ -80,6 +81,7 @@ class Utils {
     return InternalMetadata.newMetadata(convertHeadersToArray(http2Headers));
   }
 
+  @CheckReturnValue
   private static byte[][] convertHeadersToArray(Http2Headers http2Headers) {
     // The Netty AsciiString class is really just a wrapper around a byte[] and supports
     // arbitrary binary data, not just ASCII.

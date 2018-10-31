@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
+import javax.annotation.CheckReturnValue;
 
 /**
  * Utility functions for transport layer framing.
@@ -89,10 +90,13 @@ public final class TransportFrameUtil {
    * metadata marshallers. It decodes the Base64-encoded binary headers.  This function modifies
    * the headers in place.  By modifying the input array.
    *
+   * <p>Warning: it may mutate the content of the argument.
+   *
    * @param http2Headers the interleaved keys and values of HTTP/2-compliant headers
    * @return the interleaved keys and values in the raw serialized format
    */
   @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
+  @CheckReturnValue
   public static byte[][] toRawSerializedHeaders(byte[][] http2Headers) {
     List<byte[]> dupHeaders = null; // lazily allocate once ',' is found
     for (int i = 0; i < http2Headers.length; i += 2) {
