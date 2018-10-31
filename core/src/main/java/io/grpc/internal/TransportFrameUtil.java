@@ -21,7 +21,9 @@ import static com.google.common.base.Charsets.US_ASCII;
 import com.google.common.io.BaseEncoding;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -92,19 +94,51 @@ public final class TransportFrameUtil {
    */
   @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
   public static byte[][] toRawSerializedHeaders(byte[][] http2Headers) {
+    List<byte[]> dupHeaders = null; // lazily allocate once ',' is found
     for (int i = 0; i < http2Headers.length; i += 2) {
       byte[] key = http2Headers[i];
       byte[] value = http2Headers[i + 1];
       http2Headers[i] = key;
       if (endsWith(key, binaryHeaderSuffixBytes)) {
         // Binary header
-        http2Headers[i + 1] = BaseEncoding.base64().decode(new String(value, US_ASCII));
+        byte[] firstDecodedVal = null;
+        byte[] decodedVal;
+        int prevIdx = 0;
+        for (int idx = 0; idx <= value.length; idx++) {
+          if (idx != value.length && value[idx] != (byte) ',') {
+            continue;
+          }
+          if (idx != value.length && dupHeaders == null) {
+            // found ',' for the first time
+            dupHeaders = new ArrayList<>();
+          }
+          decodedVal =
+              BaseEncoding.base64().decode(new String(value, prevIdx, idx - prevIdx, US_ASCII));
+          if (firstDecodedVal == null) {
+            firstDecodedVal = decodedVal;
+          } else {
+            dupHeaders.add(key);
+            dupHeaders.add(decodedVal);
+          }
+          prevIdx = idx + 1;
+        }
+        http2Headers[i + 1] = firstDecodedVal;
       } else {
         // Non-binary header
         // Nothing to do, the value is already in the right place.
       }
     }
-    return http2Headers;
+
+    if (dupHeaders == null) {
+      return http2Headers;
+    }
+
+    byte[][] newHttp2Headers = new byte[http2Headers.length + dupHeaders.size()][];
+    System.arraycopy(http2Headers, 0, newHttp2Headers, 0, http2Headers.length);
+    System.arraycopy(
+        dupHeaders.toArray(new byte[0][]), 0, newHttp2Headers, http2Headers.length,
+        dupHeaders.size());
+    return newHttp2Headers;
   }
 
   /**

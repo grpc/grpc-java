@@ -101,17 +101,34 @@ class GrpcHttp2HeadersUtils {
       values = new AsciiString[numHeadersGuess];
     }
 
+    @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
     protected Http2Headers add(AsciiString name, AsciiString value) {
-      if (namesAndValuesIdx == namesAndValues.length) {
-        expandHeadersAndValues();
-      }
+
       byte[] nameBytes = bytes(name);
-      byte[] valueBytes = toBinaryValue(name, value);
-      values[namesAndValuesIdx / 2] = value;
-      namesAndValues[namesAndValuesIdx] = nameBytes;
-      namesAndValuesIdx++;
-      namesAndValues[namesAndValuesIdx] = valueBytes;
-      namesAndValuesIdx++;
+      byte[] valueBytes;
+      int startPos = 0;
+      int endPos;
+      int indexOfComma = AsciiString.INDEX_NOT_FOUND;
+      do {
+        AsciiString curVal = value;
+        if (!name.endsWith(binaryHeaderSuffix)) {
+          valueBytes = bytes(value);
+        } else {
+          indexOfComma = value.indexOf(',', startPos);
+          endPos = indexOfComma == AsciiString.INDEX_NOT_FOUND ? value.length() : indexOfComma;
+          curVal = value.subSequence(startPos, endPos, false);
+          valueBytes = BaseEncoding.base64().decode(curVal);
+          startPos = indexOfComma + 1;
+        }
+        if (namesAndValuesIdx == namesAndValues.length) {
+          expandHeadersAndValues();
+        }
+        values[namesAndValuesIdx / 2] = curVal;
+        namesAndValues[namesAndValuesIdx] = nameBytes;
+        namesAndValuesIdx++;
+        namesAndValues[namesAndValuesIdx] = valueBytes;
+        namesAndValuesIdx++;
+      } while (indexOfComma != AsciiString.INDEX_NOT_FOUND);
       return this;
     }
 
@@ -177,13 +194,6 @@ class GrpcHttp2HeadersUtils {
         return false;
       }
       return PlatformDependent.equals(bytes0, offset0, bytes1, offset1, length0);
-    }
-
-    @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
-    private static byte[] toBinaryValue(AsciiString name, AsciiString value) {
-      return name.endsWith(binaryHeaderSuffix)
-          ? BaseEncoding.base64().decode(value)
-          : bytes(value);
     }
 
     protected static byte[] bytes(AsciiString str) {

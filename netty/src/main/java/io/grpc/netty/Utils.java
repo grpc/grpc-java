@@ -72,9 +72,6 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
 
-  @VisibleForTesting
-  static boolean validateHeaders = false;
-
   public static Metadata convertHeaders(Http2Headers http2Headers) {
     if (http2Headers instanceof GrpcHttp2InboundHeaders) {
       GrpcHttp2InboundHeaders h = (GrpcHttp2InboundHeaders) http2Headers;
