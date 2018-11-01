@@ -20,8 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Status;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -30,18 +32,20 @@ import java.util.concurrent.TimeUnit;
  * Manages keepalive pings.
  */
 public class KeepAliveManager {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   private static final long MIN_KEEPALIVE_TIME_NANOS = TimeUnit.SECONDS.toNanos(10);
   private static final long MIN_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(10L);
 
-  private final ScheduledExecutorService scheduler;
-  private final Ticker ticker;
   private final KeepAlivePinger keepAlivePinger;
+  private final ScheduledExecutorService scheduler;
+  private final long keepAliveTimeInNanos;
+  private final long keepAliveTimeoutInNanos;
   private final boolean keepAliveDuringTransportIdle;
+  private final Rescheduler sendPingRescheduler;
+
   private State state = State.IDLE;
-  private long nextKeepaliveTime;
+  /** Whether a ping was suppressed because the channel was inactive. */
+  private boolean pingSuppressed;
   private ScheduledFuture<?> shutdownFuture;
-  private ScheduledFuture<?> pingFuture;
   private final Runnable shutdown = new LogExceptionRunnable(new Runnable() {
     @Override
     public void run() {
@@ -59,36 +63,6 @@ public class KeepAliveManager {
       }
     }
   });
-  private final Runnable sendPing = new LogExceptionRunnable(new Runnable() {
-    @Override
-    public void run() {
-      pingFuture = null;
-      boolean shouldSendPing = false;
-      synchronized (KeepAliveManager.this) {
-        if (state == State.PING_SCHEDULED) {
-          shouldSendPing = true;
-          state = State.PING_SENT;
-          // Schedule a shutdown. It fires if we don't receive the ping response within the timeout.
-          shutdownFuture = scheduler.schedule(shutdown, keepAliveTimeoutInNanos,
-              TimeUnit.NANOSECONDS);
-        } else if (state == State.PING_DELAYED) {
-          // We have received some data. Reschedule the ping with the new time.
-          pingFuture = scheduler.schedule(
-              sendPing,
-              nextKeepaliveTime - ticker.read(),
-              TimeUnit.NANOSECONDS);
-          state = State.PING_SCHEDULED;
-        }
-      }
-      if (shouldSendPing) {
-        // Send the ping.
-        keepAlivePinger.ping();
-      }
-    }
-  });
-
-  private long keepAliveTimeInNanos;
-  private long keepAliveTimeoutInNanos;
 
   private enum State {
     /*
@@ -101,10 +75,6 @@ public class KeepAliveManager {
      * some data.
      */
     PING_SCHEDULED,
-    /*
-     * We need to delay the scheduled keepalive ping.
-     */
-    PING_DELAYED,
     /*
      * The ping has been sent out. Waiting for a ping response.
      */
@@ -125,25 +95,31 @@ public class KeepAliveManager {
   public KeepAliveManager(KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
                           long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
                           boolean keepAliveDuringTransportIdle) {
-    this(keepAlivePinger, scheduler, SYSTEM_TICKER, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        keepAliveDuringTransportIdle);
+    this(keepAlivePinger, scheduler, Stopwatch.createUnstarted(), keepAliveTimeInNanos,
+        keepAliveTimeoutInNanos, keepAliveDuringTransportIdle);
   }
 
   @VisibleForTesting
   KeepAliveManager(KeepAlivePinger keepAlivePinger, ScheduledExecutorService scheduler,
-                   Ticker ticker, long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
+                   Stopwatch stopwatch, long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
                    boolean keepAliveDuringTransportIdle) {
     this.keepAlivePinger = checkNotNull(keepAlivePinger, "keepAlivePinger");
     this.scheduler = checkNotNull(scheduler, "scheduler");
-    this.ticker = checkNotNull(ticker, "ticker");
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
     this.keepAliveDuringTransportIdle = keepAliveDuringTransportIdle;
-    nextKeepaliveTime = ticker.read() + keepAliveTimeInNanos;
+    Runnable sendPing = new LogExceptionRunnable(new Runnable() {
+      @Override public void run() {
+        sendPing();
+      }
+    });
+    this.sendPingRescheduler = new Rescheduler(
+        sendPing, new SynchronizedDirectExecutor(), scheduler, stopwatch);
   }
 
   /** Start keepalive monitoring. */
   public synchronized void onTransportStarted() {
+    sendPingRescheduler.reschedule(keepAliveTimeInNanos, TimeUnit.NANOSECONDS);
     if (keepAliveDuringTransportIdle) {
       onTransportActive();
     }
@@ -153,27 +129,19 @@ public class KeepAliveManager {
    * Transport has received some data so that we can delay sending keepalives.
    */
   public synchronized void onDataReceived() {
-    nextKeepaliveTime = ticker.read() + keepAliveTimeInNanos;
-    // We do not cancel the ping future here. This avoids constantly scheduling and cancellation in
-    // a busy transport. Instead, we update the status here and reschedule later. So we actually
-    // keep one sendPing task always in flight when there're active rpcs.
     if (state == State.PING_SCHEDULED) {
-      state = State.PING_DELAYED;
+      sendPingRescheduler.reschedule(keepAliveTimeInNanos, TimeUnit.NANOSECONDS);
     } else if (state == State.PING_SENT || state == State.IDLE_AND_PING_SENT) {
-      // Ping acked or effectively ping acked. Cancel shutdown, and then if not idle,
-      // schedule a new keep-alive ping.
+      // Ping acked or effectively ping acked.
       if (shutdownFuture != null) {
         shutdownFuture.cancel(false);
       }
       if (state == State.IDLE_AND_PING_SENT) {
-        // not to schedule new pings until onTransportActive
         state = State.IDLE;
-        return;
+      } else {
+        state = State.PING_SCHEDULED;
       }
-      // schedule a new ping
-      state = State.PING_SCHEDULED;
-      checkState(pingFuture == null, "There should be no outstanding pingFuture");
-      pingFuture = scheduler.schedule(sendPing, keepAliveTimeInNanos, TimeUnit.NANOSECONDS);
+      sendPingRescheduler.reschedule(keepAliveTimeInNanos, TimeUnit.NANOSECONDS);
     }
   }
 
@@ -182,14 +150,12 @@ public class KeepAliveManager {
    */
   public synchronized void onTransportActive() {
     if (state == State.IDLE) {
-      // When the transport goes active, we do not reset the nextKeepaliveTime. This allows us to
+      // When the transport goes active, we do not reset the ping rescheduler. This allows us to
       // quickly check whether the connection is still working.
       state = State.PING_SCHEDULED;
-      if (pingFuture == null) {
-        pingFuture = scheduler.schedule(
-            sendPing,
-            nextKeepaliveTime - ticker.read(),
-            TimeUnit.NANOSECONDS);
+      if (pingSuppressed) {
+        pingSuppressed = false;
+        sendPing();
       }
     } else if (state == State.IDLE_AND_PING_SENT) {
       state = State.PING_SENT;
@@ -203,7 +169,7 @@ public class KeepAliveManager {
     if (keepAliveDuringTransportIdle) {
       return;
     }
-    if (state == State.PING_SCHEDULED || state == State.PING_DELAYED) {
+    if (state == State.PING_SCHEDULED) {
       state = State.IDLE;
     }
     if (state == State.PING_SENT) {
@@ -220,10 +186,30 @@ public class KeepAliveManager {
       if (shutdownFuture != null) {
         shutdownFuture.cancel(false);
       }
-      if (pingFuture != null) {
-        pingFuture.cancel(false);
-        pingFuture = null;
-      }
+      sendPingRescheduler.cancel(true);
+    }
+  }
+
+  /**
+   * Timer for keepalive expired; proceed to send a ping. Does not actually send a ping if in IDLE
+   * state.
+   */
+  private synchronized void sendPing() {
+    // Note that this method is generally called with the lock already held
+    if (state == State.PING_SCHEDULED) {
+      state = State.PING_SENT;
+      // Avoid calling the keepAlivePinger with lock held
+      scheduler.execute(new LogExceptionRunnable(new Runnable() {
+        @Override public void run() {
+          // Send the ping.
+          keepAlivePinger.ping();
+        }
+      }));
+      // Schedule a shutdown. It fires if we don't receive the ping response within the timeout.
+      shutdownFuture = scheduler.schedule(shutdown, keepAliveTimeoutInNanos,
+          TimeUnit.NANOSECONDS);
+    } else if (state == State.IDLE) {
+      pingSuppressed = true;
     }
   }
 
@@ -239,6 +225,14 @@ public class KeepAliveManager {
    */
   public static long clampKeepAliveTimeoutInNanos(long keepAliveTimeoutInNanos) {
     return Math.max(keepAliveTimeoutInNanos, MIN_KEEPALIVE_TIMEOUT_NANOS);
+  }
+
+  private class SynchronizedDirectExecutor implements Executor {
+    @Override public void execute(Runnable run) {
+      synchronized (KeepAliveManager.this) {
+        run.run();
+      }
+    }
   }
 
   public interface KeepAlivePinger {
@@ -281,22 +275,6 @@ public class KeepAliveManager {
     public void onPingTimeout() {
       transport.shutdownNow(Status.UNAVAILABLE.withDescription(
           "Keepalive failed. The connection is likely gone"));
-    }
-  }
-
-  // TODO(zsurocking): Classes below are copied from Deadline.java. We should consider share the
-  // code.
-
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
-    /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
-  }
-
-  private static class SystemTicker extends Ticker {
-    @Override
-    public long read() {
-      return System.nanoTime();
     }
   }
 }
