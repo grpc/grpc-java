@@ -797,7 +797,7 @@ public abstract class AbstractTransportTest {
     serverStream.writeHeaders(serverHeaders);
     Metadata headers = clientStreamListener.headers.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertNotNull(headers);
-    assertAsciiMetadataValuesEqual(serverHeadersCopy.getAll(asciiKey),headers.getAll(asciiKey));
+    assertAsciiMetadataValuesEqual(serverHeadersCopy.getAll(asciiKey), headers.getAll(asciiKey));
     assertEquals(
         Lists.newArrayList(serverHeadersCopy.getAll(binaryKey)),
         Lists.newArrayList(headers.getAll(binaryKey)));

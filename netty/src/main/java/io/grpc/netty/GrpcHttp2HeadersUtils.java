@@ -103,33 +103,35 @@ class GrpcHttp2HeadersUtils {
 
     @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
     protected Http2Headers add(AsciiString name, AsciiString value) {
-
       byte[] nameBytes = bytes(name);
       byte[] valueBytes;
+      if (!name.endsWith(binaryHeaderSuffix)) {
+        valueBytes = bytes(value);
+        addHeader(value, nameBytes, valueBytes);
+        return this;
+      }
       int startPos = 0;
-      int endPos;
-      int indexOfComma = AsciiString.INDEX_NOT_FOUND;
-      do {
-        AsciiString curVal = value;
-        if (!name.endsWith(binaryHeaderSuffix)) {
-          valueBytes = bytes(value);
-        } else {
-          indexOfComma = value.indexOf(',', startPos);
-          endPos = indexOfComma == AsciiString.INDEX_NOT_FOUND ? value.length() : indexOfComma;
-          curVal = value.subSequence(startPos, endPos, false);
-          valueBytes = BaseEncoding.base64().decode(curVal);
-          startPos = indexOfComma + 1;
-        }
-        if (namesAndValuesIdx == namesAndValues.length) {
-          expandHeadersAndValues();
-        }
-        values[namesAndValuesIdx / 2] = curVal;
-        namesAndValues[namesAndValuesIdx] = nameBytes;
-        namesAndValuesIdx++;
-        namesAndValues[namesAndValuesIdx] = valueBytes;
-        namesAndValuesIdx++;
-      } while (indexOfComma != AsciiString.INDEX_NOT_FOUND);
+      int endPos = -1;
+      while (endPos < value.length()) {
+        int indexOfComma = value.indexOf(',', startPos);
+        endPos = indexOfComma == AsciiString.INDEX_NOT_FOUND ? value.length() : indexOfComma;
+        AsciiString curVal = value.subSequence(startPos, endPos, false);
+        valueBytes = BaseEncoding.base64().decode(curVal);
+        startPos = indexOfComma + 1;
+        addHeader(curVal, nameBytes, valueBytes);
+      }
       return this;
+    }
+
+    private void addHeader(AsciiString value, byte[] nameBytes, byte[] valueBytes) {
+      if (namesAndValuesIdx == namesAndValues.length) {
+        expandHeadersAndValues();
+      }
+      values[namesAndValuesIdx / 2] = value;
+      namesAndValues[namesAndValuesIdx] = nameBytes;
+      namesAndValuesIdx++;
+      namesAndValues[namesAndValuesIdx] = valueBytes;
+      namesAndValuesIdx++;
     }
 
     protected CharSequence get(AsciiString name) {

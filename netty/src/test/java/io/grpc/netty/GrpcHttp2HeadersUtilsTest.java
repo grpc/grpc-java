@@ -137,8 +137,10 @@ public class GrpcHttp2HeadersUtilsTest {
   @Test
   public void dupBinHeadersWithComma() {
     Key<byte[]> key = Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
-    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(1);
+    Http2Headers http2Headers = new GrpcHttp2RequestHeaders(2);
     http2Headers.add(AsciiString.of("bytes-bin"), AsciiString.of("BaS,e6,,4+,padding=="));
+    http2Headers.add(AsciiString.of("bytes-bin"), AsciiString.of("more"));
+    http2Headers.add(AsciiString.of("bytes-bin"), AsciiString.of(""));
     Metadata recoveredHeaders = Utils.convertHeaders(http2Headers);
     byte[][] values = Iterables.toArray(recoveredHeaders.getAll(key), byte[].class);
 
@@ -148,7 +150,9 @@ public class GrpcHttp2HeadersUtilsTest {
             BaseEncoding.base64().decode("e6"),
             BaseEncoding.base64().decode(""),
             BaseEncoding.base64().decode("4+"),
-            BaseEncoding.base64().decode("padding")},
+            BaseEncoding.base64().decode("padding"),
+            BaseEncoding.base64().decode("more"),
+            BaseEncoding.base64().decode("")},
         values));
   }
 

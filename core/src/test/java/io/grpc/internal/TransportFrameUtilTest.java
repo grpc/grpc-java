@@ -107,7 +107,11 @@ public class TransportFrameUtilTest {
   public void dupBinHeadersWithComma() {
     byte[][] http2Headers = new byte[][] {
         BINARY_BYTES.name().getBytes(US_ASCII),
-        "BaS,e6,,4+,padding==".getBytes(US_ASCII)};
+        "BaS,e6,,4+,padding==".getBytes(US_ASCII),
+        BINARY_BYTES.name().getBytes(US_ASCII),
+        "more".getBytes(US_ASCII),
+        BINARY_BYTES.name().getBytes(US_ASCII),
+        "".getBytes(US_ASCII)};
     byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
     Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
     byte[][] values = Iterables.toArray(recoveredHeaders.getAll(BINARY_BYTES), byte[].class);
@@ -118,7 +122,9 @@ public class TransportFrameUtilTest {
             BaseEncoding.base64().decode("e6"),
             BaseEncoding.base64().decode(""),
             BaseEncoding.base64().decode("4+"),
-            BaseEncoding.base64().decode("padding")},
+            BaseEncoding.base64().decode("padding"),
+            BaseEncoding.base64().decode("more"),
+            BaseEncoding.base64().decode("")},
         values));
   }
 

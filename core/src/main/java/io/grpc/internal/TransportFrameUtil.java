@@ -87,10 +87,11 @@ public final class TransportFrameUtil {
 
   /**
    * Transform HTTP/2-compliant headers to the raw serialized format which can be deserialized by
-   * metadata marshallers. It decodes the Base64-encoded binary headers.  This function modifies
-   * the headers in place.  By modifying the input array.
+   * metadata marshallers. It decodes the Base64-encoded binary headers.
    *
-   * <p>Warning: it may mutate the content of the argument.
+   * <p>Warning: This function may partially modify the headers in place by modifying the input
+   * array (but not modifying any single byte), so the input reference {@code http2Headers} can not
+   * be used again.
    *
    * @param http2Headers the interleaved keys and values of HTTP/2-compliant headers
    * @return the interleaved keys and values in the raw serialized format
@@ -98,51 +99,53 @@ public final class TransportFrameUtil {
   @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
   @CheckReturnValue
   public static byte[][] toRawSerializedHeaders(byte[][] http2Headers) {
-    List<byte[]> dupHeaders = null; // lazily allocate once ',' is found
     for (int i = 0; i < http2Headers.length; i += 2) {
       byte[] key = http2Headers[i];
       byte[] value = http2Headers[i + 1];
-      http2Headers[i] = key;
       if (endsWith(key, binaryHeaderSuffixBytes)) {
         // Binary header
-        byte[] firstDecodedVal = null;
-        byte[] decodedVal;
-        int prevIdx = 0;
-        for (int idx = 0; idx <= value.length; idx++) {
-          if (idx != value.length && value[idx] != (byte) ',') {
-            continue;
+        for (int idx = 0; idx < value.length; idx++) {
+          if (value[idx] == (byte) ',') {
+            return serializeHeadersWithCommasInBin(http2Headers, i);
           }
-          if (idx != value.length && dupHeaders == null) {
-            // found ',' for the first time
-            dupHeaders = new ArrayList<>();
-          }
-          decodedVal =
-              BaseEncoding.base64().decode(new String(value, prevIdx, idx - prevIdx, US_ASCII));
-          if (firstDecodedVal == null) {
-            firstDecodedVal = decodedVal;
-          } else {
-            dupHeaders.add(key);
-            dupHeaders.add(decodedVal);
-          }
-          prevIdx = idx + 1;
         }
-        http2Headers[i + 1] = firstDecodedVal;
+        byte[] decodedVal = BaseEncoding.base64().decode(new String(value, US_ASCII));
+        http2Headers[i + 1] = decodedVal;
       } else {
         // Non-binary header
         // Nothing to do, the value is already in the right place.
       }
     }
+    return http2Headers;
+  }
 
-    if (dupHeaders == null) {
-      return http2Headers;
+  private static byte[][] serializeHeadersWithCommasInBin(byte[][] http2Headers, int resumeFrom) {
+    List<byte[]> headerList = new ArrayList<>(http2Headers.length + 10);
+    for (int i = 0; i < resumeFrom; i++) {
+      headerList.add(http2Headers[i]);
     }
-
-    byte[][] newHttp2Headers = new byte[http2Headers.length + dupHeaders.size()][];
-    System.arraycopy(http2Headers, 0, newHttp2Headers, 0, http2Headers.length);
-    System.arraycopy(
-        dupHeaders.toArray(new byte[0][]), 0, newHttp2Headers, http2Headers.length,
-        dupHeaders.size());
-    return newHttp2Headers;
+    for (int i = resumeFrom; i < http2Headers.length; i += 2) {
+      byte[] key = http2Headers[i];
+      byte[] value = http2Headers[i + 1];
+      if (!endsWith(key, binaryHeaderSuffixBytes)) {
+        headerList.add(key);
+        headerList.add(value);
+        continue;
+      }
+      // Binary header
+      int prevIdx = 0;
+      for (int idx = 0; idx <= value.length; idx++) {
+        if (idx != value.length && value[idx] != (byte) ',') {
+          continue;
+        }
+        byte[] decodedVal =
+          BaseEncoding.base64().decode(new String(value, prevIdx, idx - prevIdx, US_ASCII));
+        prevIdx = idx + 1;
+        headerList.add(key);
+        headerList.add(decodedVal);
+      }
+    }
+    return headerList.toArray(new byte[0][]);
   }
 
   /**
