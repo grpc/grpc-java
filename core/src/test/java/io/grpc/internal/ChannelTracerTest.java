@@ -22,9 +22,7 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
 import io.grpc.InternalLogId;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 

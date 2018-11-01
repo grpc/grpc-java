@@ -22,7 +22,17 @@ package io.grpc;
  */
 public abstract class ChannelLogger {
   /**
-   * Log levels.
+   * Log levels.  Each level maps to its corresponding severity level when exported to Channelz, and
+   * to a {@link java.util.logging.Level logger level} defined below when exported to Java logger:
+   * <pre>
+   * +---------------------+-------------------+
+   * | ChannelLogger Level | Java Logger Level |
+   * +---------------------+-------------------+
+   * | INFO                | FINEST            |
+   * | WARNING             | FINER             |
+   * | ERROR               | FINE              |
+   * +---------------------+-------------------+
+   * </pre>
    */
   public enum Level {
     INFO,
@@ -30,5 +40,8 @@ public abstract class ChannelLogger {
     ERROR
   }
 
+  /**
+   * Logs a message, which is exported on Channelz as well as the Java logger for this class.
+   */
   public abstract void log(Level level, String message);
 }

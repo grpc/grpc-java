@@ -55,8 +55,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -134,8 +132,8 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
       });
     this.channelCallsTracer = callsTracer;
-    this.channelTracer = channelTracer;
-    this.timeProvider = timeProvider;
+    this.channelTracer = checkNotNull(channelTracer, "channelTracer");
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
   }
 
   // Must be called only once, right after the OobChannel is created.
@@ -242,14 +240,12 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   }
 
   void handleSubchannelStateChange(final ConnectivityStateInfo newState) {
-    if (channelTracer != null) {
-      channelTracer.reportEvent(
-          new ChannelTrace.Event.Builder()
-              .setDescription("Entering " + newState.getState() + " state")
-              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-              .setTimestampNanos(timeProvider.currentTimeNanos())
-              .build());
-    }
+    channelTracer.reportEvent(
+        new ChannelTrace.Event.Builder()
+            .setDescription("Entering " + newState.getState() + " state")
+            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+            .setTimestampNanos(timeProvider.currentTimeNanos())
+            .build());
     switch (newState.getState()) {
       case READY:
       case IDLE:
@@ -293,9 +289,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     final SettableFuture<ChannelStats> ret = SettableFuture.create();
     final ChannelStats.Builder builder = new ChannelStats.Builder();
     channelCallsTracer.updateBuilder(builder);
-    if (channelTracer != null) {
-      channelTracer.updateBuilder(builder);
-    }
+    channelTracer.updateBuilder(builder);
     builder
         .setTarget(authority)
         .setState(subchannel.getState())

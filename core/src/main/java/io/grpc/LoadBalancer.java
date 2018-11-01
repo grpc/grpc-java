@@ -617,6 +617,8 @@ public abstract class LoadBalancer {
 
     /**
      * Returns the {@link ChannelLogger} for the Channel served by this LoadBalancer.
+     *
+     * @since 1.17.0
      */
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();
@@ -719,6 +721,8 @@ public abstract class LoadBalancer {
 
     /**
      * Returns a {@link ChannelLogger} for this Subchannel.
+     *
+     * @since 1.17.0
      */
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();

@@ -2281,7 +2281,7 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     createChannel();
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Channel created")
+        .setDescription("Channel for 'fake://fake.example.com' created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -2483,13 +2483,13 @@ public class ManagedChannelImplTest {
         .setChannelRef(oobChannel)
         .build());
     assertThat(getStats(oobChannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("OobChannel created")
+        .setDescription("OobChannel for [[test-addr]/{}] created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
     assertThat(getStats(oobChannel.getInternalSubchannel()).channelTrace.events).contains(
         new ChannelTrace.Event.Builder()
-            .setDescription("Subchannel created")
+            .setDescription("Subchannel for [[test-addr]/{}] created")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());

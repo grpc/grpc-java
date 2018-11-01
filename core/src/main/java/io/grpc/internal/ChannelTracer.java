@@ -16,9 +16,9 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
@@ -36,7 +36,9 @@ import javax.annotation.concurrent.GuardedBy;
  * Tracks a collections of channel tracing events for a channel/subchannel.
  */
 final class ChannelTracer {
-  private static final Logger logger = Logger.getLogger(ChannelTrace.class.getName());
+  // The logs go to ChannelLogger's logger so that user can control the logging level on that public
+  // class rather than on this internal class.
+  private static final Logger logger = Logger.getLogger(ChannelLogger.class.getName());
   private final Object lock = new Object();
   private final InternalLogId logId;
   @GuardedBy("lock")

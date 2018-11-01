@@ -16,8 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ascii;
 import io.grpc.Attributes;
@@ -25,7 +23,6 @@ import io.grpc.ChannelLogger.Level;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -36,7 +33,6 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
 final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
