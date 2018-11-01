@@ -17,10 +17,12 @@
 package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
 import okio.Sink;
@@ -42,18 +44,28 @@ final class AsyncSink implements Sink {
   @GuardedBy("lock")
   private boolean flushEnqueued = false;
   private boolean closed = false;
+  @Nullable
   private Sink sink;
 
-  private AsyncSink(
-      Sink sink, SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
-    this.sink = checkNotNull(sink, "sink");
+  private AsyncSink(SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
     this.serializingExecutor = checkNotNull(executor, "executor");
     this.transportExceptionHandler = checkNotNull(exceptionHandler, "exceptionHandler");
   }
 
   static AsyncSink sink(
-      Sink sink, SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
-    return new AsyncSink(sink, executor, exceptionHandler);
+      SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
+    return new AsyncSink(executor, exceptionHandler);
+  }
+
+  /**
+   * Sets the actual sink. It is allowed to call write / flush operations on the sink iff calling
+   * this method is scheduled in the executor.
+   *
+   * <p>should only be called once by thread of executor.
+   */
+  void becomeConnected(Sink sink) {
+    checkState(this.sink == null, "AsyncSink's becomeConnected should only be called once.");
+    this.sink = checkNotNull(sink, "sink");
   }
 
   @Override
@@ -69,15 +81,19 @@ final class AsyncSink implements Sink {
       }
       writeEnqueued = true;
     }
-    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
+    serializingExecutor.execute(new Runnable() {
       @Override
-      public void doRun() throws IOException {
+      public void run() {
         Buffer buf = new Buffer();
         synchronized (lock) {
           buf.write(buffer, buffer.completeSegmentByteCount());
           writeEnqueued = false;
         }
-        sink.write(buf, buf.size());
+        try {
+          sink.write(buf, buf.size());
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
       }
     });
   }
@@ -93,16 +109,20 @@ final class AsyncSink implements Sink {
       }
       flushEnqueued = true;
     }
-    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
+    serializingExecutor.execute(new Runnable() {
       @Override
-      public void doRun() throws IOException {
+      public void run() {
         Buffer buf = new Buffer();
         synchronized (lock) {
           buf.write(buffer, buffer.size());
           flushEnqueued = false;
         }
-        sink.write(buf, buf.size());
-        sink.flush();
+        try {
+          sink.write(buf, buf.size());
+          sink.flush();
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
       }
     });
   }
@@ -118,26 +138,16 @@ final class AsyncSink implements Sink {
       return;
     }
     closed = true;
-    serializingExecutor.execute(new AsyncSinkTaskRunnable() {
+    serializingExecutor.execute(new Runnable() {
       @Override
-      public void doRun() throws IOException {
+      public void run() {
         buffer.close();
-        sink.close();
+        try {
+          sink.close();
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
       }
     });
-  }
-
-  private abstract class AsyncSinkTaskRunnable implements Runnable {
-
-    @Override
-    public final void run() {
-      try {
-        doRun();
-      } catch (Exception e) {
-        transportExceptionHandler.onException(e);
-      }
-    }
-
-    public abstract void doRun() throws IOException;
   }
 }

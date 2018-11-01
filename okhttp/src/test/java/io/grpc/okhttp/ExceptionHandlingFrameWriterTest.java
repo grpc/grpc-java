@@ -26,7 +26,6 @@ import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import java.io.IOException;
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import org.junit.Test;
@@ -37,20 +36,10 @@ import org.junit.runners.JUnit4;
 public class ExceptionHandlingFrameWriterTest {
 
   private FrameWriter mockedFrameWriter = mock(FrameWriter.class);
-  private Socket socket = mock(Socket.class);
   private TransportExceptionHandler transportExceptionHandler =
       mock(TransportExceptionHandler.class);
   private ExceptionHandlingFrameWriter exceptionHandlingFrameWriter =
-      new ExceptionHandlingFrameWriter(transportExceptionHandler);
-
-  private void connectFrameWriter() {
-    exceptionHandlingFrameWriter.becomeConnected(mockedFrameWriter, socket);
-  }
-
-  @Test
-  public void todo() {
-    //TODO(jihuncho) test become connected.
-  }
+      new ExceptionHandlingFrameWriter(transportExceptionHandler, mockedFrameWriter);
 
   @Test
   public void exception() throws IOException {

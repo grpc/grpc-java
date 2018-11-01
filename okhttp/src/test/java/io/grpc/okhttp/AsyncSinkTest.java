@@ -41,6 +41,7 @@ import java.util.concurrent.Executor;
 import okio.Buffer;
 import okio.Sink;
 import okio.Timeout;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -54,7 +55,12 @@ public class AsyncSinkTest {
   private QueueingExecutor queueingExecutor = new QueueingExecutor();
   private TransportExceptionHandler exceptionHandler = mock(TransportExceptionHandler.class);
   private AsyncSink sink =
-      AsyncSink.sink(mockedSink, new SerializingExecutor(queueingExecutor), exceptionHandler);
+      AsyncSink.sink(new SerializingExecutor(queueingExecutor), exceptionHandler);
+
+  @Before
+  public void setUp() throws Exception {
+    sink.becomeConnected(mockedSink);
+  }
 
   @Test
   public void noCoalesceRequired() throws IOException {
@@ -141,7 +147,7 @@ public class AsyncSinkTest {
   }
 
   @Test
-  public void close_writeShouldThrowException() throws IOException {
+  public void close_writeShouldThrowException() {
     sink.close();
     queueingExecutor.runAll();
     try {

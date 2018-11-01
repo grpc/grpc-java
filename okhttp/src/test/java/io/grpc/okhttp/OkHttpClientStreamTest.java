@@ -22,7 +22,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isA;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -42,7 +41,6 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.net.Socket;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -87,8 +85,7 @@ public class OkHttpClientStreamTest {
         .build();
 
     frameWriter =
-        new ExceptionHandlingFrameWriter(transport);
-    frameWriter.becomeConnected(mockedFrameWriter, mock(Socket.class));
+        new ExceptionHandlingFrameWriter(transport, mockedFrameWriter);
     stream = new OkHttpClientStream(
         methodDescriptor,
         new Metadata(),
