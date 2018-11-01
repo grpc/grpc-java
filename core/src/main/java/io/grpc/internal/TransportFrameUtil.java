@@ -139,7 +139,7 @@ public final class TransportFrameUtil {
           continue;
         }
         byte[] decodedVal =
-          BaseEncoding.base64().decode(new String(value, prevIdx, idx - prevIdx, US_ASCII));
+            BaseEncoding.base64().decode(new String(value, prevIdx, idx - prevIdx, US_ASCII));
         prevIdx = idx + 1;
         headerList.add(key);
         headerList.add(decodedVal);
