@@ -21,6 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
+import io.grpc.InternalLogId;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -32,21 +33,26 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ChannelTracerTest {
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
+  private InternalLogId logId = InternalLogId.allocate("test");
 
   @Test
-  public void channelTracerWithZeroMaxEventsShouldThrow() {
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("maxEvents must be greater than zero");
+  public void channelTracerWithZeroMaxEvents() {
+    ChannelTracer channelTracer =
+        new ChannelTracer(logId, /* maxEvents= */ 0, /* channelCreationTimeNanos= */ 3L, "fooType");
+    ChannelStats.Builder builder = new ChannelStats.Builder();
+    Event e1 = new Event.Builder()
+        .setDescription("e1").setSeverity(Severity.CT_ERROR).setTimestampNanos(1001).build();
+    channelTracer.reportEvent(e1);
 
-    new ChannelTracer(/* maxEvents= */ 0, /* channelCreationTimeNanos= */ 3L, "fooType");
+    channelTracer.updateBuilder(builder);
+    ChannelStats stats = builder.build();
+    assertThat(stats.channelTrace).isNull();
   }
 
   @Test
   public void reportEvents() {
     ChannelTracer channelTracer =
-        new ChannelTracer(/* maxEvents= */ 2, /* channelCreationTimeNanos= */ 3L, "fooType");
+        new ChannelTracer(logId, /* maxEvents= */ 2, /* channelCreationTimeNanos= */ 3L, "fooType");
     ChannelStats.Builder builder = new ChannelStats.Builder();
     Event e1 = new Event.Builder()
         .setDescription("e1").setSeverity(Severity.CT_ERROR).setTimestampNanos(1001).build();

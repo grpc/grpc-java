@@ -160,7 +160,13 @@ public class ManagedChannelImplTest {
           .setUserAgent(USER_AGENT);
   private static final String TARGET = "fake://" + SERVICE_NAME;
   private URI expectedUri;
-  private final SocketAddress socketAddress = new SocketAddress() {};
+  private final SocketAddress socketAddress =
+      new SocketAddress() {
+        @Override
+        public String toString() {
+          return "test-addr";
+        }
+      };
   private final EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
@@ -2289,13 +2295,13 @@ public class ManagedChannelImplTest {
     AbstractSubchannel subchannel =
         (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Child channel created")
+        .setDescription("Child Subchannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .setSubchannelRef(subchannel.getInternalSubchannel())
         .build());
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Subchannel created")
+        .setDescription("Subchannel for [[[test-addr]/{}]] created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -2443,7 +2449,7 @@ public class ManagedChannelImplTest {
     timer.forwardNanos(1234);
     subchannel.obtainActiveTransport();
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Entering CONNECTING state")
+        .setDescription("CONNECTING as requested")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -2471,7 +2477,7 @@ public class ManagedChannelImplTest {
     timer.forwardNanos(1234);
     OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "authority");
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Child channel created")
+        .setDescription("Child OobChannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .setChannelRef(oobChannel)
@@ -2908,7 +2914,7 @@ public class ManagedChannelImplTest {
 
     ManagedChannel mychannel = new CustomBuilder()
         .nameResolverFactory(factory)
-        .loadBalancerFactory(new AutoConfiguredLoadBalancerFactory(null, null)).build();
+        .loadBalancerFactory(new AutoConfiguredLoadBalancerFactory()).build();
 
     ClientCall<Void, Void> call1 =
         mychannel.newCall(TestMethodDescriptors.voidMethod(), CallOptions.DEFAULT);

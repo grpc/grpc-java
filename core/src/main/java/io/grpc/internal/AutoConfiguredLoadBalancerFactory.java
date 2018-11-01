@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ascii;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger.Level;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -41,21 +42,11 @@ import javax.annotation.Nullable;
 final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   private static final String DEFAULT_POLICY = "pick_first";
 
-  @Nullable
-  private final ChannelTracer channelTracer;
-  @Nullable
-  private final TimeProvider timeProvider;
   private static final LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
-
-  AutoConfiguredLoadBalancerFactory(
-      @Nullable ChannelTracer channelTracer, @Nullable TimeProvider timeProvider) {
-    this.channelTracer = channelTracer;
-    this.timeProvider = timeProvider;
-  }
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new AutoConfiguredLoadBalancer(helper, channelTracer, timeProvider);
+    return new AutoConfiguredLoadBalancer(helper);
   }
 
   private static final class NoopLoadBalancer extends LoadBalancer {
@@ -79,21 +70,11 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     private final Helper helper;
     private LoadBalancer delegate;
     private LoadBalancerProvider delegateProvider;
-    @CheckForNull
-    private ChannelTracer channelTracer;
-    @Nullable
-    private final TimeProvider timeProvider;
 
-    AutoConfiguredLoadBalancer(
-        Helper helper, @Nullable ChannelTracer channelTracer, @Nullable TimeProvider timeProvider) {
+    AutoConfiguredLoadBalancer(Helper helper) {
       this.helper = helper;
       delegateProvider = registry.getProvider(DEFAULT_POLICY);
       delegate = delegateProvider.newLoadBalancer(helper);
-      this.channelTracer = channelTracer;
-      this.timeProvider = timeProvider;
-      if (channelTracer != null) {
-        checkNotNull(timeProvider, "timeProvider");
-      }
     }
 
     //  Must be run inside ChannelExecutor.
@@ -120,14 +101,10 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         delegateProvider = newlbp;
         LoadBalancer old = delegate;
         delegate = delegateProvider.newLoadBalancer(helper);
-        if (channelTracer != null) {
-          channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-              .setDescription("Load balancer changed from " + old.getClass().getSimpleName()
-                  + " to " + delegate.getClass().getSimpleName())
-              .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-              .setTimestampNanos(timeProvider.currentTimeNanos())
-              .build());
-        }
+        helper.getChannelLogger().log(
+            Level.INFO, 
+            "Load balancer changed from " + old.getClass().getSimpleName()
+                + " to " + delegate.getClass().getSimpleName());
       }
       getDelegate().handleResolvedAddressGroups(servers, attributes);
     }

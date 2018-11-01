@@ -81,7 +81,6 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
   private volatile boolean shutdown;
   private final CallTracer channelCallsTracer;
-  @CheckForNull
   private final ChannelTracer channelTracer;
   private final TimeProvider timeProvider;
 
@@ -104,7 +103,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
       ScheduledExecutorService deadlineCancellationExecutor, SynchronizationContext syncContext,
-      CallTracer callsTracer, @Nullable  ChannelTracer channelTracer, InternalChannelz channelz,
+      CallTracer callsTracer, ChannelTracer channelTracer, InternalChannelz channelz,
       TimeProvider timeProvider) {
     this.authority = checkNotNull(authority, "authority");
     this.executorPool = checkNotNull(executorPool, "executorPool");

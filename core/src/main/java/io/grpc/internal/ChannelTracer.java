@@ -22,18 +22,25 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
+import io.grpc.InternalLogId;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Tracks a collections of channel tracing events for a channel/subchannel.
  */
 final class ChannelTracer {
+  private static final Logger logger = Logger.getLogger(ChannelTrace.class.getName());
   private final Object lock = new Object();
+  private final InternalLogId logId;
   @GuardedBy("lock")
+  @Nullable
   private final Collection<Event> events;
   private final long channelCreationTimeNanos;
 
@@ -45,24 +52,28 @@ final class ChannelTracer {
    *
    * @param channelType Chennel, Subchannel, or OobChannel
    */
-  ChannelTracer(final int maxEvents, long channelCreationTimeNanos, String channelType) {
-    checkArgument(maxEvents > 0, "maxEvents must be greater than zero");
-    checkNotNull(channelType, "channelType");
-    events = new ArrayDeque<Event>() {
-      @GuardedBy("lock")
-      @Override
-      public boolean add(Event event) {
-        if (size() == maxEvents) {
-          removeFirst();
-        }
-        eventsLogged++;
-        return super.add(event);
-      }
-    };
+  ChannelTracer(
+      InternalLogId logId, final int maxEvents, long channelCreationTimeNanos, String description) {
+    this.logId = checkNotNull(logId, "logId");
+    if (maxEvents > 0) {
+      events = new ArrayDeque<Event>() {
+          @GuardedBy("lock")
+          @Override
+          public boolean add(Event event) {
+            if (size() == maxEvents) {
+              removeFirst();
+            }
+            eventsLogged++;
+            return super.add(event);
+          }
+        };
+    } else {
+      events = null;
+    }
     this.channelCreationTimeNanos = channelCreationTimeNanos;
 
     reportEvent(new ChannelTrace.Event.Builder()
-        .setDescription(channelType + " created")
+        .setDescription(description + " created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         // passing the timestamp in as a parameter instead of computing it right here because when
         // parent channel and subchannel both report the same event of the subchannel (e.g. creation
@@ -72,8 +83,24 @@ final class ChannelTracer {
   }
 
   void reportEvent(Event event) {
+    Level logLevel;
+    switch (event.severity) {
+      case CT_ERROR:
+        logLevel = Level.FINE;
+        break;
+      case CT_WARNING:
+        logLevel = Level.FINER;
+        break;
+      default:
+        logLevel = Level.FINEST;
+    }
     synchronized (lock) {
-      events.add(event);
+      if (events != null) {
+        events.add(event);
+      }
+    }
+    if (logger.isLoggable(logLevel)) {
+      logger.log(logLevel, "[" + logId + "] " + event.description);
     }
   }
 
@@ -81,6 +108,9 @@ final class ChannelTracer {
     List<Event> eventsSnapshot;
     int eventsLoggedSnapshot;
     synchronized (lock) {
+      if (events == null) {
+        return;
+      }
       eventsLoggedSnapshot = eventsLogged;
       eventsSnapshot = new ArrayList<>(events);
     }
