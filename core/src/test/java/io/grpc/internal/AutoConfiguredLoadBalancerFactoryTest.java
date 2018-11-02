@@ -345,11 +345,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         eq(Level.INFO),
         eq("Load balancer changed from RoundRobinLoadBalancer to GrpclbLoadBalancer"));
 
-    // Log from GrpclbLoadBalancer
-    verify(channelLogger).log(
-        eq(Level.INFO),
-        eq("CONNECTING: No ready Subchannel"));
-
     verifyNoMoreInteractions(channelLogger);
   }
 

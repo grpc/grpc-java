@@ -35,6 +35,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.Level;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -83,7 +84,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.CheckForNull;
@@ -139,7 +139,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void uncaughtException(Thread t, Throwable e) {
           logger.log(
-              Level.SEVERE,
+              java.util.logging.Level.SEVERE,
               "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
               e);
           panic(e);
@@ -345,7 +345,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (lbHelper != null) {
       return;
     }
-    logger.log(Level.FINE, "[{0}] Exiting idle mode", getLogId());
+    channelLogger.log(Level.INFO, "Exiting idle mode");
     lbHelper = new LbHelperImpl(nameResolver);
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
@@ -360,7 +360,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // Must be run from syncContext
   private void enterIdleMode() {
-    logger.log(Level.FINE, "[{0}] Entering idle mode", getLogId());
     // nameResolver and loadBalancer are guaranteed to be non-null.  If any of them were null,
     // either the idleModeTimer ran twice without exiting the idle mode, or the task in shutdown()
     // did not cancel idleModeTimer, or enterIdle() ran while shutdown or in idle, all of
@@ -368,12 +367,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
     nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    channelTracer.reportEvent(
-        new ChannelTrace.Event.Builder()
-            .setDescription("Entering IDLE state")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+    channelLogger.log(Level.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     if (inUseStateAggregator.isInUse()) {
       exitIdleMode();
@@ -603,8 +597,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelCallTracer = callTracerFactory.create();
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
-
-    logger.log(Level.FINE, "[{0}] Created with target {1}", new Object[] {getLogId(), target});
   }
 
   @VisibleForTesting
@@ -658,7 +650,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   @Override
   public ManagedChannelImpl shutdown() {
-    logger.log(Level.FINE, "[{0}] shutdown() called", getLogId());
+    channelLogger.log(Level.DEBUG, "shutdown() called");
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
@@ -670,11 +662,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     final class Shutdown implements Runnable {
       @Override
       public void run() {
-        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Entering SHUTDOWN state")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+        channelLogger.log(Level.INFO, "Entering SHUTDOWN state");
         channelStateManager.gotoState(SHUTDOWN);
       }
     }
@@ -690,7 +678,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     syncContext.execute(new CancelIdleTimer());
-    logger.log(Level.FINE, "[{0}] Shutting down", getLogId());
     return this;
   }
 
@@ -701,7 +688,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   @Override
   public ManagedChannelImpl shutdownNow() {
-    logger.log(Level.FINE, "[{0}] shutdownNow() called", getLogId());
+    channelLogger.log(Level.DEBUG, "shutdownNow() called");
     shutdown();
     uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
     final class ShutdownNow implements Runnable {
@@ -741,12 +728,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
-    channelTracer.reportEvent(
-        new ChannelTrace.Event.Builder()
-            .setDescription("Entering TRANSIENT_FAILURE state")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+    channelLogger.log(Level.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
 
@@ -833,7 +815,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return;
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
-      logger.log(Level.FINE, "[{0}] Terminated", getLogId());
+      channelLogger.log(Level.INFO, "Terminated");
       channelz.removeRootChannel(this);
       terminated = true;
       terminatedLatch.countDown();
@@ -1020,7 +1002,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       try {
         syncContext.throwIfNotInThisSynchronizationContext();
       } catch (IllegalStateException e) {
-        logger.log(Level.WARNING,
+        logger.log(java.util.logging.Level.WARNING,
             "We sugguest you call createSubchannel() from SynchronizationContext."
             + " Otherwise, it may race with handleSubchannelState()."
             + " See https://github.com/grpc/grpc-java/issues/5015", e);
@@ -1081,14 +1063,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannelTracer,
           subchannelLogId,
           timeProvider);
-      if (channelTracer != null) {
-        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Child Subchannel created")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(subchannelCreationTime)
-            .setSubchannelRef(internalSubchannel)
-            .build());
-      }
+      channelTracer.reportEvent(new ChannelTrace.Event.Builder()
+          .setDescription("Child Subchannel created")
+          .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+          .setTimestampNanos(subchannelCreationTime)
+          .setSubchannelRef(internalSubchannel)
+          .build());
       channelz.addSubchannel(internalSubchannel);
       subchannel.subchannel = internalSubchannel;
 
@@ -1130,12 +1110,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // It's not appropriate to report SHUTDOWN state from lb.
           // Ignore the case of newState == SHUTDOWN for now.
           if (newState != SHUTDOWN) {
-            channelTracer.reportEvent(
-                new ChannelTrace.Event.Builder()
-                    .setDescription("Entering " + newState + " state")
-                    .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-                    .setTimestampNanos(timeProvider.currentTimeNanos())
-                    .build());
+            channelLogger.log(Level.INFO, "Entering " + newState + " state");
             channelStateManager.gotoState(newState);
           }
         }
@@ -1276,27 +1251,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
             "Name resolver " + helper.nr + " returned an empty list"));
         return;
       }
-      if (logger.isLoggable(Level.FINE)) {
-        logger.log(Level.FINE, "[{0}] resolved address: {1}, config={2}",
-            new Object[]{getLogId(), servers, config});
-      }
+      channelLogger.log(Level.DEBUG, "Resolved address: " + servers + ", config=" + config);
 
       if (haveBackends == null || !haveBackends) {
-        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Address resolved: " + servers)
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+        channelLogger.log(Level.INFO, "Address resolved: " + servers);
         haveBackends = true;
       }
       final Map<String, Object> serviceConfig =
           config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
-        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Service config changed")
-            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+        channelLogger.log(Level.INFO, "Service config changed");
         lastServiceConfig = serviceConfig;
       }
 
@@ -1318,7 +1282,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             } catch (RuntimeException re) {
               logger.log(
-                  Level.WARNING,
+                  java.util.logging.Level.WARNING,
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
                   re);
             }
@@ -1334,14 +1298,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+      logger.log(java.util.logging.Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
       if (haveBackends == null || haveBackends) {
-        channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-            .setDescription("Failed to resolve name")
-            .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
-            .setTimestampNanos(timeProvider.currentTimeNanos())
-            .build());
+        channelLogger.log(Level.WARNING, "Failed to resolve name: " + error);
         haveBackends = false;
       }
       final class NameResolverErrorHandler implements Runnable {
@@ -1363,12 +1323,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             nameResolverBackoffPolicy = backoffPolicyProvider.get();
           }
           long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
-          if (logger.isLoggable(Level.FINE)) {
-            logger.log(
-                Level.FINE,
-                "[{0}] Scheduling DNS resolution backoff for {1} ns",
-                new Object[] {logId, delayNanos});
-          }
+          channelLogger.log(
+                Level.DEBUG,
+                "Scheduling DNS resolution backoff for " + delayNanos + "ns");
           nameResolverRefresh = new NameResolverRefresh();
           nameResolverRefreshFuture =
               transportFactory

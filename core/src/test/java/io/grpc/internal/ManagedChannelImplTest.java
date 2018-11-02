@@ -2313,7 +2313,9 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     createChannel();
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Failed to resolve name")
+        .setDescription("Failed to resolve name:"
+            + " Status{code=UNAVAILABLE, description=Name resolver FakeNameResolver"
+            + " returned an empty list, cause=null}")
         .setSeverity(ChannelTrace.Event.Severity.CT_WARNING)
         .setTimestampNanos(timer.getTicker().read())
         .build());
@@ -3072,6 +3074,11 @@ public class ManagedChannelImplTest {
 
       @Override public void shutdown() {
         shutdown = true;
+      }
+
+      @Override
+      public String toString() {
+        return "FakeNameResolver";
       }
     }
 
