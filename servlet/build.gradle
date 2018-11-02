@@ -4,6 +4,20 @@ targetCompatibility = 1.8
 
 dependencies {
     compile project(':grpc-core')
-    compileOnly group: 'javax.servlet', name: 'javax.servlet-api', version: '4.0.1'
-    compileOnly libraries.javax_annotation // java 9, 10 needs it
+    compileOnly 'javax.servlet:javax.servlet-api:4.0.1',
+            libraries.javax_annotation // java 9, 10 needs it
+
+    testCompile project(':grpc-stub'),
+            project(':grpc-protobuf'),
+            project(':grpc-servlet'),
+            project(':grpc-netty'),
+            project(':grpc-testing'),
+            project(':grpc-auth'),
+            project(':grpc-interop-testing'),
+            project(':grpc-core').sourceSets.test.output,
+            project(':grpc-netty').sourceSets.test.output,
+            libraries.junit,
+            libraries.oauth_client,
+            'io.undertow:undertow-servlet:2.0.15.Final',
+            'org.apache.tomcat.embed:tomcat-embed-core:9.0.12'
 }

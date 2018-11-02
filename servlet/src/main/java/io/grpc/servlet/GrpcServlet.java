@@ -16,6 +16,7 @@
 
 package io.grpc.servlet;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import java.io.IOException;
 import java.util.List;
@@ -34,11 +35,16 @@ public class GrpcServlet extends HttpServlet {
 
   private final ServletAdapter servletAdapter;
 
+  @VisibleForTesting
+  GrpcServlet(ServletAdapter servletAdapter) {
+    this.servletAdapter = servletAdapter;
+  }
+
   /**
    * Instantiate the servlet with the given serverBuilder.
    */
   public GrpcServlet(ServletServerBuilder serverBuilder) {
-    servletAdapter = ServletAdapter.Factory.create(serverBuilder);
+    this(ServletAdapter.Factory.create(serverBuilder));
   }
 
   /**

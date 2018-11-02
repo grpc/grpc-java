@@ -19,16 +19,18 @@ package io.grpc.servlet;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.InternalChannelz.SocketStats;
+import io.grpc.InternalInstrumented;
+import io.grpc.InternalLogId;
 import io.grpc.Server;
+import io.grpc.ServerStreamTracer;
 import io.grpc.ServerStreamTracer.Factory;
 import io.grpc.Status;
 import io.grpc.internal.AbstractServerImplBuilder;
-import io.grpc.internal.Channelz.SocketStats;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.Instrumented;
 import io.grpc.internal.InternalServer;
-import io.grpc.internal.LogId;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
@@ -50,6 +52,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private InternalServerImpl internalServer;
+  private List<ServerStreamTracer.Factory> streamTracerFactories;
 
   /**
    * Builds a gRPC server that can run as a servlet.
@@ -92,6 +95,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
 
   @Override
   protected InternalServer buildTransportServer(List<Factory> streamTracerFactories) {
+    this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
     return internalServer;
   }
@@ -118,8 +122,8 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     return this;
   }
 
-  ScheduledExecutorService getScheduledExecutorService() {
-    return scheduler;
+  List<ServerStreamTracer.Factory> getStreamTracerFactories() {
+    return streamTracerFactories;
   }
 
   private static final class InternalServerImpl implements InternalServer {
@@ -147,15 +151,16 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     }
 
     @Override
-    public List<Instrumented<SocketStats>> getListenSockets() {
+    public List<InternalInstrumented<SocketStats>> getListenSockets() {
       // sockets are managed by the servlet container, grpc is ignorant of that
       return Collections.emptyList();
     }
   }
 
-  private static final class ServerTransportImpl implements ServerTransport {
+  @VisibleForTesting
+  static final class ServerTransportImpl implements ServerTransport {
 
-    private final LogId logId = LogId.allocate(getClass().getName());
+    private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
     private final ScheduledExecutorService scheduler;
     private final boolean usingCustomScheduler;
 
@@ -189,7 +194,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     }
 
     @Override
-    public LogId getLogId() {
+    public InternalLogId getLogId() {
       return logId;
     }
   }

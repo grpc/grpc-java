@@ -23,15 +23,17 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
+import static java.util.logging.Level.WARNING;
 
 import com.google.common.io.BaseEncoding;
 import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.Attributes;
+import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.AbstractServerStream;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.LogId;
-import io.grpc.internal.ReadableBuffer;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportFrameUtil;
@@ -40,14 +42,13 @@ import io.grpc.internal.WritableBuffer;
 import io.grpc.internal.WritableBufferAllocator;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
-import java.util.stream.IntStream;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
@@ -56,26 +57,34 @@ import javax.servlet.http.HttpServletResponse;
 
 final class ServletServerStream extends AbstractServerStream {
 
-  static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
+  private static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
-  private final TransportState transportState =
-      new TransportState(Integer.MAX_VALUE, StatsTraceContext.NOOP, new TransportTracer());
-  final Sink sink;
-  final AsyncContext asyncCtx;
-  final AtomicReference<WriteState> writeState;
-  final Queue<ByteArrayWritableBuffer> writeChain;
-  final ScheduledExecutorService scheduler;
-  final LogId logId;
+  private final TransportState transportState;
+  private final Sink sink;
+  private final AsyncContext asyncCtx;
+  private final AtomicReference<WriteState> writeState;
+  private final Queue<ByteArrayWritableBuffer> writeChain;
+  private final Attributes attributes;
+  private final String authority;
+  private final InternalLogId logId;
 
   ServletServerStream(
-      WritableBufferAllocator bufferAllocator, AsyncContext asyncCtx,
-      AtomicReference<WriteState> writeState, Queue<ByteArrayWritableBuffer> writeChain,
-      ScheduledExecutorService scheduler, LogId logId) {
-    super(bufferAllocator, StatsTraceContext.NOOP);
+      WritableBufferAllocator bufferAllocator,
+      AsyncContext asyncCtx,
+      StatsTraceContext statsTraceCtx,
+      AtomicReference<WriteState> writeState,
+      Queue<ByteArrayWritableBuffer> writeChain,
+      Attributes attributes,
+      String authority,
+      InternalLogId logId) {
+    super(bufferAllocator, statsTraceCtx);
+    transportState =
+        new TransportState(Integer.MAX_VALUE, statsTraceCtx, new TransportTracer());
     this.asyncCtx = asyncCtx;
     this.writeState = writeState;
     this.writeChain = writeChain;
-    this.scheduler = scheduler;
+    this.attributes = attributes;
+    this.authority = authority;
     this.logId = logId;
     this.sink = new Sink();
   }
@@ -86,11 +95,21 @@ final class ServletServerStream extends AbstractServerStream {
   }
 
   @Override
+  public Attributes getAttributes() {
+    return attributes;
+  }
+
+  @Override
+  public String getAuthority() {
+    return authority;
+  }
+
+  @Override
   protected Sink abstractServerStreamSink() {
     return sink;
   }
 
-  static final class TransportState extends io.grpc.internal.AbstractServerStream.TransportState {
+  final class TransportState extends io.grpc.internal.AbstractServerStream.TransportState {
 
     final SerializingExecutor transportThreadExecutor =
         new SerializingExecutor(MoreExecutors.directExecutor());
@@ -108,18 +127,13 @@ final class ServletServerStream extends AbstractServerStream {
     @Override
     public void bytesRead(int numBytes) {
       // no-op
-      // not able to do flow control
+      // no flow control yet
     }
 
     @Override
     public void deframeFailed(Throwable cause) {
-      // TODO
-      cause.printStackTrace();
-    }
-
-    @Override
-    public void inboundDataReceived(ReadableBuffer frame, boolean endOfStream) {
-      runOnTransportThread(() -> super.inboundDataReceived(frame, endOfStream));
+      logger.log(WARNING, String.format("[{%s}] Exception processing message", logId), cause);
+      cancel(Status.fromThrowable(cause));
     }
   }
 
@@ -230,11 +244,12 @@ final class ServletServerStream extends AbstractServerStream {
 
       byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
       for (int i = 0; i < serializedHeaders.length; i += 2) {
-        resp.setHeader(
+        resp.addHeader(
             new String(serializedHeaders[i], StandardCharsets.US_ASCII),
             new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
       }
       resp.setTrailerFields(trailerSupplier);
+      writeFrame(FLUSH);
     }
 
     @Override
@@ -243,9 +258,9 @@ final class ServletServerStream extends AbstractServerStream {
         return;
       }
 
-      if (logger.isLoggable(FINE)) {
+      if (logger.isLoggable(FINEST)) {
         logger.log(
-            FINE,
+            FINEST,
             "[{0}] writeFrame: numBytes = {1}, flush = {2}, numMessages = {3}",
             new Object[]{logId, frame == null ? 0 : frame.readableBytes(), flush, numMessages});
       }
@@ -265,18 +280,15 @@ final class ServletServerStream extends AbstractServerStream {
 
     private void writeFrame(ByteArrayWritableBuffer byteBuffer) {
       int numBytes = byteBuffer.readableBytes();
-
       WriteState curState = writeState.get();
       if (curState.stillWritePossible) {
-        logger.log(FINEST, "[{0}] stillWritePossible = true", logId);
-
         try {
           ServletOutputStream outputStream = resp.getOutputStream();
           if (byteBuffer == FLUSH) {
             resp.flushBuffer();
           } else {
             outputStream.write(byteBuffer.bytes, 0, byteBuffer.readableBytes());
-            transportState().onSentBytes(numBytes);
+            transportState().runOnTransportThread(() -> transportState().onSentBytes(numBytes));
             if (logger.isLoggable(FINEST)) {
               logger.log(
                   FINEST,
@@ -286,33 +298,23 @@ final class ServletServerStream extends AbstractServerStream {
             }
           }
           if (!outputStream.isReady()) {
-            logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = false", logId);
-
             while (true) {
               if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
-                logger.log(
-                    FINEST, "[{0}] writeFrame set stillWritePossible to false", logId);
                 return;
               }
               curState = writeState.get();
             }
 
           }
-          logger.log(FINEST, "[{0}] writeFrame outputStream.isReady() = true", logId);
         } catch (IOException ioe) {
-          ioe.printStackTrace(); // TODO
+          logger.log(WARNING, String.format("[{%s}] Exception writing message", logId), ioe);
+          cancel(Status.fromThrowable(ioe));
         }
       } else {
-        logger.log(FINEST, "[{0}] stillWritePossible = false", logId);
-
         writeChain.offer(byteBuffer);
         if (!writeState.compareAndSet(curState, curState.newState())) {
           // state changed by another thread, need to check if stillWritePossible again
           if (writeState.get().stillWritePossible) {
-            logger.log(
-                FINEST,
-                "[{0}] stillWritePossible changed from false to true while enqueuing buffer",
-                logId);
             ByteArrayWritableBuffer bf = writeChain.poll();
             if (bf != null) {
               assert bf == byteBuffer;
@@ -342,29 +344,37 @@ final class ServletServerStream extends AbstractServerStream {
 
         byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
         for (int i = 0; i < serializedHeaders.length; i += 2) {
-          resp.setHeader(
+          resp.addHeader(
               new String(serializedHeaders[i], StandardCharsets.US_ASCII),
               new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
         }
       } else {
         byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
-        IntStream.range(0, serializedHeaders.length)
-            .filter(i -> i % 2 == 0)
-            .forEach(i ->
-                trailerSupplier.get().put(
-                    new String(serializedHeaders[i], StandardCharsets.US_ASCII),
-                    new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII)));
+        for (int i = 0; i < serializedHeaders.length; i += 2) {
+          String key = new String(serializedHeaders[i], StandardCharsets.US_ASCII);
+          String newValue = new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII);
+          String value = trailerSupplier.get().putIfAbsent(key, newValue);
+          if (value != null) {
+            trailerSupplier.get().put(key, value + "," + newValue);
+          }
+        }
       }
 
       while (true) {
         WriteState curState = writeState.get();
         if (curState.stillWritePossible) {
-          ServletAdapter.asyncContextComplete(asyncCtx, scheduler);
+          // in non-error case, this condition means all messages are sent out
+
+          transportState().runOnTransportThread(
+              () -> {
+                transportState().complete();
+                asyncCtx.complete();
+              });
           logger.log(FINE, "[{0}] writeTrailers: call complete", logId);
-          return;
-        }
+          break;
+        } // else, some messages are still in write queue
         if (writeState.compareAndSet(curState, curState.withTrailersSent(true))) {
-          return;
+          break;
         }
       }
     }
@@ -377,13 +387,18 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void cancel(Status status) {
-      // TODO:
-      // run in transport thread
+      transportState().runOnTransportThread(
+          () -> transportState().transportReportStatus(status));
+      if (resp.isCommitted() && Code.DEADLINE_EXCEEDED == status.getCode()) {
+        return; // let the servlet timeout, which will sent RST_STREAM automatically
+      }
+      // Not able to RST_STREAM with CANCEL code
+      close(Status.CANCELLED, new Metadata());
     }
   }
 
   private static final class TrailerSupplier implements Supplier<Map<String, String>> {
-    final Map<String, String> trailers = new ConcurrentHashMap<>();
+    final Map<String, String> trailers = Collections.synchronizedMap(new HashMap<>());
 
     TrailerSupplier() {}
 

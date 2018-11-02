@@ -18,30 +18,45 @@ package io.grpc.servlet;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
+import static java.util.logging.Level.WARNING;
 
+import com.google.common.io.BaseEncoding;
+import io.grpc.Attributes;
+import io.grpc.Grpc;
+import io.grpc.InternalLogId;
+import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
+import io.grpc.ServerStreamTracer;
+import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.LogId;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.WritableBufferAllocator;
 import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
 import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.AsyncContext;
+import javax.servlet.AsyncEvent;
+import javax.servlet.AsyncListener;
 import javax.servlet.ReadListener;
-import javax.servlet.ServletContext;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.WriteListener;
@@ -63,12 +78,15 @@ public final class ServletAdapter {
   static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final ServerTransportListener transportListener;
-  private final ScheduledExecutorService scheduler;
+  private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final Attributes attributes;
 
   ServletAdapter(
-      ServerTransportListener transportListener, ScheduledExecutorService scheduler) {
+      ServerTransportListener transportListener,
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     this.transportListener = transportListener;
-    this.scheduler = checkNotNull(scheduler, "scheduler");
+    this.streamTracerFactories = streamTracerFactories;
+    attributes = transportListener.transportReady(Attributes.EMPTY);
   }
 
   /**
@@ -81,7 +99,7 @@ public final class ServletAdapter {
    * calling {@code resp.setBufferSize()} before invocation is allowed.
    */
   public void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-    // TODO
+    // TODO(zdapeng)
   }
 
   /**
@@ -95,17 +113,29 @@ public final class ServletAdapter {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "req is not a gRPC request");
 
-    LogId logId = LogId.allocate(getClass().getName());
+    InternalLogId logId = InternalLogId.allocate(getClass().getName());
     logger.log(FINE, "[{0}] RPC started", logId);
 
-    String method = req.getRequestURI().substring(1); // remove the leading "/"
-    Metadata headers = new Metadata();
-
-    AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
     AsyncContext asyncCtx = req.startAsync();
 
-    ServletOutputStream output = asyncCtx.getResponse().getOutputStream();
+    String method = req.getRequestURI().substring(1); // remove the leading "/"
+    Metadata headers = getHeaders(req);
 
+    if (logger.isLoggable(FINEST)) {
+      logger.log(FINEST, "[{0}] method: {1}", new Object[] {logId, method});
+      logger.log(FINEST, "[{0}] headers:\n{1}", new Object[] {logId, headers});
+    }
+
+    Long timeoutNanos = headers.get(TIMEOUT_KEY);
+    if (timeoutNanos == null) {
+      timeoutNanos = 0L;
+    }
+    asyncCtx.setTimeout(TimeUnit.NANOSECONDS.toMillis(timeoutNanos));
+    StatsTraceContext statsTraceCtx =
+        StatsTraceContext.newServerContext(streamTracerFactories, method, headers);
+    AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
+    ServletInputStream input = asyncCtx.getRequest().getInputStream();
+    ServletOutputStream output = asyncCtx.getResponse().getOutputStream();
     WritableBufferAllocator bufferAllocator =
         capacityHint -> new ByteArrayWritableBuffer(capacityHint);
 
@@ -118,134 +148,70 @@ public final class ServletAdapter {
     Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedDeque<>();
 
     ServletServerStream stream = new ServletServerStream(
-        bufferAllocator, asyncCtx, writeState, writeChain, scheduler, logId);
-    transportListener.streamCreated(stream, method, headers);
-    stream.transportState().onStreamAllocated();
+        bufferAllocator,
+        asyncCtx,
+        statsTraceCtx,
+        writeState,
+        writeChain,
+        Attributes.newBuilder()
+            .setAll(attributes)
+            .set(
+                Grpc.TRANSPORT_ATTR_REMOTE_ADDR,
+                new InetSocketAddress(req.getRemoteHost(), req.getRemotePort()))
+            .set(
+                Grpc.TRANSPORT_ATTR_LOCAL_ADDR,
+                new InetSocketAddress(req.getLocalAddr(), req.getLocalPort()))
+            .build(),
+        getAuthority(req),
+        logId);
 
     output.setWriteListener(
-        new WriteListener() {
-          @Override
-          public void onWritePossible() throws IOException {
-            logger.log(FINE, "[{0}] onWritePossible", logId);
+        new GrpcWriteListener(stream, asyncCtx, resp, writeState, writeChain, logId));
 
-            WriteState curState = writeState.get();
-            // curState.stillWritePossible should have been set to false already or right now
-            while (curState.stillWritePossible) {
-              // it's very unlikely this happens due to a race condition
-              Thread.yield();
-              curState = writeState.get();
-            }
+    transportListener.streamCreated(stream, method, headers);
+    stream.transportState().runOnTransportThread(
+        () -> stream.transportState().onStreamAllocated());
 
-            boolean isReady;
-            while ((isReady = output.isReady())) {
-              curState = writeState.get();
+    input.setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
+    asyncCtx.addListener(new GrpcAsycListener(stream, logId));
+  }
 
-              ByteArrayWritableBuffer buffer = writeChain.poll();
-              if (buffer != null) {
-                if (buffer == ByteArrayWritableBuffer.FLUSH) {
-                  resp.flushBuffer();
-                } else {
-                  output.write(buffer.bytes, 0, buffer.readableBytes());
-                  stream.transportState().onSentBytes(buffer.readableBytes());
+  private Metadata getHeaders(HttpServletRequest req) {
+    Enumeration<String> headerNames = req.getHeaderNames();
+    checkNotNull(
+        headerNames, "Servlet container does not allow HttpServletRequest.getHeaderNames()");
+    List<byte[]> byteArrays = new ArrayList<>();
+    while (headerNames.hasMoreElements()) {
+      String headerName = headerNames.nextElement();
+      Enumeration<String> values = req.getHeaders(headerName);
+      if (values == null) {
+        continue;
+      }
+      while (values.hasMoreElements()) {
+        String value = values.nextElement();
+        if (headerName.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          byteArrays.add(headerName.getBytes(StandardCharsets.US_ASCII));
+          byteArrays.add(BaseEncoding.base64().decode(value));
+        } else {
+          byteArrays.add(headerName.getBytes(StandardCharsets.US_ASCII));
+          byteArrays.add(value.getBytes(StandardCharsets.US_ASCII));
+        }
+      }
+    }
+    return InternalMetadata.newMetadata(byteArrays.toArray(new byte[][]{}));
+  }
 
-                  if (logger.isLoggable(Level.FINEST)) {
-                    logger.log(
-                        Level.FINEST,
-                        "[{0}] outbound data: length = {1}, bytes = {2}",
-                        new Object[]{
-                            logId, buffer.readableBytes(),
-                            toHexString(buffer.bytes, buffer.readableBytes())});
-                  }
-                }
-                continue;
-              }
-
-              if (writeState.compareAndSet(curState, curState.withStillWritePossible(true))) {
-                logger.log(FINEST, "[{0}] set stillWritePossible to true", logId);
-                // state has not changed since. It's possible a new entry is just enqueued into the
-                // writeChain, but this case is handled right after the enqueuing
-                break;
-              } // else state changed by another thread, need to drain the writeChain again
-            }
-
-            if (isReady && writeState.get().trailersSent) {
-              asyncContextComplete(asyncCtx, scheduler);
-
-              logger.log(FINE, "[{0}] onWritePossible: call complete", logId);
-            }
-          }
-
-          @Override
-          public void onError(Throwable t) {
-            // TODO
-            t.printStackTrace();
-          }
-        });
-
-    ServletInputStream input = asyncCtx.getRequest().getInputStream();
-    input.setReadListener(
-        new ReadListener() {
-          volatile boolean allDataRead;
-          final byte[] buffer = new byte[4 * 1024];
-
-          @Override
-          public void onDataAvailable() throws IOException {
-            logger.log(FINE, "[{0}] onDataAvailable", logId);
-            while (input.isReady()) {
-              int length = input.read(buffer);
-              if (length == -1) {
-                logger.log(FINEST, "[{0}] inbound data: read end of stream", logId);
-                return;
-              } else {
-                if (logger.isLoggable(FINEST)) {
-                  logger.log(
-                      FINEST,
-                      "[{0}] inbound data: length = {1}, bytes = {2}",
-                      new Object[]{logId, length, toHexString(buffer, length)});
-                }
-
-                stream
-                    .transportState()
-                    .inboundDataReceived(
-                        ReadableBuffers.wrap(Arrays.copyOf(buffer, length)), false);
-              }
-            }
-          }
-
-          @SuppressWarnings("FutureReturnValueIgnored")
-          @Override
-          public void onAllDataRead() {
-            logger.log(FINE, "[{0}] onAllDataRead", logId);
-            if (input.isFinished() && !allDataRead) {
-              allDataRead = true;
-              ServletContext servletContext = asyncCtx.getRequest().getServletContext();
-              if (servletContext != null
-                  && servletContext.getServerInfo().contains("GlassFish Server")
-                  && servletContext.getServerInfo().contains("5.0")) {
-                // Glassfish workaround only:
-                // otherwise client may flakily fail with "INTERNAL: Half-closed without a request"
-                // for server streaming
-                scheduler.schedule(
-                    () ->
-                        stream
-                            .transportState()
-                            .inboundDataReceived(ReadableBuffers.wrap(new byte[] {}), true),
-                    1,
-                    TimeUnit.MILLISECONDS);
-              } else {
-                stream
-                    .transportState()
-                    .inboundDataReceived(ReadableBuffers.wrap(new byte[] {}), true);
-              }
-            }
-          }
-
-          @Override
-          public void onError(Throwable t) {
-            // TODO
-            t.printStackTrace();
-          }
-        });
+  private String getAuthority(HttpServletRequest req) {
+    String authority = req.getRequestURL().toString();
+    String uri = req.getRequestURI();
+    String scheme = req.getScheme() + "://";
+    if (authority.endsWith(uri)) {
+      authority = authority.substring(0, authority.length() - uri.length());
+    }
+    if (authority.startsWith(scheme)) {
+      authority = authority.substring(scheme.length());
+    }
+    return authority;
   }
 
   /**
@@ -255,19 +221,215 @@ public final class ServletAdapter {
     transportListener.transportTerminated();
   }
 
-  @SuppressWarnings("FutureReturnValueIgnored")
-  static void asyncContextComplete(AsyncContext asyncContext, ScheduledExecutorService scheduler) {
-    ServletContext servletContext = asyncContext.getRequest().getServletContext();
-    if (servletContext != null
-        && servletContext.getServerInfo().contains("GlassFish Server Open Source Edition  5.0")) {
-      // Glassfish workaround only:
-      // otherwise client may receive Encountered end-of-stream mid-frame for
-      // server/bidi streaming
-      scheduler.schedule(() -> asyncContext.complete(), 100, TimeUnit.MILLISECONDS);
-      return;
+  private static final class GrpcAsycListener implements AsyncListener {
+    final InternalLogId logId;
+    final ServletServerStream stream;
+
+    GrpcAsycListener(ServletServerStream stream, InternalLogId logId) {
+      this.stream = stream;
+      this.logId = logId;
     }
 
-    asyncContext.complete();
+    @Override
+    public void onComplete(AsyncEvent event) {
+    }
+
+    @Override
+    public void onTimeout(AsyncEvent event) {
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Timeout: ", logId), event.getThrowable());
+      }
+      // If the resp is not committed, cancel() to avoid being redirected to an error page.
+      // Else, the container will send RST_STREAM at the end.
+      if (!event.getAsyncContext().getResponse().isCommitted()) {
+        stream.cancel(Status.DEADLINE_EXCEEDED);
+      } else {
+        stream.transportState().runOnTransportThread(
+            () -> stream.transportState().transportReportStatus(Status.DEADLINE_EXCEEDED));
+      }
+    }
+
+    @Override
+    public void onError(AsyncEvent event) {
+      logger.log(WARNING, String.format("[{%s}] Error: ", logId), event.getThrowable());
+
+      // If the resp is not committed, cancel() to avoid being redirected to an error page.
+      // Else, the container will send RST_STREAM at the end.
+      if (!event.getAsyncContext().getResponse().isCommitted()) {
+        stream.cancel(Status.fromThrowable(event.getThrowable()));
+      } else {
+        stream.transportState().runOnTransportThread(
+            () -> stream.transportState().transportReportStatus(
+                Status.fromThrowable(event.getThrowable())));
+      }
+    }
+
+    @Override
+    public void onStartAsync(AsyncEvent event) {}
+  }
+
+  private static final class GrpcWriteListener implements WriteListener {
+    final ServletServerStream stream;
+    final AsyncContext asyncCtx;
+    final HttpServletResponse resp;
+    final ServletOutputStream output;
+    final AtomicReference<WriteState> writeState;
+    final Queue<ByteArrayWritableBuffer> writeChain;
+    final InternalLogId logId;
+
+    GrpcWriteListener(
+        ServletServerStream stream,
+        AsyncContext asyncCtx,
+        HttpServletResponse resp,
+        AtomicReference<WriteState> writeState,
+        Queue<ByteArrayWritableBuffer> writeChain,
+        InternalLogId logId) throws IOException {
+      this.stream = stream;
+      this.asyncCtx = asyncCtx;
+      this.resp = resp;
+      output = resp.getOutputStream();
+      this.writeState = writeState;
+      this.writeChain = writeChain;
+      this.logId = logId;
+    }
+
+    @Override
+    public void onWritePossible() throws IOException {
+      logger.log(FINEST, "[{0}] onWritePossible", logId);
+
+      WriteState curState = writeState.get();
+      // curState.stillWritePossible should have been set to false already or right now/
+      // It's very very unlikely stillWritePossible is true due to a race condition
+      while (curState.stillWritePossible) {
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(100L));
+        curState = writeState.get();
+      }
+
+      boolean isReady;
+      while ((isReady = output.isReady())) {
+        curState = writeState.get();
+
+        ByteArrayWritableBuffer buffer = writeChain.poll();
+        if (buffer != null) {
+          if (buffer == ByteArrayWritableBuffer.FLUSH) {
+            resp.flushBuffer();
+          } else {
+            output.write(buffer.bytes, 0, buffer.readableBytes());
+            stream.transportState().runOnTransportThread(
+                () -> stream.transportState().onSentBytes(buffer.readableBytes()));
+
+            if (logger.isLoggable(Level.FINEST)) {
+              logger.log(
+                  Level.FINEST,
+                  "[{0}] outbound data: length = {1}, bytes = {2}",
+                  new Object[] {
+                      logId,
+                      buffer.readableBytes(),
+                      toHexString(buffer.bytes, buffer.readableBytes())
+                  });
+            }
+          }
+          continue;
+        }
+
+        if (writeState.compareAndSet(curState, curState.withStillWritePossible(true))) {
+          logger.log(FINEST, "[{0}] set stillWritePossible to true", logId);
+          // state has not changed since. It's possible a new entry is just enqueued into the
+          // writeChain, but this case is handled right after the enqueuing
+          break;
+        } // else state changed by another thread, need to drain the writeChain again
+      }
+
+      if (isReady && writeState.get().trailersSent) {
+        stream.transportState().runOnTransportThread(
+            () -> {
+              stream.transportState().complete();
+              asyncCtx.complete();
+            });
+        logger.log(FINEST, "[{0}] onWritePossible: call complete", logId);
+      }
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      logger.log(WARNING, String.format("[{%s}] Error: ", logId), t);
+
+      // If the resp is not committed, cancel() to avoid being redirected to an error page.
+      // Else, the container will send RST_STREAM at the end.
+      if (!asyncCtx.getResponse().isCommitted()) {
+        stream.cancel(Status.fromThrowable(t));
+      } else {
+        stream.transportState().runOnTransportThread(
+            () -> stream.transportState().transportReportStatus(Status.fromThrowable(t)));
+      }
+    }
+  }
+
+  private static final class GrpcReadListener implements ReadListener {
+    final ServletServerStream stream;
+    final AsyncContext asyncCtx;
+    final ServletInputStream input;
+    final InternalLogId logId;
+
+    GrpcReadListener(
+        ServletServerStream stream,
+        AsyncContext asyncCtx,
+        InternalLogId logId) throws IOException {
+      this.stream = stream;
+      this.asyncCtx = asyncCtx;
+      input = asyncCtx.getRequest().getInputStream();
+      this.logId = logId;
+    }
+
+    final byte[] buffer = new byte[4 * 1024];
+
+    @Override
+    public void onDataAvailable() throws IOException {
+      logger.log(FINEST, "[{0}] onDataAvailable ENTRY", logId);
+      while (input.isReady()) {
+        int length = input.read(buffer);
+        if (length == -1) {
+          logger.log(FINEST, "[{0}] inbound data: read end of stream", logId);
+          return;
+        } else {
+          if (logger.isLoggable(FINEST)) {
+            logger.log(
+                FINEST,
+                "[{0}] inbound data: length = {1}, bytes = {2}",
+                new Object[] {logId, length, toHexString(buffer, length)});
+          }
+
+          byte[] copy = Arrays.copyOf(buffer, length);
+          stream.transportState().runOnTransportThread(
+              () -> stream.transportState().inboundDataReceived(ReadableBuffers.wrap(copy), false));
+        }
+      }
+      logger.log(FINEST, "[{0}] onDataAvailable EXIT", logId);
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored")
+    @Override
+    public void onAllDataRead() {
+      logger.log(FINE, "[{0}] onAllDataRead", logId);
+      stream.transportState().runOnTransportThread(() ->
+          stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {}), true));
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Error: ", logId), t);
+      }
+      // If the resp is not committed, cancel() to avoid being redirected to an error page.
+      // Else, the container will send RST_STREAM at the end.
+      if (!asyncCtx.getResponse().isCommitted()) {
+        stream.cancel(Status.fromThrowable(t));
+      } else {
+        stream.transportState().runOnTransportThread(
+            () -> stream.transportState()
+                .transportReportStatus(Status.fromThrowable(t)));
+      }
+    }
   }
 
   /**
@@ -292,7 +454,9 @@ public final class ServletAdapter {
      */
     public static ServletAdapter create(ServletServerBuilder serverBuilder) {
       ServerTransportListener listener = serverBuilder.buildAndStart();
-      return new ServletAdapter(listener, serverBuilder.getScheduledExecutorService());
+      return new ServletAdapter(
+          listener,
+          serverBuilder.getStreamTracerFactories());
     }
   }
 }

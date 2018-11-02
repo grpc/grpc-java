@@ -200,10 +200,8 @@ public abstract class AbstractInteropTest {
 
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
-  private void startServer() {
-    AbstractServerImplBuilder<?> builder = getServerBuilder();
+  private void configBuilder(@Nullable AbstractServerImplBuilder<?> builder) {
     if (builder == null) {
-      server = null;
       return;
     }
     testServiceExecutor = Executors.newScheduledThreadPool(2);
@@ -229,6 +227,13 @@ public abstract class AbstractInteropTest {
             serverStatsRecorder,
             GrpcUtil.STOPWATCH_SUPPLIER,
             true));
+  }
+
+  protected void startServer(@Nullable AbstractServerImplBuilder<?> builder) {
+    if (builder == null) {
+      server = null;
+      return;
+    }
     try {
       server = builder.build().start();
     } catch (IOException ex) {
@@ -280,7 +285,9 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    startServer();
+    AbstractServerImplBuilder<?> builder = getServerBuilder();
+    configBuilder(builder);
+    startServer(builder);
     channel = createChannel();
 
     blockingStub =
