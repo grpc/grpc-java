@@ -51,6 +51,7 @@ import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
 import io.grpc.Server;
@@ -133,6 +134,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Mock
   private LoadBalancer origLb;
+  private LoadBalancer hcLb;
   @Captor
   ArgumentCaptor<Attributes> attrsCaptor;
   @Mock
@@ -175,7 +177,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     hcLbFactory = new HealthCheckingLoadBalancerFactory(
         origLbFactory, backoffPolicyProvider, clock.getTimeProvider());
-    final LoadBalancer hcLb = hcLbFactory.newLoadBalancer(origHelper);
+    hcLb = hcLbFactory.newLoadBalancer(origHelper);
     // Make sure all calls into the hcLb is from the syncContext
     hcLbEventDelivery = new LoadBalancer() {
         @Override
@@ -912,6 +914,49 @@ public class HealthCheckingLoadBalancerFactoryTest {
     serviceConfig.put("healthCheckConfig", hcConfig);
     assertThat(ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig))
         .isEqualTo("FooService");
+  }
+
+  @Test
+  public void provider_isAvailable() {
+    LoadBalancerProvider fakeProvider = new LoadBalancerProvider() {
+        @Override
+        public boolean isAvailable() {
+          return true;
+        }
+
+        @Override
+        public int getPriority() {
+          return 11;
+        }
+
+        @Override
+        public String getPolicyName() {
+          return "fake_lb";
+        }
+
+        @Override
+        public LoadBalancer newLoadBalancer(Helper helper) {
+          wrappedHelper = helper;
+          return origLb;
+        }
+      };
+    HealthCheckingLoadBalancerProvider hcProvider =
+        new HealthCheckingLoadBalancerProvider(fakeProvider){};
+
+    assertThat(hcProvider.isAvailable()).isTrue();
+    assertThat(hcProvider.getPriority()).isEqualTo(12);
+    assertThat(hcProvider.getPolicyName()).isEqualTo("fake_lb");
+    hcLb = hcProvider.newLoadBalancer(origHelper);
+
+    // Verify that HC works
+    Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    createSubchannel(0, Attributes.EMPTY);
+    assertThat(healthImpls[0].calls).isEmpty();
+    hcLbEventDelivery.handleSubchannelState(
+        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    assertThat(healthImpls[0].calls).hasSize(1);
   }
 
   private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {
