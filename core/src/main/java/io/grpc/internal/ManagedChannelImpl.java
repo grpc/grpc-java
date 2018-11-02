@@ -122,7 +122,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
   private final Attributes nameResolverParams;
@@ -532,6 +532,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       List<ClientInterceptor> interceptors,
       final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
+    this.logId = InternalLogId.allocate("Channel", target);
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
