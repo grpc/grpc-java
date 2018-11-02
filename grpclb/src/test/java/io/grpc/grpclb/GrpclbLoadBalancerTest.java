@@ -31,8 +31,10 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
+import static org.mockito.Matchers.startsWith;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
@@ -49,6 +51,8 @@ import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.Level;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -140,6 +144,8 @@ public class GrpclbLoadBalancerTest {
   private Helper helper;
   @Mock
   private SubchannelPool subchannelPool;
+  @Mock
+  private ChannelLogger channelLogger;
   private SubchannelPicker currentPicker;
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
@@ -226,8 +232,18 @@ public class GrpclbLoadBalancerTest {
         }
       }).when(subchannelPool).takeOrCreateSubchannel(
           any(EquivalentAddressGroup.class), any(Attributes.class));
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          Level level = (Level) invocation.getArguments()[0];
+          String msg = (String) invocation.getArguments()[1];
+          System.err.println("XXX ChannelLogger: " + level + ": " + msg);
+          return null;
+        }
+      }).when(channelLogger).log(any(Level.class), anyString());
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
+    when(helper.getChannelLogger()).thenReturn(channelLogger);
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -624,8 +640,15 @@ public class GrpclbLoadBalancerTest {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER));
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
+    verify(channelLogger, never()).log(eq(Level.WARNING), anyString());;
+
     // Simulate an abundant LB initial response, with a different report interval
     lbResponseObserver.onNext(buildInitialResponse(9097));
+
+    // This incident is logged
+    verify(channelLogger).log(
+        eq(Level.WARNING), eq("Ignoring unexpected response type: INITIAL_RESPONSE"));
+
     // It doesn't affect load-reporting at all
     assertThat(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER))
         .containsExactly(scheduledTask);
@@ -813,7 +836,7 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void grpclbWorking() {
-    InOrder inOrder = inOrder(helper, subchannelPool);
+    InOrder inOrder = inOrder(helper, subchannelPool, channelLogger);
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
@@ -840,7 +863,11 @@ public class GrpclbLoadBalancerTest {
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
     lbResponseObserver.onNext(buildInitialResponse());
+    inOrder.verify(channelLogger).log(
+        eq(Level.DEBUG), eq("Got an LB response: " + buildInitialResponse()));
     lbResponseObserver.onNext(buildLbResponse(backends1));
+    inOrder.verify(channelLogger).log(
+        eq(Level.DEBUG), eq("Got an LB response: " + buildLbResponse(backends1)));
 
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
         eq(new EquivalentAddressGroup(backends1.get(0).addr, LB_BACKEND_ATTRS)),
@@ -862,6 +889,7 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+    verify(channelLogger).log(eq(Level.INFO), eq("CONNECTING: No ready Subchannel"));
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     RoundRobinPicker picker0 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker0.dropList).containsExactly(null, null);
@@ -876,6 +904,9 @@ public class GrpclbLoadBalancerTest {
     assertThat(picker1.dropList).containsExactly(null, null);
     assertThat(picker1.pickList).containsExactly(
         new BackendEntry(subchannel2, getLoadRecorder(), "token0002"));
+
+    inOrder.verify(channelLogger).log(
+        eq(Level.INFO), eq("READY:"));
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
@@ -1059,11 +1090,25 @@ public class GrpclbLoadBalancerTest {
     // Fallback timer expires (or not)
     //////////////////////////////////
     if (timerExpires) {
+      // Don't care about other logs
+      verify(channelLogger, atLeast(0)).log(any(Level.class), anyString());
+
+      verify(channelLogger, never()).log(eq(Level.INFO), eq("Using fallback backends"));
+      verify(channelLogger, never()).log(eq(Level.INFO), startsWith("Using RR list"));
+
       fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+
       assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+      List<EquivalentAddressGroup> fallbackList =
+          Arrays.asList(resolutionList.get(0), resolutionList.get(2));
+      verify(channelLogger).log(eq(Level.INFO), eq("Using fallback backends"));
+      verify(channelLogger).log(
+          eq(Level.INFO),
+          eq("Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
+              + "[[FakeSocketAddress-fake-address-2]/{}]], drop=[null, null]"));
+
       // Fall back to the backends from resolver
-      fallbackTestVerifyUseOfFallbackBackendLists(
-          inOrder, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+      fallbackTestVerifyUseOfFallbackBackendLists(inOrder, fallbackList);
 
       assertFalse(oobChannel.isShutdown());
       verify(lbRequestObserver, never()).onCompleted();

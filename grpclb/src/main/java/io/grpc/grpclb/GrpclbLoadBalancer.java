@@ -40,9 +40,7 @@ import javax.annotation.Nullable;
  * <p>Optionally, when requested by the naming system, will delegate the work to a local pick-first
  * or round-robin balancer.
  */
-class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
-
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+class GrpclbLoadBalancer extends LoadBalancer {
   private final SubchannelPool subchannelPool;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
@@ -60,12 +58,7 @@ class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.subchannelPool.init(helper);
     grpclbState =
-        new GrpclbState(helper, subchannelPool, time, backoffPolicyProvider, logId);
-  }
-
-  @Override
-  public InternalLogId getLogId() {
-    return logId;
+        new GrpclbState(helper, subchannelPool, time, backoffPolicyProvider);
   }
 
   @Override

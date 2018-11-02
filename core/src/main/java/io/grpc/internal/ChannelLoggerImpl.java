@@ -33,11 +33,15 @@ final class ChannelLoggerImpl extends ChannelLogger {
 
   @Override
   public void log(Level level, String msg) {
-    tracer.reportEvent(new Event.Builder()
-        .setDescription(msg)
-        .setSeverity(toTracerSeverity(level))
-        .setTimestampNanos(time.currentTimeNanos())
-        .build());
+    if (level == Level.DEBUG) {
+      tracer.logOnly(java.util.logging.Level.FINEST, msg);
+    } else {
+      tracer.reportEvent(new Event.Builder()
+          .setDescription(msg)
+          .setSeverity(toTracerSeverity(level))
+          .setTimestampNanos(time.currentTimeNanos())
+          .build());
+    }
   }
 
   private Severity toTracerSeverity(Level level) {

@@ -22,19 +22,23 @@ package io.grpc;
  */
 public abstract class ChannelLogger {
   /**
-   * Log levels.  Each level maps to its corresponding severity level when exported to Channelz, and
-   * to a {@link java.util.logging.Level logger level} defined below when exported to Java logger:
+   * Log levels.  See the table below for the mapping from the ChannelLogger levels to Channelz
+   * severity level (see {@code ChannelTraceEvent} from <a
+   * href="https://github.com/grpc/grpc-java/blob/master/services/src/main/proto/grpc/channelz/v1/channelz.proto">channelz.proto</a>)
+   * and Java logger levels.  Note that {@code DEBUG} level  doesn't go to Channelz.
    * <pre>
-   * +---------------------+-------------------+
-   * | ChannelLogger Level | Java Logger Level |
-   * +---------------------+-------------------+
-   * | INFO                | FINEST            |
-   * | WARNING             | FINER             |
-   * | ERROR               | FINE              |
-   * +---------------------+-------------------+
+   * +---------------------+-------------------+------------------+
+   * | ChannelLogger Level | Channelz Severity |Java Logger Level |
+   * +---------------------+-------------------+------------------+
+   * | DEBUG               | N/A               | FINEST           |
+   * | INFO                | CT_INFO           | FINEST           |
+   * | WARNING             | CT_WARNING        | FINER            |
+   * | ERROR               | CT_ERROR          | FINE             |
+   * +---------------------+-------------------+------------------+
    * </pre>
    */
   public enum Level {
+    DEBUG,
     INFO,
     WARNING,
     ERROR

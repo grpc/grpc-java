@@ -101,9 +101,17 @@ final class ChannelTracer {
         events.add(event);
       }
     }
+    logOnly(logLevel, event.description);
+  }
+
+  void logOnly(Level logLevel, String msg) {
     if (logger.isLoggable(logLevel)) {
-      logger.log(logLevel, "[" + logId + "] " + event.description);
+      logger.log(logLevel, "[" + logId + "] " + msg);
     }
+  }
+
+  InternalLogId getLogId() {
+    return logId;
   }
 
   void updateBuilder(ChannelStats.Builder builder) {
