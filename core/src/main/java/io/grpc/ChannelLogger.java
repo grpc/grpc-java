@@ -18,8 +18,10 @@ package io.grpc;
 
 /**
  * A Channel-specific logger provided by GRPC library to {@link LoadBalancer} implementations.
- * Information logged here goes to <string>Channelz</strong>, and to Java logger as well.
+ * Information logged here goes to <string>Channelz</strong>, and to the Java logger of this class
+ * as well.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5029")
 public abstract class ChannelLogger {
   /**
    * Log levels.  See the table below for the mapping from the ChannelLogger levels to Channelz
@@ -37,7 +39,7 @@ public abstract class ChannelLogger {
    * +---------------------+-------------------+-------------------+
    * </pre>
    */
-  public enum Level {
+  public enum ChannelLogLevel {
     DEBUG,
     INFO,
     WARNING,
@@ -45,7 +47,13 @@ public abstract class ChannelLogger {
   }
 
   /**
-   * Logs a message, which is exported on Channelz as well as the Java logger for this class.
+   * Logs a message.
    */
-  public abstract void log(Level level, String message);
+  public abstract void log(ChannelLogLevel level, String message);
+
+  /**
+   * Logs a message, using a message template and a list of arguments used to generate the log
+   * message with {@link String#format}.
+   */
+  public abstract void log(ChannelLogLevel level, String template, Object... args);
 }

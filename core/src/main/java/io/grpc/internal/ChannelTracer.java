@@ -38,7 +38,7 @@ import javax.annotation.concurrent.GuardedBy;
 final class ChannelTracer {
   // The logs go to ChannelLogger's logger so that user can control the logging level on that public
   // class rather than on this internal class.
-  private static final Logger logger = Logger.getLogger(ChannelLogger.class.getName());
+  static final Logger logger = Logger.getLogger(ChannelLogger.class.getName());
   private final Object lock = new Object();
   private final InternalLogId logId;
   @GuardedBy("lock")

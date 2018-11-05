@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
+import java.util.logging.Level;
 
 final class ChannelLoggerImpl extends ChannelLogger {
   private final ChannelTracer tracer;
@@ -32,19 +33,36 @@ final class ChannelLoggerImpl extends ChannelLogger {
   }
 
   @Override
-  public void log(Level level, String msg) {
-    if (level == Level.DEBUG) {
-      tracer.logOnly(java.util.logging.Level.FINEST, msg);
+  public void log(ChannelLogLevel level, String msg) {
+    if (level == ChannelLogLevel.DEBUG) {
+      tracer.logOnly(Level.FINEST, msg);
     } else {
-      tracer.reportEvent(new Event.Builder()
-          .setDescription(msg)
-          .setSeverity(toTracerSeverity(level))
-          .setTimestampNanos(time.currentTimeNanos())
-          .build());
+      reportToTracer(level, msg);
     }
   }
 
-  private Severity toTracerSeverity(Level level) {
+  @Override
+  public void log(ChannelLogLevel level, String template, Object... args) {
+    if (level == ChannelLogLevel.DEBUG) {
+      // DEBUG logs can be expensive to generate (e.g., large proto messages), and when not logged,
+      // go nowhere.  We will skip the generation if it's not logged.
+      if (ChannelTracer.logger.isLoggable(Level.FINEST)) {
+        tracer.logOnly(Level.FINEST, String.format(template, args));
+      }
+    } else {
+      reportToTracer(level, String.format(template, args));
+    }
+  }
+
+  private void reportToTracer(ChannelLogLevel level, String msg) {
+    tracer.reportEvent(new Event.Builder()
+        .setDescription(msg)
+        .setSeverity(toTracerSeverity(level))
+        .setTimestampNanos(time.currentTimeNanos())
+        .build());
+  }
+
+  private Severity toTracerSeverity(ChannelLogLevel level) {
     switch (level) {
       case ERROR:
         return Severity.CT_ERROR;

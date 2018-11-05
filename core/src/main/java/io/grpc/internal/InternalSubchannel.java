@@ -33,7 +33,7 @@ import com.google.errorprone.annotations.ForOverride;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
@@ -211,7 +212,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
           return savedTransport;
         }
         if (state.getState() == IDLE) {
-          channelLogger.log(Level.INFO, "CONNECTING as requested");
+          channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
           gotoNonErrorState(CONNECTING);
           startNewTransport();
         }
@@ -288,14 +289,14 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
               // started when it's being canceled.
               return;
             }
-            channelLogger.log(Level.INFO, "CONNECTING after backoff");
+            channelLogger.log(ChannelLogLevel.INFO, "CONNECTING after backoff");
             gotoNonErrorState(CONNECTING);
             startNewTransport();
           }
         } catch (Throwable t) {
           // TODO(zhangkun): we may consider using SynchronizationContext to schedule the reconnect
           // timer, so that we don't need this catch, since SynchronizationContext would catch it.
-          log.log(java.util.logging.Level.WARNING, "Exception handling end of backoff", t);
+          log.log(Level.WARNING, "Exception handling end of backoff", t);
         } finally {
           syncContext.drain();
         }
@@ -309,9 +310,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     long delayNanos =
         reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
     channelLogger.log(
-        Level.INFO,
-        "TRANSIENT_FAILURE (" + printShortStatus(status) + "). Will reconnect after "
-        + delayNanos + "ns");
+        ChannelLogLevel.INFO,
+        "TRANSIENT_FAILURE (%s). Will reconnect after %s ns", printShortStatus(status), delayNanos);
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
     reconnectCanceled = false;
     reconnectTask = scheduledExecutor.schedule(
@@ -331,7 +331,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
           return;
         }
         cancelReconnectTask();
-        channelLogger.log(Level.INFO, "CONNECTING; backoff interrupted");
+        channelLogger.log(ChannelLogLevel.INFO, "CONNECTING; backoff interrupted");
         gotoNonErrorState(CONNECTING);
         startNewTransport();
       }
@@ -446,7 +446,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
 
   @GuardedBy("lock")
   private void handleTermination() {
-    channelLogger.log(Level.INFO, "Terminated");
+    channelLogger.log(ChannelLogLevel.INFO, "Terminated");
     syncContext.executeLater(new Runnable() {
         @Override
         public void run() {
@@ -555,7 +555,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
 
     @Override
     public void transportReady() {
-      channelLogger.log(Level.INFO, "READY");
+      channelLogger.log(ChannelLogLevel.INFO, "READY");
       Status savedShutdownReason;
       try {
         synchronized (lock) {
@@ -587,7 +587,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     @Override
     public void transportShutdown(Status s) {
       channelLogger.log(
-          Level.INFO, transport.getLogId() + " SHUTDOWN with " + printShortStatus(s));
+          ChannelLogLevel.INFO, "%s SHUTDOWN with %s", transport.getLogId(), printShortStatus(s));
       try {
         synchronized (lock) {
           if (state.getState() == SHUTDOWN) {
@@ -620,7 +620,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
 
     @Override
     public void transportTerminated() {
-      channelLogger.log(Level.INFO, transport.getLogId() + " Terminated");
+      channelLogger.log(ChannelLogLevel.INFO, "%s Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
       try {

@@ -50,7 +50,7 @@ import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -145,8 +145,13 @@ public class GrpclbLoadBalancerTest {
   private final ArrayList<String> logs = new ArrayList<String>();
   private final ChannelLogger channelLogger = new ChannelLogger() {
       @Override
-      public void log(Level level, String msg) {
+      public void log(ChannelLogLevel level, String msg) {
         logs.add(level + ": " + msg);
+      }
+
+      @Override
+      public void log(ChannelLogLevel level, String template, Object... args) {
+        log(level, String.format(template, args));
       }
     };
   private SubchannelPicker currentPicker;

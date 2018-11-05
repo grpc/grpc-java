@@ -35,7 +35,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
@@ -84,6 +84,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import javax.annotation.CheckForNull;
@@ -139,7 +140,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void uncaughtException(Thread t, Throwable e) {
           logger.log(
-              java.util.logging.Level.SEVERE,
+              Level.SEVERE,
               "[" + getLogId() + "] Uncaught exception in the SynchronizationContext. Panic!",
               e);
           panic(e);
@@ -345,7 +346,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     if (lbHelper != null) {
       return;
     }
-    channelLogger.log(Level.INFO, "Exiting idle mode");
+    channelLogger.log(ChannelLogLevel.INFO, "Exiting idle mode");
     lbHelper = new LbHelperImpl(nameResolver);
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
 
@@ -367,7 +368,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
     nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
-    channelLogger.log(Level.INFO, "Entering IDLE state");
+    channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     if (inUseStateAggregator.isInUse()) {
       exitIdleMode();
@@ -650,7 +651,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   @Override
   public ManagedChannelImpl shutdown() {
-    channelLogger.log(Level.DEBUG, "shutdown() called");
+    channelLogger.log(ChannelLogLevel.DEBUG, "shutdown() called");
     if (!shutdown.compareAndSet(false, true)) {
       return this;
     }
@@ -662,7 +663,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     final class Shutdown implements Runnable {
       @Override
       public void run() {
-        channelLogger.log(Level.INFO, "Entering SHUTDOWN state");
+        channelLogger.log(ChannelLogLevel.INFO, "Entering SHUTDOWN state");
         channelStateManager.gotoState(SHUTDOWN);
       }
     }
@@ -688,7 +689,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    */
   @Override
   public ManagedChannelImpl shutdownNow() {
-    channelLogger.log(Level.DEBUG, "shutdownNow() called");
+    channelLogger.log(ChannelLogLevel.DEBUG, "shutdownNow() called");
     shutdown();
     uncommittedRetriableStreamsRegistry.onShutdownNow(SHUTDOWN_NOW_STATUS);
     final class ShutdownNow implements Runnable {
@@ -728,7 +729,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     updateSubchannelPicker(new PanicSubchannelPicker());
-    channelLogger.log(Level.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
+    channelLogger.log(ChannelLogLevel.ERROR, "PANIC! Entering TRANSIENT_FAILURE");
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
 
@@ -815,7 +816,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return;
     }
     if (shutdown.get() && subchannels.isEmpty() && oobChannels.isEmpty()) {
-      channelLogger.log(Level.INFO, "Terminated");
+      channelLogger.log(ChannelLogLevel.INFO, "Terminated");
       channelz.removeRootChannel(this);
       terminated = true;
       terminatedLatch.countDown();
@@ -1002,7 +1003,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       try {
         syncContext.throwIfNotInThisSynchronizationContext();
       } catch (IllegalStateException e) {
-        logger.log(java.util.logging.Level.WARNING,
+        logger.log(Level.WARNING,
             "We sugguest you call createSubchannel() from SynchronizationContext."
             + " Otherwise, it may race with handleSubchannelState()."
             + " See https://github.com/grpc/grpc-java/issues/5015", e);
@@ -1110,7 +1111,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // It's not appropriate to report SHUTDOWN state from lb.
           // Ignore the case of newState == SHUTDOWN for now.
           if (newState != SHUTDOWN) {
-            channelLogger.log(Level.INFO, "Entering " + newState + " state");
+            channelLogger.log(ChannelLogLevel.INFO, "Entering %s state", newState);
             channelStateManager.gotoState(newState);
           }
         }
@@ -1251,16 +1252,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
             "Name resolver " + helper.nr + " returned an empty list"));
         return;
       }
-      channelLogger.log(Level.DEBUG, "Resolved address: " + servers + ", config=" + config);
+      channelLogger.log(ChannelLogLevel.DEBUG, "Resolved address: %s, config=%s", servers, config);
 
       if (haveBackends == null || !haveBackends) {
-        channelLogger.log(Level.INFO, "Address resolved: " + servers);
+        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: %s", servers);
         haveBackends = true;
       }
       final Map<String, Object> serviceConfig =
           config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
-        channelLogger.log(Level.INFO, "Service config changed");
+        channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
         lastServiceConfig = serviceConfig;
       }
 
@@ -1282,7 +1283,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             } catch (RuntimeException re) {
               logger.log(
-                  java.util.logging.Level.WARNING,
+                  Level.WARNING,
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
                   re);
             }
@@ -1298,10 +1299,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      logger.log(java.util.logging.Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
       if (haveBackends == null || haveBackends) {
-        channelLogger.log(Level.WARNING, "Failed to resolve name: " + error);
+        channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: %s", error);
         haveBackends = false;
       }
       final class NameResolverErrorHandler implements Runnable {
@@ -1324,8 +1325,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
           long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
           channelLogger.log(
-                Level.DEBUG,
-                "Scheduling DNS resolution backoff for " + delayNanos + "ns");
+                ChannelLogLevel.DEBUG,
+                "Scheduling DNS resolution backoff for %s ns", delayNanos);
           nameResolverRefresh = new NameResolverRefresh();
           nameResolverRefreshFuture =
               transportFactory

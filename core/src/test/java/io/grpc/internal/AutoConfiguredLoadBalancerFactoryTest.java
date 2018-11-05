@@ -27,7 +27,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -326,8 +326,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build());
 
     verify(channelLogger).log(
-        eq(Level.INFO),
-        eq("Load balancer changed from PickFirstLoadBalancer to RoundRobinLoadBalancer"));
+        eq(ChannelLogLevel.INFO),
+        eq("Load balancer changed from %s to %s"),
+        eq("PickFirstLoadBalancer"), eq("RoundRobinLoadBalancer"));
     verifyNoMoreInteractions(channelLogger);
 
     serviceConfig.put("loadBalancingPolicy", "round_robin");
@@ -342,8 +343,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
 
     verify(channelLogger).log(
-        eq(Level.INFO),
-        eq("Load balancer changed from RoundRobinLoadBalancer to GrpclbLoadBalancer"));
+        eq(ChannelLogLevel.INFO),
+        eq("Load balancer changed from %s to %s"),
+        eq("RoundRobinLoadBalancer"), eq("GrpclbLoadBalancer"));
 
     verifyNoMoreInteractions(channelLogger);
   }

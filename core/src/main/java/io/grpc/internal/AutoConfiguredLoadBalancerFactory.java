@@ -19,7 +19,7 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Ascii;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -98,9 +98,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         LoadBalancer old = delegate;
         delegate = delegateProvider.newLoadBalancer(helper);
         helper.getChannelLogger().log(
-            Level.INFO, 
-            "Load balancer changed from " + old.getClass().getSimpleName()
-                + " to " + delegate.getClass().getSimpleName());
+            ChannelLogLevel.INFO, "Load balancer changed from %s to %s",
+            old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
       getDelegate().handleResolvedAddressGroups(servers, attributes);
     }

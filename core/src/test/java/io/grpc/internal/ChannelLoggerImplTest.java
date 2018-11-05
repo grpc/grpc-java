@@ -19,7 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
@@ -79,7 +79,7 @@ public class ChannelLoggerImplTest {
     logs.clear();
 
     clock.forwardNanos(100);
-    logger.log(Level.ERROR, "Error message");
+    logger.log(ChannelLogLevel.ERROR, "Error message");
     tracer.updateBuilder(builder);
     ChannelStats stats = builder.build();
     Event event = new Event.Builder()
@@ -91,7 +91,7 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINE: " + logPrefix + "Error message");
 
     clock.forwardNanos(100);
-    logger.log(Level.WARNING, "Warning message");
+    logger.log(ChannelLogLevel.WARNING, "Warning message");
     tracer.updateBuilder(builder);
     stats = builder.build();
     event = new Event.Builder()
@@ -103,7 +103,7 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINER: " + logPrefix + "Warning message");
 
     clock.forwardNanos(100);
-    logger.log(Level.INFO, "Info message");
+    logger.log(ChannelLogLevel.INFO, "Info message");
     tracer.updateBuilder(builder);
     stats = builder.build();
     event = new Event.Builder()
@@ -115,12 +115,66 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINEST: " + logPrefix + "Info message");
 
     clock.forwardNanos(100);
-    logger.log(Level.DEBUG, "Debug message");
+    logger.log(ChannelLogLevel.DEBUG, "Debug message");
     tracer.updateBuilder(builder);
     stats = builder.build();
     // DEBUG level messages are not logged to channelz, thus channelz still has the
     // last event.
     assertThat(stats.channelTrace.events).containsExactly(event);
     assertThat(logs).contains("FINEST: " + logPrefix + "Debug message");
+  }
+
+  @Test
+  public void formatLogging() {
+    ChannelTracer tracer = new ChannelTracer(
+        logId, /* maxEvents= */ 1, /* channelCreationTimeNanos= */ 3L, "fooType");
+    ChannelLoggerImpl logger = new ChannelLoggerImpl(tracer, clock.getTimeProvider());
+    ChannelStats.Builder builder = new ChannelStats.Builder();
+    logs.clear();
+
+    clock.forwardNanos(100);
+    logger.log(ChannelLogLevel.ERROR, "Error message %s", "foo");
+    tracer.updateBuilder(builder);
+    ChannelStats stats = builder.build();
+    Event event = new Event.Builder()
+        .setDescription("Error message foo")
+        .setSeverity(Severity.CT_ERROR)
+        .setTimestampNanos(100)
+        .build();
+    assertThat(stats.channelTrace.events).containsExactly(event);
+    assertThat(logs).contains("FINE: " + logPrefix + "Error message foo");
+
+    clock.forwardNanos(100);
+    logger.log(ChannelLogLevel.WARNING, "Warning message %s, %s", "foo", "bar");
+    tracer.updateBuilder(builder);
+    stats = builder.build();
+    event = new Event.Builder()
+        .setDescription("Warning message foo, bar")
+        .setSeverity(Severity.CT_WARNING)
+        .setTimestampNanos(200)
+        .build();
+    assertThat(stats.channelTrace.events).containsExactly(event);
+    assertThat(logs).contains("FINER: " + logPrefix + "Warning message foo, bar");
+
+    clock.forwardNanos(100);
+    logger.log(ChannelLogLevel.INFO, "Info message %s", "bar");
+    tracer.updateBuilder(builder);
+    stats = builder.build();
+    event = new Event.Builder()
+        .setDescription("Info message bar")
+        .setSeverity(Severity.CT_INFO)
+        .setTimestampNanos(300)
+        .build();
+    assertThat(stats.channelTrace.events).containsExactly(event);
+    assertThat(logs).contains("FINEST: " + logPrefix + "Info message bar");
+
+    clock.forwardNanos(100);
+    logger.log(ChannelLogLevel.DEBUG, "Debug message %s", "foo");
+    tracer.updateBuilder(builder);
+    stats = builder.build();
+    // DEBUG level messages are not logged to channelz, thus channelz still has the
+    // last event.
+    assertThat(stats.channelTrace.events).containsExactly(event);
+    assertThat(logs).contains("FINEST: " + logPrefix + "Debug message foo");
   }
 }

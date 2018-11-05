@@ -28,7 +28,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -102,9 +102,9 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       if (stickinessMetadataKey != null) {
         if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
           helper.getChannelLogger().log(
-              Level.WARNING,
-              "Binary stickiness header is not supported. The header '" + stickinessMetadataKey
-              + "' will be ignored");
+              ChannelLogLevel.WARNING,
+              "Binary stickiness header is not supported. The header '%s' will be ignored",
+              stickinessMetadataKey);
         } else if (stickinessState == null
             || !stickinessState.key.name().equals(stickinessMetadataKey)) {
           stickinessState = new StickinessState(stickinessMetadataKey);

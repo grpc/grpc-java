@@ -30,7 +30,7 @@ import com.google.common.base.Objects;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.Level;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -229,7 +229,7 @@ final class GrpclbState {
    */
   private void useFallbackBackends() {
     usingFallbackBackends = true;
-    logger.log(Level.INFO, "Using fallback backends");
+    logger.log(ChannelLogLevel.INFO, "Using fallback backends");
 
     List<DropEntry> newDropList = new ArrayList<>();
     List<BackendAddressGroup> newBackendAddrList = new ArrayList<>();
@@ -314,7 +314,7 @@ final class GrpclbState {
   }
 
   void propagateError(Status status) {
-    logger.log(Level.DEBUG, "Error: " + status);
+    logger.log(ChannelLogLevel.DEBUG, "Error: %s", status);
     if (backendList.isEmpty()) {
       maybeUpdatePicker(
           TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
@@ -336,7 +336,7 @@ final class GrpclbState {
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
-    logger.log(Level.INFO, "Using RR list=" + newBackendAddrList + ", drop=" + newDropList);
+    logger.log(ChannelLogLevel.INFO, "Using RR list=%s, drop=%s", newBackendAddrList, newDropList);
     HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
         new HashMap<EquivalentAddressGroup, Subchannel>();
     List<BackendEntry> newBackendList = new ArrayList<>();
@@ -491,12 +491,12 @@ final class GrpclbState {
       if (closed) {
         return;
       }
-      logger.log(Level.DEBUG, "Got an LB response: " + response);
+      logger.log(ChannelLogLevel.DEBUG, "Got an LB response: %s", response);
 
       LoadBalanceResponseTypeCase typeCase = response.getLoadBalanceResponseTypeCase();
       if (!initialResponseReceived) {
         if (typeCase != LoadBalanceResponseTypeCase.INITIAL_RESPONSE) {
-          logger.log(Level.WARNING, "Received a response without initial response");
+          logger.log(ChannelLogLevel.WARNING, "Received a response without initial response");
           return;
         }
         initialResponseReceived = true;
@@ -508,7 +508,7 @@ final class GrpclbState {
       }
 
       if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
-        logger.log(Level.WARNING, "Ignoring unexpected response type: " + typeCase);
+        logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: %s", typeCase);
         return;
       }
 
@@ -659,7 +659,8 @@ final class GrpclbState {
       return;
     }
     currentPicker = picker;
-    logger.log(Level.INFO, state + ": picks=" + picker.pickList + ", drops=" + picker.dropList);
+    logger.log(
+        ChannelLogLevel.INFO, "%s: picks=%s, drops=%s", state, picker.pickList, picker.dropList);
     helper.updateBalancingState(state, picker);
   }
 
@@ -671,9 +672,9 @@ final class GrpclbState {
       if (!authority.equals(group.getAuthority())) {
         // TODO(ejona): Allow different authorities for different addresses. Requires support from
         // Helper.
-        logger.log(Level.WARNING,
+        logger.log(ChannelLogLevel.WARNING,
             "Multiple authorities found for LB. "
-            + "Skipping addresses for " + group.getAuthority() + " in preference to " + authority);
+            + "Skipping addresses for %s in preference to %s", group.getAuthority(), authority);
       } else {
         eags.add(group.getAddresses());
       }
