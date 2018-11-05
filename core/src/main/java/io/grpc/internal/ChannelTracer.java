@@ -52,10 +52,15 @@ final class ChannelTracer {
   /**
    * Creates a channel tracer and log the creation event of the underlying channel.
    *
-   * @param channelType Chennel, Subchannel, or OobChannel
+   * @param logId logId will be prepended to the logs logged to Java logger
+   * @param maxEvents maximum number of events that are retained in memory.  If not a positive
+   *        number no events will be retained, but they will still be sent to the Java logger.
+   * @param channelCreationTimeNanos the creation time of the entity being traced
+   * @param description a description of the entity being traced
    */
   ChannelTracer(
       InternalLogId logId, final int maxEvents, long channelCreationTimeNanos, String description) {
+    checkNotNull(description, "description");
     this.logId = checkNotNull(logId, "logId");
     if (maxEvents > 0) {
       events = new ArrayDeque<Event>() {
