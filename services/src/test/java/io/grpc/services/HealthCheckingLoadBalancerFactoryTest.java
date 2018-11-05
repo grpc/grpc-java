@@ -51,7 +51,6 @@ import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
 import io.grpc.Server;
@@ -917,36 +916,20 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void provider_isAvailable() {
-    LoadBalancerProvider fakeProvider = new LoadBalancerProvider() {
-        @Override
-        public boolean isAvailable() {
-          return true;
-        }
+  public void util_newHealthCheckingLoadBalancer() {
+    Factory hcFactory =
+        new Factory() {
+          @Override
+          public LoadBalancer newLoadBalancer(Helper helper) {
+            return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(
+                origLbFactory, helper);
+          }
+        };
 
-        @Override
-        public int getPriority() {
-          return 11;
-        }
-
-        @Override
-        public String getPolicyName() {
-          return "fake_lb";
-        }
-
-        @Override
-        public LoadBalancer newLoadBalancer(Helper helper) {
-          wrappedHelper = helper;
-          return origLb;
-        }
-      };
-    HealthCheckingLoadBalancerProvider hcProvider =
-        new HealthCheckingLoadBalancerProvider(fakeProvider){};
-
-    assertThat(hcProvider.isAvailable()).isTrue();
-    assertThat(hcProvider.getPriority()).isEqualTo(12);
-    assertThat(hcProvider.getPolicyName()).isEqualTo("fake_lb");
-    hcLb = hcProvider.newLoadBalancer(origHelper);
+    // hcLb and wrappedHelper are already set in setUp().  For this special test case, we
+    // clear wrappedHelper so that we can create hcLb again with the util.
+    wrappedHelper = null;
+    hcLb = hcFactory.newLoadBalancer(origHelper);
 
     // Verify that HC works
     Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");

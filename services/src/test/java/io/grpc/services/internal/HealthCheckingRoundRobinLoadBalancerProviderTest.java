@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.internal.RoundRobinLoadBalancerProvider;
 import org.junit.Test;
 
 /**
@@ -38,6 +39,13 @@ public class HealthCheckingRoundRobinLoadBalancerProviderTest {
   public void policyName() {
     LoadBalancerProvider hcRoundRobin = new HealthCheckingRoundRobinLoadBalancerProvider();
     assertThat(hcRoundRobin.getPolicyName())
-        .isEqualTo(new HealthCheckingRoundRobinLoadBalancerProvider().getPolicyName());
+        .isEqualTo(new RoundRobinLoadBalancerProvider().getPolicyName());
+  }
+
+  @Test
+  public void priority() {
+    LoadBalancerProvider hcRoundRobin = new HealthCheckingRoundRobinLoadBalancerProvider();
+    assertThat(hcRoundRobin.getPriority())
+        .isEqualTo(new RoundRobinLoadBalancerProvider().getPriority() + 1);
   }
 }

@@ -17,18 +17,37 @@
 package io.grpc.services.internal;
 
 import io.grpc.Internal;
+import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancerProvider;
 import io.grpc.internal.RoundRobinLoadBalancerProvider;
-import io.grpc.services.HealthCheckingLoadBalancerProvider;
+import io.grpc.services.HealthCheckingLoadBalancerUtil;
 
 /**
  * The health-check-capable provider for the "round_robin" balancing policy.  This overrides
  * the "round_robin" provided by grpc-core.
  */
 @Internal
-public final class HealthCheckingRoundRobinLoadBalancerProvider
-    extends HealthCheckingLoadBalancerProvider {
+public final class HealthCheckingRoundRobinLoadBalancerProvider extends LoadBalancerProvider {
+  private final RoundRobinLoadBalancerProvider rrProvider = new RoundRobinLoadBalancerProvider();
 
-  public HealthCheckingRoundRobinLoadBalancerProvider() {
-    super(new RoundRobinLoadBalancerProvider());
+  @Override
+  public boolean isAvailable() {
+    return rrProvider.isAvailable();
+  }
+
+  @Override
+  public int getPriority() {
+    return rrProvider.getPriority() + 1;
+  }
+
+  @Override
+  public String getPolicyName() {
+    return rrProvider.getPolicyName();
+  }
+
+  @Override
+  public LoadBalancer newLoadBalancer(Helper helper) {
+    return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(rrProvider, helper);
   }
 }
