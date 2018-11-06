@@ -90,9 +90,11 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -112,7 +114,7 @@ import org.junit.Test;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Answers;
+import org.mockito.AdditionalAnswers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Matchers;
@@ -139,8 +141,7 @@ public class OkHttpClientTransportTest {
 
   @Rule public final Timeout globalTimeout = Timeout.seconds(10);
 
-  @Mock(answer = Answers.CALLS_REAL_METHODS)
-  private MockFrameWriter frameWriter;
+  private FrameWriter frameWriter;
 
   private MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
 
@@ -150,6 +151,7 @@ public class OkHttpClientTransportTest {
   private final SSLSocketFactory sslSocketFactory = null;
   private final HostnameVerifier hostnameVerifier = null;
   private final TransportTracer transportTracer = new TransportTracer();
+  private final Queue<Buffer> capturedBuffer = new ArrayDeque<>();
   private OkHttpClientTransport clientTransport;
   private MockFrameReader frameReader;
   private Socket socket;
@@ -169,7 +171,8 @@ public class OkHttpClientTransportTest {
     MockitoAnnotations.initMocks(this);
     frameReader = new MockFrameReader();
     socket = new MockSocket(frameReader);
-    frameWriter.setSocket(socket);
+    MockFrameWriter mockFrameWriter = new MockFrameWriter(socket, capturedBuffer);
+    frameWriter = mock(FrameWriter.class, AdditionalAnswers.delegatesTo(mockFrameWriter));
   }
 
   @After
@@ -558,10 +561,9 @@ public class OkHttpClientTransportTest {
     assertEquals(12, input.available());
     stream.writeMessage(input);
     stream.flush();
-    ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), captor.capture(), eq(12 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
+        .data(eq(false), eq(3), any(Buffer.class), eq(12 + HEADER_LENGTH));
+    Buffer sentFrame = capturedBuffer.poll();
     assertEquals(createMessageFrame(message), sentFrame);
     stream.cancel(Status.CANCELLED);
     shutdownAndVerify();
@@ -890,11 +892,9 @@ public class OkHttpClientTransportTest {
     assertEquals(22, input.available());
     stream.writeMessage(input);
     stream.flush();
-    ArgumentCaptor<Buffer> captor =
-        ArgumentCaptor.forClass(Buffer.class);
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), captor.capture(), eq(22 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
+        .data(eq(false), eq(3), any(Buffer.class), eq(22 + HEADER_LENGTH));
+    Buffer sentFrame = capturedBuffer.poll();
     assertEquals(createMessageFrame(sentMessage), sentFrame);
 
     // And read.
@@ -978,10 +978,9 @@ public class OkHttpClientTransportTest {
     // The second stream should be active now, and the pending data should be sent out.
     assertEquals(1, activeStreamCount());
     assertEquals(0, clientTransport.getPendingStreamSize());
-    ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(true), eq(5), captor.capture(), eq(5 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
+        .data(eq(true), eq(5), any(Buffer.class), eq(5 + HEADER_LENGTH));
+    Buffer sentFrame = capturedBuffer.poll();
     assertEquals(createMessageFrame(sentMessage), sentFrame);
     stream2.cancel(Status.CANCELLED);
     shutdownAndVerify();
@@ -1444,8 +1443,6 @@ public class OkHttpClientTransportTest {
   @Test
   public void writeBeforeConnected() throws Exception {
     initTransportAndDelayConnected();
-    // clear invocation during setup
-    verify(frameWriter).setSocket(socket);
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -1460,10 +1457,9 @@ public class OkHttpClientTransportTest {
     allowTransportConnected();
 
     // The queued message should be sent out.
-    ArgumentCaptor<Buffer> captor = ArgumentCaptor.forClass(Buffer.class);
     verify(frameWriter, timeout(TIME_OUT_MS))
-        .data(eq(false), eq(3), captor.capture(), eq(12 + HEADER_LENGTH));
-    Buffer sentFrame = captor.getValue();
+        .data(eq(false), eq(3), any(Buffer.class), eq(12 + HEADER_LENGTH));
+    Buffer sentFrame = capturedBuffer.poll();
     assertEquals(createMessageFrame(message), sentFrame);
     stream.cancel(Status.CANCELLED);
     shutdownAndVerify();
@@ -1472,8 +1468,6 @@ public class OkHttpClientTransportTest {
   @Test
   public void cancelBeforeConnected() throws Exception {
     initTransportAndDelayConnected();
-    // clear invocation during setup
-    verify(frameWriter).setSocket(socket);
     final String message = "Hello Server";
     MockStreamListener listener = new MockStreamListener();
     OkHttpClientStream stream =
@@ -2123,11 +2117,15 @@ public class OkHttpClientTransportTest {
   private static class MockFrameWriter implements FrameWriter {
 
     private Socket socket;
+    private Queue<Buffer> capturedBuffer;
 
-    /**
-     * Sets a socket to close. Some tests assumes that FrameWriter will close underlying sink which
-     * will eventually close the socket.
-     */
+    public MockFrameWriter(Socket socket, Queue<Buffer> capturedBuffer) {
+      // Sets a socket to close. Some tests assumes that FrameWriter will close underlying sink
+      // which will eventually close the socket.
+      this.socket = socket;
+      this.capturedBuffer = capturedBuffer;
+    }
+
     void setSocket(Socket socket) {
       this.socket = socket;
     }
@@ -2140,6 +2138,15 @@ public class OkHttpClientTransportTest {
     @Override
     public int maxDataLength() {
       return Integer.MAX_VALUE;
+    }
+
+    @Override
+    public void data(boolean outFinished, int streamId, Buffer source, int byteCount)
+        throws IOException {
+      // simulate the side effect, and captures to internal queue.
+      Buffer capture = new Buffer();
+      capture.write(source, byteCount);
+      capturedBuffer.add(capture);
     }
 
     // rest of methods are unimplemented
@@ -2170,11 +2177,6 @@ public class OkHttpClientTransportTest {
 
     @Override
     public void rstStream(int streamId, ErrorCode errorCode) throws IOException {}
-
-
-    @Override
-    public void data(boolean outFinished, int streamId, Buffer source, int byteCount)
-        throws IOException {}
 
     @Override
     public void settings(Settings okHttpSettings) throws IOException {}

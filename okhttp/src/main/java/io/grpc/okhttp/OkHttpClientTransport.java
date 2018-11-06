@@ -470,90 +470,17 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       return null;
     }
 
-    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
-    final Variant variant = new Http2();
-    final FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
+    AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
+    Variant variant = new Http2();
+    FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
 
     synchronized (lock) {
       frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
       outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
-    }
-
-    // Connecting in the serializingExecutor, so that some stream operations like synStream
-    // will be executed after connected.
-    serializingExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        // Use closed source on failure so that the reader immediately shuts down.
-        BufferedSource source = Okio.buffer(new Source() {
-          @Override
-          public long read(Buffer sink, long byteCount) {
-            return -1;
-          }
-
-          @Override
-          public Timeout timeout() {
-            return Timeout.NONE;
-          }
-
-          @Override
-          public void close() {
-          }
-        });
-        Socket sock;
-        SSLSession sslSession = null;
-        try {
-          if (proxy == null) {
-            sock = new Socket(address.getAddress(), address.getPort());
-          } else {
-            sock = createHttpProxySocket(
-                address, proxy.proxyAddress, proxy.username, proxy.password);
-          }
-
-          if (sslSocketFactory != null) {
-            SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
-                sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
-                connectionSpec);
-            sslSession = sslSocket.getSession();
-            sock = sslSocket;
-          }
-          sock.setTcpNoDelay(true);
-          source = Okio.buffer(Okio.source(sock));
-          asyncSink.becomeConnected(Okio.sink(sock), sock);
-
-          // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-          attributes = Attributes
-              .newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
-              .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
-              .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
-              .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
-                  sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
-              .build();
-        } catch (StatusException e) {
-          startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
-          return;
-        } catch (Exception e) {
-          onException(e);
-          return;
-        } finally {
-          clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-          executor.execute(clientFrameHandler);
-        }
-
-        synchronized (lock) {
-          socket = Preconditions.checkNotNull(sock, "socket");
-          maxConcurrentStreams = Integer.MAX_VALUE;
-          startPendingStreams();
-          if (sslSession != null) {
-            securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
-          }
-        }
-      }
-    });
-
-    // Enqueue these immediately, so that they will be the first writes on the connection.
-    synchronized (lock) {
+      // Connecting in the serializingExecutor, so that some stream operations like synStream
+      // will be executed after connected.
+      serializingExecutor.execute(new StartTransportTask(asyncSink, variant));
+      // Enqueue these immediately, so that they will be the first writes on the connection.
       frameWriter.connectionPreface();
       Settings settings = new Settings();
       frameWriter.settings(settings);
@@ -1281,6 +1208,86 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void alternateService(int streamId, String origin, ByteString protocol, String host,
         int port, long maxAge) {
       // TODO(madongfly): Deal with alternateService propagation
+    }
+  }
+
+  private final class StartTransportTask implements Runnable {
+
+    private final AsyncSink asyncSink;
+    private final Variant variant;
+
+    StartTransportTask(AsyncSink asyncSink, Variant variant) {
+      this.asyncSink = asyncSink;
+      this.variant = variant;
+    }
+
+    @Override
+    public void run() {
+      // Use closed source on failure so that the reader immediately shuts down.
+      BufferedSource source = Okio.buffer(new Source() {
+        @Override
+        public long read(Buffer sink, long byteCount) {
+          return -1;
+        }
+
+        @Override
+        public Timeout timeout() {
+          return Timeout.NONE;
+        }
+
+        @Override
+        public void close() {
+        }
+      });
+      Socket sock;
+      SSLSession sslSession = null;
+      try {
+        if (proxy == null) {
+          sock = new Socket(address.getAddress(), address.getPort());
+        } else {
+          sock = createHttpProxySocket(
+              address, proxy.proxyAddress, proxy.username, proxy.password);
+        }
+
+        if (sslSocketFactory != null) {
+          SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
+              sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
+              connectionSpec);
+          sslSession = sslSocket.getSession();
+          sock = sslSocket;
+        }
+        sock.setTcpNoDelay(true);
+        source = Okio.buffer(Okio.source(sock));
+        asyncSink.becomeConnected(Okio.sink(sock), sock);
+
+        // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+        attributes = Attributes
+            .newBuilder()
+            .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
+            .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
+            .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
+            .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
+                sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
+            .build();
+      } catch (StatusException e) {
+        startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+        return;
+      } catch (Exception e) {
+        onException(e);
+        return;
+      } finally {
+        clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
+        executor.execute(clientFrameHandler);
+      }
+
+      synchronized (lock) {
+        socket = Preconditions.checkNotNull(sock, "socket");
+        maxConcurrentStreams = Integer.MAX_VALUE;
+        startPendingStreams();
+        if (sslSession != null) {
+          securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
+        }
+      }
     }
   }
 }
