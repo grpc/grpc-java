@@ -43,7 +43,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private final TransportExceptionHandler transportExceptionHandler;
 
-  private FrameWriter frameWriter;
+  private final FrameWriter frameWriter;
 
   ExceptionHandlingFrameWriter(
       TransportExceptionHandler transportExceptionHandler, FrameWriter frameWriter) {
