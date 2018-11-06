@@ -497,7 +497,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     assertThat(headers)
         .containsEntry(
             AsciiString.of(":path"),
-            AsciiString.of("/testService/test?" + BaseEncoding.base64().encode(msg)));
+            AsciiString.of("/testService/test?" + BaseEncoding.base64().omitPadding().encode(msg)));
   }
 
   @Override

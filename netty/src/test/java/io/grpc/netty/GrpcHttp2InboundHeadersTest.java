@@ -69,7 +69,7 @@ public class GrpcHttp2InboundHeadersTest {
 
     byte[] data = new byte[100];
     new Random().nextBytes(data);
-    headers.add(of("foo-bin"), of(BaseEncoding.base64().encode(data)));
+    headers.add(of("foo-bin"), of(BaseEncoding.base64().omitPadding().encode(data)));
 
     assertEquals(1, headers.size());
 

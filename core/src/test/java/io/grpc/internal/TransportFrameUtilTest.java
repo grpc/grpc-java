@@ -140,7 +140,7 @@ public class TransportFrameUtilTest {
   }
 
   private static byte[] base64Encode(byte[] input) {
-    return BaseEncoding.base64().encode(input).getBytes(US_ASCII);
+    return BaseEncoding.base64().omitPadding().encode(input).getBytes(US_ASCII);
   }
 
 }

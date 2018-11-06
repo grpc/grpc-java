@@ -135,7 +135,7 @@ class CronetClientStream extends AbstractClientStream {
       BidirectionalStreamCallback callback = new BidirectionalStreamCallback();
       String path = url;
       if (payload != null) {
-        path += "?" + BaseEncoding.base64().encode(payload);
+        path += "?" + BaseEncoding.base64().omitPadding().encode(payload);
       }
       BidirectionalStream.Builder builder =
           streamFactory.newBidirectionalStreamBuilder(path, callback, executor);

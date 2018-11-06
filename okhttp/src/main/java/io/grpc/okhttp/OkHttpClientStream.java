@@ -147,7 +147,7 @@ class OkHttpClientStream extends AbstractClientStream {
       String defaultPath = "/" + method.getFullMethodName();
       if (payload != null) {
         useGet = true;
-        defaultPath += "?" + BaseEncoding.base64().encode(payload);
+        defaultPath += "?" + BaseEncoding.base64().omitPadding().encode(payload);
       }
       synchronized (state.lock) {
         state.streamReady(metadata, defaultPath);

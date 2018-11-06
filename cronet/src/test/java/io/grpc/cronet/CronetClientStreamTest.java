@@ -692,7 +692,7 @@ public final class CronetClientStreamTest {
             urlCaptor.capture(), isA(BidirectionalStream.Callback.class), isA(Executor.class));
     verify(getBuilder).setHttpMethod("GET");
     assertEquals(
-        "https://www.google.com/service/method?" + BaseEncoding.base64().encode(msg),
+        "https://www.google.com/service/method?" + BaseEncoding.base64().omitPadding().encode(msg),
         urlCaptor.getValue());
   }
 

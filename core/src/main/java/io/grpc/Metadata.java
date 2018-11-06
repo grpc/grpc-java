@@ -466,7 +466,7 @@ public final class Metadata {
       String headerName = new String(name(i), US_ASCII);
       sb.append(headerName).append('=');
       if (headerName.endsWith(BINARY_HEADER_SUFFIX)) {
-        sb.append(BaseEncoding.base64().encode(value(i)));
+        sb.append(BaseEncoding.base64().omitPadding().encode(value(i)));
       } else {
         String headerValue = new String(value(i), US_ASCII);
         sb.append(headerValue);
