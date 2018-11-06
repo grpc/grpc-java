@@ -352,8 +352,6 @@ class OkHttpClientStream extends AbstractClientStream {
         requestHeaders = null;
         pendingData.clear();
         canStart = false;
-        flushPendingData = false;
-        pendingDataHasEndOfStream = false;
         transportReportStatus(reason, true, trailers != null ? trailers : new Metadata());
       } else {
         // If pendingData is null, start must have already been called, which means synStream has
