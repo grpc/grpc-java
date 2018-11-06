@@ -85,6 +85,7 @@ import io.grpc.lb.v1.ServerList;
 import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -151,7 +152,7 @@ public class GrpclbLoadBalancerTest {
 
       @Override
       public void log(ChannelLogLevel level, String template, Object... args) {
-        log(level, String.format(template, args));
+        log(level, MessageFormat.format(template, args));
       }
     };
   private SubchannelPicker currentPicker;

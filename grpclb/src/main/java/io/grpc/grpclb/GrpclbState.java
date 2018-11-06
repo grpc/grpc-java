@@ -314,7 +314,7 @@ final class GrpclbState {
   }
 
   void propagateError(Status status) {
-    logger.log(ChannelLogLevel.DEBUG, "Error: %s", status);
+    logger.log(ChannelLogLevel.DEBUG, "Error: {0}", status);
     if (backendList.isEmpty()) {
       maybeUpdatePicker(
           TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
@@ -336,7 +336,8 @@ final class GrpclbState {
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
-    logger.log(ChannelLogLevel.INFO, "Using RR list=%s, drop=%s", newBackendAddrList, newDropList);
+    logger.log(
+        ChannelLogLevel.INFO, "Using RR list={0}, drop={1}", newBackendAddrList, newDropList);
     HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
         new HashMap<EquivalentAddressGroup, Subchannel>();
     List<BackendEntry> newBackendList = new ArrayList<>();
@@ -491,7 +492,7 @@ final class GrpclbState {
       if (closed) {
         return;
       }
-      logger.log(ChannelLogLevel.DEBUG, "Got an LB response: %s", response);
+      logger.log(ChannelLogLevel.DEBUG, "Got an LB response: {0}", response);
 
       LoadBalanceResponseTypeCase typeCase = response.getLoadBalanceResponseTypeCase();
       if (!initialResponseReceived) {
@@ -508,7 +509,7 @@ final class GrpclbState {
       }
 
       if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
-        logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: %s", typeCase);
+        logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: {0}", typeCase);
         return;
       }
 
@@ -660,7 +661,7 @@ final class GrpclbState {
     }
     currentPicker = picker;
     logger.log(
-        ChannelLogLevel.INFO, "%s: picks=%s, drops=%s", state, picker.pickList, picker.dropList);
+        ChannelLogLevel.INFO, "{0}: picks={1}, drops={2}", state, picker.pickList, picker.dropList);
     helper.updateBalancingState(state, picker);
   }
 
@@ -674,7 +675,7 @@ final class GrpclbState {
         // Helper.
         logger.log(ChannelLogLevel.WARNING,
             "Multiple authorities found for LB. "
-            + "Skipping addresses for %s in preference to %s", group.getAuthority(), authority);
+            + "Skipping addresses for {0} in preference to {1}", group.getAuthority(), authority);
       } else {
         eags.add(group.getAddresses());
       }

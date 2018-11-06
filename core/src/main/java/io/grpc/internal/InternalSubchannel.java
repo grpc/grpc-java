@@ -311,7 +311,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
         reconnectPolicy.nextBackoffNanos() - connectingTimer.elapsed(TimeUnit.NANOSECONDS);
     channelLogger.log(
         ChannelLogLevel.INFO,
-        "TRANSIENT_FAILURE (%s). Will reconnect after %s ns", printShortStatus(status), delayNanos);
+        "TRANSIENT_FAILURE ({0}). Will reconnect after {1} ns",
+        printShortStatus(status), delayNanos);
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
     reconnectCanceled = false;
     reconnectTask = scheduledExecutor.schedule(
@@ -587,7 +588,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     @Override
     public void transportShutdown(Status s) {
       channelLogger.log(
-          ChannelLogLevel.INFO, "%s SHUTDOWN with %s", transport.getLogId(), printShortStatus(s));
+          ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
       try {
         synchronized (lock) {
           if (state.getState() == SHUTDOWN) {
@@ -620,7 +621,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
 
     @Override
     public void transportTerminated() {
-      channelLogger.log(ChannelLogLevel.INFO, "%s Terminated", transport.getLogId());
+      channelLogger.log(ChannelLogLevel.INFO, "{0} Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
       try {

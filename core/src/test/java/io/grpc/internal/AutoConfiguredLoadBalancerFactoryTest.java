@@ -327,7 +327,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),
-        eq("Load balancer changed from %s to %s"),
+        eq("Load balancer changed from {0} to {1}"),
         eq("PickFirstLoadBalancer"), eq("RoundRobinLoadBalancer"));
     verifyNoMoreInteractions(channelLogger);
 
@@ -344,7 +344,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),
-        eq("Load balancer changed from %s to %s"),
+        eq("Load balancer changed from {0} to {1}"),
         eq("RoundRobinLoadBalancer"), eq("GrpclbLoadBalancer"));
 
     verifyNoMoreInteractions(channelLogger);

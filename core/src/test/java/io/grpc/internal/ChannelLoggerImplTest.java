@@ -133,7 +133,7 @@ public class ChannelLoggerImplTest {
     logs.clear();
 
     clock.forwardNanos(100);
-    logger.log(ChannelLogLevel.ERROR, "Error message %s", "foo");
+    logger.log(ChannelLogLevel.ERROR, "Error message {0}", "foo");
     tracer.updateBuilder(builder);
     ChannelStats stats = builder.build();
     Event event = new Event.Builder()
@@ -145,7 +145,7 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINE: " + logPrefix + "Error message foo");
 
     clock.forwardNanos(100);
-    logger.log(ChannelLogLevel.WARNING, "Warning message %s, %s", "foo", "bar");
+    logger.log(ChannelLogLevel.WARNING, "Warning message {0}, {1}", "foo", "bar");
     tracer.updateBuilder(builder);
     stats = builder.build();
     event = new Event.Builder()
@@ -157,7 +157,7 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINER: " + logPrefix + "Warning message foo, bar");
 
     clock.forwardNanos(100);
-    logger.log(ChannelLogLevel.INFO, "Info message %s", "bar");
+    logger.log(ChannelLogLevel.INFO, "Info message {0}", "bar");
     tracer.updateBuilder(builder);
     stats = builder.build();
     event = new Event.Builder()
@@ -169,7 +169,7 @@ public class ChannelLoggerImplTest {
     assertThat(logs).contains("FINEST: " + logPrefix + "Info message bar");
 
     clock.forwardNanos(100);
-    logger.log(ChannelLogLevel.DEBUG, "Debug message %s", "foo");
+    logger.log(ChannelLogLevel.DEBUG, "Debug message {0}", "foo");
     tracer.updateBuilder(builder);
     stats = builder.build();
     // DEBUG level messages are not logged to channelz, thus channelz still has the

@@ -55,8 +55,8 @@ public abstract class ChannelLogger {
   public abstract void log(ChannelLogLevel level, String message);
 
   /**
-   * Logs a message, using a message template and a list of arguments used to generate the log
-   * message with {@link String#format}.
+   * Logs a message, using a message format and a list of arguments used to generate the log
+   * message with {@link java.text.MessageFormat}.
    */
-  public abstract void log(ChannelLogLevel level, String template, Object... args);
+  public abstract void log(ChannelLogLevel level, String messageFormat, Object... args);
 }

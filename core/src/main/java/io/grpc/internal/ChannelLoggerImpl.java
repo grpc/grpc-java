@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.ChannelTrace.Event;
 import io.grpc.InternalChannelz.ChannelTrace.Event.Severity;
+import java.text.MessageFormat;
 import java.util.logging.Level;
 
 final class ChannelLoggerImpl extends ChannelLogger {
@@ -42,15 +43,15 @@ final class ChannelLoggerImpl extends ChannelLogger {
   }
 
   @Override
-  public void log(ChannelLogLevel level, String template, Object... args) {
+  public void log(ChannelLogLevel level, String messageFormat, Object... args) {
     if (level == ChannelLogLevel.DEBUG) {
       // DEBUG logs can be expensive to generate (e.g., large proto messages), and when not logged,
       // go nowhere.  We will skip the generation if it's not logged.
       if (ChannelTracer.logger.isLoggable(Level.FINEST)) {
-        tracer.logOnly(Level.FINEST, String.format(template, args));
+        tracer.logOnly(Level.FINEST, MessageFormat.format(messageFormat, args));
       }
     } else {
-      reportToTracer(level, String.format(template, args));
+      reportToTracer(level, MessageFormat.format(messageFormat, args));
     }
   }
 

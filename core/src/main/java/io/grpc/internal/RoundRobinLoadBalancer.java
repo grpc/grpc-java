@@ -103,7 +103,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
           helper.getChannelLogger().log(
               ChannelLogLevel.WARNING,
-              "Binary stickiness header is not supported. The header '%s' will be ignored",
+              "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
               stickinessMetadataKey);
         } else if (stickinessState == null
             || !stickinessState.key.name().equals(stickinessMetadataKey)) {

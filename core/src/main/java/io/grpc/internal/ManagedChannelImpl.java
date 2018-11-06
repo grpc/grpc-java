@@ -1111,7 +1111,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           // It's not appropriate to report SHUTDOWN state from lb.
           // Ignore the case of newState == SHUTDOWN for now.
           if (newState != SHUTDOWN) {
-            channelLogger.log(ChannelLogLevel.INFO, "Entering %s state", newState);
+            channelLogger.log(ChannelLogLevel.INFO, "Entering {0} state", newState);
             channelStateManager.gotoState(newState);
           }
         }
@@ -1252,10 +1252,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
             "Name resolver " + helper.nr + " returned an empty list"));
         return;
       }
-      channelLogger.log(ChannelLogLevel.DEBUG, "Resolved address: %s, config=%s", servers, config);
+      channelLogger.log(
+          ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, config);
 
       if (haveBackends == null || !haveBackends) {
-        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: %s", servers);
+        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
         haveBackends = true;
       }
       final Map<String, Object> serviceConfig =
@@ -1302,7 +1303,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
       if (haveBackends == null || haveBackends) {
-        channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: %s", error);
+        channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
         haveBackends = false;
       }
       final class NameResolverErrorHandler implements Runnable {
@@ -1326,7 +1327,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
           channelLogger.log(
                 ChannelLogLevel.DEBUG,
-                "Scheduling DNS resolution backoff for %s ns", delayNanos);
+                "Scheduling DNS resolution backoff for {0} ns", delayNanos);
           nameResolverRefresh = new NameResolverRefresh();
           nameResolverRefreshFuture =
               transportFactory

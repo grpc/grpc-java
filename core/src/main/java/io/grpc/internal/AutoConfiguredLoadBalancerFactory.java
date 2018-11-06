@@ -98,7 +98,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         LoadBalancer old = delegate;
         delegate = delegateProvider.newLoadBalancer(helper);
         helper.getChannelLogger().log(
-            ChannelLogLevel.INFO, "Load balancer changed from %s to %s",
+            ChannelLogLevel.INFO, "Load balancer changed from {0} to {1}",
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
       getDelegate().handleResolvedAddressGroups(servers, attributes);
