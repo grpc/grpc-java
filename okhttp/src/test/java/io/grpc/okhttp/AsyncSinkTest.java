@@ -35,6 +35,7 @@ import com.google.common.base.Charsets;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
+import java.net.Socket;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -51,6 +52,7 @@ import org.mockito.InOrder;
 @RunWith(JUnit4.class)
 public class AsyncSinkTest {
 
+  private Socket socket = mock(Socket.class);
   private Sink mockedSink = mock(VoidSink.class, CALLS_REAL_METHODS);
   private QueueingExecutor queueingExecutor = new QueueingExecutor();
   private TransportExceptionHandler exceptionHandler = mock(TransportExceptionHandler.class);
@@ -59,7 +61,7 @@ public class AsyncSinkTest {
 
   @Before
   public void setUp() throws Exception {
-    sink.becomeConnected(mockedSink);
+    sink.becomeConnected(mockedSink, socket);
   }
 
   @Test

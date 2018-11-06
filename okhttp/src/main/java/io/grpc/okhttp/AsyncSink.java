@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import java.io.IOException;
+import java.net.Socket;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
 import okio.Buffer;
@@ -46,6 +47,8 @@ final class AsyncSink implements Sink {
   private boolean closed = false;
   @Nullable
   private Sink sink;
+  @Nullable
+  private Socket socket;
 
   private AsyncSink(SerializingExecutor executor, TransportExceptionHandler exceptionHandler) {
     this.serializingExecutor = checkNotNull(executor, "executor");
@@ -59,13 +62,14 @@ final class AsyncSink implements Sink {
 
   /**
    * Sets the actual sink. It is allowed to call write / flush operations on the sink iff calling
-   * this method is scheduled in the executor.
+   * this method is scheduled in the executor. The socket is needed for closing.
    *
    * <p>should only be called once by thread of executor.
    */
-  void becomeConnected(Sink sink) {
+  void becomeConnected(Sink sink, Socket socket) {
     checkState(this.sink == null, "AsyncSink's becomeConnected should only be called once.");
     this.sink = checkNotNull(sink, "sink");
+    this.socket = checkNotNull(socket, "socket");
   }
 
   @Override
@@ -144,6 +148,11 @@ final class AsyncSink implements Sink {
         buffer.close();
         try {
           sink.close();
+        } catch (IOException e) {
+          transportExceptionHandler.onException(e);
+        }
+        try {
+          socket.close();
         } catch (IOException e) {
           transportExceptionHandler.onException(e);
         }

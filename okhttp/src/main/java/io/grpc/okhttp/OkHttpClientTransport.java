@@ -446,29 +446,25 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           keepAliveWithoutCalls);
       keepAliveManager.onTransportStarted();
     }
-    final OkHttpClientTransport okHttpClientTransport = this;
     if (isForTest()) {
       synchronized (lock) {
-        frameWriter = new ExceptionHandlingFrameWriter(okHttpClientTransport, testFrameWriter);
+        frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter);
         outboundFlow =
-            new OutboundFlowController(okHttpClientTransport, frameWriter, initialWindowSize);
+            new OutboundFlowController(OkHttpClientTransport.this, frameWriter, initialWindowSize);
       }
       serializingExecutor.execute(new Runnable() {
         @Override
         public void run() {
-          if (isForTest()) {
-            if (connectingCallback != null) {
-              connectingCallback.run();
-            }
-            clientFrameHandler = new ClientFrameHandler(testFrameReader);
-            executor.execute(clientFrameHandler);
-            synchronized (lock) {
-              frameWriter.becomeConnected(socket);
-              maxConcurrentStreams = Integer.MAX_VALUE;
-              startPendingStreams();
-            }
-            connectedFuture.set(null);
+          if (connectingCallback != null) {
+            connectingCallback.run();
           }
+          clientFrameHandler = new ClientFrameHandler(testFrameReader);
+          executor.execute(clientFrameHandler);
+          synchronized (lock) {
+            maxConcurrentStreams = Integer.MAX_VALUE;
+            startPendingStreams();
+          }
+          connectedFuture.set(null);
         }
       });
       return null;
@@ -481,91 +477,86 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     synchronized (lock) {
       frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
       outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+
+      // Connecting in the serializingExecutor, so that some stream operations like synStream
+      // will be executed after connected.
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
+          // Use closed source on failure so that the reader immediately shuts down.
+          BufferedSource source = Okio.buffer(new Source() {
+            @Override
+            public long read(Buffer sink, long byteCount) {
+              return -1;
+            }
+
+            @Override
+            public Timeout timeout() {
+              return Timeout.NONE;
+            }
+
+            @Override
+            public void close() {
+            }
+          });
+          Socket sock;
+          SSLSession sslSession = null;
+          try {
+            if (proxy == null) {
+              sock = new Socket(address.getAddress(), address.getPort());
+            } else {
+              sock = createHttpProxySocket(
+                  address, proxy.proxyAddress, proxy.username, proxy.password);
+            }
+
+            if (sslSocketFactory != null) {
+              SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
+                  sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
+                  connectionSpec);
+              sslSession = sslSocket.getSession();
+              sock = sslSocket;
+            }
+            sock.setTcpNoDelay(true);
+            source = Okio.buffer(Okio.source(sock));
+            asyncSink.becomeConnected(Okio.sink(sock), sock);
+
+            // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
+            attributes = Attributes
+                .newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
+                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
+                .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
+                .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
+                    sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
+                .build();
+          } catch (StatusException e) {
+            startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
+            return;
+          } catch (Exception e) {
+            onException(e);
+            return;
+          } finally {
+            clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
+            executor.execute(clientFrameHandler);
+          }
+
+          synchronized (lock) {
+            socket = Preconditions.checkNotNull(sock, "socket");
+            maxConcurrentStreams = Integer.MAX_VALUE;
+            startPendingStreams();
+            if (sslSession != null) {
+              securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
+            }
+          }
+        }
+      });
+
+      // Do these with the transport lock, so that they will be done right after the start and
+      // right before any possible pending stream operations.
+      frameWriter.connectionPreface();
+      Settings settings = new Settings();
+      frameWriter.settings(settings);
     }
-
-    // Connecting in the serializingExecutor, so that some stream operations like synStream
-    // will be executed after connected.
-    serializingExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        // Use closed source on failure so that the reader immediately shuts down.
-        BufferedSource source = Okio.buffer(new Source() {
-          @Override
-          public long read(Buffer sink, long byteCount) {
-            return -1;
-          }
-
-          @Override
-          public Timeout timeout() {
-            return Timeout.NONE;
-          }
-
-          @Override
-          public void close() {}
-        });
-        Socket sock;
-        SSLSession sslSession = null;
-        try {
-          if (proxy == null) {
-            sock = new Socket(address.getAddress(), address.getPort());
-          } else {
-            sock = createHttpProxySocket(
-                address, proxy.proxyAddress, proxy.username, proxy.password);
-          }
-
-          if (sslSocketFactory != null) {
-            SSLSocket sslSocket = OkHttpTlsUpgrader.upgrade(
-                sslSocketFactory, hostnameVerifier, sock, getOverridenHost(), getOverridenPort(),
-                connectionSpec);
-            sslSession = sslSocket.getSession();
-            sock = sslSocket;
-          }
-          sock.setTcpNoDelay(true);
-          source = Okio.buffer(Okio.source(sock));
-          asyncSink.becomeConnected(Okio.sink(sock));
-
-          // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
-          attributes = Attributes
-              .newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, sock.getRemoteSocketAddress())
-              .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, sock.getLocalSocketAddress())
-              .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, sslSession)
-              .set(GrpcAttributes.ATTR_SECURITY_LEVEL,
-                  sslSession == null ? SecurityLevel.NONE : SecurityLevel.PRIVACY_AND_INTEGRITY)
-              .build();
-        } catch (StatusException e) {
-          startGoAway(0, ErrorCode.INTERNAL_ERROR, e.getStatus());
-          return;
-        } catch (Exception e) {
-          onException(e);
-          return;
-        } finally {
-          clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-          executor.execute(clientFrameHandler);
-        }
-
-        synchronized (lock) {
-          socket = Preconditions.checkNotNull(sock, "socket");
-          frameWriter.becomeConnected(socket);
-          maxConcurrentStreams = Integer.MAX_VALUE;
-          startPendingStreams();
-          if (sslSession != null) {
-            securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
-          }
-        }
-
-        try {
-          // Do these with the raw FrameWriter, so that they will be done in this thread,
-          // and before any possible pending stream operations.
-          rawFrameWriter.connectionPreface();
-          Settings settings = new Settings();
-          rawFrameWriter.settings(settings);
-        } catch (Exception e) {
-          onException(e);
-          return;
-        }
-      }
-    });
     return null;
   }
 
@@ -899,17 +890,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     // We will close the underlying socket in the writing thread to break out the reader
     // thread, which will close the frameReader and notify the listener.
-    // When the transport is middle of start and received stop before the frameWriter init
-    // synchronized block; this stop need, frameWriter can be null so the close can be ignored
-    // while the other thread will be setup the frameWriter. So, close in the executor to close it.
-    serializingExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        synchronized (lock) {
-          frameWriter.close();
-        }
-      }
-    });
+    frameWriter.close();
   }
 
   @GuardedBy("lock")

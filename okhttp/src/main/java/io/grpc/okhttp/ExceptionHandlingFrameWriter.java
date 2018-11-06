@@ -25,7 +25,6 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.Settings;
 import java.io.IOException;
-import java.net.Socket;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -45,18 +44,12 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   private final TransportExceptionHandler transportExceptionHandler;
 
   private FrameWriter frameWriter;
-  private Socket socket;
 
   ExceptionHandlingFrameWriter(
       TransportExceptionHandler transportExceptionHandler, FrameWriter frameWriter) {
     this.transportExceptionHandler =
         checkNotNull(transportExceptionHandler, "transportExceptionHandler");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
-  }
-
-  /** Registers underlying socket for the frameWriter to close. */
-  void becomeConnected(Socket socket) {
-    this.socket = socket;
   }
 
   @Override
@@ -194,9 +187,6 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   public void close() {
     try {
       frameWriter.close();
-      if (socket != null) {
-        socket.close();
-      }
     } catch (IOException e) {
       log.log(getLogLevel(e), "Failed closing connection", e);
     }
