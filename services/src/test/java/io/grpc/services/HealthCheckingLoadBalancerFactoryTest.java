@@ -71,6 +71,7 @@ import io.grpc.stub.StreamObserver;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -132,6 +133,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   @Mock
   private LoadBalancer origLb;
+  private LoadBalancer hcLb;
   @Captor
   ArgumentCaptor<Attributes> attrsCaptor;
   @Mock
@@ -174,7 +176,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     hcLbFactory = new HealthCheckingLoadBalancerFactory(
         origLbFactory, backoffPolicyProvider, clock.getTimeProvider());
-    final LoadBalancer hcLb = hcLbFactory.newLoadBalancer(origHelper);
+    hcLb = hcLbFactory.newLoadBalancer(origHelper);
     // Make sure all calls into the hcLb is from the syncContext
     hcLbEventDelivery = new LoadBalancer() {
         @Override
@@ -913,6 +915,33 @@ public class HealthCheckingLoadBalancerFactoryTest {
         .isEqualTo("FooService");
   }
 
+  @Test
+  public void util_newHealthCheckingLoadBalancer() {
+    Factory hcFactory =
+        new Factory() {
+          @Override
+          public LoadBalancer newLoadBalancer(Helper helper) {
+            return HealthCheckingLoadBalancerUtil.newHealthCheckingLoadBalancer(
+                origLbFactory, helper);
+          }
+        };
+
+    // hcLb and wrappedHelper are already set in setUp().  For this special test case, we
+    // clear wrappedHelper so that we can create hcLb again with the util.
+    wrappedHelper = null;
+    hcLb = hcFactory.newLoadBalancer(origHelper);
+
+    // Verify that HC works
+    Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");
+    hcLbEventDelivery.handleResolvedAddressGroups(resolvedAddressList, resolutionAttrs);
+    verify(origLb).handleResolvedAddressGroups(same(resolvedAddressList), same(resolutionAttrs));
+    createSubchannel(0, Attributes.EMPTY);
+    assertThat(healthImpls[0].calls).isEmpty();
+    hcLbEventDelivery.handleSubchannelState(
+        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    assertThat(healthImpls[0].calls).hasSize(1);
+  }
+
   private Attributes attrsWithHealthCheckService(@Nullable String serviceName) {
     HashMap<String, Object> serviceConfig = new HashMap<String, Object>();
     HashMap<String, Object> hcConfig = new HashMap<String, Object>();
@@ -959,9 +988,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   private static class HealthImpl extends HealthGrpc.HealthImplBase {
-    boolean isImplemented = true;
     boolean checkCalled;
-    final LinkedList<ServerSideCall> calls = new LinkedList<ServerSideCall>();
+    final Deque<ServerSideCall> calls = new LinkedList<ServerSideCall>();
 
     @Override
     public void check(HealthCheckRequest request,
