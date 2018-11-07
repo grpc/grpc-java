@@ -101,12 +101,22 @@ final class ChannelTracer {
       default:
         logLevel = Level.FINEST;
     }
+    traceOnly(event);
+    logOnly(logLevel, event.description);
+  }
+
+  boolean isTraceEnabled() {
+    synchronized (lock) {
+      return events != null;
+    }
+  }
+
+  void traceOnly(Event event) {
     synchronized (lock) {
       if (events != null) {
         events.add(event);
       }
     }
-    logOnly(logLevel, event.description);
   }
 
   void logOnly(Level logLevel, String msg) {

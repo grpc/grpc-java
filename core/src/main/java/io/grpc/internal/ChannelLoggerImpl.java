@@ -35,28 +35,42 @@ final class ChannelLoggerImpl extends ChannelLogger {
 
   @Override
   public void log(ChannelLogLevel level, String msg) {
-    if (level == ChannelLogLevel.DEBUG) {
-      tracer.logOnly(Level.FINEST, msg);
-    } else {
-      reportToTracer(level, msg);
+    Level javaLogLevel = toJavaLogLevel(level);
+    if (ChannelTracer.logger.isLoggable(javaLogLevel)) {
+      tracer.logOnly(javaLogLevel, msg);
+    }
+    if (isTraceable(level)) {
+      trace(level, msg);
     }
   }
 
   @Override
   public void log(ChannelLogLevel level, String messageFormat, Object... args) {
-    if (level == ChannelLogLevel.DEBUG) {
-      // DEBUG logs can be expensive to generate (e.g., large proto messages), and when not logged,
-      // go nowhere.  We will skip the generation if it's not logged.
-      if (ChannelTracer.logger.isLoggable(Level.FINEST)) {
-        tracer.logOnly(Level.FINEST, MessageFormat.format(messageFormat, args));
+    Level javaLogLevel = toJavaLogLevel(level);
+    String msg = null;
+    if (ChannelTracer.logger.isLoggable(javaLogLevel)) {
+      if (msg == null) {
+        msg = MessageFormat.format(messageFormat, args);
       }
-    } else {
-      reportToTracer(level, MessageFormat.format(messageFormat, args));
+      tracer.logOnly(javaLogLevel, msg);
+    }
+    if (isTraceable(level)) {
+      if (msg == null) {
+        msg = MessageFormat.format(messageFormat, args);
+      }
+      trace(level, msg);
     }
   }
 
-  private void reportToTracer(ChannelLogLevel level, String msg) {
-    tracer.reportEvent(new Event.Builder()
+  private boolean isTraceable(ChannelLogLevel level) {
+    return level != ChannelLogLevel.DEBUG && tracer.isTraceEnabled();
+  }
+
+  private void trace(ChannelLogLevel level, String msg) {
+    if (level == ChannelLogLevel.DEBUG) {
+      return;
+    }
+    tracer.traceOnly(new Event.Builder()
         .setDescription(msg)
         .setSeverity(toTracerSeverity(level))
         .setTimestampNanos(time.currentTimeNanos())
@@ -71,6 +85,17 @@ final class ChannelLoggerImpl extends ChannelLogger {
         return Severity.CT_WARNING;
       default:
         return Severity.CT_INFO;
+    }
+  }
+
+  private Level toJavaLogLevel(ChannelLogLevel level) {
+    switch (level) {
+      case ERROR:
+        return Level.FINE;
+      case WARNING:
+        return Level.FINER;
+      default:
+        return Level.FINEST;
     }
   }
 }
