@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.USER_AGENT_KEY;
 import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalMetadata;
@@ -135,7 +134,7 @@ class CronetClientStream extends AbstractClientStream {
       BidirectionalStreamCallback callback = new BidirectionalStreamCallback();
       String path = url;
       if (payload != null) {
-        path += "?" + BaseEncoding.base64().omitPadding().encode(payload);
+        path += "?" + InternalMetadata.BASE64_ENCODING_OMIT_PADDING.encode(payload);
       }
       BidirectionalStream.Builder builder =
           streamFactory.newBidirectionalStreamBuilder(path, callback, executor);

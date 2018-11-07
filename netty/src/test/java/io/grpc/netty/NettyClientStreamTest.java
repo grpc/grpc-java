@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.netty.NettyTestUtil.messageFrame;
@@ -42,7 +43,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableListMultimap;
-import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.InternalStatus;
 import io.grpc.Metadata;
@@ -497,7 +497,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
     assertThat(headers)
         .containsEntry(
             AsciiString.of(":path"),
-            AsciiString.of("/testService/test?" + BaseEncoding.base64().omitPadding().encode(msg)));
+            AsciiString.of("/testService/test?" + BASE64_ENCODING_OMIT_PADDING.encode(msg)));
   }
 
   @Override

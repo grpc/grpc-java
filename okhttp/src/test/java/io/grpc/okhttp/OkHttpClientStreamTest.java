@@ -17,6 +17,7 @@
 package io.grpc.okhttp;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -26,7 +27,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -215,7 +215,7 @@ public class OkHttpClientStreamTest {
     assertThat(headersCaptor.getValue()).contains(Headers.METHOD_GET_HEADER);
     assertThat(headersCaptor.getValue()).contains(
         new Header(Header.TARGET_PATH, "/" + getMethod.getFullMethodName() + "?"
-            + BaseEncoding.base64().omitPadding().encode(msg)));
+            + BASE64_ENCODING_OMIT_PADDING.encode(msg)));
   }
 
   // TODO(carl-mastrangelo): extract this out into a testing/ directory and remove other definitions

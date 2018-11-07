@@ -18,9 +18,9 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 
-import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
@@ -147,7 +147,7 @@ class OkHttpClientStream extends AbstractClientStream {
       String defaultPath = "/" + method.getFullMethodName();
       if (payload != null) {
         useGet = true;
-        defaultPath += "?" + BaseEncoding.base64().omitPadding().encode(payload);
+        defaultPath += "?" + BASE64_ENCODING_OMIT_PADDING.encode(payload);
       }
       synchronized (state.lock) {
         state.streamReady(metadata, defaultPath);
