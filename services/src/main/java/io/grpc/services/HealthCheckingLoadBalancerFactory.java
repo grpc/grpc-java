@@ -27,6 +27,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -254,7 +255,6 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         // A connection was lost.  We will reset disabled flag because health check
         // may be available on the new connection.
         disabled = false;
-        // TODO(zhangkun83): record this to channel tracer
       }
       this.rawState = rawState;
       adjustHealthCheck();
@@ -393,8 +393,9 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
       void handleStreamClosed(Status status) {
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
-          // TODO(zhangkun83): record this to channel tracer
           disabled = true;
+          subchannel.getChannelLogger().log(
+              ChannelLogLevel.ERROR, "Health-check disabled: {0}", status);
           gotoState(rawState);
           return;
         }
