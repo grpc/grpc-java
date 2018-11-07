@@ -21,6 +21,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.Attributes;
+import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
 import java.net.URI;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,5 +43,22 @@ public class DnsNameResolverProviderTest {
         provider.newNameResolver(URI.create("dns:///localhost:443"), Attributes.EMPTY).getClass());
     assertNull(
         provider.newNameResolver(URI.create("notdns:///localhost:443"), Attributes.EMPTY));
+  }
+
+  @Test
+  public void skipMissingJndiResolverResolver() throws Exception {
+    ClassLoader cl = new ClassLoader() {
+      @Override
+      protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        if ("io.grpc.internal.JndiResourceResolverFactory".equals(name)) {
+          throw new ClassNotFoundException();
+        }
+        return super.loadClass(name, resolve);
+      }
+    };
+
+    ResourceResolverFactory factory = DnsNameResolverProvider.getResourceResolverFactory(cl);
+
+    assertNull(factory);
   }
 }

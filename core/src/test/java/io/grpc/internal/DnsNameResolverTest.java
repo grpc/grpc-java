@@ -44,6 +44,8 @@ import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
+import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
+import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -112,6 +114,8 @@ public class DnsNameResolverTest {
   private NameResolver.Listener mockListener;
   @Captor
   private ArgumentCaptor<List<EquivalentAddressGroup>> resultCaptor;
+  @Mock
+  private RecordFetcher recordFetcher;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
 
@@ -146,7 +150,8 @@ public class DnsNameResolverTest {
         fakeExecutorResource,
         proxyDetector,
         stopwatch,
-        isAndroid);
+        isAndroid,
+        new MockResourceResolverFactory(recordFetcher));
     return dnsResolver;
   }
 
@@ -548,22 +553,6 @@ public class DnsNameResolverTest {
     verify(mockResourceResolver).resolveSrv(mockAddressResolver, "_grpclb._tcp." + hostname);
   }
 
-  @Test
-  public void skipMissingJndiResolverResolver() throws Exception {
-    ClassLoader cl = new ClassLoader() {
-      @Override
-      protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-        if ("io.grpc.internal.JndiResourceResolverFactory".equals(name)) {
-          throw new ClassNotFoundException();
-        }
-        return super.loadClass(name, resolve);
-      }
-    };
-
-    ResourceResolverFactory factory = DnsNameResolver.getResourceResolverFactory(cl);
-
-    assertThat(factory).isNull();
-  }
 
   @Test
   public void doNotResolveWhenProxyDetected() throws Exception {
@@ -899,9 +888,6 @@ public class DnsNameResolverTest {
         enableJndi, enableJndiLocalhost, "8.8.8.8.in-addr.arpa."));
     assertTrue(DnsNameResolver.shouldUseJndi(
         enableJndi, enableJndiLocalhost, "2001-db8-1234--as3.ipv6-literal.net"));
-
-
-
   }
 
   private void testInvalidUri(URI uri) {
@@ -939,6 +925,27 @@ public class DnsNameResolverTest {
           (InetSocketAddress) Iterables.getOnlyElement(addrGroup.getAddresses());
       assertEquals("Addr " + i, port, socketAddr.getPort());
       assertEquals("Addr " + i, addrs.get(i), socketAddr.getAddress());
+    }
+  }
+
+  private static class MockResourceResolverFactory implements ResourceResolverFactory {
+
+    private RecordFetcher mockRecordFetcher;
+
+    public MockResourceResolverFactory(RecordFetcher mockRecordFetcher) {
+      this.mockRecordFetcher = mockRecordFetcher;
+    }
+
+    @Nullable
+    @Override
+    public ResourceResolver newResourceResolver() {
+      return new JndiResourceResolver(mockRecordFetcher);
+    }
+
+    @Nullable
+    @Override
+    public Throwable unavailabilityCause() {
+      return null;
     }
   }
 }

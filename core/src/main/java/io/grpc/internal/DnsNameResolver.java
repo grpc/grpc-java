@@ -30,7 +30,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -118,9 +117,6 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
 
-  private static final ResourceResolverFactory resourceResolverFactory =
-      getResourceResolverFactory(DnsNameResolver.class.getClassLoader());
-
   @VisibleForTesting
   final ProxyDetector proxyDetector;
 
@@ -146,10 +142,12 @@ final class DnsNameResolver extends NameResolver {
   private Listener listener;
 
   private final Runnable resolveRunnable;
+  private final ResourceResolverFactory resourceResolverFactory;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
       Resource<Executor> executorResource, ProxyDetector proxyDetector,
-      Stopwatch stopwatch, boolean isAndroid) {
+      Stopwatch stopwatch, boolean isAndroid,
+      ResourceResolverFactory resourceResolverFactory) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -173,6 +171,8 @@ final class DnsNameResolver extends NameResolver {
     }
     this.proxyDetector = proxyDetector;
     this.resolveRunnable = new Resolve(this, stopwatch, getNetworkAddressCacheTtlNanos(isAndroid));
+    this.resourceResolverFactory =
+        Preconditions.checkNotNull(resourceResolverFactory, "resourceResolverFactory");
   }
 
   @Override
@@ -640,41 +640,6 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     return rr;
-  }
-
-  @Nullable
-  @VisibleForTesting
-  static ResourceResolverFactory getResourceResolverFactory(ClassLoader loader) {
-    Class<? extends ResourceResolverFactory> jndiClazz;
-    try {
-      jndiClazz =
-          Class.forName("io.grpc.internal.JndiResourceResolverFactory", true, loader)
-              .asSubclass(ResourceResolverFactory.class);
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.FINE, "Unable to find JndiResourceResolverFactory, skipping.", e);
-      return null;
-    }
-    Constructor<? extends ResourceResolverFactory> jndiCtor;
-    try {
-      jndiCtor = jndiClazz.getConstructor();
-    } catch (Exception e) {
-      logger.log(Level.FINE, "Can't find JndiResourceResolverFactory ctor, skipping.", e);
-      return null;
-    }
-    ResourceResolverFactory rrf;
-    try {
-      rrf = jndiCtor.newInstance();
-    } catch (Exception e) {
-      logger.log(Level.FINE, "Can't construct JndiResourceResolverFactory, skipping.", e);
-      return null;
-    }
-    if (rrf.unavailabilityCause() != null) {
-      logger.log(
-          Level.FINE,
-          "JndiResourceResolverFactory not available, skipping.",
-          rrf.unavailabilityCause());
-    }
-    return rrf;
   }
 
   private static String getLocalHostname() {

@@ -16,12 +16,18 @@
 
 package io.grpc.internal;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolverProvider;
+import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
+import java.lang.reflect.Constructor;
 import java.net.URI;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * A provider for {@link DnsNameResolver}.
@@ -40,6 +46,10 @@ import java.net.URI;
  */
 public final class DnsNameResolverProvider extends NameResolverProvider {
 
+  private static final Logger logger = Logger.getLogger(DnsNameResolverProvider.class.getName());
+
+  private static final ResourceResolverFactory resourceResolverFactory =
+      getResourceResolverFactory(DnsNameResolverProvider.class.getClassLoader());
   private static final String SCHEME = "dns";
 
   @Override
@@ -56,7 +66,8 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
           GrpcUtil.SHARED_CHANNEL_EXECUTOR,
           GrpcUtil.getDefaultProxyDetector(),
           Stopwatch.createUnstarted(),
-          InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+          InternalServiceProviders.isAndroid(getClass().getClassLoader()),
+          resourceResolverFactory);
     } else {
       return null;
     }
@@ -75,5 +86,40 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   @Override
   protected int priority() {
     return 5;
+  }
+
+  @Nullable
+  @VisibleForTesting
+  static ResourceResolverFactory getResourceResolverFactory(ClassLoader loader) {
+    Class<? extends ResourceResolverFactory> jndiClazz;
+    try {
+      jndiClazz =
+          Class.forName("io.grpc.internal.JndiResourceResolverFactory", true, loader)
+              .asSubclass(ResourceResolverFactory.class);
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find JndiResourceResolverFactory, skipping.", e);
+      return null;
+    }
+    Constructor<? extends ResourceResolverFactory> jndiCtor;
+    try {
+      jndiCtor = jndiClazz.getConstructor();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Can't find JndiResourceResolverFactory ctor, skipping.", e);
+      return null;
+    }
+    ResourceResolverFactory rrf;
+    try {
+      rrf = jndiCtor.newInstance();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Can't construct JndiResourceResolverFactory, skipping.", e);
+      return null;
+    }
+    if (rrf.unavailabilityCause() != null) {
+      logger.log(
+          Level.FINE,
+          "JndiResourceResolverFactory not available, skipping.",
+          rrf.unavailabilityCause());
+    }
+    return rrf;
   }
 }
