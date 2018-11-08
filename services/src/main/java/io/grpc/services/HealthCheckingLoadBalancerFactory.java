@@ -27,6 +27,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
@@ -203,6 +204,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private final ScheduledExecutorService timerService;
 
     private Subchannel subchannel;
+    private ChannelLogger subchannelLogger;
 
     // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
@@ -233,6 +235,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     void init(Subchannel subchannel) {
       checkState(this.subchannel == null, "init() already called");
       this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
     }
 
     void setServiceName(@Nullable String newServiceName) {
@@ -282,6 +285,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     private void startRpc() {
+      checkState(serviceName != null, "serviceName is null");
       checkState(activeRpc == null, "previous health-checking RPC has not been cleaned up");
       checkState(subchannel != null, "init() not called");
       // Optimization suggested by @markroth: if we are already READY and starting the health
@@ -289,6 +293,8 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       // name, we don't go to CONNECTING, otherwise there will be artificial delays on RPCs
       // waiting for the health check to respond.
       if (!Objects.equal(concludedState.getState(), READY)) {
+        subchannelLogger.log(
+            ChannelLogLevel.INFO, "CONNECTING: Starting health-check for \"{0}\"", serviceName);
         gotoState(ConnectivityStateInfo.forNonError(CONNECTING));
       }
       activeRpc = new HcStream();
@@ -378,15 +384,19 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       void handleResponse(HealthCheckResponse response) {
         callHasResponded = true;
         backoffPolicy = null;
+        ServingStatus status = response.getStatus();
         // running == true means the Subchannel's state (rawState) is READY
-        if (Objects.equal(response.getStatus(), ServingStatus.SERVING)) {
+        if (Objects.equal(status, ServingStatus.SERVING)) {
+          subchannelLogger.log(ChannelLogLevel.INFO, "READY: health-check responded SERVING");
           gotoState(ConnectivityStateInfo.forNonError(READY));
         } else {
+          subchannelLogger.log(
+              ChannelLogLevel.INFO, "TRANSIENT_FAILURE: health-check responded {0}", status);
           gotoState(
               ConnectivityStateInfo.forTransientFailure(
                   Status.UNAVAILABLE.withDescription(
                       "Health-check service responded "
-                      + response.getStatus() + " for '" + callServiceName + "'")));
+                      + status + " for '" + callServiceName + "'")));
         }
         call.request(1);
       }
@@ -394,12 +404,14 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       void handleStreamClosed(Status status) {
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
           disabled = true;
-          subchannel.getChannelLogger().log(
-              ChannelLogLevel.ERROR, "Health-check disabled: {0}", status);
+          subchannelLogger.log(ChannelLogLevel.ERROR, "Health-check disabled: {0}", status);
+          subchannelLogger.log(ChannelLogLevel.INFO, "{0} (no health-check)", rawState);
           gotoState(rawState);
           return;
         }
         long delayNanos = 0;
+        subchannelLogger.log(
+            ChannelLogLevel.INFO, "TRANSIENT_FAILURE: health-check stream closed with {0}", status);
         gotoState(
             ConnectivityStateInfo.forTransientFailure(
                 Status.UNAVAILABLE.withDescription(
@@ -417,6 +429,8 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
           startRpc();
         } else {
           checkState(!isRetryTimerPending(), "Retry double scheduled");
+          subchannelLogger.log(
+              ChannelLogLevel.DEBUG, "Will retry health-check after {0} ns", delayNanos);
           retryTimer = syncContext.schedule(
               retryTask, delayNanos, TimeUnit.NANOSECONDS, timerService);
         }
