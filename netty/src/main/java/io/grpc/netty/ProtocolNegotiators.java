@@ -341,7 +341,8 @@ public final class ProtocolNegotiators {
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       final HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-      return new BufferingHttp2UpgradeHandler(httpClientCodec, upgrader, handler, handler.getAuthority());
+      return new BufferingHttp2UpgradeHandler(httpClientCodec, upgrader, handler,
+          handler.getAuthority());
     }
   }
 
