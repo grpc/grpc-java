@@ -93,7 +93,6 @@ import io.grpc.testing.integration.Messages.StreamingInputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingInputCallResponse;
 import io.grpc.testing.integration.Messages.StreamingOutputCallRequest;
 import io.grpc.testing.integration.Messages.StreamingOutputCallResponse;
-import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.tags.TagKey;
 import io.opencensus.tags.TagValue;
 import io.opencensus.trace.Span;
@@ -1932,12 +1931,6 @@ public abstract class AbstractInteropTest {
     TagValue methodNameTagOld = record.tags.get(DeprecatedCensusConstants.RPC_METHOD);
     assertNotNull("method name tagged", methodNameTagOld);
     assertEquals("method names match", methodName, methodNameTagOld.asString());
-
-    TagValue methodNameTagNew =
-        Type.CLIENT.equals(type) ? record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD)
-            : record.tags.get(RpcMeasureConstants.GRPC_SERVER_METHOD);
-    assertNotNull("method name tagged", methodNameTagNew);
-    assertEquals("method names match", methodName, methodNameTagNew.asString());
   }
 
   private static void checkEndTags(
@@ -1949,17 +1942,6 @@ public abstract class AbstractInteropTest {
     TagValue statusTagOld = record.tags.get(DeprecatedCensusConstants.RPC_STATUS);
     assertNotNull("status tagged", statusTagOld);
     assertEquals(status.toString(), statusTagOld.asString());
-
-    TagValue methodNameTagNew =
-        Type.CLIENT.equals(type) ? record.tags.get(RpcMeasureConstants.GRPC_CLIENT_METHOD)
-            : record.tags.get(RpcMeasureConstants.GRPC_SERVER_METHOD);
-    assertNotNull("method name tagged", methodNameTagNew);
-    assertEquals("method names match", methodName, methodNameTagNew.asString());
-    TagValue statusTagNew =
-        Type.CLIENT.equals(type) ? record.tags.get(RpcMeasureConstants.GRPC_CLIENT_STATUS)
-            : record.tags.get(RpcMeasureConstants.GRPC_SERVER_STATUS);
-    assertNotNull("status tagged", statusTagNew);
-    assertEquals(status.toString(), statusTagNew.asString());
   }
 
   private enum Type {

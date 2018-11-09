@@ -36,7 +36,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
-import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.Stats;
 import io.opencensus.stats.StatsRecorder;
@@ -329,14 +328,12 @@ public final class CensusStatsModule {
       this.startCtx =
           module.tagger.toBuilder(parentCtx)
           .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
-          .put(RpcMeasureConstants.GRPC_CLIENT_METHOD, methodTag)
           .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
       this.recordFinishedRpcs = recordFinishedRpcs;
       if (recordStartedRpcs) {
         module.statsRecorder.newMeasureMap()
             .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
-            .put(RpcMeasureConstants.GRPC_CLIENT_STARTED_RPCS, 1)
             .record(startCtx);
       }
     }
@@ -407,17 +404,7 @@ public final class CensusStatsModule {
               tracer.outboundUncompressedSize)
           .put(
               DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
-              tracer.inboundUncompressedSize)
-
-          // New RPC measure constants.
-          // The latency is double value
-          .put(RpcMeasureConstants.GRPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_RPC, tracer.outboundMessageCount)
-          .put(
-              RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_RPC,
-              tracer.inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_RPC, tracer.outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_RPC, tracer.inboundWireSize);
+              tracer.inboundUncompressedSize);
       if (!status.isOk()) {
         measureMap.put(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
@@ -427,7 +414,6 @@ public final class CensusStatsModule {
               .tagger
               .toBuilder(startCtx)
               .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
-              .put(RpcMeasureConstants.GRPC_CLIENT_STATUS, statusTag)
               .build());
     }
   }
@@ -520,7 +506,6 @@ public final class CensusStatsModule {
       if (recordStartedRpcs) {
         module.statsRecorder.newMeasureMap()
             .put(DeprecatedCensusConstants.RPC_SERVER_STARTED_COUNT, 1)
-            .put(RpcMeasureConstants.GRPC_SERVER_STARTED_RPCS, 1)
             .record(parentCtx);
       }
     }
@@ -624,14 +609,7 @@ public final class CensusStatsModule {
               outboundUncompressedSize)
           .put(
               DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
-              inboundUncompressedSize)
-
-          // New RPC measure constants.
-          .put(RpcMeasureConstants.GRPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_RPC, outboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_RPC, inboundMessageCount)
-          .put(RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_RPC, outboundWireSize)
-          .put(RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_RPC, inboundWireSize);
+              inboundUncompressedSize);
       if (!status.isOk()) {
         measureMap.put(DeprecatedCensusConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
@@ -641,7 +619,6 @@ public final class CensusStatsModule {
               .tagger
               .toBuilder(parentCtx)
               .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
-              .put(RpcMeasureConstants.GRPC_SERVER_STATUS, statusTag)
               .build());
     }
 
@@ -675,7 +652,6 @@ public final class CensusStatsModule {
           tagger
               .toBuilder(parentCtx)
               .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
-              .put(RpcMeasureConstants.GRPC_SERVER_METHOD, methodTag)
               .build();
       return new ServerTracer(
           CensusStatsModule.this,
