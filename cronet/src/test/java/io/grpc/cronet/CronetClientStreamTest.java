@@ -16,7 +16,6 @@
 
 package io.grpc.cronet;
 
-import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +28,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -692,7 +692,7 @@ public final class CronetClientStreamTest {
             urlCaptor.capture(), isA(BidirectionalStream.Callback.class), isA(Executor.class));
     verify(getBuilder).setHttpMethod("GET");
     assertEquals(
-        "https://www.google.com/service/method?" + BASE64_ENCODING_OMIT_PADDING.encode(msg),
+        "https://www.google.com/service/method?" + BaseEncoding.base64().encode(msg),
         urlCaptor.getValue());
   }
 

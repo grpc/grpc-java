@@ -19,10 +19,10 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.InternalMetadata.BASE64_ENCODING_OMIT_PADDING;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 
 import com.google.common.base.Preconditions;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.InternalKnownTransport;
@@ -129,8 +129,7 @@ class NettyClientStream extends AbstractClientStream {
         // Forge the query string
         // TODO(ericgribkoff) Add the key back to the query string
         defaultPath =
-            new AsciiString(
-                defaultPath + "?" + BASE64_ENCODING_OMIT_PADDING.encode(requestPayload));
+            new AsciiString(defaultPath + "?" + BaseEncoding.base64().encode(requestPayload));
         httpMethod = Utils.HTTP_GET_METHOD;
       } else {
         httpMethod = Utils.HTTP_METHOD;
