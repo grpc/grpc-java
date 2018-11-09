@@ -184,6 +184,18 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
+    public void shutdown() {
+      super.shutdown();
+      for (HealthCheckState hcState : helper.hcStates) {
+        // ManagedChannel will stop calling handleSubchannelState() after shutdown() is called,
+        // which is required by LoadBalancer API semantics. We need to deliver the final SHUTDOWN
+        // signal to health checkers so that they can cancel the streams.
+        hcState.updateRawState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+      }
+      helper.hcStates.clear();
+    }
+
+    @Override
     public String toString() {
       return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
     }
