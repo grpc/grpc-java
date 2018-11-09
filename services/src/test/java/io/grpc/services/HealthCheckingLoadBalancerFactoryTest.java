@@ -976,11 +976,22 @@ public class HealthCheckingLoadBalancerFactoryTest {
     ServerSideCall serverCall = healthImpl.calls.poll();
     assertThat(serverCall.cancelled).isFalse();
 
+    verify(origLb).handleSubchannelState(
+        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+
     // Shut down the balancer
     hcLbEventDelivery.shutdown();
+    verify(origLb).shutdown();
 
     // Health check stream should be cancelled
     assertThat(serverCall.cancelled).isTrue();
+
+    // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
+    verifyNoMoreInteractions(origLb);
+
+    // No more health check call is made or scheduled
+    assertThat(healthImpl.calls).isEmpty();
+    assertThat(clock.getPendingTasks()).isEmpty();
   }
 
   @Test
