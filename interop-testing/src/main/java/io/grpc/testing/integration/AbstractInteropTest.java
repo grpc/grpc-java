@@ -753,15 +753,14 @@ public abstract class AbstractInteropTest {
 
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
-      checkStartTags(clientStartRecord, "grpc.testing.TestService/StreamingInputCall", Type.CLIENT);
+      checkStartTags(clientStartRecord, "grpc.testing.TestService/StreamingInputCall");
       // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
       // recorded.  The tracer stats rely on the stream being created, which is not always the case
       // in this test.  Therefore we don't check the tracer stats.
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/StreamingInputCall",
-          Status.CANCELLED.getCode(),
-          Type.CLIENT);
+          Status.CANCELLED.getCode());
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
   }
@@ -1067,13 +1066,12 @@ public abstract class AbstractInteropTest {
       // stats.
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkStartTags(
-          clientStartRecord, "grpc.testing.TestService/StreamingOutputCall", Type.CLIENT);
+          clientStartRecord, "grpc.testing.TestService/StreamingOutputCall");
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord,
           "grpc.testing.TestService/StreamingOutputCall",
-          Status.Code.DEADLINE_EXCEEDED,
-          Type.CLIENT);
+          Status.Code.DEADLINE_EXCEEDED);
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
   }
@@ -1104,13 +1102,12 @@ public abstract class AbstractInteropTest {
       // stats.
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkStartTags(
-          clientStartRecord, "grpc.testing.TestService/StreamingOutputCall", Type.CLIENT);
+          clientStartRecord, "grpc.testing.TestService/StreamingOutputCall");
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord,
           "grpc.testing.TestService/StreamingOutputCall",
-          Status.Code.DEADLINE_EXCEEDED,
-          Type.CLIENT);
+          Status.Code.DEADLINE_EXCEEDED);
       // Do not check server-side metrics, because the status on the server side is undetermined.
     }
   }
@@ -1132,12 +1129,11 @@ public abstract class AbstractInteropTest {
     // deadline is exceeded before the call is created. Therefore we don't check the tracer stats.
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
-      checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall", Type.CLIENT);
+      checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall");
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
-          Status.DEADLINE_EXCEEDED.getCode(),
-          Type.CLIENT);
+          Status.DEADLINE_EXCEEDED.getCode());
     }
 
     // warm up the channel
@@ -1153,12 +1149,11 @@ public abstract class AbstractInteropTest {
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
-      checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall", Type.CLIENT);
+      checkStartTags(clientStartRecord, "grpc.testing.TestService/EmptyCall");
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord, "grpc.testing.TestService/EmptyCall",
-          Status.DEADLINE_EXCEEDED.getCode(),
-          Type.CLIENT);
+          Status.DEADLINE_EXCEEDED.getCode());
     }
   }
 
@@ -1592,13 +1587,12 @@ public abstract class AbstractInteropTest {
       // recorded.  The tracer stats rely on the stream being created, which is not always the case
       // in this test, thus we will not check that.
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
-      checkStartTags(clientStartRecord, "grpc.testing.TestService/FullDuplexCall", Type.CLIENT);
+      checkStartTags(clientStartRecord, "grpc.testing.TestService/FullDuplexCall");
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord(5, TimeUnit.SECONDS);
       checkEndTags(
           clientEndRecord,
           "grpc.testing.TestService/FullDuplexCall",
-          Status.DEADLINE_EXCEEDED.getCode(),
-          Type.CLIENT);
+          Status.DEADLINE_EXCEEDED.getCode());
     }
   }
 
@@ -1866,9 +1860,9 @@ public abstract class AbstractInteropTest {
       // CensusStreamTracerModule records final status in interceptor, which is guaranteed to be
       // done before application receives status.
       MetricsRecord clientStartRecord = clientStatsRecorder.pollRecord();
-      checkStartTags(clientStartRecord, method, Type.CLIENT);
+      checkStartTags(clientStartRecord, method);
       MetricsRecord clientEndRecord = clientStatsRecorder.pollRecord();
-      checkEndTags(clientEndRecord, method, code, Type.CLIENT);
+      checkEndTags(clientEndRecord, method, code);
 
       if (requests != null && responses != null) {
         checkCensus(clientEndRecord, false, requests, responses);
@@ -1901,8 +1895,8 @@ public abstract class AbstractInteropTest {
       }
       assertNotNull(serverStartRecord);
       assertNotNull(serverEndRecord);
-      checkStartTags(serverStartRecord, method, Type.SERVER);
-      checkEndTags(serverEndRecord, method, code, Type.SERVER);
+      checkStartTags(serverStartRecord, method);
+      checkEndTags(serverEndRecord, method, code);
       if (requests != null && responses != null) {
         checkCensus(serverEndRecord, true, requests, responses);
       }
@@ -1926,7 +1920,7 @@ public abstract class AbstractInteropTest {
     }
   }
 
-  private static void checkStartTags(MetricsRecord record, String methodName, Type type) {
+  private static void checkStartTags(MetricsRecord record, String methodName) {
     assertNotNull("record is not null", record);
     TagValue methodNameTagOld = record.tags.get(DeprecatedCensusConstants.RPC_METHOD);
     assertNotNull("method name tagged", methodNameTagOld);
@@ -1934,7 +1928,7 @@ public abstract class AbstractInteropTest {
   }
 
   private static void checkEndTags(
-      MetricsRecord record, String methodName, Status.Code status, Type type) {
+      MetricsRecord record, String methodName, Status.Code status) {
     assertNotNull("record is not null", record);
     TagValue methodNameTagOld = record.tags.get(DeprecatedCensusConstants.RPC_METHOD);
     assertNotNull("method name tagged", methodNameTagOld);
@@ -1942,11 +1936,6 @@ public abstract class AbstractInteropTest {
     TagValue statusTagOld = record.tags.get(DeprecatedCensusConstants.RPC_STATUS);
     assertNotNull("status tagged", statusTagOld);
     assertEquals(status.toString(), statusTagOld.asString());
-  }
-
-  private enum Type {
-    CLIENT,
-    SERVER
   }
 
   /**
