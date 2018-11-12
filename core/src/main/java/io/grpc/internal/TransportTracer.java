@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import static io.grpc.internal.TimeProvider.SYSTEM_TIME_PROVIDER;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalChannelz.TransportStats;
 
@@ -159,7 +158,6 @@ public final class TransportTracer {
   public static final class Factory {
     private TimeProvider timeProvider;
 
-    @VisibleForTesting
     public Factory(TimeProvider timeProvider) {
       this.timeProvider = timeProvider;
     }
