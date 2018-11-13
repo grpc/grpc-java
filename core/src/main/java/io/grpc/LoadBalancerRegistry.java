@@ -126,7 +126,9 @@ public final class LoadBalancerRegistry {
     try {
       list.add(Class.forName("io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider"));
     } catch (ClassNotFoundException e) {
-      logger.log(Level.WARNING, "Unable to find round-robin LoadBalancer", e);
+      // Since hard-coded list is only used in Android environment, and we don't expect round-robin
+      // to be actually used there, we log it as a lower level.
+      logger.log(Level.FINE, "Unable to find round-robin LoadBalancer", e);
     }
     return Collections.unmodifiableList(list);
   }
