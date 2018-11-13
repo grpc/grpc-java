@@ -32,8 +32,10 @@ public class LoadBalancerRegistryTest {
   @Test
   public void getClassesViaHardcoded_classesPresent() throws Exception {
     List<Class<?>> classes = LoadBalancerRegistry.getHardCodedClasses();
-    assertThat(classes).hasSize(1);
+    assertThat(classes).hasSize(2);
     assertThat(classes.get(0)).isEqualTo(PickFirstLoadBalancerProvider.class);
+    assertThat(classes.get(1).getName()).isEqualTo(
+        "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
   }
 
   @Test
