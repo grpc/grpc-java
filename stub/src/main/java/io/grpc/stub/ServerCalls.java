@@ -331,7 +331,7 @@ public final class ServerCalls {
 
     @Override
     public void onNext(RespT response) {
-      if (cancelled) {
+      if (cancelled && onCancelHandler == null) {
         throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
       }
       if (!sentHeaders) {
