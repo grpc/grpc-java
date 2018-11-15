@@ -52,12 +52,17 @@ import javax.servlet.Servlet;
 import javax.servlet.ServletException;
 import org.junit.After;
 import org.junit.Ignore;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 
 /**
  * Transport test for Undertow server and Netty client.
  */
 public class UndertowTransportTest extends AbstractTransportTest {
+  @Rule
+  public final Timeout globalTimeout = Timeout.seconds(10);
+
   private static final String HOST = "localhost";
   private static final String MYAPP = "/service";
 
