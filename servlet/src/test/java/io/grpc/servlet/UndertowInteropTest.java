@@ -69,7 +69,7 @@ public class UndertowInteropTest extends AbstractInteropTest {
 
   @Override
   protected AbstractServerImplBuilder<?> getServerBuilder() {
-    return new ServletServerBuilder();
+    return new ServletServerBuilder().maxInboundMessageSize(AbstractInteropTest.MAX_MESSAGE_SIZE);
   }
 
   @Override

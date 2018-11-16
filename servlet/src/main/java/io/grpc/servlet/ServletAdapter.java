@@ -22,7 +22,6 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
-import static java.util.logging.Level.WARNING;
 
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
@@ -72,20 +71,28 @@ import javax.servlet.http.HttpServletResponse;
  * javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes the servlet
  * backed by the gRPC server associated with the adapter. The servlet must support Asynchronous
  * Processing and must be deployed to a container that supports servlet 4.0 and enables HTTP/2.
+ *
+ * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
+ * welcome to provide feedback by commenting on
+ * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
+@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public final class ServletAdapter {
 
   static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final ServerTransportListener transportListener;
   private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final int maxInboundMessageSize;
   private final Attributes attributes;
 
   ServletAdapter(
       ServerTransportListener transportListener,
-      List<ServerStreamTracer.Factory> streamTracerFactories) {
+      List<ServerStreamTracer.Factory> streamTracerFactories,
+      int maxInboundMessageSize) {
     this.transportListener = transportListener;
     this.streamTracerFactories = streamTracerFactories;
+    this.maxInboundMessageSize = maxInboundMessageSize;
     attributes = transportListener.transportReady(Attributes.EMPTY);
   }
 
@@ -111,19 +118,19 @@ public final class ServletAdapter {
    */
   public void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
-    checkArgument(ServletAdapter.isGrpc(req), "req is not a gRPC request");
+    checkArgument(ServletAdapter.isGrpc(req), "the request is not a gRPC request");
 
     InternalLogId logId = InternalLogId.allocate(getClass().getName());
     logger.log(FINE, "[{0}] RPC started", logId);
 
-    AsyncContext asyncCtx = req.startAsync();
+    AsyncContext asyncCtx = req.startAsync(req, resp);
 
     String method = req.getRequestURI().substring(1); // remove the leading "/"
     Metadata headers = getHeaders(req);
 
     if (logger.isLoggable(FINEST)) {
       logger.log(FINEST, "[{0}] method: {1}", new Object[] {logId, method});
-      logger.log(FINEST, "[{0}] headers:\n{1}", new Object[] {logId, headers});
+      logger.log(FINEST, "[{0}] headers: {1}", new Object[] {logId, headers});
     }
 
     Long timeoutNanos = headers.get(TIMEOUT_KEY);
@@ -134,8 +141,6 @@ public final class ServletAdapter {
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, method, headers);
     AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
-    ServletInputStream input = asyncCtx.getRequest().getInputStream();
-    ServletOutputStream output = asyncCtx.getResponse().getOutputStream();
     WritableBufferAllocator bufferAllocator =
         capacityHint -> new ByteArrayWritableBuffer(capacityHint);
 
@@ -153,6 +158,7 @@ public final class ServletAdapter {
         statsTraceCtx,
         writeState,
         writeChain,
+        maxInboundMessageSize,
         Attributes.newBuilder()
             .setAll(attributes)
             .set(
@@ -165,18 +171,19 @@ public final class ServletAdapter {
         getAuthority(req),
         logId);
 
-    output.setWriteListener(
-        new GrpcWriteListener(stream, asyncCtx, resp, writeState, writeChain, logId));
+    asyncCtx.getResponse().getOutputStream().setWriteListener(
+        new GrpcWriteListener(stream, asyncCtx, writeState, writeChain, logId));
 
     transportListener.streamCreated(stream, method, headers);
     stream.transportState().runOnTransportThread(
         () -> stream.transportState().onStreamAllocated());
 
-    input.setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
+    asyncCtx.getRequest().getInputStream()
+        .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
     asyncCtx.addListener(new GrpcAsycListener(stream, logId));
   }
 
-  private Metadata getHeaders(HttpServletRequest req) {
+  private static Metadata getHeaders(HttpServletRequest req) {
     Enumeration<String> headerNames = req.getHeaderNames();
     checkNotNull(
         headerNames, "Servlet container does not allow HttpServletRequest.getHeaderNames()");
@@ -201,7 +208,7 @@ public final class ServletAdapter {
     return InternalMetadata.newMetadata(byteArrays.toArray(new byte[][]{}));
   }
 
-  private String getAuthority(HttpServletRequest req) {
+  private static String getAuthority(HttpServletRequest req) {
     String authority = req.getRequestURL().toString();
     String uri = req.getRequestURI();
     String scheme = req.getScheme() + "://";
@@ -215,7 +222,7 @@ public final class ServletAdapter {
   }
 
   /**
-   * Call this method when the adapter is no longer need.
+   * Call this method when the adapter is no longer needed.
    */
   public void destroy() {
     transportListener.transportTerminated();
@@ -231,8 +238,7 @@ public final class ServletAdapter {
     }
 
     @Override
-    public void onComplete(AsyncEvent event) {
-    }
+    public void onComplete(AsyncEvent event) {}
 
     @Override
     public void onTimeout(AsyncEvent event) {
@@ -251,7 +257,9 @@ public final class ServletAdapter {
 
     @Override
     public void onError(AsyncEvent event) {
-      logger.log(WARNING, String.format("[{%s}] Error: ", logId), event.getThrowable());
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Error: ", logId), event.getThrowable());
+      }
 
       // If the resp is not committed, cancel() to avoid being redirected to an error page.
       // Else, the container will send RST_STREAM at the end.
@@ -280,13 +288,12 @@ public final class ServletAdapter {
     GrpcWriteListener(
         ServletServerStream stream,
         AsyncContext asyncCtx,
-        HttpServletResponse resp,
         AtomicReference<WriteState> writeState,
         Queue<ByteArrayWritableBuffer> writeChain,
         InternalLogId logId) throws IOException {
       this.stream = stream;
       this.asyncCtx = asyncCtx;
-      this.resp = resp;
+      resp = (HttpServletResponse) asyncCtx.getResponse();
       output = resp.getOutputStream();
       this.writeState = writeState;
       this.writeChain = writeChain;
@@ -295,7 +302,7 @@ public final class ServletAdapter {
 
     @Override
     public void onWritePossible() throws IOException {
-      logger.log(FINEST, "[{0}] onWritePossible", logId);
+      logger.log(FINEST, "[{0}] onWritePossible: ENTRY", logId);
 
       WriteState curState = writeState.get();
       // curState.stillWritePossible should have been set to false already or right now/
@@ -348,11 +355,15 @@ public final class ServletAdapter {
             });
         logger.log(FINEST, "[{0}] onWritePossible: call complete", logId);
       }
+
+      logger.log(FINEST, "[{0}] onWritePossible: EXIT", logId);
     }
 
     @Override
     public void onError(Throwable t) {
-      logger.log(WARNING, String.format("[{%s}] Error: ", logId), t);
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Error: ", logId), t);
+      }
 
       // If the resp is not committed, cancel() to avoid being redirected to an error page.
       // Else, the container will send RST_STREAM at the end.
@@ -385,7 +396,8 @@ public final class ServletAdapter {
 
     @Override
     public void onDataAvailable() throws IOException {
-      logger.log(FINEST, "[{0}] onDataAvailable ENTRY", logId);
+      logger.log(FINEST, "[{0}] onDataAvailable: ENTRY", logId);
+
       while (input.isReady()) {
         int length = input.read(buffer);
         if (length == -1) {
@@ -404,10 +416,10 @@ public final class ServletAdapter {
               () -> stream.transportState().inboundDataReceived(ReadableBuffers.wrap(copy), false));
         }
       }
-      logger.log(FINEST, "[{0}] onDataAvailable EXIT", logId);
+
+      logger.log(FINEST, "[{0}] onDataAvailable: EXIT", logId);
     }
 
-    @SuppressWarnings("FutureReturnValueIgnored")
     @Override
     public void onAllDataRead() {
       logger.log(FINE, "[{0}] onAllDataRead", logId);
@@ -442,21 +454,28 @@ public final class ServletAdapter {
         && request.getContentType().contains(GrpcUtil.CONTENT_TYPE_GRPC);
   }
 
-  /** Factory of ServletAdapter. */
+  /**
+   * Factory of ServletAdapter.
+   *
+   * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
+   * welcome to provide feedback by commenting on
+   * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
+   */
+  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
   public static final class Factory {
 
     private Factory() {}
 
     /**
      * Creates an instance of ServletAdapter. A gRPC server will be built and started with the given
-     * {@link ServletServerBuilder}. The servlet using this servletAdapter will be backed by the
-     * gRPC server.
+     * {@link ServletServerBuilder}. The servlet using this servletAdapter will power the gRPC
+     * server.
      */
     public static ServletAdapter create(ServletServerBuilder serverBuilder) {
-      ServerTransportListener listener = serverBuilder.buildAndStart();
       return new ServletAdapter(
-          listener,
-          serverBuilder.getStreamTracerFactories());
+          serverBuilder.buildAndStart(),
+          serverBuilder.streamTracerFactories,
+          serverBuilder.maxInboundMessageSize);
     }
   }
 }

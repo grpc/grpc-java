@@ -74,19 +74,20 @@ final class ServletServerStream extends AbstractServerStream {
       StatsTraceContext statsTraceCtx,
       AtomicReference<WriteState> writeState,
       Queue<ByteArrayWritableBuffer> writeChain,
+      int maxInboundMessageSize,
       Attributes attributes,
       String authority,
       InternalLogId logId) {
     super(bufferAllocator, statsTraceCtx);
     transportState =
-        new TransportState(Integer.MAX_VALUE, statsTraceCtx, new TransportTracer());
+        new TransportState(maxInboundMessageSize, statsTraceCtx, new TransportTracer());
     this.asyncCtx = asyncCtx;
     this.writeState = writeState;
     this.writeChain = writeChain;
     this.attributes = attributes;
     this.authority = authority;
     this.logId = logId;
-    this.sink = new Sink();
+    sink = new Sink();
   }
 
   @Override
@@ -132,7 +133,9 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void deframeFailed(Throwable cause) {
-      logger.log(WARNING, String.format("[{%s}] Exception processing message", logId), cause);
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Exception processing message", logId), cause);
+      }
       cancel(Status.fromThrowable(cause));
     }
   }

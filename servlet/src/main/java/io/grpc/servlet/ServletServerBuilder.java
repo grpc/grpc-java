@@ -16,8 +16,10 @@
 
 package io.grpc.servlet;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -44,15 +46,21 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Builder to build a gRPC server that can run as a servlet.
+ *
+ * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
+ * welcome to provide feedback by commenting on
+ * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
+@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 @NotThreadSafe
 public final class ServletServerBuilder extends AbstractServerImplBuilder<ServletServerBuilder> {
+  List<ServerStreamTracer.Factory> streamTracerFactories;
+  int maxInboundMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
 
   private ScheduledExecutorService scheduler;
   private boolean internalCaller;
   private boolean usingCustomScheduler;
   private InternalServerImpl internalServer;
-  private List<ServerStreamTracer.Factory> streamTracerFactories;
 
   /**
    * Builds a gRPC server that can run as a servlet.
@@ -61,13 +69,13 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
    *
    * <p>Users should not call this method directly. Instead users should either pass the builder to
    * {@link ServletAdapter.Factory#create(ServletServerBuilder)} or to the constructor of {@link
-   * GrpcServlet},which internally will call {@code build()} and {@code start()} appropriately.
+   * GrpcServlet}, which internally will call {@code build()} and {@code start()} appropriately.
    *
    * @throws IllegalStateException if this method is called by users directly
    */
   @Override
   public Server build() {
-    checkState(internalCaller, "method should not be called by the user");
+    checkState(internalCaller, "build() method should not be called directly by an application");
     return super.build();
   }
 
@@ -95,6 +103,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
 
   @Override
   protected InternalServer buildTransportServer(List<Factory> streamTracerFactories) {
+    checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
     return internalServer;
@@ -107,7 +116,8 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
 
   @Override
   public ServletServerBuilder maxInboundMessageSize(int bytes) {
-    // TODO
+    checkArgument(bytes >= 0, "bytes must be >= 0");
+    maxInboundMessageSize = bytes;
     return this;
   }
 
@@ -120,10 +130,6 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     this.scheduler = checkNotNull(scheduler, "scheduler");
     usingCustomScheduler = true;
     return this;
-  }
-
-  List<ServerStreamTracer.Factory> getStreamTracerFactories() {
-    return streamTracerFactories;
   }
 
   private static final class InternalServerImpl implements InternalServer {
@@ -179,7 +185,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
 
     @Override
     public void shutdownNow(Status reason) {
-      // TODO:
+      shutdown();
     }
 
     @Override
