@@ -16,8 +16,8 @@
 
 package io.grpc;
 
-import javax.annotation.concurrent.ThreadSafe;
 import javax.annotation.Nonnull;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Interface for intercepting outgoing calls before they are dispatched by a {@link Channel}.
