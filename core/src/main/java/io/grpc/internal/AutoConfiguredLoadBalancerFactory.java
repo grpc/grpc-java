@@ -16,8 +16,10 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Ascii;
+import com.google.common.base.CaseFormat;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -31,8 +33,10 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import javax.annotation.Nullable;
 
 final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
@@ -81,11 +85,16 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     @Override
     public void handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers, Attributes attributes) {
+      if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
+        throw new IllegalArgumentException(
+            "Unexpected ATTR_LOAD_BALANCING_CONFIG from upstream: " +
+            attributes.get(ATTR_LOAD_BALANCING_CONFIG));
+      }
       Map<String, Object> configMap = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      LoadBalancerProvider newlbp;
+      PolicySelection selection;
       try {
-        newlbp = decideLoadBalancerProvider(servers, configMap);
-      } catch (PolicyNotFoundException e) {
+        selection = decideLoadBalancerProvider(servers, configMap);
+      } catch (PolicyException e) {
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
         delegate.shutdown();
@@ -95,15 +104,22 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
       }
 
       if (delegateProvider == null
-          || !newlbp.getPolicyName().equals(delegateProvider.getPolicyName())) {
+          || !selection.provider.getPolicyName().equals(delegateProvider.getPolicyName())) {
         helper.updateBalancingState(ConnectivityState.CONNECTING, new EmptyPicker());
         delegate.shutdown();
-        delegateProvider = newlbp;
+        delegateProvider = selection.provider;
         LoadBalancer old = delegate;
         delegate = delegateProvider.newLoadBalancer(helper);
         helper.getChannelLogger().log(
             ChannelLogLevel.INFO, "Load balancer changed from {0} to {1}",
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
+      }
+
+      if (selection.config != null) {
+        helper.getChannelLogger().log(
+            ChannelLogLevel.DEBUG, "load-balancing config: {0}", selection.config);
+        attributes =
+            attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.config).build();
       }
       getDelegate().handleResolvedAddressGroups(servers, attributes);
     }
@@ -138,76 +154,93 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     LoadBalancerProvider getDelegateProvider() {
       return delegateProvider;
     }
-
-    /**
-     * Picks a load balancer based on given criteria.  In order of preference:
-     *
-     * <ol>
-     *   <li>User provided lb on the channel.  This is a degenerate case and not handled here.</li>
-     *   <li>"grpclb" if any gRPC LB balancer addresses are present</li>
-     *   <li>The policy picked by the service config</li>
-     *   <li>"pick_first" if the service config choice does not specify</li>
-     * </ol>
-     *
-     * @param servers The list of servers reported
-     * @param config the service config object
-     * @return the new load balancer factory, never null
-     */
-    @VisibleForTesting
-    static LoadBalancerProvider decideLoadBalancerProvider(
-        List<EquivalentAddressGroup> servers, @Nullable Map<String, Object> config)
-        throws PolicyNotFoundException {
-      // Check for balancer addresses
-      boolean haveBalancerAddress = false;
-      for (EquivalentAddressGroup s : servers) {
-        if (s.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) != null) {
-          haveBalancerAddress = true;
-          break;
-        }
-      }
-
-      if (haveBalancerAddress) {
-        return getProviderOrThrow("grpclb", "NameResolver has returned balancer addresses");
-      }
-
-      String serviceConfigChoiceBalancingPolicy = null;
-      if (config != null) {
-        serviceConfigChoiceBalancingPolicy =
-            ServiceConfigUtil.getLoadBalancingPolicyFromServiceConfig(config);
-        if (serviceConfigChoiceBalancingPolicy != null) {
-          // Handle ASCII specifically rather than relying on the implicit default locale of the str
-          return getProviderOrThrow(
-              Ascii.toLowerCase(serviceConfigChoiceBalancingPolicy),
-              "service-config specifies load-balancing policy");
-        }
-      }
-      return getProviderOrThrow(DEFAULT_POLICY, "Using default policy");
-    }
   }
 
-  private static LoadBalancerProvider getProviderOrThrow(String policy, String reason)
-      throws PolicyNotFoundException {
+  /**
+   * Picks a load balancer based on given criteria.  In order of preference:
+   *
+   * <ol>
+   *   <li>User provided lb on the channel.  This is a degenerate case and not handled here.</li>
+   *   <li>"grpclb" if any gRPC LB balancer addresses are present</li>
+   *   <li>The policy picked by the service config</li>
+   *   <li>"pick_first" if the service config choice does not specify</li>
+   * </ol>
+   *
+   * @param servers The list of servers reported
+   * @param config the service config object
+   * @return the new load balancer factory, never null
+   */
+  @VisibleForTesting
+  static PolicySelection decideLoadBalancerProvider(
+      List<EquivalentAddressGroup> servers, @Nullable Map<String, Object> config)
+    throws PolicyException {
+    // Check for balancer addresses
+    boolean haveBalancerAddress = false;
+    for (EquivalentAddressGroup s : servers) {
+      if (s.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) != null) {
+        haveBalancerAddress = true;
+        break;
+      }
+    }
+
+    if (haveBalancerAddress) {
+      LoadBalancerProvider provider =
+          getProviderOrThrow("grpclb", "NameResolver has returned balancer addresses");
+      return new PolicySelection(provider, null);
+    }
+
+    if (config != null) {
+      List<Map<String, Object>> lbConfigs =
+          ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+      LinkedHashSet<String> policiesTried = new LinkedHashSet<String>();
+      for (Map<String, Object> lbConfig : lbConfigs) {
+        if (lbConfig.size() != 1) {
+          throw new PolicyException(
+              "There are " + lbConfig.size()
+              + " load-balancing configs in a list item. Exactly one is expected. Config="
+              + lbConfig);
+        }
+        Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
+        String policy = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, entry.getKey());
+        policiesTried.add(policy);
+        LoadBalancerProvider provider = registry.getProvider(policy);
+        if (provider != null) {
+          return new PolicySelection(provider, (Map) entry.getValue());
+        }
+      }
+      throw new PolicyException(
+          "None of " + policiesTried + " specified by Service Config are available.");
+    }
+    return new PolicySelection(
+        getProviderOrThrow(DEFAULT_POLICY, "Using default policy"), null);
+  }
+
+  private static LoadBalancerProvider getProviderOrThrow(String policy, String choiceReason)
+      throws PolicyException {
     LoadBalancerProvider provider = registry.getProvider(policy);
     if (provider == null) {
-      throw new PolicyNotFoundException(policy, reason);
+      throw new PolicyException(
+          "Trying to load '" + policy + "' because " + choiceReason + ", but it's unavailable");
     }
     return provider;
   }
 
-  static final class PolicyNotFoundException extends Exception {
+  static class PolicyException extends Exception {
     private static final long serialVersionUID = 1L;
 
-    final String policy;
-    final String choiceReason;
-
-    private PolicyNotFoundException(String policy, String choiceReason) {
-      this.policy = policy;
-      this.choiceReason = choiceReason;
+    private PolicyException(String msg) {
+      super(msg);
     }
+  }
 
-    @Override
-    public String getMessage() {
-      return "Trying to load '" + policy + "' because " + choiceReason + ", but it's unavailable";
+  static final class PolicySelection {
+    final LoadBalancerProvider provider;
+    @Nullable final Map<String, Object> config;
+
+    @SuppressWarnings("unchecked")
+    PolicySelection(LoadBalancerProvider provider, @Nullable Map<?, ?> config) {
+      this.provider = checkNotNull(provider, "provider");
+      this.config = (Map<String, Object>) config;
     }
   }
 
