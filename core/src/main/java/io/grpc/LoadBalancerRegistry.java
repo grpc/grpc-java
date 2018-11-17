@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Registry of {@link LoadBalancerProvider}s.  The {@link #getDefaultRegistry default instance}
@@ -35,48 +36,49 @@ import javax.annotation.Nullable;
  * @since 1.17.0
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+@ThreadSafe
 public final class LoadBalancerRegistry {
   private static final Logger logger = Logger.getLogger(LoadBalancerRegistry.class.getName());
   private static LoadBalancerRegistry instance;
   private static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
 
-  private final Map<String, LoadBalancerProvider> providers;
+  private final LinkedHashMap<String, LoadBalancerProvider> providers =
+      new LinkedHashMap<String, LoadBalancerProvider>();
 
-  @VisibleForTesting
-  LoadBalancerRegistry(List<LoadBalancerProvider> providerList) {
-    // Use LinkedHashMap to preserve order s othat it's easier to test
-    LinkedHashMap<String, LoadBalancerProvider> providerMap = new LinkedHashMap<>();
-    for (LoadBalancerProvider provider : providerList) {
-      if (!provider.isAvailable()) {
-        logger.fine(provider + " found but not available");
-        continue;
-      }
-      String policy = provider.getPolicyName();
-      LoadBalancerProvider existing = providerMap.get(policy);
-      if (existing == null) {
-        logger.fine("Found " + provider);
-        providerMap.put(policy, provider);
+  /**
+   * Register a provider.  If successfully registered, this provider can be fetched by its
+   * {@link LoadBalancerProvider#getPolicyName policy name} via {@link #getProvider}.  If a provider
+   * with the same policy name has already been registered, only the provider with the higher
+   * {@link LoadBalancerProvider#getPriority priority}, or the one registered earlier if their
+   * priorities are the same, will be kept in the registry.
+   *
+   * @return {@code OK} if successfully registered. {@code UNAVAILABLE} if the provider's
+   *         {@link LoadBalancerProvider#isAvailable isAvailable()} returned {@code false}.
+   *         {@code ALREADY_EXISTS} if a provider with the same policy name and a higher priority
+   *         has already been registered.  {@code FAILED_PRECONDITION} if a provider with the same
+   *         policy name and an equal priority has already been registered.
+   */
+  public synchronized Status register(LoadBalancerProvider provider) {
+    if (!provider.isAvailable()) {
+      return Status.UNAVAILABLE.withDescription("isAvailable() returned false");
+    }
+    String policy = provider.getPolicyName();
+    LoadBalancerProvider existing = providers.get(policy);
+    if (existing == null) {
+      providers.put(policy, provider);
+      return Status.OK;
+    } else {
+      if (existing.getPriority() < provider.getPriority()) {
+        providers.put(policy, provider);
+        return Status.OK;
+      } else if (existing.getPriority() > provider.getPriority()) {
+        return Status.ALREADY_EXISTS.withDescription(
+            existing + " with higher priority already registered");
       } else {
-        if (existing.getPriority() < provider.getPriority()) {
-          logger.fine(provider + " overrides " + existing + " because of higher priority");
-          providerMap.put(policy, provider);
-        } else if (existing.getPriority() > provider.getPriority()) {
-          logger.fine(provider + " doesn't override " + existing + " because of lower priority");
-        } else {
-          LoadBalancerProvider selected = existing;
-          if (existing.getClass().getName().compareTo(provider.getClass().getName()) < 0) {
-            providerMap.put(policy, provider);
-            selected = provider;
-          }
-          logger.warning(
-              provider + " and " + existing + " has the same priority. "
-              + selected + " is selected for this time. "
-              + "You should make them differ in either policy name or priority, or remove "
-              + "one of them from your classpath");
-        }
+        return Status.FAILED_PRECONDITION.withDescription(
+            existing + " with the same priority already registered");
       }
     }
-    providers = Collections.unmodifiableMap(providerMap);
   }
 
   /**
@@ -89,7 +91,21 @@ public final class LoadBalancerRegistry {
           HARDCODED_CLASSES,
           LoadBalancerProvider.class.getClassLoader(),
           new LoadBalancerPriorityAccessor());
-      instance = new LoadBalancerRegistry(providerList);
+      instance = new LoadBalancerRegistry();
+      for (LoadBalancerProvider provider : providerList) {
+        logger.fine("Found " + provider);
+        Status status = instance.register(provider);
+        switch (status.getCode()) {
+          case OK:
+            logger.fine(provider + " successfully registered");
+            break;
+          case FAILED_PRECONDITION:
+            logger.warning(provider + " failed to register because " + status.getDescription());
+            break;
+          default:
+            logger.fine(provider + " didn't register because " + status.getDescription());
+        }
+      }
     }
     return instance;
   }
@@ -100,16 +116,16 @@ public final class LoadBalancerRegistry {
    * LoadBalancerProvider#getPolicyName}.
    */
   @Nullable
-  public LoadBalancerProvider getProvider(String policy) {
+  public synchronized LoadBalancerProvider getProvider(String policy) {
     return providers.get(checkNotNull(policy, "policy"));
   }
 
   /**
-   * Returns effective providers.
+   * Returns effective providers in a new map.
    */
   @VisibleForTesting
-  Map<String, LoadBalancerProvider> providers() {
-    return providers;
+  synchronized Map<String, LoadBalancerProvider> providers() {
+    return new LinkedHashMap<String, LoadBalancerProvider>(providers);
   }
 
   @VisibleForTesting
