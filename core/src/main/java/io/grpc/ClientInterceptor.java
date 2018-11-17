@@ -17,6 +17,7 @@
 package io.grpc;
 
 import javax.annotation.concurrent.ThreadSafe;
+import javax.annotation.Nonnull;
 
 /**
  * Interface for intercepting outgoing calls before they are dispatched by a {@link Channel}.
@@ -48,5 +49,5 @@ public interface ClientInterceptor {
    * @return the call object for the remote operation, never {@code null}.
    */
   <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next);
+      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, @Nonnull Channel next);
 }
