@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -48,5 +49,7 @@ public interface ClientInterceptor {
    * @return the call object for the remote operation, never {@code null}.
    */
   <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-      MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next);
+      @Nonnull MethodDescriptor<ReqT, RespT> method,
+      @Nonnull CallOptions callOptions,
+      @Nonnull Channel next);
 }
