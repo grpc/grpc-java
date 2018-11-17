@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.CaseFormat;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -87,13 +88,13 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
         throw new IllegalArgumentException(
-            "Unexpected ATTR_LOAD_BALANCING_CONFIG from upstream: " +
-            attributes.get(ATTR_LOAD_BALANCING_CONFIG));
+            "Unexpected ATTR_LOAD_BALANCING_CONFIG from upstream: "
+            + attributes.get(ATTR_LOAD_BALANCING_CONFIG));
       }
       Map<String, Object> configMap = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       PolicySelection selection;
       try {
-        selection = decideLoadBalancerProvider(servers, configMap);
+        selection = decideLoadBalancerProvider(servers, configMap, helper.getChannelLogger());
       } catch (PolicyException e) {
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
@@ -117,7 +118,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
 
       if (selection.config != null) {
         helper.getChannelLogger().log(
-            ChannelLogLevel.DEBUG, "load-balancing config: {0}", selection.config);
+            ChannelLogLevel.DEBUG, "Load-balancing config: {0}", selection.config);
         attributes =
             attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.config).build();
       }
@@ -172,7 +173,8 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
    */
   @VisibleForTesting
   static PolicySelection decideLoadBalancerProvider(
-      List<EquivalentAddressGroup> servers, @Nullable Map<String, Object> config)
+      List<EquivalentAddressGroup> servers, @Nullable Map<String, Object> config,
+      ChannelLogger channelLogger)
     throws PolicyException {
     // Check for balancer addresses
     boolean haveBalancerAddress = false;
@@ -201,12 +203,22 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
               + lbConfig);
         }
         Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
+        // Internally the service config is written in Protobuf and converted to JSON.
+        // Unfortunately the policy name is lowerCamel format in the converted JSON.  We will
+        // have to convert it to the lower_underscore format to match the policy names.
+        // The conversion is no-op if it's already lower_underscore, thus external users who
+        // write the service config in JSON directly can use lower_underscore.
         String policy = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, entry.getKey());
-        policiesTried.add(policy);
         LoadBalancerProvider provider = registry.getProvider(policy);
         if (provider != null) {
+          if (!policiesTried.isEmpty()) {
+            channelLogger.log(
+                ChannelLogLevel.DEBUG,
+                "{0} specified by Service Config are not available", policiesTried);
+          }
           return new PolicySelection(provider, (Map) entry.getValue());
         }
+        policiesTried.add(policy);
       }
       throw new PolicyException(
           "None of " + policiesTried + " specified by Service Config are available.");
@@ -225,6 +237,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     return provider;
   }
 
+  @VisibleForTesting
   static class PolicyException extends Exception {
     private static final long serialVersionUID = 1L;
 
@@ -233,6 +246,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     }
   }
 
+  @VisibleForTesting
   static final class PolicySelection {
     final LoadBalancerProvider provider;
     @Nullable final Map<String, Object> config;
