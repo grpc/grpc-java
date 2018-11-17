@@ -64,7 +64,8 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class AutoConfiguredLoadBalancerFactoryTest {
-  private final AutoConfiguredLoadBalancerFactory lbf = new AutoConfiguredLoadBalancerFactory();
+  private final AutoConfiguredLoadBalancerFactory lbf =
+      new AutoConfiguredLoadBalancerFactory(LoadBalancerRegistry.getDefaultRegistry());
 
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
 
@@ -198,6 +199,10 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(lb.getDelegateProvider().getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
     assertTrue(shutdown.get());
+  }
+
+  @Test
+  public void handleResolvedAddressGroups_propagateLbConfigToDelegate() {
   }
 
   @Test
