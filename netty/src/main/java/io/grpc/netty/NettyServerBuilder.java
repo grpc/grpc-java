@@ -39,6 +39,8 @@ import java.io.File;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,7 +67,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
-  private final SocketAddress address;
+  private final List<SocketAddress> listenAddresses = new ArrayList<>();
   private Class<? extends ServerChannel> channelType = NioServerSocketChannel.class;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
   @Nullable
@@ -110,12 +112,12 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @CheckReturnValue
   private NettyServerBuilder(int port) {
-    this.address = new InetSocketAddress(port);
+    this.listenAddresses.add(new InetSocketAddress(port));
   }
 
   @CheckReturnValue
   private NettyServerBuilder(SocketAddress address) {
-    this.address = address;
+    this.listenAddresses.add(address);
   }
 
   /**
@@ -436,22 +438,26 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @Override
   @CheckReturnValue
-  protected NettyServer buildTransportServer(
+  protected List<NettyServer> buildTransportServers(
       List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
     ProtocolNegotiator negotiator = protocolNegotiator;
     if (negotiator == null) {
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
               ProtocolNegotiators.serverPlaintext();
     }
-
-    return new NettyServer(
-        address, channelType, channelOptions, bossEventLoopGroup, workerEventLoopGroup,
-        negotiator, streamTracerFactories, getTransportTracerFactory(),
-        maxConcurrentCallsPerConnection, flowControlWindow,
-        maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-        maxConnectionIdleInNanos,
-        maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-        permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+    List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
+    for (SocketAddress listenAddress : listenAddresses) {
+      NettyServer transportServer = new NettyServer(
+          listenAddress, channelType, channelOptions, bossEventLoopGroup, workerEventLoopGroup,
+          negotiator, streamTracerFactories, getTransportTracerFactory(),
+          maxConcurrentCallsPerConnection, flowControlWindow,
+          maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
+          maxConnectionIdleInNanos,
+          maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
+          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+      transportServers.add(transportServer);
+    }
+    return Collections.unmodifiableList(transportServers);
   }
 
   @Override

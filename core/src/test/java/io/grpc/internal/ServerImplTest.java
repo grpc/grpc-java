@@ -1326,7 +1326,7 @@ public class ServerImplTest {
 
     builder.fallbackHandlerRegistry(fallbackRegistry);
     builder.executorPool = executorPool;
-    server = new ServerImpl(builder, transportServer, SERVER_CONTEXT);
+    server = new ServerImpl(builder, Collections.singletonList(transportServer), SERVER_CONTEXT);
   }
 
   private void verifyExecutorsAcquired() {
@@ -1411,7 +1411,7 @@ public class ServerImplTest {
   }
 
   private static class Builder extends AbstractServerImplBuilder<Builder> {
-    @Override protected InternalServer buildTransportServer(
+    @Override protected List<InternalServer> buildTransportServers(
         List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       throw new UnsupportedOperationException();
     }
