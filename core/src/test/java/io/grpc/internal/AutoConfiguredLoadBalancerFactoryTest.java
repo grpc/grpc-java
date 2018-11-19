@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.eq;
@@ -44,6 +45,8 @@ import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicyException;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
+import io.grpc.internal.TestLbLoadBalancerProvider.ResolvedAddressGroups;
+import io.grpc.internal.TestLbLoadBalancerProvider.TestLbLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.SocketAddress;
 import java.util.Arrays;
@@ -64,8 +67,7 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class AutoConfiguredLoadBalancerFactoryTest {
-  private final AutoConfiguredLoadBalancerFactory lbf =
-      new AutoConfiguredLoadBalancerFactory(LoadBalancerRegistry.getDefaultRegistry());
+  private final AutoConfiguredLoadBalancerFactory lbf = new AutoConfiguredLoadBalancerFactory();
 
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
 
@@ -202,7 +204,59 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void handleResolvedAddressGroups_propagateLbConfigToDelegate() {
+  public void handleResolvedAddressGroups_propagateLbConfigToDelegate() throws Exception {
+    Map<String, Object> serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"testLb\": { \"setting1\": \"high\" } } ] }");
+    Attributes serviceConfigAttrs =
+        Attributes.newBuilder()
+            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
+            .build();
+    final List<EquivalentAddressGroup> servers =
+        Collections.singletonList(
+            new EquivalentAddressGroup(
+                new SocketAddress(){},
+                Attributes.EMPTY));
+    Helper helper = new TestHelper() {
+      @Override
+      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+        assertThat(addrs).isEqualTo(servers);
+        return new TestSubchannel(addrs, attrs);
+      }
+
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        // noop
+      }
+    };
+    AutoConfiguredLoadBalancer lb =
+        (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(helper);
+
+    lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
+
+    TestLbLoadBalancer delegateLb = (TestLbLoadBalancer) lb.getDelegate();
+    assertThat(delegateLb.resolvedAddressGroupsList).hasSize(1);
+    ResolvedAddressGroups resolved = delegateLb.resolvedAddressGroupsList.poll();
+    assertThat(resolved.servers).isSameAs(servers);
+    assertThat(resolved.attributes.get(ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(Collections.singletonMap("setting1", "high"));
+
+    serviceConfig =
+        parseConfig("{\"loadBalancingConfig\": [ {\"testLb\": { \"setting1\": \"low\" } } ] }");
+    serviceConfigAttrs =
+        Attributes.newBuilder()
+            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
+            .build();
+    lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
+
+    // Service config didn't change policy, thus the delegateLb is not swapped
+    assertThat(lb.getDelegate()).isSameAs(delegateLb);
+    assertThat(delegateLb.isShutdown()).isFalse();
+    // But the balancer config is changed.
+    assertThat(delegateLb.resolvedAddressGroupsList).hasSize(1);
+    resolved = delegateLb.resolvedAddressGroupsList.poll();
+    assertThat(resolved.servers).isSameAs(servers);
+    assertThat(resolved.attributes.get(ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(Collections.singletonMap("setting1", "low"));
   }
 
   @Test
@@ -293,7 +347,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbConfigOverridesDefault() throws Exception {
     Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"roundRobin\": {} } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"roundRobin\": {\"setting1\": \"high\"} } ] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
@@ -304,7 +358,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     assertThat(selection.provider.getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
-    assertThat(selection.config).isEqualTo(Collections.emptyMap());
+    assertThat(selection.config).isEqualTo(Collections.singletonMap("setting1", "high"));
     verifyZeroInteractions(channelLogger);
   }
 

@@ -43,11 +43,7 @@ import javax.annotation.Nullable;
 final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   private static final String DEFAULT_POLICY = "pick_first";
 
-  private final LoadBalancerRegistry registry;
-
-  AutoConfiguredLoadBalancerFactory(LoadBalancerRegistry registry) {
-    this.registry = checkNotNull(registry, "registry");
-  }
+  private static final LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
