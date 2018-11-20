@@ -55,15 +55,19 @@ public final class LoadBalancerRegistry {
    * <p>If the provider's {@link LoadBalancerProvider#isAvailable isAvailable()} returns
    * {@code false}, this method will throw {@link IllegalArgumentException}.
    *
-   * <p>If more than one providers with the same {@link LoadBalancerProvider#getPolicyName policy
+   * <p>If more than one provider with the same {@link LoadBalancerProvider#getPolicyName policy
    * name} are registered, the one with the highest {@link LoadBalancerProvider#getPriority
-   * priority} will be effective.  If there are more than one name-sake providers ranking the
-   * highest priority, the one registered first will be effective.
+   * priority} will be effective.  If there are more than one name-sake providers rank the highest
+   * priority, the one registered first will be effective.
    */
   public synchronized void register(LoadBalancerProvider provider) {
+    addProvider(provider);
+    refreshProviderMap();
+  }
+
+  private synchronized void addProvider(LoadBalancerProvider provider) {
     checkArgument(provider.isAvailable(), "isAvailable() returned false");
     allProviders.add(provider);
-    refreshProviderMap();
   }
 
   /**
@@ -104,9 +108,10 @@ public final class LoadBalancerRegistry {
       for (LoadBalancerProvider provider : providerList) {
         logger.fine("Service loader found " + provider);
         if (provider.isAvailable()) {
-          instance.register(provider);
+          instance.addProvider(provider);
         }
       }
+      instance.refreshProviderMap();
     }
     return instance;
   }
