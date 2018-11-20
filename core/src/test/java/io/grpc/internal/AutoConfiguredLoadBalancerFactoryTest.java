@@ -20,7 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -38,6 +41,8 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -45,8 +50,6 @@ import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicyException;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
-import io.grpc.internal.TestLbLoadBalancerProvider.ResolvedAddressGroups;
-import io.grpc.internal.TestLbLoadBalancerProvider.TestLbLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.net.SocketAddress;
 import java.util.Arrays;
@@ -58,9 +61,12 @@ import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Unit tests for {@link AutoConfiguredLoadBalancerFactory}.
@@ -70,6 +76,19 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   private final AutoConfiguredLoadBalancerFactory lbf = new AutoConfiguredLoadBalancerFactory();
 
   private final ChannelLogger channelLogger = mock(ChannelLogger.class);
+  private final LoadBalancer testLbBalancer = mock(LoadBalancer.class);
+  private final LoadBalancerProvider testLbBalancerProvider =
+      mock(LoadBalancerProvider.class, delegatesTo(new TestLbLoadBalancerProvider()));
+
+  @Before
+  public void setUp() {
+    LoadBalancerRegistry.getDefaultRegistry().register(testLbBalancerProvider);
+  }
+
+  @After
+  public void tearDown() {
+    LoadBalancerRegistry.getDefaultRegistry().deregister(testLbBalancerProvider);
+  }
 
   @Test
   public void newLoadBalancer_isAuto() {
@@ -217,28 +236,23 @@ public class AutoConfiguredLoadBalancerFactoryTest {
                 new SocketAddress(){},
                 Attributes.EMPTY));
     Helper helper = new TestHelper() {
-      @Override
-      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-        assertThat(addrs).isEqualTo(servers);
-        return new TestSubchannel(addrs, attrs);
-      }
-
-      @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        // noop
-      }
-    };
+        @Override
+        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+          // noop
+        }
+      };
     AutoConfiguredLoadBalancer lb =
         (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(helper);
 
     lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
 
-    TestLbLoadBalancer delegateLb = (TestLbLoadBalancer) lb.getDelegate();
-    assertThat(delegateLb.resolvedAddressGroupsList).hasSize(1);
-    ResolvedAddressGroups resolved = delegateLb.resolvedAddressGroupsList.poll();
-    assertThat(resolved.servers).isSameAs(servers);
-    assertThat(resolved.attributes.get(ATTR_LOAD_BALANCING_CONFIG))
+    verify(testLbBalancerProvider).newLoadBalancer(same(helper));
+    assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
+    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
+    verify(testLbBalancer).handleResolvedAddressGroups(same(servers), attrsCaptor.capture());
+    assertThat(attrsCaptor.getValue().get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(Collections.singletonMap("setting1", "high"));
+    verifyNoMoreInteractions(testLbBalancer);
 
     serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"testLb\": { \"setting1\": \"low\" } } ] }");
@@ -248,15 +262,14 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .build();
     lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
 
-    // Service config didn't change policy, thus the delegateLb is not swapped
-    assertThat(lb.getDelegate()).isSameAs(delegateLb);
-    assertThat(delegateLb.isShutdown()).isFalse();
+    verify(testLbBalancer, times(2))
+        .handleResolvedAddressGroups(same(servers), attrsCaptor.capture());
     // But the balancer config is changed.
-    assertThat(delegateLb.resolvedAddressGroupsList).hasSize(1);
-    resolved = delegateLb.resolvedAddressGroupsList.poll();
-    assertThat(resolved.servers).isSameAs(servers);
-    assertThat(resolved.attributes.get(ATTR_LOAD_BALANCING_CONFIG))
+    assertThat(attrsCaptor.getValue().get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(Collections.singletonMap("setting1", "low"));
+    // Service config didn't change policy, thus the delegateLb is not swapped
+    verifyNoMoreInteractions(testLbBalancer);
+    verify(testLbBalancerProvider).newLoadBalancer(any(Helper.class));
   }
 
   @Test
@@ -611,6 +624,30 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     @Override
     public Attributes getAttributes() {
       return attrs;
+    }
+  }
+
+  private final class TestLbLoadBalancerProvider extends LoadBalancerProvider {
+    static final String POLICY_NAME = "test_lb";
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return POLICY_NAME;
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return testLbBalancer;
     }
   }
 }
