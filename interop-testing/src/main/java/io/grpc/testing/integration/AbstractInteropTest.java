@@ -1780,6 +1780,7 @@ public abstract class AbstractInteropTest {
   /**
    * Wrapper around {@link Mockito#verify}, to keep log spam down on failure.
    */
+  @SuppressWarnings("serial")
   private static <T> T verify(T mock, VerificationMode mode) {
     try {
       return Mockito.verify(mock, mode);
@@ -1801,6 +1802,7 @@ public abstract class AbstractInteropTest {
   /**
    * Wrapper around {@link Mockito#verify}, to keep log spam down on failure.
    */
+  @SuppressWarnings("serial")
   private static void verifyNoMoreInteractions(Object... mocks) {
     try {
       Mockito.verifyNoMoreInteractions(mocks);

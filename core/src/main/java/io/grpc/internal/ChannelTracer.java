@@ -63,7 +63,8 @@ final class ChannelTracer {
     checkNotNull(description, "description");
     this.logId = checkNotNull(logId, "logId");
     if (maxEvents > 0) {
-      events = new ArrayDeque<Event>() {
+      @SuppressWarnings("serial")
+      Collection<Event> events = new ArrayDeque<Event>() {
           @GuardedBy("lock")
           @Override
           public boolean add(Event event) {
@@ -74,6 +75,7 @@ final class ChannelTracer {
             return super.add(event);
           }
         };
+      this.events = events;
     } else {
       events = null;
     }
