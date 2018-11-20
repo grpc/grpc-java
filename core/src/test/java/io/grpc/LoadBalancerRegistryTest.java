@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import io.grpc.grpclb.GrpclbLoadBalancerProvider;
 import io.grpc.internal.PickFirstLoadBalancerProvider;
@@ -57,52 +58,42 @@ public class LoadBalancerRegistryTest {
   }
 
   @Test
-  public void filterUnavilableProviders() {
-    LoadBalancerProvider[] providers = new LoadBalancerProvider[] {
-      new FakeProvider("cool", 5, true),
-      new FakeProvider("great", 5, false),
-      new FakeProvider("excellent", 5, true)};
+  public void unavilableProviderThrows() {
     LoadBalancerRegistry reg = new LoadBalancerRegistry();
-    assertThat(reg.register(providers[0])).isEqualTo(Status.OK);
-    assertThat(reg.register(providers[1]).getCode()).isEqualTo(Status.Code.UNAVAILABLE);
-    assertThat(reg.register(providers[2])).isEqualTo(Status.OK);
-    assertThat(reg.providers()).hasSize(2);
-    assertThat(reg.getProvider("cool")).isSameAs(providers[0]);
+    try {
+      reg.register(new FakeProvider("great", 5, false));
+      fail("Should throw");
+    } catch (IllegalArgumentException e) {
+      assertThat(e.getMessage()).contains("isAvailable() returned false");
+    }
     assertThat(reg.getProvider("great")).isNull();
-    assertThat(reg.getProvider("excellent")).isSameAs(providers[2]);
   }
 
   @Test
-  public void priorities() {
+  public void registerAndDeregister() {
     LoadBalancerProvider[] providers = new LoadBalancerProvider[] {
       new FakeProvider("cool", 5, true),
       new FakeProvider("cool", 6, true),
       new FakeProvider("great", 5, true),
       new FakeProvider("great", 4, true),
+      new FakeProvider("excellent", 5, true),
       new FakeProvider("excellent", 5, true)};
     LoadBalancerRegistry reg = new LoadBalancerRegistry();
-    assertThat(reg.register(providers[0])).isEqualTo(Status.OK);
-    assertThat(reg.register(providers[1])).isEqualTo(Status.OK);
-    assertThat(reg.register(providers[2])).isEqualTo(Status.OK);
-    assertThat(reg.register(providers[3]).getCode()).isEqualTo(Status.Code.ALREADY_EXISTS);
-    assertThat(reg.register(providers[4])).isEqualTo(Status.OK);
+    for (LoadBalancerProvider provider : providers) {
+      reg.register(provider);
+    }
 
     assertThat(reg.providers()).hasSize(3);
     assertThat(reg.getProvider("cool")).isSameAs(providers[1]);
     assertThat(reg.getProvider("great")).isSameAs(providers[2]);
     assertThat(reg.getProvider("excellent")).isSameAs(providers[4]);
-  }
 
-  @Test
-  public void samePriority() {
-    LoadBalancerProvider[] providers = new LoadBalancerProvider[] {
-      new FakeProvider("cool", 5, true),
-      new FakeProvider("cool", 5, true)};
-    LoadBalancerRegistry reg = new LoadBalancerRegistry();
-    assertThat(reg.register(providers[0])).isEqualTo(Status.OK);
-    assertThat(reg.register(providers[1]).getCode()).isEqualTo(Status.Code.FAILED_PRECONDITION);
+    reg.deregister(providers[1]);
     assertThat(reg.getProvider("cool")).isSameAs(providers[0]);
-    assertThat(reg.getProvider("cool")).isNotSameAs(providers[1]);
+    reg.deregister(providers[2]);
+    assertThat(reg.getProvider("great")).isSameAs(providers[3]);
+    reg.deregister(providers[4]);
+    assertThat(reg.getProvider("excellent")).isSameAs(providers[5]);
   }
 
   private static class FakeProvider extends LoadBalancerProvider {
