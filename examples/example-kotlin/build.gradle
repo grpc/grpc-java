@@ -43,7 +43,7 @@ dependencies {
     compile "io.grpc:grpc-netty-shaded:${grpcVersion}"
     compile "io.grpc:grpc-protobuf:${grpcVersion}"
     compile "io.grpc:grpc-stub:${grpcVersion}"
-    // compileOnly "javax.annotation:javax.annotation-api:1.2"
+    compileOnly "javax.annotation:javax.annotation-api:1.2"
 
     testCompile "io.grpc:grpc-testing:${grpcVersion}" // gRCP testing utilities
     testCompile "junit:junit:4.12"
