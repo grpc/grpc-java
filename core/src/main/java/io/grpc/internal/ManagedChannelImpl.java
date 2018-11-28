@@ -394,10 +394,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // Run from syncContext
   @VisibleForTesting
-  class NameResolverRefresh implements Runnable {
+  class DelayedNameResolverRefresh implements Runnable {
     @Override
     public void run() {
-      nameResolverRefresh = null;
+      scheduledNameResolverRefresh = null;
       if (nameResolver != null) {
         nameResolver.refresh();
       }
@@ -405,17 +405,27 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   // Must be used from syncContext
-  @Nullable private ScheduledHandle nameResolverRefresh;
+  @Nullable private ScheduledHandle scheduledNameResolverRefresh;
   // The policy to control backoff between name resolution attempts. Non-null when an attempt is
   // scheduled. Must be used from syncContext
   @Nullable private BackoffPolicy nameResolverBackoffPolicy;
 
   // Must be run from syncContext
   private void cancelNameResolverBackoff() {
-    if (nameResolverRefresh != null) {
-      nameResolverRefresh.cancel();
-      nameResolverRefresh = null;
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (scheduledNameResolverRefresh != null) {
+      scheduledNameResolverRefresh.cancel();
+      scheduledNameResolverRefresh = null;
       nameResolverBackoffPolicy = null;
+    }
+  }
+
+  // Must be run from syncContext
+  private void refreshNameResolutionNow() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    cancelNameResolverBackoff();
+    if (nameResolver != null) {
+      nameResolver.refresh();
     }
   }
 
@@ -857,10 +867,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         if (shutdown.get()) {
           return;
         }
-        if (nameResolverRefresh != null && nameResolverRefresh.isPending()) {
+        if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
           checkState(nameResolverStarted, "name resolver must be started");
-          cancelNameResolverBackoff();
-          nameResolver.refresh();
+          refreshNameResolutionNow();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -984,7 +993,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must be called from syncContext
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
       if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-        nr.refresh();
+        refreshNameResolutionNow();
       }
     }
 
@@ -1109,6 +1118,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new UpdateBalancingState());
+    }
+
+    @Override
+    public void refreshNameResoultion() {
+      final class LoadBalancerRefreshNameResolution implements Runnable {
+        @Override
+        public void run() {
+          refreshNameResolutionNow();
+        }
+      }
+
+      syncContext.execute(new LoadBalancerRefreshNameResolution());
     }
 
     @Override
@@ -1305,7 +1326,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             return;
           }
           helper.lb.handleNameResolutionError(error);
-          if (nameResolverRefresh != null && nameResolverRefresh.isPending()) {
+          if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
             // The name resolver may invoke onError multiple times, but we only want to
             // schedule one backoff attempt
             // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
@@ -1319,9 +1340,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           channelLogger.log(
                 ChannelLogLevel.DEBUG,
                 "Scheduling DNS resolution backoff for {0} ns", delayNanos);
-          nameResolverRefresh =
+          scheduledNameResolverRefresh =
               syncContext.schedule(
-                  new NameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
+                  new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
                   transportFactory .getScheduledExecutorService());
         }
       }
