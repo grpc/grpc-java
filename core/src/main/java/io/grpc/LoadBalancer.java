@@ -103,16 +103,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @NotThreadSafe
 public abstract class LoadBalancer {
   /**
-   * Initializes the LoadBalancer.  Called before any other methods.  The default implementation
-   * will return the default options.
-   *
-   * @return options that affect the Channel's behavior when interacting with the LoadBalancer
-   */
-  public ChannelBalancingOptions initialize() {
-    return optionsBuilder.build();
-  }
-
-  /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
    * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
    * but may be flattened into a single list if needed.
@@ -571,8 +561,12 @@ public abstract class LoadBalancer {
 
     /**
      * Call {@link NameResolver#refresh} on the channel's resolver.
+     *
+     * @since 1.17.0
      */
-    public void refreshNameResolution() {}
+    public void refreshNameResolution() {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Schedule a task to be run in the Synchronization Context, which serializes the task with the
@@ -758,46 +752,5 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract LoadBalancer newLoadBalancer(Helper helper);
-  }
-
-  /**
-   * Options that affects the Channel's behavior when interacting with the LoadBalancer.
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
-  public static final class ChannelBalancingOptions {
-    private boolean autoRefreshNameResolutionWhenSubchannelDisconnect = true;
-
-    private Options() {}
-
-    public static final class Builder {
-      private Builder() {}
-
-      private ChannelBalancingOptions product = new ChannelBalancingOptions();
-
-      /**
-       * If {@code true} (default value), the channel will {@link NameResolver#refresh refresh name
-       * resolution} whenever a {@link Subchannel} is disconnected.  If the LoadBalancer wants to
-       * control the timing of refresh, set it to {@code false} and call {@link
-       * Helper#refreshNameResolution} when desired.
-       */
-      protected Builder setAutoRefreshNameResolutionWhenSubchannelDisconnect(boolean value) {
-        product.autoRefreshNameResolutionWhenSubchannelDisconnect = value;
-        return this;
-      }
-
-      protected Options build() {
-        ChannelBalancingOptions result = product;
-        product = new ChannelBalancingOptions();
-        return result;
-      }
-    }
-
-    public boolean shouldAutoRefreshNameResolutionWhenSubchannelDisconnect() {
-      return autoRefreshNameResolutionWhenSubchannelDisconnect;
-    }
-
-    public static Builder newBuilder() {
-      return new Builder();
-    }
   }
 }

@@ -136,7 +136,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
-  private final SynchronizationContext syncContext = new SynchronizationContext(
+  @VisibleForTesting
+  final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
         public void uncaughtException(Thread t, Throwable e) {
@@ -1121,7 +1122,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void refreshNameResoultion() {
+    public void refreshNameResolution() {
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
