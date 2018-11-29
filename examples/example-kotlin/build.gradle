@@ -55,14 +55,14 @@ task helloWorldServer(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.helloworld.HelloWorldServer'
     applicationName = 'hello-world-server'
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = project.startScripts.classpath
+    classpath = startScripts.classpath
 }
 
 task helloWorldClient(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
     applicationName = 'hello-world-client'
     outputDir = new File(project.buildDir, 'tmp')
-    classpath = project.startScripts.classpath
+    classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
