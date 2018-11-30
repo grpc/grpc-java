@@ -33,7 +33,7 @@ dependencies {
     implementation "io.grpc:grpc-netty-shaded:${grpcVersion}"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
-    implementation "javax.annotation:javax.annotation-api:1.2"
+    compileOnly "javax.annotation:javax.annotation-api:1.2"
 
     // Used in HelloWorldServerTls
     implementation "io.grpc:grpc-netty:${grpcVersion}"
