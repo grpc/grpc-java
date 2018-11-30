@@ -335,13 +335,13 @@ public final class ServerCalls {
         if (onCancelHandler == null) {
           throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
         }
-      } else {
-        if (!sentHeaders) {
-          call.sendHeaders(new Metadata());
-          sentHeaders = true;
-        }
-        call.sendMessage(response);
+        return;
       }
+      if (!sentHeaders) {
+        call.sendHeaders(new Metadata());
+        sentHeaders = true;
+      }
+      call.sendMessage(response);
     }
 
     @Override
