@@ -225,7 +225,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void handleResolvedAddressGroups_propagateLbConfigToDelegate() throws Exception {
     Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"testLb\": { \"setting1\": \"high\" } } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
     Attributes serviceConfigAttrs =
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
@@ -255,7 +255,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verifyNoMoreInteractions(testLbBalancer);
 
     serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"testLb\": { \"setting1\": \"low\" } } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"low\" } } ] }");
     serviceConfigAttrs =
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
@@ -325,7 +325,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_grpclbOverridesServiceConfigLbConfig() throws Exception {
     Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"roundRobin\": {} } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": {} } ] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
@@ -360,7 +360,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbConfigOverridesDefault() throws Exception {
     Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"roundRobin\": {\"setting1\": \"high\"} } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": {\"setting1\": \"high\"} } ] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
@@ -372,26 +372,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(selection.provider.getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
     assertThat(selection.config).isEqualTo(Collections.singletonMap("setting1", "high"));
-    verifyZeroInteractions(channelLogger);
-  }
-
-  @Test
-  public void decideLoadBalancerProvider_serviceConfigLbConfigGivenAsLowerUnderscore()
-      throws Exception {
-    // We also allow 
-    Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"round_robin\": {} } ] }");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(
-            new EquivalentAddressGroup(
-                new SocketAddress(){},
-                Attributes.EMPTY));
-    PolicySelection selection = AutoConfiguredLoadBalancerFactory.decideLoadBalancerProvider(
-        servers, serviceConfig, channelLogger);
-
-    assertThat(selection.provider.getClass().getName()).isEqualTo(
-        "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
-    assertThat(selection.config).isEqualTo(Collections.emptyMap());
     verifyZeroInteractions(channelLogger);
   }
 
@@ -417,7 +397,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   @Test
   public void decideLoadBalancerProvider_serviceConfigLbConfigFailsOnUnknown() throws Exception {
     Map<String, Object> serviceConfig =
-        parseConfig("{\"loadBalancingConfig\": [ {\"magicBalancer\": {} } ] }");
+        parseConfig("{\"loadBalancingConfig\": [ {\"magic_balancer\": {} } ] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(
@@ -437,7 +417,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   public void decideLoadBalancerProvider_serviceConfigLbConfigSkipUnknown() throws Exception {
     Map<String, Object> serviceConfig =
         parseConfig(
-            "{\"loadBalancingConfig\": [ {\"magicBalancer\": {} }, {\"roundRobin\": {} } ] }");
+            "{\"loadBalancingConfig\": [ {\"magic_balancer\": {} }, {\"round_robin\": {} } ] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
             new EquivalentAddressGroup(

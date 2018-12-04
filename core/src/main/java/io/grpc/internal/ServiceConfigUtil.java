@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.math.LongMath.checkedAdd;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -315,7 +314,7 @@ public final class ServiceConfigUtil {
               "fallbackPolicy": {...},
             }
           },
-          {"roundRobin": {}}
+          {"round_robin": {}}
         ]
       },
       "loadBalancingPolicy": "ROUND_ROBIN"  // The deprecated policy key
@@ -333,7 +332,7 @@ public final class ServiceConfigUtil {
       if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY)) {
         String policy = getString(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY);
         // Convert the policy to a config, so that the caller can handle them in the same way.
-        policy = CaseFormat.UPPER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, policy);
+        policy = policy.toLowerCase();
         Map<String, Object> fakeConfig =
             Collections.singletonMap(policy, (Object) Collections.emptyMap());
         lbConfigs.add(fakeConfig);

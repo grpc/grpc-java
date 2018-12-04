@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.CaseFormat;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -203,12 +202,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
               + lbConfig);
         }
         Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
-        // Internally the service config is written in Protobuf and converted to JSON.
-        // Unfortunately the policy name is lowerCamel format in the converted JSON.  We will
-        // have to convert it to the lower_underscore format to match the policy names.
-        // The conversion is no-op if it's already lower_underscore, thus external users who
-        // write the service config in JSON directly can use lower_underscore.
-        String policy = CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, entry.getKey());
+        String policy = entry.getKey();
         LoadBalancerProvider provider = registry.getProvider(policy);
         if (provider != null) {
           if (!policiesTried.isEmpty()) {
