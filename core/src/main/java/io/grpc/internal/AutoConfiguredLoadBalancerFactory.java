@@ -192,7 +192,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
     if (config != null) {
       List<Map<String, Object>> lbConfigs =
           ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
-      LinkedHashSet<String> policiesTried = new LinkedHashSet<String>();
+      LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
       for (Map<String, Object> lbConfig : lbConfigs) {
         if (lbConfig.size() != 1) {
           throw new PolicyException(
