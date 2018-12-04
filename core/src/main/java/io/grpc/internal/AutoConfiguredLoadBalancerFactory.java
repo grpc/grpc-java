@@ -173,8 +173,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   @VisibleForTesting
   static PolicySelection decideLoadBalancerProvider(
       List<EquivalentAddressGroup> servers, @Nullable Map<String, Object> config,
-      ChannelLogger channelLogger)
-    throws PolicyException {
+      ChannelLogger channelLogger) throws PolicyException {
     // Check for balancer addresses
     boolean haveBalancerAddress = false;
     for (EquivalentAddressGroup s : servers) {
@@ -218,7 +217,7 @@ final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
           "None of " + policiesTried + " specified by Service Config are available.");
     }
     return new PolicySelection(
-        getProviderOrThrow(DEFAULT_POLICY, "Using default policy"), null);
+        getProviderOrThrow(DEFAULT_POLICY, "using default policy"), null);
   }
 
   private static LoadBalancerProvider getProviderOrThrow(String policy, String choiceReason)
