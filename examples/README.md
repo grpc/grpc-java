@@ -11,7 +11,7 @@ before trying out the examples.
 
 To build the examples,
 
-1. **(Only need this step for non-released versions, e.g. master HEAD) [Install gRPC Java library SNAPSHOT locally](../COMPILING.dm).**
+1. **(Only need this step for non-released versions, e.g. master HEAD) [Install gRPC Java 1.18.0-SNAPSHOT library locally](../COMPILING.dm).** <!--- CURRENT_GRPC_VERSION -->
 
 2. Run in this directory:
 ```
