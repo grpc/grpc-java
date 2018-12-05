@@ -562,7 +562,7 @@ public abstract class LoadBalancer {
     /**
      * Call {@link NameResolver#refresh} on the channel's resolver.
      *
-     * @since 1.17.0
+     * @since 1.18.0
      */
     public void refreshNameResolution() {
       throw new UnsupportedOperationException();
