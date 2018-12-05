@@ -11,8 +11,6 @@ target
 # Bazel
 bazel-bin
 bazel-examples
-bazel-examples-alts
-bazel-examples-tls
 bazel-genfiles
 bazel-grpc-java
 bazel-out
