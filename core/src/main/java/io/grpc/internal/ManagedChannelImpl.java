@@ -349,13 +349,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return;
     }
     channelLogger.log(ChannelLogLevel.INFO, "Exiting idle mode");
-    LbHelperImpl lbHelper = new LbHelperImpl(nameResolver);
+    LbHelperImpl lbHelper = new LbHelperImpl();
     lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
     // Delay setting lbHelper until fully initialized, since loadBalancerFactory is user code and
     // may throw. We don't want to confuse our state, even if we will enter panic mode.
     this.lbHelper = lbHelper;
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper, nameResolver);
     try {
       nameResolver.start(listener);
       nameResolverStarted = true;
@@ -985,11 +985,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private class LbHelperImpl extends LoadBalancer.Helper {
     LoadBalancer lb;
-    final NameResolver nr;
-
-    LbHelperImpl(NameResolver nr) {
-      this.nr = checkNotNull(nr, "NameResolver");
-    }
 
     // Must be called from syncContext
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
@@ -1253,16 +1248,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private class NameResolverListenerImpl implements NameResolver.Listener {
     final LbHelperImpl helper;
+    final NameResolver resolver;
 
-    NameResolverListenerImpl(LbHelperImpl helperImpl) {
-      this.helper = helperImpl;
+    NameResolverListenerImpl(LbHelperImpl helperImpl, NameResolver resolver) {
+      this.helper = checkNotNull(helperImpl, "helperImpl");
+      this.resolver = checkNotNull(resolver, "resolver");
     }
 
     @Override
     public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
       if (servers.isEmpty()) {
         onError(Status.UNAVAILABLE.withDescription(
-            "Name resolver " + helper.nr + " returned an empty list"));
+            "Name resolver " + resolver + " returned an empty list"));
         return;
       }
       channelLogger.log(
