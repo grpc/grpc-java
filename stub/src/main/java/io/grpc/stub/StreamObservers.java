@@ -44,12 +44,15 @@ public final class StreamObservers {
     Preconditions.checkNotNull(target, "target");
 
     final class FlowControllingOnReadyHandler implements Runnable {
+      private boolean completed;
+
       @Override
       public void run() {
         while (target.isReady() && source.hasNext()) {
           target.onNext(source.next());
         }
-        if (!source.hasNext()) {
+        if (!source.hasNext() && !completed) {
+          completed = true;
           target.onCompleted();
         }
       }
