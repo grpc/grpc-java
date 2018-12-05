@@ -95,6 +95,20 @@ task helloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task fileDownloadServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.filedownload.FileDownloadServer'
+    applicationName = 'file-download-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task fileDownloadClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.filedownload.FileDownloadClient'
+    applicationName = 'file-download-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task helloWorldTlsServer(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.helloworldtls.HelloWorldServerTls'
     applicationName = 'hello-world-tls-server'
@@ -121,6 +135,8 @@ applicationDistribution.into('bin') {
     from(routeGuideClient)
     from(helloWorldServer)
     from(helloWorldClient)
+    from(fileDownloadClient)
+    from(fileDownloadServer)
     from(helloWorldTlsServer)
     from(helloWorldTlsClient)
     from(compressingHelloWorldClient)
