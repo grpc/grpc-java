@@ -19,7 +19,6 @@ package io.grpc;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * An absolute point in time, generally for tracking when a task should be completed. A deadline is
@@ -32,14 +31,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * passed to the various components unambiguously.
  */
 public final class Deadline implements Comparable<Deadline> {
+  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
   private static final long MIN_OFFSET = -MAX_OFFSET;
   private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
-
-  static final AtomicReference<? extends Ticker> defaultTicker =
-      new AtomicReference<>(new SystemTicker());
 
   /**
    * Create a deadline that will expire at the specified offset from the current system clock.
@@ -48,7 +45,7 @@ public final class Deadline implements Comparable<Deadline> {
    * @return A new deadline.
    */
   public static Deadline after(long duration, TimeUnit units) {
-    return after(duration, units, defaultTicker.get());
+    return after(duration, units, SYSTEM_TICKER);
   }
 
   // For testing
