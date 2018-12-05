@@ -92,8 +92,7 @@ public class FileDownloadClient {
   }
 
   /**
-   * Greet server. If provided, the first element of {@code args} is the name to use in the
-   * greeting.
+   * File download server.
    */
   public static void main(String[] args) throws Exception {
     FileDownloadClient client = new FileDownloadClient("localhost", 50051);
