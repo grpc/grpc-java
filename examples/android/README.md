@@ -14,12 +14,7 @@ PREREQUISITES
 INSTALL
 -------
 
-1. (Only for non-released versions) Install gRPC Java
-```sh
-$ cd ../..
-$ ./gradlew install -PskipCodegen=true
-$ cd examples/android
-```
+1. **(Only need this step for non-released versions, e.g. master HEAD) [Install gRPC Java library locally](../../COMPILING.dm).**
 
 2. Install the app
 ```sh
