@@ -19,6 +19,7 @@ package io.grpc;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * An absolute point in time, generally for tracking when a task should be completed. A deadline is
@@ -31,11 +32,14 @@ import java.util.concurrent.TimeUnit;
  * passed to the various components unambiguously.
  */
 public final class Deadline implements Comparable<Deadline> {
-  private static final SystemTicker SYSTEM_TICKER = new SystemTicker();
   // nanoTime has a range of just under 300 years. Only allow up to 100 years in the past or future
   // to prevent wraparound as long as process runs for less than ~100 years.
   private static final long MAX_OFFSET = TimeUnit.DAYS.toNanos(100 * 365);
   private static final long MIN_OFFSET = -MAX_OFFSET;
+  private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+
+  static final AtomicReference<? extends Ticker> defaultTicker =
+      new AtomicReference<>(new SystemTicker());
 
   /**
    * Create a deadline that will expire at the specified offset from the current system clock.
@@ -44,7 +48,7 @@ public final class Deadline implements Comparable<Deadline> {
    * @return A new deadline.
    */
   public static Deadline after(long duration, TimeUnit units) {
-    return after(duration, units, SYSTEM_TICKER);
+    return after(duration, units, defaultTicker.get());
   }
 
   // For testing
@@ -89,6 +93,7 @@ public final class Deadline implements Comparable<Deadline> {
    * Is {@code this} deadline before another.
    */
   public boolean isBefore(Deadline other) {
+    assert this.ticker == other.ticker : "Tickers don't match";
     return this.deadlineNanos - other.deadlineNanos < 0;
   }
 
@@ -97,6 +102,7 @@ public final class Deadline implements Comparable<Deadline> {
    * @param other deadline to compare with {@code this}.
    */
   public Deadline minimum(Deadline other) {
+    assert this.ticker == other.ticker : "Tickers don't match";
     return isBefore(other) ? this : other;
   }
 
@@ -142,11 +148,36 @@ public final class Deadline implements Comparable<Deadline> {
 
   @Override
   public String toString() {
-    return timeRemaining(TimeUnit.NANOSECONDS) + " ns from now";
+    long remainingNanos = timeRemaining(TimeUnit.NANOSECONDS);
+    long seconds = Math.abs(remainingNanos) / NANOS_PER_SECOND;
+    long nanos = Math.abs(remainingNanos) % NANOS_PER_SECOND;
+
+    StringBuilder buf = new StringBuilder();
+    if (remainingNanos < 0) {
+      buf.append('-');
+    }
+    buf.append(seconds);
+    if (nanos > 0) {
+      buf.append('.');
+      String nanoString = String.valueOf(nanos);
+      String zeros = "000000000";
+      buf.append(zeros.substring(nanoString.length()));
+      int len = nanoString.length();
+      while (len > 0) {
+        if (nanoString.charAt(len - 1) != '0') {
+          break;
+        }
+        len--;
+      }
+      buf.append(nanoString, 0, len);
+    }
+    buf.append("s from now");
+    return buf.toString();
   }
 
   @Override
   public int compareTo(Deadline that) {
+    assert this.ticker == that.ticker : "Tickers don't match";
     long diff = this.deadlineNanos - that.deadlineNanos;
     if (diff < 0) {
       return -1;
