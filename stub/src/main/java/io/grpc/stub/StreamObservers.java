@@ -48,12 +48,14 @@ public final class StreamObservers {
 
       @Override
       public void run() {
-        while (target.isReady() && source.hasNext()) {
-          target.onNext(source.next());
-        }
-        if (!source.hasNext() && !completed) {
-          completed = true;
-          target.onCompleted();
+        if (!completed) {
+          while (target.isReady() && source.hasNext()) {
+            target.onNext(source.next());
+          }
+          if (!source.hasNext()) {
+            completed = true;
+            target.onCompleted();
+          }
         }
       }
     }
