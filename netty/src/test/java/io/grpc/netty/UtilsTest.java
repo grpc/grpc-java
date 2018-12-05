@@ -135,7 +135,6 @@ public class UtilsTest {
     assertNull(socketOptions.lingerSeconds);
   }
 
-
   @Test
   @SuppressWarnings("deprecation")
   public void channelOptionsTest_oio() {
