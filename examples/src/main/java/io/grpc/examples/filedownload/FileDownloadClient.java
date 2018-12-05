@@ -22,8 +22,6 @@ import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
-import io.grpc.examples.helloworld.HelloReply;
-import io.grpc.examples.helloworld.HelloRequest;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -42,7 +40,7 @@ public class FileDownloadClient {
   private final ManagedChannel channel;
   private final FileDownloadGrpc.FileDownloadBlockingStub blockingStub;
 
-  /** Construct client connecting to HelloWorld server at {@code host:port}. */
+  /** Construct client connecting to FileDownload server at {@code host:port}. */
   public FileDownloadClient(String host, int port) {
     this(ManagedChannelBuilder.forAddress(host, port)
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
