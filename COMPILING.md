@@ -1,7 +1,8 @@
 Building gRPC-Java
 ==================
 
-Building is only necessary if you are making changes to gRPC-Java.
+Building is only necessary if you are making changes to gRPC-Java or testing/using a non-released
+ version (e.g. master HEAD) of gRPC-Java library.
 
 Building requires JDK 8, as our tests use TLS.
 
