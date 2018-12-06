@@ -14,7 +14,7 @@ PREREQUISITES
 INSTALL
 -------
 
-1. **[Install gRPC Java library SNAPSHOT locally](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
+1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
 2. Install the app
 ```sh
