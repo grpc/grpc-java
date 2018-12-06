@@ -446,24 +446,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
-  public void decideLoadBalancerProvider_serviceConfigSelectsGrpclbButNoBalancerAddress()
-      throws Exception {
-    AutoConfiguredLoadBalancer lb =
-        (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(new TestHelper());
-    Map<String, Object> serviceConfig = new HashMap<String, Object>();
-    serviceConfig.put("loadBalancingPolicy", "grpclb");
-    List<EquivalentAddressGroup> servers =
-        Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
-    try {
-      lb.decideLoadBalancerProvider(servers, serviceConfig);
-      fail("Should throw");
-    } catch (PolicyException e) {
-      assertThat(e.getMessage()).isEqualTo(
-          "grpclb specified by Service Config but no balancer addresses exist");
-    }
-  }
-
-  @Test
   public void decideLoadBalancerProvider_serviceConfigLbConfigOverridesDefault() throws Exception {
     AutoConfiguredLoadBalancer lb =
         (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(new TestHelper());

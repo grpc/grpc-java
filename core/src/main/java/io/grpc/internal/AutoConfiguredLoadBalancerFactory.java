@@ -44,7 +44,6 @@ import javax.annotation.Nullable;
 @VisibleForTesting
 public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   private static final String DEFAULT_POLICY = "pick_first";
-  private static final String GRPCLB_POLICY = "grpclb";
   private static final Logger logger =
       Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());
 
@@ -200,7 +199,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       }
 
       if (haveBalancerAddress) {
-        LoadBalancerProvider grpclbProvider = registry.getProvider(GRPCLB_POLICY);
+        LoadBalancerProvider grpclbProvider = registry.getProvider("grpclb");
         if (grpclbProvider == null) {
           if (backendAddrs.isEmpty()) {
             throw new PolicyException(
@@ -236,10 +235,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
           }
           Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
           String policy = entry.getKey();
-          if (policy.equals(GRPCLB_POLICY)) {
-            throw new PolicyException(
-                GRPCLB_POLICY + " specified by Service Config but no balancer addresses exist");
-          }
           LoadBalancerProvider provider = registry.getProvider(policy);
           if (provider != null) {
             if (!policiesTried.isEmpty()) {
