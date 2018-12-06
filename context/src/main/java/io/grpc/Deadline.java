@@ -155,18 +155,7 @@ public final class Deadline implements Comparable<Deadline> {
     }
     buf.append(seconds);
     if (nanos > 0) {
-      buf.append('.');
-      String nanoString = String.valueOf(nanos);
-      String zeros = "000000000";
-      buf.append(zeros.substring(nanoString.length()));
-      int len = nanoString.length();
-      while (len > 0) {
-        if (nanoString.charAt(len - 1) != '0') {
-          break;
-        }
-        len--;
-      }
-      buf.append(nanoString, 0, len);
+      buf.append(String.format(".%09d", nanos));
     }
     buf.append("s from now");
     return buf.toString();
