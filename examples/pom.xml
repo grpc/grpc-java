@@ -6,12 +6,12 @@
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
-  <version>1.17.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
+  <version>1.18.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
   <name>examples</name>
   <url>http://maven.apache.org</url>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <grpc.version>1.17.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
+    <grpc.version>1.18.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
     <protobuf.version>3.5.1</protobuf.version>
     <protoc.version>3.5.1-1</protoc.version>
     <netty.tcnative.version>2.0.7.Final</netty.tcnative.version>
@@ -24,6 +24,7 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-netty-shaded</artifactId>
       <version>${grpc.version}</version>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>io.grpc</groupId>
@@ -33,11 +34,6 @@
     <dependency>
       <groupId>io.grpc</groupId>
       <artifactId>grpc-stub</artifactId>
-      <version>${grpc.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-alts</artifactId>
       <version>${grpc.version}</version>
     </dependency>
     <dependency>
@@ -51,24 +47,6 @@
       <artifactId>grpc-testing</artifactId>
       <version>${grpc.version}</version>
       <scope>test</scope>
-    </dependency>
-
-    <!-- Used in HelloWorldServerTls -->
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-netty</artifactId>
-      <version>${grpc.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-tcnative-boringssl-static</artifactId>
-      <version>${netty.tcnative.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.api.grpc</groupId>
-      <artifactId>proto-google-common-protos</artifactId>
-      <version>1.0.0</version>
     </dependency>
     <dependency>
       <groupId>com.google.protobuf</groupId>

@@ -26,14 +26,14 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalLogId;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -42,6 +42,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.TimeProvider;
@@ -67,11 +69,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -82,8 +81,6 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class GrpclbState {
-  private static final Logger logger = Logger.getLogger(GrpclbState.class.getName());
-
   static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
@@ -105,9 +102,9 @@ final class GrpclbState {
       }
     };
 
-  private final InternalLogId logId;
   private final String serviceName;
   private final Helper helper;
+  private final SynchronizationContext syncContext;
   private final SubchannelPool subchannelPool;
   private final TimeProvider time;
   private final ScheduledExecutorService timerService;
@@ -115,10 +112,11 @@ final class GrpclbState {
   private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("io.grpc.grpclb.GrpclbLoadBalancer.stateInfo");
   private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final ChannelLogger logger;
 
   // Scheduled only once.  Never reset.
   @Nullable
-  private FallbackModeTask fallbackTimer;
+  private ScheduledHandle fallbackTimer;
   private List<EquivalentAddressGroup> fallbackBackendList = Collections.emptyList();
   private boolean usingFallbackBackends;
   // True if the current balancer has returned a serverlist.  Will be reset to false when lost
@@ -127,7 +125,7 @@ final class GrpclbState {
   @Nullable
   private BackoffPolicy lbRpcRetryPolicy;
   @Nullable
-  private LbRpcRetryTask lbRpcRetryTimer;
+  private ScheduledHandle lbRpcRetryTimer;
   private long prevLbRpcStartNanos;
 
   @Nullable
@@ -150,16 +148,15 @@ final class GrpclbState {
       Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
-      ScheduledExecutorService timerService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      InternalLogId logId) {
+      BackoffPolicy.Provider backoffPolicyProvider) {
     this.helper = checkNotNull(helper, "helper");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.time = checkNotNull(time, "time provider");
-    this.timerService = checkNotNull(timerService, "timerService");
+    this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
-    this.logId = checkNotNull(logId, "logId");
+    this.logger = checkNotNull(helper.getChannelLogger(), "logger");
   }
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
@@ -197,9 +194,8 @@ final class GrpclbState {
     fallbackBackendList = newBackendServers;
     // Start the fallback timer if it's never started
     if (fallbackTimer == null) {
-      logger.log(Level.FINE, "[{0}] Starting fallback timer.", new Object[] {logId});
-      fallbackTimer = new FallbackModeTask();
-      fallbackTimer.schedule();
+      fallbackTimer = syncContext.schedule(
+          new FallbackModeTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS, timerService);
     }
     if (usingFallbackBackends) {
       // Populate the new fallback backends to round-robin list.
@@ -213,9 +209,6 @@ final class GrpclbState {
       return;
     }
     if (usingFallbackBackends) {
-      return;
-    }
-    if (fallbackTimer != null && !fallbackTimer.discarded) {
       return;
     }
     int numReadySubchannels = 0;
@@ -236,7 +229,7 @@ final class GrpclbState {
    */
   private void useFallbackBackends() {
     usingFallbackBackends = true;
-    logger.log(Level.INFO, "[{0}] Using fallback: {1}", new Object[] {logId, fallbackBackendList});
+    logger.log(ChannelLogLevel.INFO, "Using fallback backends");
 
     List<DropEntry> newDropList = new ArrayList<>();
     List<BackendAddressGroup> newBackendAddrList = new ArrayList<>();
@@ -321,8 +314,7 @@ final class GrpclbState {
   }
 
   void propagateError(Status status) {
-    logger.log(Level.FINE, "[{0}] Had an error: {1}; dropList={2}; backendList={3}",
-        new Object[] {logId, status, dropList, backendList});
+    logger.log(ChannelLogLevel.DEBUG, "Error: {0}", status);
     if (backendList.isEmpty()) {
       maybeUpdatePicker(
           TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
@@ -344,8 +336,8 @@ final class GrpclbState {
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
-    logger.log(Level.FINE, "[{0}] Using round-robin list: {1}, droplist={2}",
-         new Object[] {logId, newBackendAddrList, newDropList});
+    logger.log(
+        ChannelLogLevel.INFO, "Using RR list={0}, drop={1}", newBackendAddrList, newDropList);
     HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
         new HashMap<EquivalentAddressGroup, Subchannel>();
     List<BackendEntry> newBackendList = new ArrayList<>();
@@ -391,61 +383,23 @@ final class GrpclbState {
 
   @VisibleForTesting
   class FallbackModeTask implements Runnable {
-    private ScheduledFuture<?> scheduledFuture;
-    private boolean discarded;
-
     @Override
     public void run() {
-      helper.runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            checkState(fallbackTimer == FallbackModeTask.this, "fallback timer mismatch");
-            discarded = true;
-            maybeUseFallbackBackends();
-            maybeUpdatePicker();
-          }
-        });
-    }
-
-    void cancel() {
-      discarded = true;
-      scheduledFuture.cancel(false);
-    }
-
-    void schedule() {
-      checkState(scheduledFuture == null, "FallbackModeTask already scheduled");
-      scheduledFuture = timerService.schedule(this, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+      maybeUseFallbackBackends();
+      maybeUpdatePicker();
     }
   }
 
   @VisibleForTesting
   class LbRpcRetryTask implements Runnable {
-    private ScheduledFuture<?> scheduledFuture;
-
     @Override
     public void run() {
-      helper.runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            checkState(
-                lbRpcRetryTimer == LbRpcRetryTask.this, "LbRpc retry timer mismatch");
-            startLbRpc();
-          }
-        });
-    }
-
-    void cancel() {
-      scheduledFuture.cancel(false);
-    }
-
-    void schedule(long delayNanos) {
-      checkState(scheduledFuture == null, "LbRpcRetryTask already scheduled");
-      scheduledFuture = timerService.schedule(this, delayNanos, TimeUnit.NANOSECONDS);
+      startLbRpc();
     }
   }
 
   @VisibleForTesting
-  class LoadReportingTask implements Runnable {
+  static class LoadReportingTask implements Runnable {
     private final LbStream stream;
 
     LoadReportingTask(LbStream stream) {
@@ -454,13 +408,8 @@ final class GrpclbState {
 
     @Override
     public void run() {
-      helper.runSerialized(new Runnable() {
-          @Override
-          public void run() {
-            stream.loadReportFuture = null;
-            stream.sendLoadReport();
-          }
-        });
+      stream.loadReportTimer = null;
+      stream.sendLoadReport();
     }
   }
 
@@ -473,7 +422,7 @@ final class GrpclbState {
     boolean initialResponseReceived;
     boolean closed;
     long loadReportIntervalMillis = -1;
-    ScheduledFuture<?> loadReportFuture;
+    ScheduledHandle loadReportTimer;
 
     LbStream(LoadBalancerGrpc.LoadBalancerStub stub) {
       this.stub = checkNotNull(stub, "stub");
@@ -487,7 +436,7 @@ final class GrpclbState {
     }
 
     @Override public void onNext(final LoadBalanceResponse response) {
-      helper.runSerialized(new Runnable() {
+      syncContext.execute(new Runnable() {
           @Override
           public void run() {
             handleResponse(response);
@@ -496,7 +445,7 @@ final class GrpclbState {
     }
 
     @Override public void onError(final Throwable error) {
-      helper.runSerialized(new Runnable() {
+      syncContext.execute(new Runnable() {
           @Override
           public void run() {
             handleStreamClosed(Status.fromThrowable(error)
@@ -506,7 +455,7 @@ final class GrpclbState {
     }
 
     @Override public void onCompleted() {
-      helper.runSerialized(new Runnable() {
+      syncContext.execute(new Runnable() {
           @Override
           public void run() {
             handleStreamClosed(
@@ -533,8 +482,9 @@ final class GrpclbState {
 
     private void scheduleNextLoadReport() {
       if (loadReportIntervalMillis > 0) {
-        loadReportFuture = timerService.schedule(
-            new LoadReportingTask(this), loadReportIntervalMillis, TimeUnit.MILLISECONDS);
+        loadReportTimer = syncContext.schedule(
+            new LoadReportingTask(this), loadReportIntervalMillis, TimeUnit.MILLISECONDS,
+            timerService);
       }
     }
 
@@ -542,15 +492,12 @@ final class GrpclbState {
       if (closed) {
         return;
       }
-      logger.log(Level.FINER, "[{0}] Got an LB response: {1}", new Object[] {logId, response});
+      logger.log(ChannelLogLevel.DEBUG, "Got an LB response: {0}", response);
 
       LoadBalanceResponseTypeCase typeCase = response.getLoadBalanceResponseTypeCase();
       if (!initialResponseReceived) {
         if (typeCase != LoadBalanceResponseTypeCase.INITIAL_RESPONSE) {
-          logger.log(
-              Level.WARNING,
-              "[{0}] : Did not receive response with type initial response: {1}",
-              new Object[] {logId, response});
+          logger.log(ChannelLogLevel.WARNING, "Received a response without initial response");
           return;
         }
         initialResponseReceived = true;
@@ -562,10 +509,7 @@ final class GrpclbState {
       }
 
       if (typeCase != LoadBalanceResponseTypeCase.SERVER_LIST) {
-        logger.log(
-            Level.WARNING,
-            "[{0}] : Ignoring unexpected response type: {1}",
-            new Object[] {logId, response});
+        logger.log(ChannelLogLevel.WARNING, "Ignoring unexpected response type: {0}", typeCase);
         return;
       }
 
@@ -635,9 +579,12 @@ final class GrpclbState {
       if (delayNanos <= 0) {
         startLbRpc();
       } else {
-        lbRpcRetryTimer = new LbRpcRetryTask();
-        lbRpcRetryTimer.schedule(delayNanos);
+        lbRpcRetryTimer =
+            syncContext.schedule(new LbRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS,
+                timerService);
       }
+
+      helper.refreshNameResolution();
     }
 
     void close(@Nullable Exception error) {
@@ -658,9 +605,9 @@ final class GrpclbState {
     }
 
     private void cleanUp() {
-      if (loadReportFuture != null) {
-        loadReportFuture.cancel(false);
-        loadReportFuture = null;
+      if (loadReportTimer != null) {
+        loadReportTimer.cancel();
+        loadReportTimer = null;
       }
       if (lbStream == this) {
         lbStream = null;
@@ -691,19 +638,13 @@ final class GrpclbState {
     ConnectivityState state;
     if (pickList.isEmpty()) {
       if (error != null && !hasIdle) {
-        logger.log(Level.FINE, "[{0}] No ready Subchannel. Using error: {1}",
-            new Object[] {logId, error});
         pickList.add(new ErrorEntry(error));
         state = TRANSIENT_FAILURE;
       } else {
-        logger.log(Level.FINE, "[{0}] No ready Subchannel and still connecting", logId);
         pickList.add(BUFFER_ENTRY);
         state = CONNECTING;
       }
     } else {
-      logger.log(
-          Level.FINE, "[{0}] Using drop list {1} and pick list {2}",
-          new Object[] {logId, dropList, pickList});
       state = READY;
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
@@ -720,9 +661,9 @@ final class GrpclbState {
         && picker.pickList.equals(currentPicker.pickList)) {
       return;
     }
-    // No need to skip ErrorPicker. If the current picker is ErrorPicker, there won't be any pending
-    // stream thus no time is wasted in re-process.
     currentPicker = picker;
+    logger.log(
+        ChannelLogLevel.INFO, "{0}: picks={1}, drops={2}", state, picker.pickList, picker.dropList);
     helper.updateBalancingState(state, picker);
   }
 
@@ -734,10 +675,9 @@ final class GrpclbState {
       if (!authority.equals(group.getAuthority())) {
         // TODO(ejona): Allow different authorities for different addresses. Requires support from
         // Helper.
-        logger.log(Level.WARNING,
-            "[{0}] Multiple authorities found for LB. "
-            + "Skipping addresses for {0} in preference to {1}",
-            new Object[] {logId, group.getAuthority(), authority});
+        logger.log(ChannelLogLevel.WARNING,
+            "Multiple authorities found for LB. "
+            + "Skipping addresses for {0} in preference to {1}", group.getAuthority(), authority);
       } else {
         eags.add(group.getAddresses());
       }
@@ -782,10 +722,8 @@ final class GrpclbState {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("loadRecorder", loadRecorder)
-          .add("token", token)
-          .toString();
+      // This is printed in logs.  Only include useful information.
+      return "drop(" + token + ")";
     }
 
     @Override
@@ -845,11 +783,8 @@ final class GrpclbState {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("result", result)
-          .add("loadRecorder", loadRecorder)
-          .add("token", token)
-          .toString();
+      // This is printed in logs.  Only give out useful information.
+      return "[" + result.getSubchannel().getAllAddresses().toString() + "(" + token + ")]";
     }
 
     @Override
@@ -896,9 +831,8 @@ final class GrpclbState {
 
     @Override
     public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("result", result)
-          .toString();
+      // This is printed in logs.  Only include useful information.
+      return result.getStatus().toString();
     }
   }
 

@@ -42,8 +42,10 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.InternalSubchannel.CallTracingTransport;
 import io.grpc.internal.InternalSubchannel.Index;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
@@ -82,9 +84,15 @@ public class InternalSubchannelTest {
 
   // For scheduled executor
   private final FakeClock fakeClock = new FakeClock();
-  // For channelExecutor
+  // For syncContext
   private final FakeClock fakeExecutor = new FakeClock();
-  private final ChannelExecutor channelExecutor = new ChannelExecutor();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
 
   private final InternalChannelz channelz = new InternalChannelz();
 
@@ -1109,16 +1117,13 @@ public class InternalSubchannelTest {
 
   private void createInternalSubchannel(EquivalentAddressGroup ... addrs) {
     List<EquivalentAddressGroup> addressGroups = Arrays.asList(addrs);
+    InternalLogId logId = InternalLogId.allocate("Subchannel");
     internalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
-        fakeClock.getStopwatchSupplier(), channelExecutor, mockInternalSubchannelCallback,
-        channelz, CallTracer.getDefaultFactory().create(), null,
-        new TimeProvider() {
-          @Override
-          public long currentTimeNanos() {
-            return fakeClock.getTicker().read();
-          }
-        });
+        fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback,
+        channelz, CallTracer.getDefaultFactory().create(),
+        new ChannelTracer(logId, 10, fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel"),
+        logId, fakeClock.getTimeProvider());
   }
 
   private void assertNoCallbackInvoke() {
@@ -1127,7 +1132,6 @@ public class InternalSubchannelTest {
   }
 
   private void assertExactCallbackInvokes(String ... expectedInvokes) {
-    assertEquals(0, channelExecutor.numPendingTasks());
     assertEquals(Arrays.asList(expectedInvokes), callbackInvokes);
     callbackInvokes.clear();
   }

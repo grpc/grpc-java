@@ -71,13 +71,13 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
-        "@io_grpc_grpc_java//alts",
         "@io_grpc_grpc_java//core",
-        "@io_grpc_grpc_java//netty",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
-        "@io_netty_netty_handler//jar",
     ],
+    runtime_deps = [
+        "@io_grpc_grpc_java//netty",
+    ]
 )
 
 java_binary(
@@ -95,28 +95,6 @@ java_binary(
     main_class = "io.grpc.examples.helloworld.HelloWorldServer",
     runtime_deps = [
         ":examples",
-    ],
-)
-
-java_binary(
-    name = "hello-world-alts-client",
-    testonly = 1,
-    main_class = "io.grpc.examples.alts.HelloWorldAltsClient",
-    runtime_deps = [
-        ":examples",
-        "@io_grpc_grpc_java//alts",
-        "@io_grpc_grpc_java//netty",
-    ],
-)
-
-java_binary(
-    name = "hello-world-alts-server",
-    testonly = 1,
-    main_class = "io.grpc.examples.alts.HelloWorldAltsServer",
-    runtime_deps = [
-        ":examples",
-        "@io_grpc_grpc_java//alts",
-        "@io_grpc_grpc_java//netty",
     ],
 )
 
@@ -153,25 +131,5 @@ java_binary(
     main_class = "io.grpc.examples.manualflowcontrol.ManualFlowControlServer",
     runtime_deps = [
         ":examples",
-    ],
-)
-
-java_binary(
-    name = "hello-world-tls-client",
-    testonly = 1,
-    main_class = "io.grpc.examples.helloworldtls.HelloWorldClientTls",
-    runtime_deps = [
-        ":examples",
-        "@io_netty_netty_tcnative_boringssl_static//jar",
-    ],
-)
-
-java_binary(
-    name = "hello-world-tls-server",
-    testonly = 1,
-    main_class = "io.grpc.examples.helloworldtls.HelloWorldServerTls",
-    runtime_deps = [
-        ":examples",
-        "@io_netty_netty_tcnative_boringssl_static//jar",
     ],
 )

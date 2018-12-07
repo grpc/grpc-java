@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.STATE_INFO;
+import static io.grpc.util.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -60,11 +60,10 @@ import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.util.RoundRobinLoadBalancerFactory.EmptyPicker;
-import io.grpc.util.RoundRobinLoadBalancerFactory.ReadyPicker;
-import io.grpc.util.RoundRobinLoadBalancerFactory.Ref;
-import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
-import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.StickinessState;
+import io.grpc.util.RoundRobinLoadBalancer.EmptyPicker;
+import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
+import io.grpc.util.RoundRobinLoadBalancer.Ref;
+import io.grpc.util.RoundRobinLoadBalancer.StickinessState;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,14 +85,16 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-/** Unit test for {@link RoundRobinLoadBalancerFactory}. */
+/** Unit test for {@link RoundRobinLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
-  private RoundRobinLoadBalancer loadBalancer;
-  private List<EquivalentAddressGroup> servers = Lists.newArrayList();
-  private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
-  private Attributes affinity = Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
+
+  private RoundRobinLoadBalancer loadBalancer;
+  private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
+  private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
+  private final Attributes affinity =
+      Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
 
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
@@ -132,8 +133,7 @@ public class RoundRobinLoadBalancerTest {
           }
         });
 
-    loadBalancer = (RoundRobinLoadBalancer) RoundRobinLoadBalancerFactory.getInstance()
-        .newLoadBalancer(mockHelper);
+    loadBalancer = new RoundRobinLoadBalancer(mockHelper);
   }
 
   @After
@@ -625,6 +625,7 @@ public class RoundRobinLoadBalancerTest {
     picker = pickerCaptor.getValue();
 
     // second pick with a different stickiness value
+    @SuppressWarnings("unused")
     Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
 
     // go back to ready
