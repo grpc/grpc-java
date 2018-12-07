@@ -142,7 +142,7 @@ final class HealthServiceImpl extends HealthGrpc.HealthImplBase {
   void enterTerminalState() {
     synchronized (watchLock) {
       if (terminal) {
-        logger.warning("Already terminating");
+        logger.log(Level.WARNING, "Already terminating", new RuntimeException());
         return;
       }
       terminal = true;
