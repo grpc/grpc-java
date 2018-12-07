@@ -11,9 +11,9 @@ before trying out the examples.
 
 ## Basic examples
 
-- [Hello World](src/main/java/io/grpc/examples/helloworld)
+- [Hello world](src/main/java/io/grpc/examples/helloworld)
 
-- [Bi-directional streaming](src/main/java/io/grpc/examples/routeguide)
+- [Route guide](src/main/java/io/grpc/examples/routeguide)
 
 - [Metadata](src/main/java/io/grpc/examples/header)
 
