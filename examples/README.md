@@ -91,7 +91,7 @@ $ bazel-bin/hello-world-client
 
   + [TLS examples](example-tls)
 
-  + [ALTS examples](example-tls)
+  + [ALTS examples](example-alts)
 
 - [Kotlin examples](example-kotlin)
 
