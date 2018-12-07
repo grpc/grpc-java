@@ -196,7 +196,7 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<CallOptions> callOptionsCaptor;
   @Mock
   private LoadBalancer mockLoadBalancer;
-  private LoadBalancerProvider mockLoadBalancerProvider =
+  private final LoadBalancerProvider mockLoadBalancerProvider =
       mock(LoadBalancerProvider.class, delegatesTo(new LoadBalancerProvider() {
           @Override
           public LoadBalancer newLoadBalancer(Helper helper) {
