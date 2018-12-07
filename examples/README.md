@@ -25,7 +25,7 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-#### To build the examples
+### To build the examples
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
@@ -57,7 +57,7 @@ Please refer to gRPC Java's [README](../README.md) and
 [tutorial](https://grpc.io/docs/tutorials/basic/java.html) for more
 information.
 
-#### Maven
+### Maven
 
 If you prefer to use Maven:
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
@@ -71,7 +71,7 @@ $ # In another terminal run the client
 $ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworld.HelloWorldClient
 ```
 
-#### Bazel
+### Bazel
 
 If you prefer to use Bazel:
 ```
