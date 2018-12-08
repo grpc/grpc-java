@@ -111,6 +111,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       try {
         selection = decideLoadBalancerProvider(servers, configMap);
       } catch (PolicyException e) {
+        System.err.println("XXX: " + e);
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
         delegate.shutdown();
@@ -137,7 +138,17 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
         attributes =
             attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.config).build();
       }
-      getDelegate().handleResolvedAddressGroups(selection.serverList, attributes);
+
+      LoadBalancer delegate = getDelegate();
+      if (selection.serverList.isEmpty()
+          && !delegate.canHandleEmptyAddressListFromNameResolution()) {
+        delegate.handleNameResolutionError(
+            Status.UNAVAILABLE.withDescription(
+                "Name resolver returned no usable address. addrs="
+                + servers + ", attrs=" + attributes));
+      } else {
+        delegate.handleResolvedAddressGroups(selection.serverList, attributes);
+      }
     }
 
     @Override
@@ -148,6 +159,11 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       getDelegate().handleSubchannelState(subchannel, stateInfo);
+    }
+
+    @Override
+    public boolean canHandleEmptyAddressListFromNameResolution() {
+      return true;
     }
 
     @Override
