@@ -111,7 +111,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       try {
         selection = decideLoadBalancerProvider(servers, configMap);
       } catch (PolicyException e) {
-        System.err.println("XXX: " + e);
         Status s = Status.INTERNAL.withDescription(e.getMessage());
         helper.updateBalancingState(ConnectivityState.TRANSIENT_FAILURE, new FailingPicker(s));
         delegate.shutdown();
