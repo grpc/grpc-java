@@ -31,10 +31,10 @@ import java.util.logging.Logger;
 
 /**
  * A simple client that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
- * This client can help you create custom headers.
+ * This client shows how to use interceptors to modify and/or access headers and trailing metadata.
  */
-public class CustomHeaderClient {
-  private static final Logger logger = Logger.getLogger(CustomHeaderClient.class.getName());
+public class CustomMetadataClient {
+  private static final Logger logger = Logger.getLogger(CustomMetadataClient.class.getName());
 
   private final ManagedChannel originChannel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
@@ -42,7 +42,7 @@ public class CustomHeaderClient {
   /**
    * A custom client.
    */
-  private CustomHeaderClient(String host, int port) {
+  private CustomMetadataClient(String host, int port) {
     originChannel = ManagedChannelBuilder.forAddress(host, port)
         .usePlaintext()
         .build();
@@ -75,7 +75,7 @@ public class CustomHeaderClient {
    * Main start the client from the command line.
    */
   public static void main(String[] args) throws Exception {
-    CustomHeaderClient client = new CustomHeaderClient("localhost", 50051);
+    CustomMetadataClient client = new CustomMetadataClient("localhost", 50051);
     try {
       /* Access a service running on the local machine on port 50051 */
       String user = "world";

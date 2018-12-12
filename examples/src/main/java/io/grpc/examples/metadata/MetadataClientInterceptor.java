@@ -28,15 +28,19 @@ import io.grpc.MethodDescriptor;
 import java.util.logging.Logger;
 
 /**
- * A interceptor to handle client header.
+ * A client-side interceptor that sends custom headers and receives custom headers and trailing
+ * metadata.
  */
-public class HeaderClientInterceptor implements ClientInterceptor {
+public class MetadataClientInterceptor implements ClientInterceptor {
 
-  private static final Logger logger = Logger.getLogger(HeaderClientInterceptor.class.getName());
+  private static final Logger logger = Logger.getLogger(MetadataClientInterceptor.class.getName());
 
-  @VisibleForTesting
   static final Metadata.Key<String> CUSTOM_HEADER_KEY =
       Metadata.Key.of("custom_client_header_key", Metadata.ASCII_STRING_MARSHALLER);
+
+  final AtomicReference<String> headersToBeSent = new AtomicReference<>();
+  final BlockingQueue<String> headersReceived = new LinkedBlockingQueue<>();
+  final BlockingQueue<String> trailersReceived = new LinkedBlockingQueue<>();
 
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
@@ -46,17 +50,34 @@ public class HeaderClientInterceptor implements ClientInterceptor {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
         /* put custom header */
-        headers.put(CUSTOM_HEADER_KEY, "customRequestValue");
+        String outboundHeader = headersToBeSent.get();
+        if (outboundHeader != null) {
+          headers.put(CUSTOM_HEADER_KEY, outboundHeader);
+        }
         super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
           @Override
+
+
           public void onHeaders(Metadata headers) {
             /**
              * if you don't need receive header from server,
              * you can use {@link io.grpc.stub.MetadataUtils#attachHeaders}
              * directly to send header
              */
-            logger.info("header received from server:" + headers);
+            String inboundHeader = headers.get(MetadataServerInterceptor.CUSTOM_HEADER_KEY);
+            if (inboundHeader != null) {
+              headersReceived.add(inboundHeader);
+            }
             super.onHeaders(headers);
+          }
+
+          @Override
+          public void onClose(Status status, Metadata trailers) {
+            String inboundTrailer = trailers.get(MetadataServerInterceptor.CUSTOM_TRAILER_KEY);
+            if (inboundTrailer != null) {
+              trailersReceived.add(inboundTrailer);
+            }
+            super.onClose(status, trailers);
           }
         }, headers);
       }

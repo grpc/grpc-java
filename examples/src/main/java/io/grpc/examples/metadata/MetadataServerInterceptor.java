@@ -25,16 +25,20 @@ import io.grpc.ServerInterceptor;
 import java.util.logging.Logger;
 
 /**
- * A interceptor to handle server header.
+ * A server-side interceptor that receives custom headers and sends custom headers and trailing
+ * metadata.
  */
-public class HeaderServerInterceptor implements ServerInterceptor {
+public class MetadataServerInterceptor implements ServerInterceptor {
 
-  private static final Logger logger = Logger.getLogger(HeaderServerInterceptor.class.getName());
+  private static final Logger logger = Logger.getLogger(MetadataServerInterceptor.class.getName());
 
-  @VisibleForTesting
+  final 
+
   static final Metadata.Key<String> CUSTOM_HEADER_KEY =
       Metadata.Key.of("custom_server_header_key", Metadata.ASCII_STRING_MARSHALLER);
 
+  static final Metadata.Key<String> CUSTOM_TRAILER_KEY =
+      Metadata.Key.of("custom_server_trailer_key", Metadata.ASCII_STRING_MARSHALLER);
 
   @Override
   public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
