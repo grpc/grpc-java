@@ -43,7 +43,7 @@ import java.util.logging.Logger;
  * https://groups.google.com/forum/#!forum/grpc-io
  */
 public final class HelloJsonClient {
-  private static final Logger logger = Logger.getLogger(HelloWorldClient.class.getName());
+  private static final Logger logger = Logger.getLogger(HelloJsonClient.class.getName());
 
   private final ManagedChannel channel;
   private final HelloJsonStub blockingStub;
