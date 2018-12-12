@@ -38,6 +38,7 @@ public class CustomMetadataClient {
 
   private final ManagedChannel originChannel;
   private final GreeterGrpc.GreeterBlockingStub blockingStub;
+  private final MetadataClientInterceptor interceptor = new MetadataClientInterceptor();
 
   /**
    * A custom client.
@@ -46,7 +47,6 @@ public class CustomMetadataClient {
     originChannel = ManagedChannelBuilder.forAddress(host, port)
         .usePlaintext()
         .build();
-    ClientInterceptor interceptor = new HeaderClientInterceptor();
     Channel channel = ClientInterceptors.intercept(originChannel, interceptor);
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
@@ -59,6 +59,7 @@ public class CustomMetadataClient {
    * A simple client method that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
    */
   private void greet(String name) {
+    interceptor.outgoingHeader.set("Value of client->server header");
     logger.info("Will try to greet " + name + " ...");
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
     HelloReply response;
@@ -69,6 +70,8 @@ public class CustomMetadataClient {
       return;
     }
     logger.info("Greeting: " + response.getMessage());
+    logger.info("header received from server: " + interceptor.receivedHeaders);
+    logger.info("trailer reeived from server: " + interceptor.receivedTrailers);
   }
 
   /**

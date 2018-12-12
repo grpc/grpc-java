@@ -25,6 +25,10 @@ import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.Status;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 /**
@@ -38,9 +42,9 @@ public class MetadataClientInterceptor implements ClientInterceptor {
   static final Metadata.Key<String> CUSTOM_HEADER_KEY =
       Metadata.Key.of("custom_client_header_key", Metadata.ASCII_STRING_MARSHALLER);
 
-  final AtomicReference<String> headersToBeSent = new AtomicReference<>();
-  final BlockingQueue<String> headersReceived = new LinkedBlockingQueue<>();
-  final BlockingQueue<String> trailersReceived = new LinkedBlockingQueue<>();
+  final AtomicReference<String> outgoingHeader = new AtomicReference<>();
+  final BlockingQueue<String> receivedHeaders = new LinkedBlockingQueue<>();
+  final BlockingQueue<String> receivedTrailers = new LinkedBlockingQueue<>();
 
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> method,
@@ -50,14 +54,12 @@ public class MetadataClientInterceptor implements ClientInterceptor {
       @Override
       public void start(Listener<RespT> responseListener, Metadata headers) {
         /* put custom header */
-        String outboundHeader = headersToBeSent.get();
+        String outboundHeader = outgoingHeader.get();
         if (outboundHeader != null) {
           headers.put(CUSTOM_HEADER_KEY, outboundHeader);
         }
         super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
           @Override
-
-
           public void onHeaders(Metadata headers) {
             /**
              * if you don't need receive header from server,
@@ -66,7 +68,7 @@ public class MetadataClientInterceptor implements ClientInterceptor {
              */
             String inboundHeader = headers.get(MetadataServerInterceptor.CUSTOM_HEADER_KEY);
             if (inboundHeader != null) {
-              headersReceived.add(inboundHeader);
+              receivedHeaders.add(inboundHeader);
             }
             super.onHeaders(headers);
           }
@@ -75,7 +77,7 @@ public class MetadataClientInterceptor implements ClientInterceptor {
           public void onClose(Status status, Metadata trailers) {
             String inboundTrailer = trailers.get(MetadataServerInterceptor.CUSTOM_TRAILER_KEY);
             if (inboundTrailer != null) {
-              trailersReceived.add(inboundTrailer);
+              receivedTrailers.add(inboundTrailer);
             }
             super.onClose(status, trailers);
           }
