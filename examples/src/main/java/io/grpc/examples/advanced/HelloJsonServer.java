@@ -43,7 +43,7 @@ import java.util.logging.Logger;
  * https://groups.google.com/forum/#!forum/grpc-io
  */
 public class HelloJsonServer {
-  private static final Logger logger = Logger.getLogger(HelloWorldServer.class.getName());
+  private static final Logger logger = Logger.getLogger(HelloJsonServer.class.getName());
 
   private Server server;
 
