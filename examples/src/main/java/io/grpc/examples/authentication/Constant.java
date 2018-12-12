@@ -23,7 +23,10 @@ import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
 /**
  *  Constants definition
  */
-public class Constant {
+public final class Constant {
+    private Constant() {
+    }
+
     public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
 
 }

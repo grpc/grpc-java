@@ -24,7 +24,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.ServerCall.Listener;
 import io.grpc.ServerInterceptor;
-import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Before;
 import org.junit.Rule;
@@ -74,7 +73,16 @@ public class AuthClientTest {
 
     // Create a server, add service, start, and register for automatic graceful shutdown.
     grpcCleanup.register(InProcessServerBuilder.forName(serverName).directExecutor()
-            .addService(ServerInterceptors.intercept(new GreeterGrpc.GreeterImplBase() {}, mockServerInterceptor))
+            .addService(ServerInterceptors.intercept(new GreeterGrpc.GreeterImplBase() {
+
+              @Override
+              public void sayHello(io.grpc.examples.helloworld.HelloRequest request,
+                                   io.grpc.stub.StreamObserver<io.grpc.examples.helloworld.HelloReply> responseObserver) {
+                HelloReply reply = HelloReply.newBuilder().setMessage("AuthClientTest user=" + request.getName()).build();
+                responseObserver.onNext(reply);
+                responseObserver.onCompleted();
+              }
+            }, mockServerInterceptor))
             .build().start());
 
     // Create an AuthClient using the in-process channel;
@@ -100,7 +108,7 @@ public class AuthClientTest {
     assertEquals(
             "my-default-token",
             metadataCaptor.getValue().get(Constant.JWT_METADATA_KEY));
-    assertEquals("default token test", retVal);
+    assertEquals("AuthClientTest user=default token test", retVal);
   }
 
   /**
@@ -123,8 +131,6 @@ public class AuthClientTest {
     assertEquals(
             "non-default-token",
             metadataCaptor.getValue().get(Constant.JWT_METADATA_KEY));
-    assertEquals("non default token test", retVal);
+    assertEquals("AuthClientTest user=non default token test", retVal);
   }
-
-
 }

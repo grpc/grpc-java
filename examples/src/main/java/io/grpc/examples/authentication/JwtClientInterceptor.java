@@ -29,25 +29,29 @@ import io.grpc.MethodDescriptor;
  * specifically to append credentials information.  A token might expire, so for each call, if the
  * token has expired, you can proactively refresh it.
  *
- * Every time a call takes place, the handler will execute, and the {@link io.grpc.CallCredentials2.MetadataApplier}
- * is applied to add a header. The method should not block: to refresh or fetch a token from the network, it should
- * be done asynchronously.
+ * Every time a call takes place, the handler will execute, and the
+ * {@link io.grpc.CallCredentials2.MetadataApplier}
+ * is applied to add a header. The method should not block: to refresh or fetch a token from the
+ * network, it should be done asynchronously.
  */
 public class JwtClientInterceptor implements ClientInterceptor {
 
     private String tokenValue = "my-default-token";
 
     public void setTokenValue(String tokenValue) {
-        this.tokenValue = tokenValue;
+      this.tokenValue = tokenValue;
     }
 
     @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions, Channel channel) {
-        return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(channel.newCall(methodDescriptor, callOptions)) {
+    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> methodDescriptor, CallOptions callOptions,
+            Channel channel) {
+        return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(
+                channel.newCall(methodDescriptor, callOptions)) {
             @Override
             public void start(Listener<RespT> responseListener, Metadata headers) {
-                headers.put(Constant.JWT_METADATA_KEY, tokenValue);
-                super.start(responseListener, headers);
+              headers.put(Constant.JWT_METADATA_KEY, tokenValue);
+              super.start(responseListener, headers);
             }
         };
     }

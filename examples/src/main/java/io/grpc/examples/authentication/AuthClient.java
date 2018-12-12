@@ -52,8 +52,8 @@ public class AuthClient {
   /** Construct client for accessing GreeterGrpc server using the existing channel. */
   AuthClient(ManagedChannelBuilder builder) {
     this.channel = builder
-            .intercept(jwtClientInterceptor)
-            .build();
+        .intercept(jwtClientInterceptor)
+        .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);
   }
 
@@ -65,7 +65,12 @@ public class AuthClient {
     jwtClientInterceptor.setTokenValue(tokenValue);
   }
 
-  /** Say hello to server. */
+  /**
+   * Say hello to server.
+   *
+   * @param name  name to set in HelloRequest
+   * @return the message in the HelloReply from the server
+   */
   public String greet(String name) {
     logger.info("Will try to greet " + name + " ...");
     HelloRequest request = HelloRequest.newBuilder().setName(name).build();
@@ -74,10 +79,10 @@ public class AuthClient {
       response = blockingStub.sayHello(request);
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return name;
+      return e.toString();
     }
     logger.info("Greeting: " + response.getMessage());
-    return name;
+    return response.getMessage();
   }
 
   /**
