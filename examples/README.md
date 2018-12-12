@@ -27,6 +27,7 @@ before trying out the examples.
 
 - [Authentication](AUTHENTICATION_EXAMPLE.md)
 
+- [Google Authentication](GOOGLE_AUTH_EXAMPLE.md)
 
 ### To build the examples
 

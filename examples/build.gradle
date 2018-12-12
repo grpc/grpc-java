@@ -29,7 +29,9 @@ def protocVersion = '3.5.1-1'
 dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-auth:${grpcVersion}"
     compileOnly "javax.annotation:javax.annotation-api:1.2"
+    implementation "com.google.auth:google-auth-library-oauth2-http:0.11.0"
 
     // examples/advanced need this for JsonFormat
     implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
@@ -105,6 +107,13 @@ task authClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task googleAuthClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.googleAuth.GoogleAuthClient'
+    applicationName = 'google-auth-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
     applicationName = 'compressing-hello-world-client'
@@ -120,5 +129,6 @@ applicationDistribution.into('bin') {
     from(authServer)
     from(authClient)
     from(compressingHelloWorldClient)
+    from(googleAuthClient)
     fileMode = 0755
 }
