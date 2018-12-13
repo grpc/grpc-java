@@ -1,0 +1,37 @@
+Import from lyft protoc-gen-validate GitHub repository to grpc-java
+===============================================================
+
+```sh
+# in this directory run the following commands
+BRANCH=master
+# import GIT_ORIGIN_REV_ID from one of the google internal CLs
+GIT_ORIGIN_REV_ID=8e6aaf55f4954f1ef9d3ee2e8f5a50e79cc04f8f
+GIT_REPO="https://github.com/lyft/protoc-gen-validate.git"
+GIT_BASE_DIR=protoc-gen-validate
+SOURCE_PROTO_BASE_DIR=protoc-gen-validate
+TARGET_PROTO_BASE_DIR=src/main/proto
+FILES=(
+validate/validate.proto
+)
+
+# clone the protoc-gen-validate github repo in /tmp directory
+pushd /tmp
+rm -rf $GIT_BASE_DIR
+git clone -b $BRANCH $GIT_REPO
+cd $GIT_BASE_DIR
+git checkout $GIT_ORIGIN_REV_ID
+popd
+
+cp -p /tmp/${GIT_BASE_DIR}/LICENSE LICENSE
+
+mkdir -p ${TARGET_PROTO_BASE_DIR}
+pushd ${TARGET_PROTO_BASE_DIR}
+
+# copy proto files to project directory
+for file in "${FILES[@]}"
+do
+  mkdir -p $(dirname ${file})
+  cp -p /tmp/${SOURCE_PROTO_BASE_DIR}/${file} ${file}
+done
+popd
+```
