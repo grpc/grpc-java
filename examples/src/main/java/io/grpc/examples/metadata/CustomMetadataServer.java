@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.header;
+package io.grpc.examples.metadata;
 
 import io.grpc.Context;
 import io.grpc.Server;
@@ -38,9 +38,12 @@ public class CustomMetadataServer {
   private Server server;
 
   private void start() throws IOException {
+    MetadataServerInterceptor interceptor = new MetadataServerInterceptor();
+    interceptor.outgoingHeader.set("Server->Client header value");
+    interceptor.outgoingTrailer.set("Server->Client trailer value");
     server = ServerBuilder.forPort(PORT)
         .addService(
-            ServerInterceptors.intercept(new GreeterImpl(), new MetadataServerInterceptor()))
+            ServerInterceptors.intercept(new GreeterImpl(), interceptor))
         .build()
         .start();
     logger.info("Server started, listening on " + PORT);

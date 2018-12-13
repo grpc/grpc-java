@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.header;
+package io.grpc.examples.metadata;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;

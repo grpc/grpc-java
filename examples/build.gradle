@@ -91,6 +91,20 @@ task helloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task metadataServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.metadata.CustomMetadataServer'
+    applicationName = 'metadata-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task metadataClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.metadata.CustomMetadataClient'
+    applicationName = 'metadata-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
     applicationName = 'compressing-hello-world-client'
@@ -103,6 +117,8 @@ applicationDistribution.into('bin') {
     from(routeGuideClient)
     from(helloWorldServer)
     from(helloWorldClient)
+    from(metadataServer)
+    from(metadataClient)
     from(compressingHelloWorldClient)
     fileMode = 0755
 }

@@ -15,7 +15,7 @@ before trying out the examples.
 
 - [Route guide](src/main/java/io/grpc/examples/routeguide)
 
-- [Metadata](src/main/java/io/grpc/examples/header)
+- [Metadata](src/main/java/io/grpc/examples/metadata)
 
 - [Error handling](src/main/java/io/grpc/examples/errorhandling)
 

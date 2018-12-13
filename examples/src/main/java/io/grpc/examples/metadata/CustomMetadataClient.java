@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.header;
+package io.grpc.examples.metadata;
 
 import io.grpc.Channel;
 import io.grpc.ClientInterceptor;

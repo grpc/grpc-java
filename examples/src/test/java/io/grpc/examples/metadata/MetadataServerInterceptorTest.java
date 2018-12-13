@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.header;
+package io.grpc.examples.metadata;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -29,6 +25,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptors;
@@ -49,7 +46,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
 
 /**
  * Unit tests for {@link HeaderClientInterceptor}.
@@ -69,6 +65,8 @@ public class MetadataServerInterceptorTest {
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
   private final BlockingQueue<Context> capturedContexts = new LinkedBlockingQueue<>();
+  private final BlockingQueue<Metadata> capturedServerHeaders = new LinkedBlockingQueue<>();
+  private final BlockingQueue<Metadata> capturedServerTrailers = new LinkedBlockingQueue<>();
 
   private Channel channel;
 
@@ -99,41 +97,48 @@ public class MetadataServerInterceptorTest {
 
   @Test
   public void works() {
-    class SpyingClientInterceptor implements ClientInterceptor {
-      ClientCall.Listener<?> spyListener;
+    ClientInterceptor clientInterceptor = new ClientInterceptor() {
+        @Override
+        public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+            MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+          return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+            @Override
+            public void start(Listener<RespT> responseListener, Metadata headers) {
+              headers.put(MetadataClientInterceptor.CUSTOM_HEADER_KEY, "Client->Server header value");
+              super.start(new SimpleForwardingClientCallListener<RespT>(responseListener) {
+                  @Override
+                  public void onHeaders(Metadata headers) {
+                    capturedServerHeaders.add(headers);
+                    super.onHeaders(headers);
+                  }
 
-      @Override
-      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-        return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
-          @Override
-          public void start(Listener<RespT> responseListener, Metadata headers) {
-            spyListener = responseListener =
-                mock(ClientCall.Listener.class, delegatesTo(responseListener));
-            headers.put(MetadataClientInterceptor.CUSTOM_HEADER_KEY, "Client->Server header value");
-            super.start(responseListener, headers);
-          }
-        };
-      }
-    }
+                  @Override
+                  public void onClose(Status status, Metadata trailers) {
+                    capturedServerTrailers.add(trailers);
+                    super.onClose(status, trailers);
+                  }
+                }, headers);
+            }
+          };
+        }
+      };
 
-    SpyingClientInterceptor clientInterceptor = new SpyingClientInterceptor();
     GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(channel)
         .withInterceptors(clientInterceptor);
-    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
     blockingStub.sayHello(HelloRequest.getDefaultInstance());
 
     // Verify that server headers and trailers are delivered to the client
-    assertNotNull(clientInterceptor.spyListener);
-    verify(clientInterceptor.spyListener).onHeaders(metadataCaptor.capture());
+    Metadata capturedServerHeader = capturedServerHeaders.poll();
+    assertNotNull(capturedServerHeader);
     assertEquals(
         "Server->Client header value",
-        metadataCaptor.getValue().get(MetadataServerInterceptor.CUSTOM_HEADER_KEY));
-    verify(clientInterceptor.spyListener).onClose(any(Status.class), metadataCaptor.capture());
+        capturedServerHeader.get(MetadataServerInterceptor.CUSTOM_HEADER_KEY));
+    Metadata capturedServerTrailer = capturedServerTrailers.poll();
+    assertNotNull(capturedServerTrailer);
     assertEquals(
         "Server->Client trailer value",
-        metadataCaptor.getValue().get(MetadataServerInterceptor.CUSTOM_TRAILER_KEY));
+        capturedServerTrailer.get(MetadataServerInterceptor.CUSTOM_TRAILER_KEY));
 
     // Verify that client headers is read by the server interceptor and installed on the
     // Context that the service handler sees.

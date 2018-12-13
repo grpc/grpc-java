@@ -14,14 +14,11 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.header;
+package io.grpc.examples.metadata;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
-import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import io.grpc.ClientInterceptors;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
@@ -49,8 +46,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
 
 /**
  * Unit tests for {@link MetadataClientInterceptor}.
@@ -118,7 +113,6 @@ public class MetadataClientInterceptorTest {
     interceptor.outgoingHeader.set("Client->Server header value");
     GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(
         ClientInterceptors.intercept(channel, interceptor));
-    ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
 
     blockingStub.sayHello(HelloRequest.getDefaultInstance());
 
