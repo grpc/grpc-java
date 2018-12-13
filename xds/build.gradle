@@ -10,9 +10,8 @@ buildscript {
 description = "gRPC: XDS plugin"
 
 [compileJava].each() {
-    // v1alpha of reflection.proto is deprecated at the file level.
-    // Without this workaround, the project can not compile.
     it.options.compilerArgs += [
+        // valueOf(int) in RoutingPriority has been deprecated
         "-Xlint:-deprecation",
     ]
 }
