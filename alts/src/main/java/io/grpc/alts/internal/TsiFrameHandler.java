@@ -157,7 +157,6 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
 
   @Override
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
-    checkState(protector != null, "Cannot write frames while the TSI handshake is in progress");
     final ProtectedPromise aggregatePromise =
         new ProtectedPromise(ctx.channel(), ctx.executor(), pendingUnprotectedWrites.size());
 
@@ -169,6 +168,10 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
       // protection framing.
       return;
     }
+
+    // There is something to write, we need a frame protector now.
+    checkState(protector != null, "Cannot write frames while the TSI handshake is in progress");
+
     // Drain the unprotected writes.
     while (!pendingUnprotectedWrites.isEmpty()) {
       ByteBuf in = (ByteBuf) pendingUnprotectedWrites.current();
