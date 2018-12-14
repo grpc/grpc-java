@@ -1,6 +1,8 @@
 syntax = "proto3";
 
 package envoy.type;
+option java_package = "io.grpc.xds.shaded.envoy.type";
+option java_multiple_files = true;
 
 import "validate/validate.proto";
 
