@@ -52,6 +52,15 @@ you will be running the example application as described later. Assume this JSON
 [create the service account](https://cloud.google.com/iam/docs/creating-managing-service-accounts#iam-service-accounts-create-gcloud)
 and [the JSON file](https://cloud.google.com/iam/docs/creating-managing-service-account-keys#iam-service-account-keys-create-gcloud).
 
+#### To build the examples
+
+1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
+
+2. Run in this directory:
+```
+$ ../gradlew installDist
+```
+
 
 #### How to run the example:
 `google-auth-client` requires two command line arguments for the location of the JSON file and the project ID:
@@ -66,7 +75,7 @@ the project ID of the project you created (or used) in step 2 above.
 
  ```bash
 # Run the client
-./build/install/examples/bin/google-auth-client /path/to/JSON/file projects/xyz123
+./build/install/example-gauth/bin/google-auth-client /path/to/JSON/file projects/xyz123
 ```
  That's it! The client will show the list of Pub/Sub topics for the project as follows:
 
@@ -78,14 +87,14 @@ the project ID of the project you created (or used) in step 2 above.
  ```
 
  ## Maven
- If you prefer to use Maven follow these [steps](./README.md#maven). You can run the example as follows:
-  ```
+ If you prefer to use Maven follow these [steps](../README.md#maven). You can run the example as follows:
+ ```
  $ # Run the client
  $ mvn exec:java -Dexec.mainClass=io.grpc.examples.googleAuth.GoogleAuthClient -Dexec.args="/path/to/JSON/file projects/xyz123"
  ```
 
-  ## Bazel
-  If you prefer to use Bazel:
+ ## Bazel
+ If you prefer to use Bazel:
  ```
  (With Bazel v0.8.0 or above.)
  $ bazel build :google-auth-client

@@ -59,8 +59,7 @@ public class GoogleAuthClient {
    */
   public GoogleAuthClient(String host, int port, CallCredentials callCredentials) {
     // Google API invocation requires a secure channel. Channels are secure by default (SSL/TLS)
-    this(ManagedChannelBuilder.forAddress(host, port)
-        .build(), callCredentials);
+    this(ManagedChannelBuilder.forAddress(host, port).build(), callCredentials);
   }
 
   /**
@@ -127,8 +126,8 @@ public class GoogleAuthClient {
     // credentials must be refreshed before the access token is available
     credentials.refreshIfExpired();
     credentials.getAccessToken();
-    GoogleAuthClient client = new GoogleAuthClient("pubsub.googleapis.com", 443,
-            MoreCallCredentials.from(credentials));
+    GoogleAuthClient client =
+            new GoogleAuthClient("pubsub.googleapis.com", 443, MoreCallCredentials.from(credentials));
 
     try {
       client.getTopics(args[1]);

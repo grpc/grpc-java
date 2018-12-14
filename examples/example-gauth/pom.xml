@@ -2,19 +2,18 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.grpc</groupId>
-  <artifactId>examples</artifactId>
+  <artifactId>example-gauth</artifactId>
   <packaging>jar</packaging>
   <!-- Feel free to delete the comment at the end of these lines. It is just
        for safely updating the version in our release process. -->
   <version>1.18.0-SNAPSHOT</version><!-- CURRENT_GRPC_VERSION -->
-  <name>examples</name>
+  <name>example-gauth</name>
   <url>http://maven.apache.org</url>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <grpc.version>1.18.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
-    <protobuf.version>3.5.1</protobuf.version>
     <protoc.version>3.5.1-1</protoc.version>
-    <netty.tcnative.version>2.0.7.Final</netty.tcnative.version>
+    <netty.tcnative.version>2.0.20.Final</netty.tcnative.version>
     <!-- required for jdk9 -->
     <maven.compiler.source>1.7</maven.compiler.source>
     <maven.compiler.target>1.7</maven.compiler.target>
@@ -37,6 +36,11 @@
       <version>${grpc.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-auth</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
       <groupId>javax.annotation</groupId>
       <artifactId>javax.annotation-api</artifactId>
       <version>1.2</version>
@@ -52,6 +56,11 @@
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java-util</artifactId>
       <version>${protobuf.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.auth</groupId>
+      <artifactId>google-auth-library-oauth2-http</artifactId>
+      <version>0.11.0</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
