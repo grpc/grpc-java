@@ -41,7 +41,7 @@ to create a topic:
 gcloud pubsub topics create Topic1
 ```
 
-4. You will now need to set up [authentication](https://cloud.google.com/docs/authentication/) and a
+5. You will now need to set up [authentication](https://cloud.google.com/docs/authentication/) and a
 [service account](https://cloud.google.com/docs/authentication/#service_accounts) in order to access
 Pub/Sub via gRPC APIs as described [here](https://cloud.google.com/iam/docs/creating-managing-service-accounts).
 Assign the [role](https://cloud.google.com/iam/docs/granting-roles-to-service-accounts) `Project -> Owner`
@@ -69,7 +69,7 @@ $ ../gradlew installDist
 USAGE: GoogleAuthClient <path-to-JSON-file> <project-ID>
 ```
 
-The first argument <path-to-JSON-file> is the location of the JSON file you created in step 4 above.
+The first argument <path-to-JSON-file> is the location of the JSON file you created in step 5 above.
 The second argument <project-ID> is the project ID in the form "projects/xyz123" where "xyz123" is
 the project ID of the project you created (or used) in step 2 above.
 
