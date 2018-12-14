@@ -16,17 +16,15 @@
 
 package io.grpc.examples.googleAuth;
 
-import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.pubsub.v1.ListTopicsRequest;
+import com.google.pubsub.v1.ListTopicsResponse;
+import com.google.pubsub.v1.PublisherGrpc;
 import io.grpc.CallCredentials;
-import io.grpc.auth.MoreCallCredentials;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
-import com.google.pubsub.v1.PublisherGrpc;
-import com.google.pubsub.v1.ListTopicsResponse;
-import com.google.pubsub.v1.ListTopicsRequest;
-
+import io.grpc.auth.MoreCallCredentials;
 import java.io.FileInputStream;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
@@ -38,7 +36,6 @@ import java.util.logging.Logger;
  * @see <a href="../../../../../../GOOGLE_AUTH_EXAMPLE.md">Google Auth Example README</a>
  *
  * Also @see <a href="https://cloud.google.com/pubsub/docs/reference/rpc/">Google Cloud Pubsub via gRPC</a>
- *
  */
 public class GoogleAuthClient {
   private static final Logger logger = Logger.getLogger(GoogleAuthClient.class.getName());
@@ -85,7 +82,7 @@ public class GoogleAuthClient {
    *                   the project ID for the project you created.
    */
   public void getTopics(String projectID) {
-    logger.info("Will try to get topics for poroject " + projectID + " ...");
+    logger.log(Level.INFO, "Will try to get topics for project {0} ...", projectID);
 
     ListTopicsRequest request = ListTopicsRequest.newBuilder()
             .setPageSize(10)        // get max 10 topics
@@ -99,7 +96,7 @@ public class GoogleAuthClient {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
       return;
     }
-    logger.info("Topics list:\n" + response.getTopicsList());
+    logger.log(Level.INFO, "Topics list:\n {0}", response.getTopicsList());
   }
 
   /**

@@ -11,9 +11,8 @@ The example requires grpc-java to be pre-built. Using a release tag will downloa
 from a maven repository. But if you need the latest SNAPSHOT binaries you will need to follow
 [COMPILING](../COMPILING.md) to build these.
 
-The source code is [here](src/main/java/io/grpc/examples/googleAuth). Please follow the
-[steps](./README.md#to-build-the-examples) to build the examples. The build creates the script
-`google-auth-client` in the `build/install/examples/bin/` directory which can be
+Please follow the [steps](./README.md#to-build-the-examples) to build the examples. The build creates
+the script `google-auth-client` in the `build/install/examples/bin/` directory which can be
 used to run this example.
 
 The example uses [Google PubSub gRPC API](https://cloud.google.com/pubsub/docs/reference/rpc/) to get a list
@@ -87,8 +86,12 @@ the project ID of the project you created (or used) in step 2 above.
  ```
 
  ## Maven
- If you prefer to use Maven follow these [steps](../README.md#maven). You can run the example as follows:
+ If you prefer to use Maven:
+ 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
+
+ 2. Run in this directory:
  ```
+ $ mvn verify
  $ # Run the client
  $ mvn exec:java -Dexec.mainClass=io.grpc.examples.googleAuth.GoogleAuthClient -Dexec.args="/path/to/JSON/file projects/xyz123"
  ```
