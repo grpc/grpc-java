@@ -29,7 +29,7 @@ java_library(
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
         "@io_grpc_grpc_java//auth",
-        "@com_google_auth//:google-auth-library-oauth2-http",
+        "@com_google_auth_google_auth_library_oauth2_http//jar",
     ],
 )
 
@@ -38,6 +38,6 @@ java_binary(
     testonly = 1,
     main_class = "io.grpc.examples.googleAuth.GoogleAuthClient",
     runtime_deps = [
-        ":examples",
+        ":example-gauth",
     ],
 )

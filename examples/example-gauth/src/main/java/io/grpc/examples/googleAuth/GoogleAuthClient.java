@@ -124,8 +124,7 @@ public class GoogleAuthClient {
     credentials = credentials.createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
 
     // credentials must be refreshed before the access token is available
-    credentials.refreshIfExpired();
-    credentials.getAccessToken();
+    credentials.refreshAccessToken();
     GoogleAuthClient client =
             new GoogleAuthClient("pubsub.googleapis.com", 443, MoreCallCredentials.from(credentials));
 
