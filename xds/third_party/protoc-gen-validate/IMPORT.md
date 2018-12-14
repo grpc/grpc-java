@@ -36,6 +36,8 @@ done
 
 for file in "${FILES[@]}"
 do
+  # remove old "option java_multiple_files" if any
+  sed -i -e '/^option\sjava_multiple_files\s=/d' $file
   # add new "option java_multiple_files"
   sed -i -e "/^package\s/a option java_multiple_files = true;" $file
   # remove old "option java_package" if any
