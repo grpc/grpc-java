@@ -33,5 +33,16 @@ do
   mkdir -p $(dirname ${file})
   cp -p /tmp/${SOURCE_PROTO_BASE_DIR}/${file} ${file}
 done
+
+for file in "${FILES[@]}"
+do
+  # add new "option java_multiple_files"
+  sed -i -e "/^package\s/a option java_multiple_files = true;" $file
+  # remove old "option java_package" if any
+  sed -i -e '/^option\sjava_package\s=/d' $file
+  cmd='grep -Po "^package \K.*(?=;$)" '"${file}"
+  # add new "option java_package"
+  sed -i -e "/^package\s/a option java_package = \"io.grpc.xds.shaded.$(eval $cmd)\";" $file
+done
 popd
 ```
