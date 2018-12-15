@@ -33,6 +33,7 @@ dependencies {
     implementation "io.grpc:grpc-auth:${grpcVersion}"
     compileOnly "javax.annotation:javax.annotation-api:1.2"
     implementation "com.google.auth:google-auth-library-oauth2-http:0.9.0"
+    implementation "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24"
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 }
 
