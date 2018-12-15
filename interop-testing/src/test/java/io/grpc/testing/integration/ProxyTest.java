@@ -61,7 +61,6 @@ public class ProxyTest {
   }
 
   @Test
-  @org.junit.Ignore // flaky. latency commonly too high
   public void smallLatency() throws Exception {
     server = new Server();
     int serverPort = server.init();
