@@ -121,9 +121,14 @@ public abstract class NameResolver {
      */
     public abstract String getDefaultScheme();
 
-    public static NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector,
-        Factory factory) {
-      if(factory instanceof ProxyAwareFactory){
+    /**
+     * Obtains a name resolver from the factory implementation. If the factory implements
+     * {@link ProxyAwareFactory} then {@link ProxyAwareFactory#newNameResolver(URI, Attributes,
+     * ProxyDetector)} is used instead
+     */
+    public static NameResolver getNameResolver(URI targetUri, Attributes params,
+        ProxyDetector proxyDetector, Factory factory) {
+      if(factory instanceof ProxyAwareFactory) {
         return ((ProxyAwareFactory)factory).newNameResolver(targetUri, params, proxyDetector);
       } else {
         return factory.newNameResolver(targetUri, params);

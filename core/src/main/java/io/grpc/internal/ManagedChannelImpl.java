@@ -538,7 +538,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
     this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams, proxyDetector);
+    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams,
+        proxyDetector);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     this.proxyDetector = proxyDetector;
     maxTraceEvents = builder.maxTraceEvents;
@@ -624,7 +625,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = Factory.newNameResolver(targetUri, nameResolverParams, proxyDetector,
+      NameResolver resolver = Factory.getNameResolver(targetUri, nameResolverParams, proxyDetector,
           nameResolverFactory);
       if (resolver != null) {
         return resolver;
@@ -643,7 +644,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = Factory.newNameResolver(targetUri, nameResolverParams, proxyDetector,
+      NameResolver resolver = Factory.getNameResolver(targetUri, nameResolverParams, proxyDetector,
           nameResolverFactory);
       if (resolver != null) {
         return resolver;

@@ -51,7 +51,8 @@ public final class DnsNameResolverProvider extends NameResolverProvider implemen
   }
 
   @Override
-  public DnsNameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+  public DnsNameResolver newNameResolver(URI targetUri, Attributes params,
+      ProxyDetector proxyDetector) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(targetPath.startsWith("/"),
