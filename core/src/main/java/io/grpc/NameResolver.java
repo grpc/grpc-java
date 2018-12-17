@@ -115,7 +115,7 @@ public abstract class NameResolver {
      * @since 1.0.0
      */
     @Nullable
-    public final NameResolver newNameResolver(URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
       return newNameResolver(targetUri, params, GrpcUtil.getDefaultProxyDetector());
     }
 
