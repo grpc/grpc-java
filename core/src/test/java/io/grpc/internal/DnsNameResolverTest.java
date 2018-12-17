@@ -38,6 +38,7 @@ import com.google.common.testing.FakeTicker;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.internal.DnsNameResolver.AddressResolver;

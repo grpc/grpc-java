@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
+import io.grpc.internal.ProxyParameters;
 import java.io.IOException;
 import java.net.SocketAddress;
 import javax.annotation.Nullable;

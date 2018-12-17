@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
+import io.grpc.ProxyDetector;
 import java.io.IOException;
 import java.net.Authenticator;
 import java.net.InetAddress;
