@@ -31,8 +31,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>A {@code NameResolver} uses the URI's scheme to determine whether it can resolve it, and uses
  * the components after the scheme for actual resolution.
  *
- * <p>The addresses and attributes of a target may be changed over time, thus the caller registers
- * a
+ * <p>The addresses and attributes of a target may be changed over time, thus the caller registers a
  * {@link Listener} to receive continuous updates.
  *
  * <p>A {@code NameResolver} does not need to automatically re-resolve on failure. Instead, the
@@ -44,7 +43,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 @ThreadSafe
 public abstract class NameResolver {
-
   /**
    * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
    * from a trusted source, because if the authority is tampered with, RPCs may be sent to the
@@ -85,8 +83,7 @@ public abstract class NameResolver {
    *
    * @since 1.0.0
    */
-  public void refresh() {
-  }
+  public void refresh() {}
 
   /**
    * Factory that creates {@link NameResolver} instances.
@@ -94,7 +91,6 @@ public abstract class NameResolver {
    * @since 1.0.0
    */
   public abstract static class Factory {
-
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
@@ -144,7 +140,6 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   @ThreadSafe
   public interface Listener {
-
     /**
      * Handles updates on resolved addresses and attributes.
      *
@@ -174,7 +169,5 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4972")
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  public @interface ResolutionResultAttr {
-
-  }
+  public @interface ResolutionResultAttr {}
 }
