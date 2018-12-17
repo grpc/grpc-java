@@ -128,7 +128,7 @@ public abstract class NameResolver {
      */
     public static NameResolver getNameResolver(URI targetUri, Attributes params,
         ProxyDetector proxyDetector, Factory factory) {
-      if(factory instanceof ProxyAwareFactory) {
+      if (factory instanceof ProxyAwareFactory) {
         return ((ProxyAwareFactory)factory).newNameResolver(targetUri, params, proxyDetector);
       } else {
         return factory.newNameResolver(targetUri, params);
