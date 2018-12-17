@@ -447,7 +447,8 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
-        TimeProvider.SYSTEM_TIME_PROVIDER));
+        TimeProvider.SYSTEM_TIME_PROVIDER,
+        this.proxyDetector));
   }
 
   // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
@@ -517,7 +518,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     @Override
-    public NameResolver newNameResolver(URI notUsedUri, Attributes params) {
+    public NameResolver newNameResolver(URI notUsedUri, Attributes params, ProxyDetector proxyDetector) {
       return new NameResolver() {
         @Override
         public String getServiceAuthority() {

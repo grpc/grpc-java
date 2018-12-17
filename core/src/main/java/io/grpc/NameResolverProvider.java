@@ -106,7 +106,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
 
     @Override
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
       checkForProviders();
       for (NameResolverProvider provider : providers) {
         NameResolver resolver = provider.newNameResolver(targetUri, params);

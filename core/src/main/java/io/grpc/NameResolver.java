@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import io.grpc.internal.GrpcUtil;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -30,7 +31,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>A {@code NameResolver} uses the URI's scheme to determine whether it can resolve it, and uses
  * the components after the scheme for actual resolution.
  *
- * <p>The addresses and attributes of a target may be changed over time, thus the caller registers a
+ * <p>The addresses and attributes of a target may be changed over time, thus the caller registers
+ * a
  * {@link Listener} to receive continuous updates.
  *
  * <p>A {@code NameResolver} does not need to automatically re-resolve on failure. Instead, the
@@ -42,6 +44,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 @ThreadSafe
 public abstract class NameResolver {
+
   /**
    * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
    * from a trusted source, because if the authority is tampered with, RPCs may be sent to the
@@ -82,7 +85,8 @@ public abstract class NameResolver {
    *
    * @since 1.0.0
    */
-  public void refresh() {}
+  public void refresh() {
+  }
 
   /**
    * Factory that creates {@link NameResolver} instances.
@@ -90,6 +94,7 @@ public abstract class NameResolver {
    * @since 1.0.0
    */
   public abstract static class Factory {
+
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
@@ -106,11 +111,18 @@ public abstract class NameResolver {
      *
      * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
      * @param params optional parameters. Canonical keys are defined as {@code PARAMS_*} fields in
-     *               {@link Factory}.
+     * {@link Factory}.
      * @since 1.0.0
      */
     @Nullable
-    public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
+    public final NameResolver newNameResolver(URI targetUri, Attributes params) {
+      return newNameResolver(targetUri, params, GrpcUtil.getDefaultProxyDetector());
+    }
+
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+    @Nullable
+    public abstract NameResolver newNameResolver(URI targetUri, Attributes params,
+        ProxyDetector proxyDetector);
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -132,6 +144,7 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   @ThreadSafe
   public interface Listener {
+
     /**
      * Handles updates on resolved addresses and attributes.
      *
@@ -161,5 +174,7 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4972")
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  public @interface ResolutionResultAttr {}
+  public @interface ResolutionResultAttr {
+
+  }
 }

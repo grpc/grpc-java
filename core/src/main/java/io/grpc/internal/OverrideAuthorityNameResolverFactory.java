@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
 import java.net.URI;
 import javax.annotation.Nullable;
 
@@ -43,8 +44,8 @@ final class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
 
   @Nullable
   @Override
-  public NameResolver newNameResolver(URI targetUri, Attributes params) {
-    final NameResolver resolver = delegate.newNameResolver(targetUri, params);
+  public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+    final NameResolver resolver = delegate.newNameResolver(targetUri, params, proxyDetector);
     // Do not wrap null values. We do not want to impede error signaling.
     if (resolver == null) {
       return null;
