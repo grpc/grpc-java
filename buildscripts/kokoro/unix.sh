@@ -33,7 +33,7 @@ GRADLE_FLAGS="${GRADLE_FLAGS:-}"
 GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH $GRADLE_FLAGS"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
-GRADLE_FLAGS+=" -PerrorProne=true"
+GRADLE_FLAGS+=" -PerrorProne=false"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
 export GRADLE_OPTS="-Xmx512m"
 

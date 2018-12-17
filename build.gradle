@@ -47,6 +47,8 @@ subprojects {
         }
     }
 
+    println "errorProne = ${rootProject.properties.get('errorProne', true)}"
+
     group = "io.grpc"
     version = "1.18.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
