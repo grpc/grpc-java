@@ -109,7 +109,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
     public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
       checkForProviders();
       for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, params);
+        NameResolver resolver = provider.newNameResolver(targetUri, params, proxyDetector);
         if (resolver != null) {
           return resolver;
         }
