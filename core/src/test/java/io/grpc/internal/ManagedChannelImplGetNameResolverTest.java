@@ -23,7 +23,6 @@ import static org.junit.Assert.fail;
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Factory;
-import io.grpc.ProxyDetector;
 import java.net.URI;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -97,7 +96,7 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validTargetNoResovler() {
     Factory nameResolverFactory = new NameResolver.Factory() {
       @Override
-      public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+      public NameResolver newNameResolver(URI targetUri, Attributes params) {
         return null;
       }
 
@@ -144,7 +143,7 @@ public class ManagedChannelImplGetNameResolverTest {
     }
 
     @Override
-    public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
       if (expectedScheme.equals(targetUri.getScheme())) {
         return new FakeNameResolver(targetUri);
       }

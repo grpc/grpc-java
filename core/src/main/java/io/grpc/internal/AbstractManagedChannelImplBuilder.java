@@ -518,7 +518,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     @Override
-    public NameResolver newNameResolver(URI notUsedUri, Attributes params, ProxyDetector proxyDetector) {
+    public NameResolver newNameResolver(URI notUsedUri, Attributes params) {
       return new NameResolver() {
         @Override
         public String getServiceAuthority() {

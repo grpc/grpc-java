@@ -60,6 +60,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.Factory;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -623,7 +624,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams, proxyDetector);
+      NameResolver resolver = Factory.newNameResolver(targetUri, nameResolverParams, proxyDetector,
+          nameResolverFactory);
       if (resolver != null) {
         return resolver;
       }
@@ -641,7 +643,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams, proxyDetector);
+      NameResolver resolver = Factory.newNameResolver(targetUri, nameResolverParams, proxyDetector,
+          nameResolverFactory);
       if (resolver != null) {
         return resolver;
       }

@@ -88,7 +88,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
-import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
@@ -3150,7 +3149,7 @@ public class ManagedChannelImplTest {
 
       @Nullable
       @Override
-      public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+      public NameResolver newNameResolver(URI targetUri, Attributes params) {
         return (resolver = new FakeNameResolver());
       }
 
@@ -3275,7 +3274,7 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public NameResolver newNameResolver(final URI targetUri, Attributes params, ProxyDetector proxyDetector) {
+    public NameResolver newNameResolver(final URI targetUri, Attributes params) {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
