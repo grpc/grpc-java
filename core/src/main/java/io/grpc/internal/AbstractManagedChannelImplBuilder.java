@@ -33,6 +33,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -145,6 +146,8 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   BinaryLog binlog;
+
+  ProxyDetector proxyDetector;
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -367,6 +370,12 @@ public abstract class AbstractManagedChannelImplBuilder
   @VisibleForTesting
   protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
     this.censusStatsOverride = censusStats;
+    return thisT();
+  }
+
+  @Override
+  public T proxyDetector(ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
     return thisT();
   }
 
