@@ -88,6 +88,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
@@ -254,7 +255,8 @@ public class ManagedChannelImplTest {
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
-        timer.getTimeProvider());
+        timer.getTimeProvider(),
+        null);
 
     if (requestConnection) {
       int numExpectedTasks = 0;
@@ -3148,7 +3150,7 @@ public class ManagedChannelImplTest {
 
       @Nullable
       @Override
-      public NameResolver newNameResolver(URI targetUri, Attributes params) {
+      public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
         return (resolver = new FakeNameResolver());
       }
 
@@ -3273,7 +3275,7 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public NameResolver newNameResolver(final URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(final URI targetUri, Attributes params, ProxyDetector proxyDetector) {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }

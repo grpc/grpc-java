@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.internal.GrpcUtil;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -112,7 +111,7 @@ public abstract class NameResolver {
      */
     @Nullable
     public NameResolver newNameResolver(URI targetUri, Attributes params) {
-      return newNameResolver(targetUri, params, GrpcUtil.getDefaultProxyDetector());
+      return newNameResolver(targetUri, params, null);
     }
 
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
@@ -169,5 +168,7 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4972")
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  public @interface ResolutionResultAttr {}
+  public @interface ResolutionResultAttr {
+
+  }
 }

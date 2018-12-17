@@ -172,7 +172,11 @@ final class DnsNameResolver extends NameResolver {
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = proxyDetector;
+    if(proxyDetector == null){
+      this.proxyDetector = GrpcUtil.getDefaultProxyDetector();
+    } else {
+      this.proxyDetector = proxyDetector;
+    }
     this.resolveRunnable = new Resolve(this, stopwatch, getNetworkAddressCacheTtlNanos(isAndroid));
   }
 

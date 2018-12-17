@@ -23,6 +23,7 @@ import static org.junit.Assert.fail;
 import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Factory;
+import io.grpc.ProxyDetector;
 import java.net.URI;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -96,7 +97,7 @@ public class ManagedChannelImplGetNameResolverTest {
   public void validTargetNoResovler() {
     Factory nameResolverFactory = new NameResolver.Factory() {
       @Override
-      public NameResolver newNameResolver(URI targetUri, Attributes params) {
+      public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
         return null;
       }
 
@@ -107,7 +108,7 @@ public class ManagedChannelImplGetNameResolverTest {
     };
     try {
       ManagedChannelImpl.getNameResolver(
-          "foo.googleapis.com:8080", nameResolverFactory, NAME_RESOLVER_PARAMS);
+          "foo.googleapis.com:8080", nameResolverFactory, NAME_RESOLVER_PARAMS, null);
       fail("Should fail");
     } catch (IllegalArgumentException e) {
       // expected
@@ -117,7 +118,7 @@ public class ManagedChannelImplGetNameResolverTest {
   private void testValidTarget(String target, String expectedUriString, URI expectedUri) {
     Factory nameResolverFactory = new FakeNameResolverFactory(expectedUri.getScheme());
     FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-        target, nameResolverFactory, NAME_RESOLVER_PARAMS);
+        target, nameResolverFactory, NAME_RESOLVER_PARAMS, null);
     assertNotNull(nameResolver);
     assertEquals(expectedUri, nameResolver.uri);
     assertEquals(expectedUriString, nameResolver.uri.toString());
@@ -128,7 +129,7 @@ public class ManagedChannelImplGetNameResolverTest {
 
     try {
       FakeNameResolver nameResolver = (FakeNameResolver) ManagedChannelImpl.getNameResolver(
-          target, nameResolverFactory, NAME_RESOLVER_PARAMS);
+          target, nameResolverFactory, NAME_RESOLVER_PARAMS, null);
       fail("Should have failed, but got resolver with " + nameResolver.uri);
     } catch (IllegalArgumentException e) {
       // expected
@@ -143,7 +144,7 @@ public class ManagedChannelImplGetNameResolverTest {
     }
 
     @Override
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
       if (expectedScheme.equals(targetUri.getScheme())) {
         return new FakeNameResolver(targetUri);
       }

@@ -44,6 +44,11 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   private static final String SCHEME = "dns";
 
   @Override
+  public DnsNameResolver newNameResolver(URI targetUri, Attributes params) {
+    return newNameResolver(targetUri, params, null);
+  }
+
+  @Override
   public DnsNameResolver newNameResolver(URI targetUri, Attributes params, ProxyDetector proxyDetector) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
