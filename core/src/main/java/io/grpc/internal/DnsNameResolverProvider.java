@@ -20,7 +20,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.InternalServiceProviders;
-import io.grpc.NameResolver.ProxyAwareFactory;
 import io.grpc.NameResolverProvider;
 import io.grpc.ProxyDetector;
 import java.net.URI;
@@ -40,8 +39,7 @@ import java.net.URI;
  *   <li>{@code "dns:///foo.googleapis.com"} (without port)</li>
  * </ul>
  */
-public final class DnsNameResolverProvider extends NameResolverProvider implements
-    ProxyAwareFactory {
+public final class DnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
 

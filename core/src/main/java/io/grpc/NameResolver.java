@@ -110,7 +110,16 @@ public abstract class NameResolver {
      * @since 1.0.0
      */
     @Nullable
-    public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
+      return newNameResolver(targetUri, params, null);
+    }
+
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+    @Nullable
+    public NameResolver newNameResolver(URI targetUri, Attributes params,
+        ProxyDetector proxyDetector) {
+      return null;
+    }
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -122,25 +131,19 @@ public abstract class NameResolver {
     public abstract String getDefaultScheme();
 
     /**
-     * Obtains a name resolver from the factory implementation. If the factory implements
-     * {@link ProxyAwareFactory} then {@link ProxyAwareFactory#newNameResolver(URI, Attributes,
-     * ProxyDetector)} is used instead
+     * Obtains a name resolver from the factory implementation, first by calling the new factory
+     * method  {@link #newNameResolver(URI, Attributes, ProxyDetector)}, and if this returns <code>
+     * null</code> (default implementation) by using the {@link #newNameResolver(URI, Attributes)}
+     * as fallback
      */
     public static NameResolver getNameResolver(URI targetUri, Attributes params,
         ProxyDetector proxyDetector, Factory factory) {
-      if (factory instanceof ProxyAwareFactory) {
-        return ((ProxyAwareFactory)factory).newNameResolver(targetUri, params, proxyDetector);
-      } else {
-        return factory.newNameResolver(targetUri, params);
+      NameResolver ret = factory.newNameResolver(targetUri, params, proxyDetector);
+      if (ret == null) {
+        ret = factory.newNameResolver(targetUri, params, proxyDetector);
       }
+      return ret;
     }
-  }
-
-  public static interface ProxyAwareFactory {
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
-    @Nullable
-    public abstract NameResolver newNameResolver(URI targetUri, Attributes params,
-        ProxyDetector proxyDetector);
   }
 
   /**
