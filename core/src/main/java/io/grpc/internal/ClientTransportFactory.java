@@ -69,8 +69,7 @@ public interface ClientTransportFactory extends Closeable {
     private String authority = "unknown-authority";
     private Attributes eagAttributes = Attributes.EMPTY;
     private @Nullable String userAgent;
-    private @Nullable
-    ProxyParameters proxyParameters;
+    private @Nullable ProxyParameters proxyParameters;
 
     public String getAuthority() {
       return authority;
