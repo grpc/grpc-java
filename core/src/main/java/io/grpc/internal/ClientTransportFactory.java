@@ -19,6 +19,7 @@ package io.grpc.internal;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.ProxyParameters;
 import java.io.Closeable;
 import java.net.SocketAddress;
 import java.util.concurrent.ScheduledExecutorService;
@@ -68,7 +69,8 @@ public interface ClientTransportFactory extends Closeable {
     private String authority = "unknown-authority";
     private Attributes eagAttributes = Attributes.EMPTY;
     private @Nullable String userAgent;
-    private @Nullable ProxyParameters proxyParameters;
+    private @Nullable
+    ProxyParameters proxyParameters;
 
     public String getAuthority() {
       return authority;

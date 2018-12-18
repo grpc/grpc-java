@@ -36,7 +36,7 @@ import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.ProxyParameters;
+import io.grpc.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;

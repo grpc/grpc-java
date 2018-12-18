@@ -28,6 +28,7 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;

@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;

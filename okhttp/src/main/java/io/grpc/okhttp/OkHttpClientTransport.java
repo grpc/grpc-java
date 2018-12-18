@@ -52,7 +52,7 @@ import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
-import io.grpc.internal.ProxyParameters;
+import io.grpc.ProxyParameters;
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;

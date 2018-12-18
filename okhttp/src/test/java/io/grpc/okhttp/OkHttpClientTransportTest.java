@@ -71,7 +71,7 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.ProxyParameters;
+import io.grpc.ProxyParameters;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;

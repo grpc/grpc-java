@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;

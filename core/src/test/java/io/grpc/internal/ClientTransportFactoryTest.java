@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.EqualsTester;
 import io.grpc.Attributes;
+import io.grpc.ProxyParameters;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import java.net.InetSocketAddress;
 import org.junit.Test;
