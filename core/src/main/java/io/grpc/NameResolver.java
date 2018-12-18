@@ -140,7 +140,7 @@ public abstract class NameResolver {
         ProxyDetector proxyDetector, Factory factory) {
       NameResolver ret = factory.newNameResolver(targetUri, params, proxyDetector);
       if (ret == null) {
-        ret = factory.newNameResolver(targetUri, params, proxyDetector);
+        ret = factory.newNameResolver(targetUri, params);
       }
       return ret;
     }
