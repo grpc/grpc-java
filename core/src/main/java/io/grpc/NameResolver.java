@@ -132,7 +132,7 @@ public abstract class NameResolver {
 
     /**
      * Obtains a name resolver from the factory implementation, first by calling the new factory
-     * method  {@link #newNameResolver(URI, Attributes, ProxyDetector)}, and if this returns <code>
+     * method {@link #newNameResolver(URI, Attributes, ProxyDetector)}, and if this returns <code>
      * null</code> (default implementation) by using the {@link #newNameResolver(URI, Attributes)}
      * as fallback.
      */
