@@ -85,8 +85,9 @@ public final class InternalLogId {
     StringBuilder sb = new StringBuilder();
     sb.append(shortName());
     if (details != null) {
-      sb.append(' ');
+      sb.append(": (");
       sb.append(details);
+      sb.append(')');
     }
     return sb.toString();
   }

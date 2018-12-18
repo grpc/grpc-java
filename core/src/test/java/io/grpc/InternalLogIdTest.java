@@ -36,18 +36,18 @@ public class InternalLogIdTest {
   @Test
   public void toString_includesDetails() {
     InternalLogId name = InternalLogId.allocate("foo", "deets");
-    Truth.assertThat(name.toString()).matches("foo<\\d+> deets");
+    Truth.assertThat(name.toString()).matches("foo<\\d+>: \\(deets\\)");
   }
 
   @Test
   public void shortClassName() {
     InternalLogId name = InternalLogId.allocate(getClass(), "deets");
-    Truth.assertThat(name.toString()).matches("InternalLogIdTest<\\d+> deets");
+    Truth.assertThat(name.toString()).matches("InternalLogIdTest<\\d+>: \\(deets\\)");
   }
 
   @Test
   public void shortAnonymousClassName() {
     InternalLogId name = InternalLogId.allocate(new Serializable() {}.getClass(), "deets");
-    Truth.assertThat(name.toString()).matches("InternalLogIdTest\\$\\d+<\\d+> deets");
+    Truth.assertThat(name.toString()).matches("InternalLogIdTest\\$\\d+<\\d+>: \\(deets\\)");
   }
 }
