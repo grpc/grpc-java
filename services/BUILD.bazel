@@ -1,0 +1,24 @@
+java_library(
+    name = "services",
+    srcs = glob([
+        "src/main/java/io/grpc/**/*.java",
+        "src/generated/main/**/*.java",
+    ]),
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "//context",
+        "//core",
+        "//core:internal",
+        "//core:util",
+        "//protobuf",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@javax_annotation_javax_annotation_api//jar",
+        "@com_google_re2j//jar",
+    ],
+)
