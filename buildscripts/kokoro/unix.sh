@@ -54,7 +54,8 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
     exit 1
   fi
   # Run tests
-  ./gradlew build $GRADLE_FLAGS
+  ./gradlew build $GRADLE_FLAGS -x :grpc-interop-testing:test
+  ./gradlew :grpc-interop-testing:test $GRADLE_FLAGS
   pushd examples
   ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
