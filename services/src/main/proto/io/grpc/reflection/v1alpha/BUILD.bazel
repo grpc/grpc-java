@@ -1,0 +1,23 @@
+load("//:java_grpc_library.bzl", "java_grpc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "reflection_proto",
+    srcs = [
+        "reflection.proto",
+    ],
+)
+
+java_proto_library(
+    name = "reflection_java_proto",
+    deps = [":reflection_proto"],
+)
+
+java_grpc_library(
+    name = "reflection_grpc",
+    srcs = [
+        ":reflection_proto",
+    ],
+    deps = [":reflection_java_proto"],
+)

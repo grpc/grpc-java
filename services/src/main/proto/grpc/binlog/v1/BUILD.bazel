@@ -1,0 +1,17 @@
+package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "binarylog_proto",
+    srcs = [
+        "binarylog.proto",
+    ],
+    deps = [
+        "@com_google_protobuf//:duration_proto",
+        "@com_google_protobuf//:timestamp_proto",
+    ],
+)
+
+java_proto_library(
+    name = "binarylog_java_proto",
+    deps = [":binarylog_proto"],
+)

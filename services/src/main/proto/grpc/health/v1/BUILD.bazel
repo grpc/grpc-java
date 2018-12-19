@@ -1,0 +1,9 @@
+proto_library(
+    name = "health_proto",
+    srcs = [
+        "health.proto",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
