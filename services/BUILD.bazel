@@ -1,11 +1,50 @@
+package(default_visibility = ["//visibility:public"])
+
 java_library(
-    name = "services",
-    srcs = glob([
-        "src/main/java/io/grpc/**/*.java",
-        "src/generated/main/**/*.java",
-    ]),
-    visibility = [
-        "//visibility:public",
+    name = "binarylog",
+    srcs = [
+        "src/main/java/io/grpc/services/BinaryLogProvider.java",
+        "src/main/java/io/grpc/services/BinaryLogProviderImpl.java",
+        "src/main/java/io/grpc/services/BinaryLogSink.java",
+        "src/main/java/io/grpc/services/BinlogHelper.java",
+        "src/main/java/io/grpc/services/InetAddressUtil.java",
+        "src/main/java/io/grpc/services/TempFileSink.java",
+    ],
+    deps = [
+        "//context",
+        "//core",
+        "//services/src/main/proto/grpc/binlog/v1:binarylog_java_proto",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+        "@com_google_re2j//jar",
+    ],
+)
+
+java_library(
+    name = "channelz",
+    srcs = [
+        "src/main/java/io/grpc/services/ChannelzProtoUtil.java",
+        "src/main/java/io/grpc/services/ChannelzService.java",
+    ],
+    deps = [
+        "//context",
+        "//core",
+        "//services/src/main/proto/grpc/channelz/v1:channelz_grpc",
+        "//services/src/main/proto/grpc/channelz/v1:channelz_java_proto",
+        "//stub",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+        "@com_google_protobuf//:protobuf_java_util",
+    ],
+)
+
+java_library(
+    name = "reflection",
+    srcs = [
+        "src/main/java/io/grpc/protobuf/services/ProtoReflectionService.java",
     ],
     deps = [
         "//context",
@@ -13,12 +52,14 @@ java_library(
         "//core:internal",
         "//core:util",
         "//protobuf",
+        "//services/src/main/proto/io/grpc/reflection/v1alpha:reflection_grpc",
+        "//services/src/main/proto/io/grpc/reflection/v1alpha:reflection_java_proto",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
-        "@javax_annotation_javax_annotation_api//jar",
         "@com_google_re2j//jar",
+        "@javax_annotation_javax_annotation_api//jar",
     ],
 )
