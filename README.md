@@ -167,6 +167,7 @@ import org.gradle.kotlin.dsl.provider.gradleKotlinDslOf
 buildscript {
     extra.set("grpcVersion", "1.17.1")
     extra.set("protocVersion", "3.6.1")
+    extra.set("kotlinVersion", "1.3.10")
 }
 
 plugins {
