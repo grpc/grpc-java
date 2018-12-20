@@ -26,14 +26,16 @@ import io.grpc.alts.internal.TsiPeer.Property;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.CharsetUtil;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.DisableOnDebug;
+import org.junit.rules.TestRule;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -41,8 +43,11 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class TsiFrameHandlerTest {
 
-  private TsiFrameHandler tsiFrameHandler = new TsiFrameHandler();
-  private EmbeddedChannel channel = new EmbeddedChannel(tsiFrameHandler);
+  @Rule
+  public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(5));
+
+  private final TsiFrameHandler tsiFrameHandler = new TsiFrameHandler();
+  private final EmbeddedChannel channel = new EmbeddedChannel(tsiFrameHandler);
 
   @Test
   public void writeAndFlush_beforeHandshakeEventShouldBeIgnored() {
@@ -55,7 +60,7 @@ public class TsiFrameHandlerTest {
       channel.checkException();
       fail();
     } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains(State.HANDSHAKE_NOT_FINISHED.toString());
+      assertThat(e).hasMessageThat().contains(State.HANDSHAKE_NOT_FINISHED.name());
     }
   }
 
@@ -67,21 +72,13 @@ public class TsiFrameHandlerTest {
     channel.writeAndFlush(msg);
 
     assertThat(channel.readOutbound()).isEqualTo(msg);
-
-    ChannelFuture closeFuture = channel.close();
-    boolean closed = closeFuture.await(1, TimeUnit.SECONDS);
-
-    assertThat(closed).isTrue();
+    channel.close().sync();
     channel.checkException();
   }
 
   @Test
   public void writeAndFlush_shouldBeIgnoredAfterClose() throws InterruptedException {
-    ChannelFuture closeFuture = channel.close();
-
-    boolean closed = closeFuture.await(1, TimeUnit.SECONDS);
-    assertThat(closed).isTrue();
-
+    channel.close().sync();
     ByteBuf msg = Unpooled.copiedBuffer("message after closed", CharsetUtil.UTF_8);
 
     channel.writeAndFlush(msg);
@@ -102,11 +99,7 @@ public class TsiFrameHandlerTest {
     channel.writeAndFlush(msg);
 
     assertThat(channel.outboundMessages()).isEmpty();
-
-    ChannelFuture closeFuture = channel.close();
-    boolean closed = closeFuture.await(1, TimeUnit.SECONDS);
-
-    assertThat(closed).isTrue();
+    channel.close().sync();
     channel.checkException();
   }
 
@@ -116,12 +109,11 @@ public class TsiFrameHandlerTest {
 
     ByteBuf msg = Unpooled.copiedBuffer("message after handshake failed", CharsetUtil.UTF_8);
     channel.write(msg);
+
     assertThat(channel.outboundMessages()).isEmpty();
 
-    ChannelFuture closeFuture = channel.close();
-    boolean closed = closeFuture.await(1, TimeUnit.SECONDS);
+    channel.close().sync();
 
-    assertThat(closed).isTrue();
     assertWithMessage("pending write should be flushed on close")
         .that(channel.readOutbound()).isEqualTo(msg);
     channel.checkException();

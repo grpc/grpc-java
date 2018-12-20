@@ -193,7 +193,8 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
     if (state == State.CLOSED || state == State.HANDSHAKE_FAILED) {
       logger.fine(
-          String.format("FrameHandler is inactive(%s), channel id: %s", state, ctx.channel().id()));
+          String.format("FrameHandler is inactive(%s), channel id: %s",
+              state, ctx.channel().id().asShortText()));
       return;
     }
     checkState(
