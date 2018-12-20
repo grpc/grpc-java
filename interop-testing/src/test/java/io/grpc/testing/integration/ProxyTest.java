@@ -33,12 +33,18 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.AfterClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.DisableOnDebug;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public class ProxyTest {
+
+  @Rule
+  public final DisableOnDebug globalTimeout = new DisableOnDebug(Timeout.seconds(10));
 
   private static ThreadPoolExecutor executor =
       new ThreadPoolExecutor(8, 8, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
@@ -92,7 +98,7 @@ public class ProxyTest {
     }
     Collections.sort(rtts);
     long rtt = rtts.get(0);
-    assertEquals(latency, rtt, .5 * latency);
+    assertEquals(latency, rtt, .1 * latency);
   }
 
   @Test
@@ -125,7 +131,7 @@ public class ProxyTest {
     }
     Collections.sort(rtts);
     long rtt = rtts.get(0);
-    assertEquals(latency, rtt, .5 * latency);
+    assertEquals(latency, rtt, .1 * latency);
   }
 
   @Test
@@ -156,7 +162,7 @@ public class ProxyTest {
     }
     Collections.sort(bandwidths);
     double bandUsed = bandwidths.get(bandwidths.size() - 1);
-    assertEquals(bandwidth, bandUsed, .5 * bandwidth);
+    assertEquals(bandwidth, bandUsed, .1 * bandwidth);
   }
 
   @Test
@@ -186,7 +192,7 @@ public class ProxyTest {
     }
     Collections.sort(bandwidths);
     double bandUsed = bandwidths.get(bandwidths.size() - 1);
-    assertEquals(bandwidth, bandUsed, .5 * bandwidth);
+    assertEquals(bandwidth, bandUsed, .1 * bandwidth);
   }
 
   private Future<?> startProxy(final TrafficControlProxy p) {
