@@ -9,13 +9,13 @@ base="$tmpdir/grpc-proto-master"
 
 # Copy protos in 'src/main/proto' from grpc-proto for these projects
 for project in alts grpclb services; do
-  while read proto; do
+  while read -r proto; do
     [ -f "$base/$proto" ] && cp "$base/$proto" "$project/src/main/proto/$proto"
-    echo $proto
-  done < <(cd "$project/src/main/proto" && find -name "*.proto")
+    echo "$proto"
+  done < <(cd "$project/src/main/proto" && find . -name "*.proto")
 done | sort > "$tmpdir/grpc-java.lst"
 
-(cd "$base" && find -name "*.proto") | sort > "$tmpdir/base.lst"
+(cd "$base" && find . -name "*.proto") | sort > "$tmpdir/base.lst"
 echo "Files synced:"
 comm -12 "$tmpdir/grpc-java.lst" "$tmpdir/base.lst"
 
