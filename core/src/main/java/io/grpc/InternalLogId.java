@@ -60,7 +60,8 @@ public final class InternalLogId {
   }
 
   private final String typeName;
-  private final @Nullable String details;
+  @Nullable
+  private final String details;
   private final long id;
 
   InternalLogId(String typeName, String details, long id) {
