@@ -106,7 +106,9 @@ subprojects {
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
         nettyVersion = '4.1.32.Final'
-        guavaVersion = '26.0-android'
+        // Temporarily use a slightly older version of Guava. Will want to bump
+        // to 27.0.1+ with grpc 1.19 or 1.20 for the listenablefuture dep changes.
+        guavaVersion = '25.1-android'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
         protobufNanoVersion = '3.0.0-alpha-5'
