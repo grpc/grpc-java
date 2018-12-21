@@ -54,6 +54,9 @@ import java.util.logging.Logger;
  */
 @SuppressWarnings("FutureReturnValueIgnored")
 public final class TrafficControlProxy {
+
+  private static final ClosedChannelException expectedClose = new ClosedChannelException();
+
   private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 
   private static final int DEFAULT_BAND_BPS = 1024 * 1024;
@@ -241,7 +244,7 @@ public final class TrafficControlProxy {
         QueuedWrite write;
         while ((write = bufsToWrite.poll()) != null) {
           write.release();
-          write.promise.tryFailure(new ClosedChannelException());
+          write.promise.tryFailure(expectedClose);
         }
         return;
       }
@@ -339,7 +342,7 @@ public final class TrafficControlProxy {
 
     @Override
     public void operationComplete(ChannelFuture future) {
-      if (!future.isSuccess()) {
+      if (!future.isSuccess() && future.cause() != expectedClose) {
         logger.log(Level.SEVERE, "FAILURE", future.cause());
         future.channel().close();
       }
