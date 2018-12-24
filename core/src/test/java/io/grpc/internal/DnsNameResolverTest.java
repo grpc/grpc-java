@@ -274,7 +274,9 @@ public class DnsNameResolverTest {
   public void resolveAll_failsOnEmptyResult() throws Exception {
     String hostname = "dns:///addr.fake:1234";
     DnsNameResolver nrf =
-        new DnsNameResolverProvider().newNameResolver(new URI(hostname), Attributes.EMPTY);
+        new DnsNameResolverProvider().newNameResolver(new URI(hostname),  Attributes.newBuilder()
+            .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
+            .build());
     nrf.setAddressResolver(new AddressResolver() {
       @Override
       public List<InetAddress> resolveAddress(String host) throws Exception {
