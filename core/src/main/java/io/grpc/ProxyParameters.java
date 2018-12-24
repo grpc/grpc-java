@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 /**
  * Used to express the result of a proxy lookup.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
 public final class ProxyParameters {
   public final InetSocketAddress proxyAddress;
   @Nullable public final String username;

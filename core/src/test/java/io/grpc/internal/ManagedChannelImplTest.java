@@ -254,8 +254,7 @@ public class ManagedChannelImplTest {
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
-        timer.getTimeProvider(),
-        null);
+        timer.getTimeProvider());
 
     if (requestConnection) {
       int numExpectedTasks = 0;

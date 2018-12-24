@@ -17,7 +17,6 @@
 package io.grpc;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.NameResolver.Factory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -107,11 +106,10 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
 
     @Override
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params,
-        ProxyDetector proxyDetector) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
       checkForProviders();
       for (NameResolverProvider provider : providers) {
-        NameResolver resolver = Factory.getNameResolver(targetUri, params, proxyDetector, provider);
+        NameResolver resolver = provider.newNameResolver(targetUri, params);
         if (resolver != null) {
           return resolver;
         }

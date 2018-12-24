@@ -100,6 +100,13 @@ public abstract class NameResolver {
         Attributes.Key.create("params-default-port");
 
     /**
+     * Proxy detector used in name resolution.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+    public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
+        Attributes.Key.create("params-proxy-detector");
+
+    /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
      * URI.
@@ -110,16 +117,7 @@ public abstract class NameResolver {
      * @since 1.0.0
      */
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
-      return newNameResolver(targetUri, params, null);
-    }
-
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
-    @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params,
-        ProxyDetector proxyDetector) {
-      return null;
-    }
+    public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -129,21 +127,6 @@ public abstract class NameResolver {
      * @since 1.0.0
      */
     public abstract String getDefaultScheme();
-
-    /**
-     * Obtains a name resolver from the factory implementation, first by calling the new factory
-     * method {@link #newNameResolver(URI, Attributes, ProxyDetector)}, and if this returns <code>
-     * null</code> (default implementation) by using the {@link #newNameResolver(URI, Attributes)}
-     * as fallback.
-     */
-    public static NameResolver getNameResolver(URI targetUri, Attributes params,
-        ProxyDetector proxyDetector, Factory factory) {
-      NameResolver ret = factory.newNameResolver(targetUri, params, proxyDetector);
-      if (ret == null) {
-        ret = factory.newNameResolver(targetUri, params);
-      }
-      return ret;
-    }
   }
 
   /**
@@ -185,7 +168,5 @@ public abstract class NameResolver {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4972")
   @Retention(RetentionPolicy.SOURCE)
   @Documented
-  public @interface ResolutionResultAttr {
-
-  }
+  public @interface ResolutionResultAttr {}
 }

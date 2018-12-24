@@ -60,7 +60,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.Factory;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -375,7 +374,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
-    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams, proxyDetector);
+    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     if (inUseStateAggregator.isInUse()) {
@@ -533,15 +532,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
       ObjectPool<? extends Executor> balancerRpcExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
-      final TimeProvider timeProvider,
-      ProxyDetector proxyDetector) {
+      final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
-    this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams,
-        proxyDetector);
+    this.proxyDetector = checkNotNull(builder.proxyDetector, "proxyDetector");
+    this.nameResolverParams = addProxyToAttributes(this.proxyDetector,
+        checkNotNull(builder.getNameResolverParams(), "nameResolverParams"));
+    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
-    this.proxyDetector = proxyDetector;
     maxTraceEvents = builder.maxTraceEvents;
     channelTracer = new ChannelTracer(
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
@@ -608,9 +606,22 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelz.addRootChannel(this);
   }
 
+  private static Attributes addProxyToAttributes(ProxyDetector proxyDetector,
+      Attributes attributes) {
+    if (attributes == null) {
+      attributes = Attributes.EMPTY;
+    }
+    if (attributes.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR) == null) {
+      return attributes.toBuilder()
+          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, proxyDetector).build();
+    } else {
+      return attributes;
+    }
+  }
+
   @VisibleForTesting
   static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      Attributes nameResolverParams, ProxyDetector proxyDetector) {
+      Attributes nameResolverParams) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -625,8 +636,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = Factory.getNameResolver(targetUri, nameResolverParams, proxyDetector,
-          nameResolverFactory);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
       if (resolver != null) {
         return resolver;
       }
@@ -644,8 +654,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = Factory.getNameResolver(targetUri, nameResolverParams, proxyDetector,
-          nameResolverFactory);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
       if (resolver != null) {
         return resolver;
       }

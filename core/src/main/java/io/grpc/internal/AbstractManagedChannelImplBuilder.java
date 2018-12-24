@@ -147,7 +147,7 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   BinaryLog binlog;
 
-  ProxyDetector proxyDetector;
+  ProxyDetector proxyDetector = GrpcUtil.getDefaultProxyDetector();
 
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
@@ -375,7 +375,11 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T proxyDetector(ProxyDetector proxyDetector) {
-    this.proxyDetector = proxyDetector;
+    if (proxyDetector == null) {
+      this.proxyDetector = GrpcUtil.getDefaultProxyDetector();
+    } else {
+      this.proxyDetector = proxyDetector;
+    }
     return thisT();
   }
 
@@ -447,8 +451,7 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
-        TimeProvider.SYSTEM_TIME_PROVIDER,
-        this.proxyDetector));
+        TimeProvider.SYSTEM_TIME_PROVIDER));
   }
 
   // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know

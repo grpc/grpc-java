@@ -171,8 +171,7 @@ public class ManagedChannelImplIdlenessTest {
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
-        TimeProvider.SYSTEM_TIME_PROVIDER,
-        null);
+        TimeProvider.SYSTEM_TIME_PROVIDER);
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 
     for (int i = 0; i < 2; i++) {
