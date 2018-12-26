@@ -608,9 +608,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private static Attributes addProxyToAttributes(ProxyDetector proxyDetector,
       Attributes attributes) {
-    if (attributes == null) {
-      attributes = Attributes.EMPTY;
-    }
     if (attributes.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR) == null) {
       return attributes.toBuilder()
           .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, proxyDetector).build();
