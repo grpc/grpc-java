@@ -494,7 +494,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             sock = new Socket(address.getAddress(), address.getPort());
           } else {
             sock = createHttpProxySocket(
-                address, proxy.proxyAddress, proxy.username, proxy.password);
+                address,
+                proxy.getProxyAddress(),
+                proxy.getUsername(),
+                proxy.getPassword() == null ? null : new String(proxy.getPassword())
+            );
           }
 
           if (sslSocketFactory != null) {

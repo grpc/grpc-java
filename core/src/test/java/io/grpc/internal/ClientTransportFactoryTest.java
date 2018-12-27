@@ -34,7 +34,7 @@ public final class ClientTransportFactoryTest {
       Attributes.newBuilder().set(Attributes.Key.create("fake key"), "fake value").build();
   private String userAgent = "best-ua/3.14";
   private ProxyParameters proxyParameters =
-      new ProxyParameters(new InetSocketAddress(0), null, null);
+      ProxyParameters.forAddress(new InetSocketAddress(0)).build();
 
   @Test
   public void clientTransportOptions_init_checkNotNulls() {

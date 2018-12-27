@@ -580,10 +580,11 @@ public class DnsNameResolverTest {
     final String name = "foo.googleapis.com";
     final int port = 81;
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
-    ProxyParameters proxyParameters = new ProxyParameters(
-        new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000),
-        "username",
-        "password");
+    ProxyParameters proxyParameters = ProxyParameters
+        .forAddress(
+          new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000))
+        .username("username")
+        .password("password".toCharArray()).build();
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
         .thenReturn(proxyParameters);
     DnsNameResolver resolver =

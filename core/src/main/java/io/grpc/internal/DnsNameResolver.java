@@ -253,7 +253,7 @@ final class DnsNameResolver extends NameResolver {
       }
       if (proxy != null) {
         if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Using proxy " + proxy.proxyAddress + " for " + resolver.host);
+          logger.finer("Using proxy " + proxy.getProxyAddress() + " for " + resolver.host);
         }
         EquivalentAddressGroup server =
             new EquivalentAddressGroup(

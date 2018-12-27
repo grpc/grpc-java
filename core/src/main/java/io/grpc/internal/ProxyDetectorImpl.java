@@ -178,7 +178,7 @@ class ProxyDetectorImpl implements ProxyDetector {
     this.proxySelector = checkNotNull(proxySelector);
     this.authenticationProvider = checkNotNull(authenticationProvider);
     if (proxyEnvString != null) {
-      override = new ProxyParameters(overrideProxy(proxyEnvString), null, null);
+      override = ProxyParameters.forAddress(overrideProxy(proxyEnvString)).build();
     } else {
       override = null;
     }
@@ -260,12 +260,15 @@ class ProxyDetectorImpl implements ProxyDetector {
     }
 
     if (auth == null) {
-      return new ProxyParameters(resolvedProxyAddr, null, null);
+      return ProxyParameters.forAddress(resolvedProxyAddr).build();
     }
 
     // TODO(spencerfang): users of ProxyParameters should clear the password when done
-    return new ProxyParameters(
-        resolvedProxyAddr, auth.getUserName(), new String(auth.getPassword()));
+    return ProxyParameters
+        .forAddress(resolvedProxyAddr)
+        .username(auth.getUserName())
+        .password(auth.getPassword())
+        .build();
   }
 
   /**

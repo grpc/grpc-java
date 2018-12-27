@@ -547,7 +547,9 @@ public final class NettyChannelBuilder
       ProxyParameters proxyParams = options.getProxyParameters();
       if (proxyParams != null) {
         localNegotiator = ProtocolNegotiators.httpProxy(
-            proxyParams.proxyAddress, proxyParams.username, proxyParams.password,
+            proxyParams.getProxyAddress(),
+            proxyParams.getUsername(),
+            proxyParams.getPassword() == null ? null : new String(proxyParams.getPassword()),
             protocolNegotiator);
       }
 
