@@ -1573,8 +1573,8 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
@@ -1625,8 +1625,8 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
@@ -1676,8 +1676,8 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(
+            (InetSocketAddress) serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
