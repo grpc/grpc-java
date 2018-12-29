@@ -67,7 +67,7 @@ import javax.annotation.Nullable;
 class NettyServer implements InternalServer, InternalWithLogId {
   private static final Logger log = Logger.getLogger(InternalServer.class.getName());
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final SocketAddress address;
   private final Class<? extends ServerChannel> channelType;
   private final Map<ChannelOption<?>, ?> channelOptions;
@@ -90,7 +90,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
   private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
-  private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
   // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
@@ -102,7 +102,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
       SocketAddress address, Class<? extends ServerChannel> channelType,
       Map<ChannelOption<?>, ?> channelOptions,
       @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
-      ProtocolNegotiator protocolNegotiator, List<ServerStreamTracer.Factory> streamTracerFactories,
+      ProtocolNegotiator protocolNegotiator,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
       int maxStreamsPerConnection, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
       long keepAliveTimeInNanos, long keepAliveTimeoutInNanos,
@@ -133,6 +134,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
     this.channelz = Preconditions.checkNotNull(channelz);
+    this.logId =
+        InternalLogId.allocate(getClass(), address != null ? address.toString() : "No address");
   }
 
   @Override
@@ -343,11 +346,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
    * A class that can answer channelz queries about the server listen sockets.
    */
   private static final class ListenSocket implements InternalInstrumented<SocketStats> {
-    private final InternalLogId id = InternalLogId.allocate(getClass().getName());
+    private final InternalLogId id;
     private final Channel ch;
 
     ListenSocket(Channel ch) {
       this.ch = ch;
+      this.id = InternalLogId.allocate(getClass(), String.valueOf(ch.localAddress()));
     }
 
     @Override

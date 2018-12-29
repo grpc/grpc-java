@@ -114,8 +114,9 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   String authorityOverride;
 
-
   @Nullable LoadBalancer.Factory loadBalancerFactory;
+
+  String defaultLbPolicy = GrpcUtil.DEFAULT_LB_POLICY;
 
   boolean fullStreamDecompression;
 
@@ -165,6 +166,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
+  private boolean recordRealTimeMetrics = false;
   private boolean tracingEnabled = true;
 
   @Nullable
@@ -235,12 +237,23 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Deprecated
   @Override
   public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
         directServerAddress);
     this.loadBalancerFactory = loadBalancerFactory;
+    return thisT();
+  }
+
+  @Override
+  public final T defaultLoadBalancingPolicy(String policy) {
+    Preconditions.checkState(directServerAddress == null,
+        "directServerAddress is set (%s), which forbids the use of load-balancing policy",
+        directServerAddress);
+    Preconditions.checkArgument(policy != null, "policy cannot be null");
+    this.defaultLbPolicy = policy;
     return thisT();
   }
 
@@ -384,6 +397,14 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
+   * Disable or enable real-time metrics recording.  Effective only if {@link #setStatsEnabled} is
+   * set to true.  Disabled by default.
+   */
+  protected void setStatsRecordRealTimeMetrics(boolean value) {
+    recordRealTimeMetrics = value;
+  }
+
+  /**
    * Disable or enable tracing features.  Enabled by default.
    *
    * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
@@ -432,12 +453,13 @@ public abstract class AbstractManagedChannelImplBuilder
       temporarilyDisableRetry = true;
       CensusStatsModule censusStats = this.censusStatsOverride;
       if (censusStats == null) {
-        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
+        censusStats = new CensusStatsModule(
+            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
+            recordRealTimeMetrics);
       }
       // First interceptor runs last (see ClientInterceptors.intercept()), so that no
       // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(
-          0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
+      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;

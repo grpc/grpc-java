@@ -19,6 +19,7 @@ package io.grpc.alts.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
@@ -27,6 +28,8 @@ import io.netty.util.ReferenceCountUtil;
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -34,6 +37,9 @@ import javax.annotation.Nullable;
  * TsiHandshakeCompletionEvent} indicating the result of the handshake.
  */
 public final class TsiHandshakeHandler extends ByteToMessageDecoder {
+
+  private static final Logger logger = Logger.getLogger(TsiHandshakeHandler.class.getName());
+
   private static final int HANDSHAKE_FRAME_SIZE = 1024;
 
   private final NettyTsiHandshaker handshaker;
@@ -106,28 +112,42 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
     TsiFrameProtector protector() {
       return protector;
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("peer", peer)
+          .add("protector", protector)
+          .add("context", context)
+          .add("cause", cause)
+          .toString();
+    }
   }
 
   @Override
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    logger.finest("TsiHandshakeHandler added");
     maybeStart(ctx);
     super.handlerAdded(ctx);
   }
 
   @Override
   public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    logger.finest("TsiHandshakeHandler channel active");
     maybeStart(ctx);
     super.channelActive(ctx);
   }
 
   @Override
   public void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+    logger.finest("TsiHandshakeHandler handler removed");
     close();
     super.handlerRemoved0(ctx);
   }
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    logger.log(Level.FINEST, "Exception in TsiHandshakeHandler", cause);
     ctx.fireUserEventTriggered(new TsiHandshakeCompletionEvent(cause));
     super.exceptionCaught(ctx, cause);
   }
@@ -148,16 +168,22 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
     // If the handshake is complete, transition to the framing state.
     if (!handshaker.isInProgress()) {
+      TsiFrameProtector protector = null;
       try {
         ctx.pipeline().remove(this);
-        ctx.fireUserEventTriggered(
-            new TsiHandshakeCompletionEvent(
-                handshaker.createFrameProtector(ctx.alloc()),
-                handshaker.extractPeer(),
-                handshaker.extractPeerObject()));
+        protector = handshaker.createFrameProtector(ctx.alloc());
+        TsiHandshakeCompletionEvent evt = new TsiHandshakeCompletionEvent(
+            protector,
+            handshaker.extractPeer(),
+            handshaker.extractPeerObject());
+        protector = null;
+        ctx.fireUserEventTriggered(evt);
         // No need to do anything with the in buffer, it will be re added to the pipeline when this
         // handler is removed.
       } finally {
+        if (protector != null) {
+          protector.destroy();
+        }
         close();
       }
     }

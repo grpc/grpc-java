@@ -200,7 +200,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.17.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.18.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default delay in nanos before we send a keepalive.
@@ -247,6 +247,11 @@ public final class GrpcUtil {
       return null;
     }
   };
+
+  /**
+   * The very default load-balancing policy.
+   */
+  public static final String DEFAULT_LB_POLICY = "pick_first";
 
   /**
    * RPCs created on the Channel returned by {@link io.grpc.LoadBalancer.Subchannel#asChannel}

@@ -21,6 +21,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -103,6 +104,15 @@ import javax.annotation.concurrent.ThreadSafe;
 @NotThreadSafe
 public abstract class LoadBalancer {
   /**
+   * The load-balancing config converted from an JSON object injected by the GRPC library.
+   *
+   * <p>{@link NameResolver}s should not produce this attribute.
+   */
+  @NameResolver.ResolutionResultAttr
+  public static final Attributes.Key<Map<String, Object>> ATTR_LOAD_BALANCING_CONFIG =
+      Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
+
+  /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
    * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
    * but may be flattened into a single list if needed.
@@ -157,6 +167,20 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   public abstract void shutdown();
+
+  /**
+   * Whether this LoadBalancer can handle empty address group list to be passed to {@link
+   * #handleResolvedAddressGroups}.  The default implementation returns {@code false}, meaning that
+   * if the NameResolver returns an empty list, the Channel will turn that into an error and call
+   * {@link #handleNameResolutionError}.  LoadBalancers that want to accept empty lists should
+   * override this method and return {@code true}.
+   *
+   * <p>This method should always return a constant value.  It's not specified when this will be
+   * called.
+   */
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return false;
+  }
 
   /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
@@ -558,6 +582,15 @@ public abstract class LoadBalancer {
      */
     public abstract void updateBalancingState(
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker);
+
+    /**
+     * Call {@link NameResolver#refresh} on the channel's resolver.
+     *
+     * @since 1.18.0
+     */
+    public void refreshNameResolution() {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Schedule a task to be run in the Synchronization Context, which serializes the task with the

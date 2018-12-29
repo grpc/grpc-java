@@ -109,8 +109,6 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link GrpclbLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class GrpclbLoadBalancerTest {
-  private static final Attributes.Key<String> RESOLUTION_ATTR =
-      Attributes.Key.create("resolution-attr");
   private static final String SERVICE_AUTHORITY = "api.google.com";
 
   // The tasks are wrapped by SynchronizationContext, so we can't compare the types
@@ -1469,14 +1467,14 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
-  public void grpclbBalancerStreamRetry() throws Exception {
+  public void grpclbBalancerStreamClosedAndRetried() throws Exception {
     LoadBalanceRequest expectedInitialRequest =
         LoadBalanceRequest.newBuilder()
             .setInitialRequest(
                 InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build();
     InOrder inOrder =
-        inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+        inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2, helper);
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
@@ -1495,10 +1493,12 @@ public class GrpclbLoadBalancerTest {
 
     // Balancer closes it immediately (erroneously)
     lbResponseObserver.onCompleted();
+
     // Will start backoff sequence 1 (10ns)
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
     fakeClock.forwardNanos(9);
@@ -1518,6 +1518,7 @@ public class GrpclbLoadBalancerTest {
     verifyNoMoreInteractions(backoffPolicyProvider);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
     fakeClock.forwardNanos(100 - 1);
@@ -1544,6 +1545,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1, lbRequestObservers.size());
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fail the retry after spending 4ns
     fakeClock.forwardNanos(4);
@@ -1552,6 +1554,7 @@ public class GrpclbLoadBalancerTest {
     // Will be on the first retry (10ns) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
     fakeClock.forwardNanos(10 - 4 - 1);
@@ -1568,6 +1571,7 @@ public class GrpclbLoadBalancerTest {
     verify(backoffPolicyProvider, times(2)).get();
     verify(backoffPolicy1, times(2)).nextBackoffNanos();
     verify(backoffPolicy2, times(1)).nextBackoffNanos();
+    verify(helper, times(4)).refreshNameResolution();
   }
 
   private void deliverSubchannelState(

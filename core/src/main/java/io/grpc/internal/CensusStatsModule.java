@@ -37,6 +37,8 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.StreamTracer;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.stats.Measure.MeasureDouble;
+import io.opencensus.stats.Measure.MeasureLong;
 import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.Stats;
 import io.opencensus.stats.StatsRecorder;
@@ -68,7 +70,6 @@ import javax.annotation.Nullable;
 public final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
-  private static final ClientTracer BLANK_CLIENT_TRACER = new ClientTracer();
 
   private final Tagger tagger;
   private final StatsRecorder statsRecorder;
@@ -76,17 +77,22 @@ public final class CensusStatsModule {
   @VisibleForTesting
   final Metadata.Key<TagContext> statsHeader;
   private final boolean propagateTags;
+  private final boolean recordStartedRpcs;
+  private final boolean recordFinishedRpcs;
+  private final boolean recordRealTimeMetrics;
 
   /**
    * Creates a {@link CensusStatsModule} with the default OpenCensus implementation.
    */
-  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier, boolean propagateTags) {
+  CensusStatsModule(Supplier<Stopwatch> stopwatchSupplier,
+      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
     this(
         Tags.getTagger(),
         Tags.getTagPropagationComponent().getBinarySerializer(),
         Stats.getStatsRecorder(),
         stopwatchSupplier,
-        propagateTags);
+        propagateTags, recordStartedRpcs, recordFinishedRpcs, recordRealTimeMetrics);
   }
 
   /**
@@ -96,12 +102,16 @@ public final class CensusStatsModule {
       final Tagger tagger,
       final TagContextBinarySerializer tagCtxSerializer,
       StatsRecorder statsRecorder, Supplier<Stopwatch> stopwatchSupplier,
-      boolean propagateTags) {
+      boolean propagateTags, boolean recordStartedRpcs, boolean recordFinishedRpcs,
+      boolean recordRealTimeMetrics) {
     this.tagger = checkNotNull(tagger, "tagger");
     this.statsRecorder = checkNotNull(statsRecorder, "statsRecorder");
     checkNotNull(tagCtxSerializer, "tagCtxSerializer");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.propagateTags = propagateTags;
+    this.recordStartedRpcs = recordStartedRpcs;
+    this.recordFinishedRpcs = recordFinishedRpcs;
+    this.recordRealTimeMetrics = recordRealTimeMetrics;
     this.statsHeader =
         Metadata.Key.of("grpc-tags-bin", new Metadata.BinaryMarshaller<TagContext>() {
             @Override
@@ -132,25 +142,36 @@ public final class CensusStatsModule {
    */
   @VisibleForTesting
   ClientCallTracer newClientCallTracer(
-      TagContext parentCtx, String fullMethodName,
-      boolean recordStartedRpcs, boolean recordFinishedRpcs) {
-    return new ClientCallTracer(
-        this, parentCtx, fullMethodName, recordStartedRpcs, recordFinishedRpcs);
+      TagContext parentCtx, String fullMethodName) {
+    return new ClientCallTracer(this, parentCtx, fullMethodName);
   }
 
   /**
    * Returns the server tracer factory.
    */
-  ServerStreamTracer.Factory getServerTracerFactory(
-      boolean recordStartedRpcs, boolean recordFinishedRpcs) {
-    return new ServerTracerFactory(recordStartedRpcs, recordFinishedRpcs);
+  ServerStreamTracer.Factory getServerTracerFactory() {
+    return new ServerTracerFactory();
   }
 
   /**
    * Returns the client interceptor that facilitates Census-based stats reporting.
    */
-  ClientInterceptor getClientInterceptor(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
-    return new StatsClientInterceptor(recordStartedRpcs, recordFinishedRpcs);
+  ClientInterceptor getClientInterceptor() {
+    return new StatsClientInterceptor();
+  }
+
+  private void recordRealTimeMetric(TagContext ctx, MeasureDouble measure, double value) {
+    if (recordRealTimeMetrics) {
+      MeasureMap measureMap = statsRecorder.newMeasureMap().put(measure, value);
+      measureMap.record(ctx);
+    }
+  }
+
+  private void recordRealTimeMetric(TagContext ctx, MeasureLong measure, long value) {
+    if (recordRealTimeMetrics) {
+      MeasureMap measureMap = statsRecorder.newMeasureMap().put(measure, value);
+      measureMap.record(ctx);
+    }
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
@@ -208,12 +229,20 @@ public final class CensusStatsModule {
       inboundUncompressedSizeUpdater = tmpInboundUncompressedSizeUpdater;
     }
 
+    private final CensusStatsModule module;
+    private final TagContext startCtx;
+
     volatile long outboundMessageCount;
     volatile long inboundMessageCount;
     volatile long outboundWireSize;
     volatile long inboundWireSize;
     volatile long outboundUncompressedSize;
     volatile long inboundUncompressedSize;
+
+    ClientTracer(CensusStatsModule module, TagContext startCtx) {
+      this.module = checkNotNull(module, "module");
+      this.startCtx = checkNotNull(startCtx, "startCtx");
+    }
 
     @Override
     @SuppressWarnings("NonAtomicVolatileUpdate")
@@ -223,6 +252,8 @@ public final class CensusStatsModule {
       } else {
         outboundWireSize += bytes;
       }
+      module.recordRealTimeMetric(
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_BYTES_PER_METHOD, bytes);
     }
 
     @Override
@@ -233,6 +264,8 @@ public final class CensusStatsModule {
       } else {
         inboundWireSize += bytes;
       }
+      module.recordRealTimeMetric(
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_BYTES_PER_METHOD, bytes);
     }
 
     @Override
@@ -263,6 +296,8 @@ public final class CensusStatsModule {
       } else {
         inboundMessageCount++;
       }
+      module.recordRealTimeMetric(
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_RECEIVED_MESSAGES_PER_METHOD, 1);
     }
 
     @Override
@@ -273,10 +308,10 @@ public final class CensusStatsModule {
       } else {
         outboundMessageCount++;
       }
+      module.recordRealTimeMetric(
+          startCtx, RpcMeasureConstants.GRPC_CLIENT_SENT_MESSAGES_PER_METHOD, 1);
     }
   }
-
-
 
   @VisibleForTesting
   static final class ClientCallTracer extends ClientStreamTracer.Factory {
@@ -315,30 +350,25 @@ public final class CensusStatsModule {
     private volatile int callEnded;
     private final TagContext parentCtx;
     private final TagContext startCtx;
-    private final boolean recordFinishedRpcs;
 
-    ClientCallTracer(
-        CensusStatsModule module,
-        TagContext parentCtx,
-        String fullMethodName,
-        boolean recordStartedRpcs,
-        boolean recordFinishedRpcs) {
-      this.module = module;
+    ClientCallTracer(CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+      this.module = checkNotNull(module);
       this.parentCtx = checkNotNull(parentCtx);
-      this.startCtx =
-          module.tagger.toBuilder(parentCtx)
-          .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName)).build();
+      TagValue methodTag = TagValue.create(fullMethodName);
+      this.startCtx = module.tagger.toBuilder(parentCtx)
+          .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
+          .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
-      this.recordFinishedRpcs = recordFinishedRpcs;
-      if (recordStartedRpcs) {
-        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_CLIENT_STARTED_COUNT, 1)
+      if (module.recordStartedRpcs) {
+        module.statsRecorder.newMeasureMap()
+            .put(DeprecatedCensusConstants.RPC_CLIENT_STARTED_COUNT, 1)
             .record(startCtx);
       }
     }
 
     @Override
     public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
-      ClientTracer tracer = new ClientTracer();
+      ClientTracer tracer = new ClientTracer(module, startCtx);
       // TODO(zhangkun83): Once retry or hedging is implemented, a ClientCall may start more than
       // one streams.  We will need to update this file to support them.
       if (streamTracerUpdater != null) {
@@ -377,37 +407,41 @@ public final class CensusStatsModule {
         }
         callEnded = 1;
       }
-      if (!recordFinishedRpcs) {
+      if (!module.recordFinishedRpcs) {
         return;
       }
       stopwatch.stop();
       long roundtripNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       ClientTracer tracer = streamTracer;
       if (tracer == null) {
-        tracer = BLANK_CLIENT_TRACER;
+        tracer = new ClientTracer(module, startCtx);
       }
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          .put(RpcMeasureConstants.RPC_CLIENT_FINISHED_COUNT, 1)
+          // TODO(songya): remove the deprecated measure constants once they are completed removed.
+          .put(DeprecatedCensusConstants.RPC_CLIENT_FINISHED_COUNT, 1)
           // The latency is double value
-          .put(RpcMeasureConstants.RPC_CLIENT_ROUNDTRIP_LATENCY, roundtripNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
-          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount)
-          .put(RpcMeasureConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize)
-          .put(RpcMeasureConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize)
           .put(
-              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
+              DeprecatedCensusConstants.RPC_CLIENT_ROUNDTRIP_LATENCY,
+              roundtripNanos / NANOS_PER_MILLI)
+          .put(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_COUNT, tracer.outboundMessageCount)
+          .put(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_COUNT, tracer.inboundMessageCount)
+          .put(DeprecatedCensusConstants.RPC_CLIENT_REQUEST_BYTES, tracer.outboundWireSize)
+          .put(DeprecatedCensusConstants.RPC_CLIENT_RESPONSE_BYTES, tracer.inboundWireSize)
+          .put(
+              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES,
               tracer.outboundUncompressedSize)
           .put(
-              RpcMeasureConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
+              DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES,
               tracer.inboundUncompressedSize);
       if (!status.isOk()) {
-        measureMap.put(RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT, 1);
+        measureMap.put(DeprecatedCensusConstants.RPC_CLIENT_ERROR_COUNT, 1);
       }
+      TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
           module
               .tagger
               .toBuilder(startCtx)
-              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
   }
@@ -476,8 +510,6 @@ public final class CensusStatsModule {
     private final TagContext parentCtx;
     private volatile int streamClosed;
     private final Stopwatch stopwatch;
-    private final Tagger tagger;
-    private final boolean recordFinishedRpcs;
     private volatile long outboundMessageCount;
     private volatile long inboundMessageCount;
     private volatile long outboundWireSize;
@@ -487,18 +519,13 @@ public final class CensusStatsModule {
 
     ServerTracer(
         CensusStatsModule module,
-        TagContext parentCtx,
-        Supplier<Stopwatch> stopwatchSupplier,
-        Tagger tagger,
-        boolean recordStartedRpcs,
-        boolean recordFinishedRpcs) {
-      this.module = module;
+        TagContext parentCtx) {
+      this.module = checkNotNull(module, "module");
       this.parentCtx = checkNotNull(parentCtx, "parentCtx");
-      this.stopwatch = stopwatchSupplier.get().start();
-      this.tagger = tagger;
-      this.recordFinishedRpcs = recordFinishedRpcs;
-      if (recordStartedRpcs) {
-        module.statsRecorder.newMeasureMap().put(RpcMeasureConstants.RPC_SERVER_STARTED_COUNT, 1)
+      this.stopwatch = module.stopwatchSupplier.get().start();
+      if (module.recordStartedRpcs) {
+        module.statsRecorder.newMeasureMap()
+            .put(DeprecatedCensusConstants.RPC_SERVER_STARTED_COUNT, 1)
             .record(parentCtx);
       }
     }
@@ -511,6 +538,8 @@ public final class CensusStatsModule {
       } else {
         outboundWireSize += bytes;
       }
+      module.recordRealTimeMetric(
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_BYTES_PER_METHOD, bytes);
     }
 
     @Override
@@ -521,6 +550,8 @@ public final class CensusStatsModule {
       } else {
         inboundWireSize += bytes;
       }
+      module.recordRealTimeMetric(
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_BYTES_PER_METHOD, bytes);
     }
 
     @Override
@@ -551,6 +582,8 @@ public final class CensusStatsModule {
       } else {
         inboundMessageCount++;
       }
+      module.recordRealTimeMetric(
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_RECEIVED_MESSAGES_PER_METHOD, 1);
     }
 
     @Override
@@ -561,6 +594,8 @@ public final class CensusStatsModule {
       } else {
         outboundMessageCount++;
       }
+      module.recordRealTimeMetric(
+          parentCtx, RpcMeasureConstants.GRPC_SERVER_SENT_MESSAGES_PER_METHOD, 1);
     }
 
     /**
@@ -581,35 +616,43 @@ public final class CensusStatsModule {
         }
         streamClosed = 1;
       }
-      if (!recordFinishedRpcs) {
+      if (!module.recordFinishedRpcs) {
         return;
       }
       stopwatch.stop();
       long elapsedTimeNanos = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       MeasureMap measureMap = module.statsRecorder.newMeasureMap()
-          .put(RpcMeasureConstants.RPC_SERVER_FINISHED_COUNT, 1)
+          // TODO(songya): remove the deprecated measure constants once they are completed removed.
+          .put(DeprecatedCensusConstants.RPC_SERVER_FINISHED_COUNT, 1)
           // The latency is double value
-          .put(RpcMeasureConstants.RPC_SERVER_SERVER_LATENCY, elapsedTimeNanos / NANOS_PER_MILLI)
-          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
-          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
-          .put(RpcMeasureConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
-          .put(RpcMeasureConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
-          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES, outboundUncompressedSize)
-          .put(RpcMeasureConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES, inboundUncompressedSize);
+          .put(
+              DeprecatedCensusConstants.RPC_SERVER_SERVER_LATENCY,
+              elapsedTimeNanos / NANOS_PER_MILLI)
+          .put(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_COUNT, outboundMessageCount)
+          .put(DeprecatedCensusConstants.RPC_SERVER_REQUEST_COUNT, inboundMessageCount)
+          .put(DeprecatedCensusConstants.RPC_SERVER_RESPONSE_BYTES, outboundWireSize)
+          .put(DeprecatedCensusConstants.RPC_SERVER_REQUEST_BYTES, inboundWireSize)
+          .put(
+              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_RESPONSE_BYTES,
+              outboundUncompressedSize)
+          .put(
+              DeprecatedCensusConstants.RPC_SERVER_UNCOMPRESSED_REQUEST_BYTES,
+              inboundUncompressedSize);
       if (!status.isOk()) {
-        measureMap.put(RpcMeasureConstants.RPC_SERVER_ERROR_COUNT, 1);
+        measureMap.put(DeprecatedCensusConstants.RPC_SERVER_ERROR_COUNT, 1);
       }
+      TagValue statusTag = TagValue.create(status.getCode().toString());
       measureMap.record(
           module
               .tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_STATUS, TagValue.create(status.getCode().toString()))
+              .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
 
     @Override
     public Context filterContext(Context context) {
-      if (!tagger.empty().equals(parentCtx)) {
+      if (!module.tagger.empty().equals(parentCtx)) {
         return context.withValue(TAG_CONTEXT_KEY, parentCtx);
       }
       return context;
@@ -618,53 +661,31 @@ public final class CensusStatsModule {
 
   @VisibleForTesting
   final class ServerTracerFactory extends ServerStreamTracer.Factory {
-    private final boolean recordStartedRpcs;
-    private final boolean recordFinishedRpcs;
-
-    ServerTracerFactory(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
-      this.recordStartedRpcs = recordStartedRpcs;
-      this.recordFinishedRpcs = recordFinishedRpcs;
-    }
-
     @Override
     public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
       TagContext parentCtx = headers.get(statsHeader);
       if (parentCtx == null) {
         parentCtx = tagger.empty();
       }
+      TagValue methodTag = TagValue.create(fullMethodName);
       parentCtx =
           tagger
               .toBuilder(parentCtx)
-              .put(RpcMeasureConstants.RPC_METHOD, TagValue.create(fullMethodName))
+              .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
               .build();
-      return new ServerTracer(
-          CensusStatsModule.this,
-          parentCtx,
-          stopwatchSupplier,
-          tagger,
-          recordStartedRpcs,
-          recordFinishedRpcs);
+      return new ServerTracer(CensusStatsModule.this, parentCtx);
     }
   }
 
   @VisibleForTesting
   final class StatsClientInterceptor implements ClientInterceptor {
-    private final boolean recordStartedRpcs;
-    private final boolean recordFinishedRpcs;
-
-    StatsClientInterceptor(boolean recordStartedRpcs, boolean recordFinishedRpcs) {
-      this.recordStartedRpcs = recordStartedRpcs;
-      this.recordFinishedRpcs = recordFinishedRpcs;
-    }
-
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
       final ClientCallTracer tracerFactory =
-          newClientCallTracer(parentCtx, method.getFullMethodName(),
-              recordStartedRpcs, recordFinishedRpcs);
+          newClientCallTracer(parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
