@@ -34,6 +34,8 @@ $ VERSION_FILES=(
   build.gradle
   android/build.gradle
   android-interop-testing/app/build.gradle
+  bom/build.gradle
+  bom/pom.xml
   core/src/main/java/io/grpc/internal/GrpcUtil.java
   cronet/build.gradle
   documentation/android-channel-builder.md
