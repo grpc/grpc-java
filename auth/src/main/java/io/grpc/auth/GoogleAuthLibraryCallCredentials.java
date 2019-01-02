@@ -28,7 +28,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusException;
-import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -135,9 +134,10 @@ final class GoogleAuthLibraryCallCredentials extends CallCredentials2 {
 
       @Override
       public void onFailure(Throwable e) {
-        // There are so many IOException that are not retriable. Also most of the network based operations
-        // are retried in their respective library, others are mostly not retriable. Also retrying
-        // IOException causes more undeterministic behaviour in rpc with retries and higher total timeout.
+        // There are so many IOException that are not retriable. Also most of the network based
+        // operations are retried in their respective library, others are mostly not retriable.
+        // Also retrying IOException causes more undeterministic behaviour in rpc with retries and
+        // higher total timeout.
         applier.fail(Status.UNAUTHENTICATED.withDescription("Failed computing credential metadata")
             .withCause(e));
       }
