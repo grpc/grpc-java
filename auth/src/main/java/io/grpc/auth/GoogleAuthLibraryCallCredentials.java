@@ -135,7 +135,7 @@ final class GoogleAuthLibraryCallCredentials extends CallCredentials2 {
 
       @Override
       public void onFailure(Throwable e) {
-        // There are so many IOException that are not retriable. Also most of the network based operation
+        // There are so many IOException that are not retriable. Also most of the network based operations
         // are retried in their respective library, others are mostly not retriable. Also retrying
         // IOException causes more undeterministic behaviour in rpc with retries and higher total timeout.
         applier.fail(Status.UNAUTHENTICATED.withDescription("Failed computing credential metadata")
