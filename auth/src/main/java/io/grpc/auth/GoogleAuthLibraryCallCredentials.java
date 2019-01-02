@@ -135,16 +135,11 @@ final class GoogleAuthLibraryCallCredentials extends CallCredentials2 {
 
       @Override
       public void onFailure(Throwable e) {
-        if (e instanceof IOException) {
-          // Since it's an I/O failure, let the call be retried with UNAVAILABLE.
-          applier.fail(Status.UNAVAILABLE
-              .withDescription("Credentials failed to obtain metadata")
-              .withCause(e));
-        } else {
-          applier.fail(Status.UNAUTHENTICATED
-              .withDescription("Failed computing credential metadata")
-              .withCause(e));
-        }
+        // There are so many IOException that are not retriable. Also most of the network based operation
+        // are retried in their respective library, others are mostly not retriable. Also retrying
+        // IOException causes more undeterministic behaviour in rpc with retries and higher total timeout.
+        applier.fail(Status.UNAUTHENTICATED.withDescription("Failed computing credential metadata")
+            .withCause(e));
       }
     });
   }
