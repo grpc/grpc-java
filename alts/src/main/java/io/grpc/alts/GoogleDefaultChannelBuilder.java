@@ -24,7 +24,6 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingChannelBuilder;
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
@@ -60,6 +59,17 @@ public final class GoogleDefaultChannelBuilder
     delegate = NettyChannelBuilder.forTarget(target);
     InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
         delegate(), new ProtocolNegotiatorFactory());
+    @Nullable CallCredentials credentials = null;
+    Status status = Status.OK;
+    try {
+      credentials = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
+    } catch (IOException e) {
+      status =
+          Status.UNAUTHENTICATED
+              .withDescription("Failed to get Google default credentials")
+              .withCause(e);
+    }
+    delegate().intercept(new GoogleDefaultInterceptor(credentials, status));
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
@@ -75,21 +85,6 @@ public final class GoogleDefaultChannelBuilder
   @Override
   protected NettyChannelBuilder delegate() {
     return delegate;
-  }
-
-  @Override
-  public ManagedChannel build() {
-    @Nullable CallCredentials credentials = null;
-    Status status = Status.OK;
-    try {
-      credentials = MoreCallCredentials.from(GoogleCredentials.getApplicationDefault());
-    } catch (IOException e) {
-      status =
-          Status.UNAUTHENTICATED
-              .withDescription("Failed to get Google default credentials")
-              .withCause(e);
-    }
-    return delegate().intercept(new GoogleDefaultInterceptor(credentials, status)).build();
   }
 
   @VisibleForTesting
@@ -108,7 +103,7 @@ public final class GoogleDefaultChannelBuilder
               // Used the shared grpc channel to connecting to the ALTS handshaker service.
               // TODO: Release the channel if it is not used.
               // https://github.com/grpc/grpc-java/issues/4755.
-              ManagedChannel channel =
+              Channel channel =
                   SharedResourceHolder.get(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
               AltsClientOptions handshakerOptions =
                   new AltsClientOptions.Builder()

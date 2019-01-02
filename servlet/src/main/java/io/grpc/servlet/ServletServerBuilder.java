@@ -54,7 +54,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 @NotThreadSafe
 public final class ServletServerBuilder extends AbstractServerImplBuilder<ServletServerBuilder> {
-  List<ServerStreamTracer.Factory> streamTracerFactories;
+  List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   int maxInboundMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
 
   private ScheduledExecutorService scheduler;
@@ -102,7 +102,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   }
 
   @Override
-  protected InternalServer buildTransportServer(List<Factory> streamTracerFactories) {
+  protected InternalServer buildTransportServer(List<? extends Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
@@ -166,7 +166,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   @VisibleForTesting
   static final class ServerTransportImpl implements ServerTransport {
 
-    private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+    private final InternalLogId logId = InternalLogId.allocate(ServerTransportImpl.class, null);
     private final ScheduledExecutorService scheduler;
     private final boolean usingCustomScheduler;
 

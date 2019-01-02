@@ -82,13 +82,13 @@ public final class ServletAdapter {
   static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final ServerTransportListener transportListener;
-  private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final int maxInboundMessageSize;
   private final Attributes attributes;
 
   ServletAdapter(
       ServerTransportListener transportListener,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       int maxInboundMessageSize) {
     this.transportListener = transportListener;
     this.streamTracerFactories = streamTracerFactories;
@@ -120,7 +120,7 @@ public final class ServletAdapter {
     checkArgument(req.isAsyncSupported(), "servlet does not support asynchronous operation");
     checkArgument(ServletAdapter.isGrpc(req), "the request is not a gRPC request");
 
-    InternalLogId logId = InternalLogId.allocate(getClass().getName());
+    InternalLogId logId = InternalLogId.allocate(ServletAdapter.class, null);
     logger.log(FINE, "[{0}] RPC started", logId);
 
     AsyncContext asyncCtx = req.startAsync(req, resp);

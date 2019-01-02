@@ -1380,7 +1380,7 @@ public class ServerImplTest {
 
   private class SimpleServerTransport implements ServerTransport {
     ServerTransportListener listener;
-    InternalLogId id = InternalLogId.allocate(getClass().getName());
+    InternalLogId id = InternalLogId.allocate(getClass(), /*details=*/ null);
 
     @Override
     public void shutdown() {
@@ -1412,7 +1412,7 @@ public class ServerImplTest {
 
   private static class Builder extends AbstractServerImplBuilder<Builder> {
     @Override protected InternalServer buildTransportServer(
-        List<ServerStreamTracer.Factory> streamTracerFactories) {
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       throw new UnsupportedOperationException();
     }
 

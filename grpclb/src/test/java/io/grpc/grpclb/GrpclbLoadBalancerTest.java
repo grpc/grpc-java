@@ -49,6 +49,8 @@ import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -83,6 +85,7 @@ import io.grpc.lb.v1.ServerList;
 import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -106,8 +109,6 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link GrpclbLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class GrpclbLoadBalancerTest {
-  private static final Attributes.Key<String> RESOLUTION_ATTR =
-      Attributes.Key.create("resolution-attr");
   private static final String SERVICE_AUTHORITY = "api.google.com";
 
   // The tasks are wrapped by SynchronizationContext, so we can't compare the types
@@ -140,6 +141,18 @@ public class GrpclbLoadBalancerTest {
   private Helper helper;
   @Mock
   private SubchannelPool subchannelPool;
+  private final ArrayList<String> logs = new ArrayList<String>();
+  private final ChannelLogger channelLogger = new ChannelLogger() {
+      @Override
+      public void log(ChannelLogLevel level, String msg) {
+        logs.add(level + ": " + msg);
+      }
+
+      @Override
+      public void log(ChannelLogLevel level, String template, Object... args) {
+        log(level, MessageFormat.format(template, args));
+      }
+    };
   private SubchannelPicker currentPicker;
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
@@ -228,6 +241,7 @@ public class GrpclbLoadBalancerTest {
           any(EquivalentAddressGroup.class), any(Attributes.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
+    when(helper.getChannelLogger()).thenReturn(channelLogger);
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -624,8 +638,15 @@ public class GrpclbLoadBalancerTest {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER));
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.MILLISECONDS));
 
+    logs.clear();
     // Simulate an abundant LB initial response, with a different report interval
     lbResponseObserver.onNext(buildInitialResponse(9097));
+
+    // This incident is logged
+    assertThat(logs).containsExactly(
+        "DEBUG: Got an LB response: " + buildInitialResponse(9097),
+        "WARNING: Ignoring unexpected response type: INITIAL_RESPONSE").inOrder();
+
     // It doesn't affect load-reporting at all
     assertThat(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER))
         .containsExactly(scheduledTask);
@@ -693,26 +714,18 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
-  public void nameResolutionFailsThenRecoverToDelegate() {
+  public void nameResolutionFailsThenRecover() {
     Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
     deliverNameResolutionError(error);
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
-    RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
-    assertThat(picker.dropList).isEmpty();
-    assertThat(picker.pickList).containsExactly(new ErrorEntry(error));
+    assertThat(logs).containsExactly(
+        "DEBUG: Error: " + error,
+        "INFO: TRANSIENT_FAILURE: picks="
+            + "[Status{code=NOT_FOUND, description=www.google.com not found, cause=null}],"
+            + " drops=[]")
+        .inOrder();
+    logs.clear();
 
-    // Recover with a subsequent success
-    List<EquivalentAddressGroup> resolvedServers = createResolvedServerAddresses(false);
-
-    Attributes resolutionAttrs = Attributes.newBuilder().set(RESOLUTION_ATTR, "yeah").build();
-    deliverResolvedAddresses(resolvedServers, resolutionAttrs);
-  }
-
-  @Test
-  public void nameResolutionFailsThenRecoverToGrpclb() {
-    Status error = Status.NOT_FOUND.withDescription("www.google.com not found");
-    deliverNameResolutionError(error);
-    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), pickerCaptor.capture());
     RoundRobinPicker picker = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker.dropList).isEmpty();
     assertThat(picker.pickList).containsExactly(new ErrorEntry(error));
@@ -839,7 +852,10 @@ public class GrpclbLoadBalancerTest {
         new ServerEntry("127.0.0.1", 2010, "token0002"));
     inOrder.verify(helper, never())
         .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+    logs.clear();
     lbResponseObserver.onNext(buildInitialResponse());
+    assertThat(logs).containsExactly("DEBUG: Got an LB response: " + buildInitialResponse());
+    logs.clear();
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     inOrder.verify(subchannelPool).takeOrCreateSubchannel(
@@ -862,15 +878,31 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(CONNECTING));
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(CONNECTING));
+
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     RoundRobinPicker picker0 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker0.dropList).containsExactly(null, null);
     assertThat(picker0.pickList).containsExactly(BUFFER_ENTRY);
     inOrder.verifyNoMoreInteractions();
 
+    assertThat(logs).containsExactly(
+        "DEBUG: Got an LB response: " + buildLbResponse(backends1),
+        "INFO: Using RR list="
+            + "[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}](token0001),"
+            + " [[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}](token0002)],"
+            + " drop=[null, null]",
+        "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]").inOrder();
+    logs.clear();
+
     // Let subchannels be connected
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(logs).containsExactly(
+        "INFO: READY: picks="
+            + "[[[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
+            + " drops=[null, null]");
+    logs.clear();
+
     RoundRobinPicker picker1 = (RoundRobinPicker) pickerCaptor.getValue();
 
     assertThat(picker1.dropList).containsExactly(null, null);
@@ -879,6 +911,13 @@ public class GrpclbLoadBalancerTest {
 
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(READY));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(logs).containsExactly(
+        "INFO: READY: picks="
+            + "[[[[[/127.0.0.1:2000]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0001)],"
+            + " [[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
+            + " drops=[null, null]");
+    logs.clear();
+
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
     assertThat(picker2.pickList).containsExactly(
@@ -891,6 +930,12 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel1, ConnectivityStateInfo.forNonError(IDLE));
     verify(subchannel1, times(2)).requestConnection();
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
+    assertThat(logs).containsExactly(
+        "INFO: READY: picks="
+            + "[[[[[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}]](token0002)]],"
+            + " drops=[null, null]");
+    logs.clear();
+
     RoundRobinPicker picker3 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker3.dropList).containsExactly(null, null);
     assertThat(picker3.pickList).containsExactly(
@@ -909,6 +954,10 @@ public class GrpclbLoadBalancerTest {
     deliverSubchannelState(subchannel2, ConnectivityStateInfo.forNonError(IDLE));
     verify(subchannel2, times(2)).requestConnection();
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
+    assertThat(logs).containsExactly(
+        "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]");
+    logs.clear();
+
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.dropList).containsExactly(null, null);
     assertThat(picker4.pickList).containsExactly(BUFFER_ENTRY);
@@ -924,6 +973,18 @@ public class GrpclbLoadBalancerTest {
     verify(subchannelPool, never()).returnSubchannel(same(subchannel1));
 
     lbResponseObserver.onNext(buildLbResponse(backends2));
+    assertThat(logs).containsExactly(
+        "DEBUG: Got an LB response: " + buildLbResponse(backends2),
+        "INFO: Using RR list="
+            + "[[[/127.0.0.1:2030]/{io.grpc.grpclb.lbProvidedBackend=true}](token0003),"
+            + " [[/127.0.0.1:2010]/{io.grpc.grpclb.lbProvidedBackend=true}](token0004),"
+            + " [[/127.0.0.1:2030]/{io.grpc.grpclb.lbProvidedBackend=true}](token0005)],"
+            + " drop=[null, drop(token0003), null, null, drop(token0006)]",
+        "INFO: CONNECTING: picks=[BUFFER_ENTRY],"
+            + " drops=[null, drop(token0003), null, null, drop(token0006)]")
+        .inOrder();
+    logs.clear();
+
     // not in backends2, closed
     verify(subchannelPool).returnSubchannel(same(subchannel1));
     // backends2[2], will be kept
@@ -1059,11 +1120,20 @@ public class GrpclbLoadBalancerTest {
     // Fallback timer expires (or not)
     //////////////////////////////////
     if (timerExpires) {
+      logs.clear();
       fakeClock.forwardTime(1, TimeUnit.MILLISECONDS);
+
       assertEquals(0, fakeClock.numPendingTasks(FALLBACK_MODE_TASK_FILTER));
+      List<EquivalentAddressGroup> fallbackList =
+          Arrays.asList(resolutionList.get(0), resolutionList.get(2));
+      assertThat(logs).containsExactly(
+          "INFO: Using fallback backends",
+          "INFO: Using RR list=[[[FakeSocketAddress-fake-address-0]/{}], "
+              + "[[FakeSocketAddress-fake-address-2]/{}]], drop=[null, null]",
+          "INFO: CONNECTING: picks=[BUFFER_ENTRY], drops=[null, null]").inOrder();
+
       // Fall back to the backends from resolver
-      fallbackTestVerifyUseOfFallbackBackendLists(
-          inOrder, Arrays.asList(resolutionList.get(0), resolutionList.get(2)));
+      fallbackTestVerifyUseOfFallbackBackendLists(inOrder, fallbackList);
 
       assertFalse(oobChannel.isShutdown());
       verify(lbRequestObserver, never()).onCompleted();
@@ -1397,14 +1467,14 @@ public class GrpclbLoadBalancerTest {
   }
 
   @Test
-  public void grpclbBalancerStreamRetry() throws Exception {
+  public void grpclbBalancerStreamClosedAndRetried() throws Exception {
     LoadBalanceRequest expectedInitialRequest =
         LoadBalanceRequest.newBuilder()
             .setInitialRequest(
                 InitialLoadBalanceRequest.newBuilder().setName(SERVICE_AUTHORITY).build())
             .build();
     InOrder inOrder =
-        inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+        inOrder(mockLbService, backoffPolicyProvider, backoffPolicy1, backoffPolicy2, helper);
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
     Attributes grpclbResolutionAttrs = Attributes.EMPTY;
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
@@ -1423,10 +1493,12 @@ public class GrpclbLoadBalancerTest {
 
     // Balancer closes it immediately (erroneously)
     lbResponseObserver.onCompleted();
+
     // Will start backoff sequence 1 (10ns)
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
     fakeClock.forwardNanos(9);
@@ -1446,6 +1518,7 @@ public class GrpclbLoadBalancerTest {
     verifyNoMoreInteractions(backoffPolicyProvider);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry
     fakeClock.forwardNanos(100 - 1);
@@ -1472,6 +1545,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(1, lbRequestObservers.size());
     lbRequestObserver = lbRequestObservers.poll();
     verify(lbRequestObserver).onNext(eq(expectedInitialRequest));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fail the retry after spending 4ns
     fakeClock.forwardNanos(4);
@@ -1480,6 +1554,7 @@ public class GrpclbLoadBalancerTest {
     // Will be on the first retry (10ns) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
+    inOrder.verify(helper).refreshNameResolution();
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
     fakeClock.forwardNanos(10 - 4 - 1);
@@ -1496,6 +1571,7 @@ public class GrpclbLoadBalancerTest {
     verify(backoffPolicyProvider, times(2)).get();
     verify(backoffPolicy1, times(2)).nextBackoffNanos();
     verify(backoffPolicy2, times(1)).nextBackoffNanos();
+    verify(helper, times(4)).refreshNameResolution();
   }
 
   private void deliverSubchannelState(

@@ -57,7 +57,7 @@ import io.grpc.internal.SerializingExecutor;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
-import io.grpc.okhttp.AsyncFrameWriter.TransportExceptionHandler;
+import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.FrameReader;
@@ -107,7 +107,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private static final OkHttpClientStream[] EMPTY_STREAM_ARRAY = new OkHttpClientStream[0];
 
   private static Map<ErrorCode, Status> buildErrorCodeToStatusMap() {
-    Map<ErrorCode, Status> errorToStatus = new EnumMap<ErrorCode, Status>(ErrorCode.class);
+    Map<ErrorCode, Status> errorToStatus = new EnumMap<>(ErrorCode.class);
     errorToStatus.put(ErrorCode.NO_ERROR,
         Status.INTERNAL.withDescription("No error: A GRPC status of OK should have been sent"));
     errorToStatus.put(ErrorCode.PROTOCOL_ERROR,
@@ -144,15 +144,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final int initialWindowSize;
   private Listener listener;
   private FrameReader testFrameReader;
-  private AsyncFrameWriter frameWriter;
+  @GuardedBy("lock")
+  private ExceptionHandlingFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
   private final Object lock = new Object();
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   @GuardedBy("lock")
   private int nextStreamId;
   @GuardedBy("lock")
-  private final Map<Integer, OkHttpClientStream> streams =
-      new HashMap<Integer, OkHttpClientStream>();
+  private final Map<Integer, OkHttpClientStream> streams = new HashMap<>();
   private final Executor executor;
   // Wrap on executor, to guarantee some operations be executed serially.
   private final SerializingExecutor serializingExecutor;
@@ -182,7 +182,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private int maxConcurrentStreams = 0;
   @SuppressWarnings("JdkObsolete") // Usage is bursty; want low memory usage when empty
   @GuardedBy("lock")
-  private LinkedList<OkHttpClientStream> pendingStreams = new LinkedList<OkHttpClientStream>();
+  private LinkedList<OkHttpClientStream> pendingStreams = new LinkedList<>();
   private final ConnectionSpec connectionSpec;
   private FrameWriter testFrameWriter;
   private ScheduledExecutorService scheduler;
@@ -219,7 +219,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   Runnable connectingCallback;
   SettableFuture<Void> connectedFuture;
 
-
   OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
       Executor executor, @Nullable SSLSocketFactory sslSocketFactory,
       @Nullable HostnameVerifier hostnameVerifier, ConnectionSpec connectionSpec,
@@ -244,6 +243,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.maxInboundMetadataSize = maxInboundMetadataSize;
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
+    this.logId = InternalLogId.allocate(getClass(), address.toString());
     initTransportTracer();
   }
 
@@ -285,6 +285,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.maxInboundMetadataSize = Integer.MAX_VALUE;
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+    this.logId = InternalLogId.allocate(getClass(), String.valueOf(socket.getInetAddress()));
     initTransportTracer();
   }
 
@@ -320,11 +321,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
   @Override
   public void ping(final PingCallback callback, Executor executor) {
-    checkState(frameWriter != null);
     long data = 0;
     Http2Ping p;
     boolean writePing;
     synchronized (lock) {
+      checkState(frameWriter != null);
       if (stopped) {
         Http2Ping.notifyFailed(callback, executor, getPingFailure());
         return;
@@ -343,9 +344,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         writePing = true;
         transportTracer.reportKeepAliveSent();
       }
-    }
-    if (writePing) {
-      frameWriter.ping(false, (int) (data >>> 32), (int) data);
+      if (writePing) {
+        frameWriter.ping(false, (int) (data >>> 32), (int) data);
+      }
     }
     // If transport concurrently failed/stopped since we released the lock above, this could
     // immediately invoke callback (which we shouldn't do while holding a lock)
@@ -447,15 +448,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           keepAliveWithoutCalls);
       keepAliveManager.onTransportStarted();
     }
-
-    frameWriter = new AsyncFrameWriter(this, serializingExecutor);
-    outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
-    // Connecting in the serializingExecutor, so that some stream operations like synStream
-    // will be executed after connected.
-    serializingExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        if (isForTest()) {
+    if (isForTest()) {
+      synchronized (lock) {
+        frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter);
+        outboundFlow =
+            new OutboundFlowController(OkHttpClientTransport.this, frameWriter, initialWindowSize);
+      }
+      serializingExecutor.execute(new Runnable() {
+        @Override
+        public void run() {
           if (connectingCallback != null) {
             connectingCallback.run();
           }
@@ -465,11 +466,25 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
             maxConcurrentStreams = Integer.MAX_VALUE;
             startPendingStreams();
           }
-          frameWriter.becomeConnected(testFrameWriter, socket);
           connectedFuture.set(null);
-          return;
         }
+      });
+      return null;
+    }
 
+    final AsyncSink asyncSink = AsyncSink.sink(serializingExecutor, this);
+    final Variant variant = new Http2();
+    FrameWriter rawFrameWriter = variant.newWriter(Okio.buffer(asyncSink), true);
+
+    synchronized (lock) {
+      frameWriter = new ExceptionHandlingFrameWriter(this, rawFrameWriter);
+      outboundFlow = new OutboundFlowController(this, frameWriter, initialWindowSize);
+    }
+    // Connecting in the serializingExecutor, so that some stream operations like synStream
+    // will be executed after connected.
+    serializingExecutor.execute(new Runnable() {
+      @Override
+      public void run() {
         // Use closed source on failure so that the reader immediately shuts down.
         BufferedSource source = Okio.buffer(new Source() {
           @Override
@@ -483,10 +498,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           }
 
           @Override
-          public void close() {}
+          public void close() {
+          }
         });
-        Variant variant = new Http2();
-        BufferedSink sink;
         Socket sock;
         SSLSession sslSession = null;
         try {
@@ -506,7 +520,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           }
           sock.setTcpNoDelay(true);
           source = Okio.buffer(Okio.source(sock));
-          sink = Okio.buffer(Okio.sink(sock));
+          asyncSink.becomeConnected(Okio.sink(sock), sock);
+
           // The return value of OkHttpTlsUpgrader.upgrade is an SSLSocket that has this info
           attributes = Attributes
               .newBuilder()
@@ -524,31 +539,29 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           return;
         } finally {
           clientFrameHandler = new ClientFrameHandler(variant.newReader(source, true));
-          executor.execute(clientFrameHandler);
         }
-
-        FrameWriter rawFrameWriter;
         synchronized (lock) {
           socket = Preconditions.checkNotNull(sock, "socket");
-          maxConcurrentStreams = Integer.MAX_VALUE;
-          startPendingStreams();
           if (sslSession != null) {
             securityInfo = new InternalChannelz.Security(new InternalChannelz.Tls(sslSession));
           }
         }
-
-        rawFrameWriter = variant.newWriter(sink, true);
-        frameWriter.becomeConnected(rawFrameWriter, socket);
-
-        try {
-          // Do these with the raw FrameWriter, so that they will be done in this thread,
-          // and before any possible pending stream operations.
-          rawFrameWriter.connectionPreface();
-          Settings settings = new Settings();
-          rawFrameWriter.settings(settings);
-        } catch (Exception e) {
-          onException(e);
-          return;
+      }
+    });
+    synchronized (lock) {
+      frameWriter.connectionPreface();
+      Settings settings = new Settings();
+      frameWriter.settings(settings);
+    }
+    serializingExecutor.execute(new Runnable() {
+      @Override
+      public void run() {
+        // ClientFrameHandler need to be started after connectionPreface / settings, otherwise it
+        // may send goAway immediately.
+        executor.execute(clientFrameHandler);
+        synchronized (lock) {
+          maxConcurrentStreams = Integer.MAX_VALUE;
+          startPendingStreams();
         }
       }
     });
@@ -556,7 +569,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   private Socket createHttpProxySocket(InetSocketAddress address, InetSocketAddress proxyAddress,
-      String proxyUsername, String proxyPassword) throws IOException, StatusException {
+      String proxyUsername, String proxyPassword) throws StatusException {
     try {
       Socket sock;
       // The proxy address may not be resolved
@@ -1011,9 +1024,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       } catch (Throwable t) {
         // TODO(madongfly): Send the exception message to the server.
         startGoAway(
-            0, 
-            ErrorCode.PROTOCOL_ERROR, 
-            Status.UNAVAILABLE.withDescription("error in frame handler").withCause(t));
+            0,
+            ErrorCode.PROTOCOL_ERROR,
+            Status.INTERNAL.withDescription("error in frame handler").withCause(t));
       } finally {
         try {
           frameReader.close();
@@ -1037,7 +1050,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       OkHttpClientStream stream = getStream(streamId);
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
-          frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+          synchronized (lock) {
+            frameWriter.rstStream(streamId, ErrorCode.INVALID_STREAM);
+          }
           in.skip(length);
         } else {
           onError(ErrorCode.PROTOCOL_ERROR, "Received data for unknown stream: " + streamId);
@@ -1057,7 +1072,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       // connection window update
       connectionUnacknowledgedBytesRead += length;
       if (connectionUnacknowledgedBytesRead >= initialWindowSize * DEFAULT_WINDOW_UPDATE_RATIO) {
-        frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
+        synchronized (lock) {
+          frameWriter.windowUpdate(0, connectionUnacknowledgedBytesRead);
+        }
         connectionUnacknowledgedBytesRead = 0;
       }
     }
@@ -1168,7 +1185,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     @Override
     public void ping(boolean ack, int payload1, int payload2) {
       if (!ack) {
-        frameWriter.ping(true, payload1, payload2);
+        synchronized (lock) {
+          frameWriter.ping(true, payload1, payload2);
+        }
       } else {
         Http2Ping p = null;
         long ackPayload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
@@ -1220,7 +1239,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     public void pushPromise(int streamId, int promisedStreamId, List<Header> requestHeaders)
         throws IOException {
       // We don't accept server initiated stream.
-      frameWriter.rstStream(streamId, ErrorCode.PROTOCOL_ERROR);
+      synchronized (lock) {
+        frameWriter.rstStream(streamId, ErrorCode.PROTOCOL_ERROR);
+      }
     }
 
     @Override
