@@ -248,6 +248,7 @@ dependencies {
 }
 ```
 </details>
+<p>
 
 [protobuf-gradle-plugin]: https://github.com/google/protobuf-gradle-plugin
 
