@@ -124,7 +124,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 For protobuf-based codegen integrated with the Gradle build system, you can use
 [protobuf-gradle-plugin][]:
 <details open>
-<summary>Groovy</summary>
+<summary>Groovy DSL</summary>
 
 ```groovy
 apply plugin: 'com.google.protobuf'
@@ -154,10 +154,11 @@ protobuf {
   }
 }
 ```
-
 </details>
+
+A community-supported Kotlin-DSL example is also available:
 <details>
-<summary>Kotlin</summary>
+<summary>Kotlin DSL</summary>
 
 ```kotlin
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -246,7 +247,6 @@ dependencies {
     implementation("io.grpc:grpc-netty:$grpcVersion")
 }
 ```
-
 </details>
 
 [protobuf-gradle-plugin]: https://github.com/google/protobuf-gradle-plugin
