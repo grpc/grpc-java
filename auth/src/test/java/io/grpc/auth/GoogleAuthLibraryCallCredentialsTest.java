@@ -195,7 +195,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     verify(credentials).getRequestMetadata(eq(expectedUri));
     verify(applier).fail(statusCaptor.capture());
     Status status = statusCaptor.getValue();
-    assertEquals(Status.Code.UNAVAILABLE, status.getCode());
+    assertEquals(Status.Code.UNAUTHENTICATED, status.getCode());
     assertEquals(exception, status.getCause());
   }
 
