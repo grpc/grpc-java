@@ -135,6 +135,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
         server =
             Undertow.builder()
                 .setServerOption(UndertowOptions.ENABLE_HTTP2, true)
+                .setServerOption(UndertowOptions.SHUTDOWN_TIMEOUT, 5000 /* 5 sec */)
                 .addHttpListener(0, HOST)
                 .setHandler(path)
                 .build();

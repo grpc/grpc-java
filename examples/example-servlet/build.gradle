@@ -1,11 +1,9 @@
-description = "gRPC: Servlet example"
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-
-    }
-    dependencies { classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.3' }
+plugins {
+    // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier gradle versions
+    id 'com.google.protobuf' version '0.8.5'
+    // Generate IntelliJ IDEA's .idea & .iml project files
+    id 'idea'
+    id 'war'
 }
 
 repositories {
@@ -14,28 +12,22 @@ repositories {
     mavenLocal()
 }
 
-apply plugin: 'war'
-
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
-def grpcVersion = '1.17.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.5.1'
+def grpcVersion = '1.19.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 def protocVersion = '3.5.1-1'
 
 dependencies {
-    compile "io.grpc:grpc-stub:${grpcVersion}"
-    compile "io.grpc:grpc-protobuf:${grpcVersion}"
-    compile "io.grpc:grpc-servlet:${grpcVersion}"
+    implementation "io.grpc:grpc-protobuf:${grpcVersion}",
+            "io.grpc:grpc-servlet:${grpcVersion}",
+            "io.grpc:grpc-stub:${grpcVersion}"
+    
 
-    compile ("com.google.protobuf:protobuf-java-util:${protobufVersion}") {
-        exclude group: 'com.google.guava', module: 'guava'
-    }
-
-    providedCompile group: 'javax.servlet', name: 'javax.servlet-api', version: '4.0.1'
+    providedCompile "javax.annotation:javax.annotation-api:1.2",
+            "javax.servlet:javax.servlet-api:4.0.1"
 }
 
-apply plugin: 'com.google.protobuf'
 protobuf {
     protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
     plugins { grpc { artifact = "io.grpc:protoc-gen-grpc-java:1.13.1" } }
@@ -43,8 +35,6 @@ protobuf {
         all()*.plugins { grpc {} }
     }
 }
-
-apply plugin: 'idea'
 
 // Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
 sourceSets {
