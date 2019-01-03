@@ -23,7 +23,7 @@ dependencies {
             project(':grpc-testing'),
             libraries.junit,
             libraries.mockito,
-            libraries.oauth_client
+            libraries.google_auth_oauth2_http
     compile (libraries.truth) {
         // Disable because it uses Java 8 bytecode, which breaks gae-java7
         exclude group: 'com.google.auto.value', module: 'auto-value-annotations'
