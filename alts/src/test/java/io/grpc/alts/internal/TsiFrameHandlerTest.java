@@ -43,8 +43,7 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class TsiFrameHandlerTest {
 
-  @Rule
-  public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(5));
+  @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(5));
 
   private final TsiFrameHandler tsiFrameHandler = new TsiFrameHandler();
   private final EmbeddedChannel channel = new EmbeddedChannel(tsiFrameHandler);
@@ -115,7 +114,8 @@ public class TsiFrameHandlerTest {
     channel.close().sync();
 
     assertWithMessage("pending write should be flushed on close")
-        .that((Object) channel.readOutbound()).isEqualTo(msg);
+        .that((Object) channel.readOutbound())
+        .isEqualTo(msg);
     channel.checkException();
   }
 
@@ -128,8 +128,9 @@ public class TsiFrameHandlerTest {
   private static final class IdentityFrameProtector implements TsiFrameProtector {
 
     @Override
-    public void protectFlush(List<ByteBuf> unprotectedBufs, Consumer<ByteBuf> ctxWrite,
-        ByteBufAllocator alloc) throws GeneralSecurityException {
+    public void protectFlush(
+        List<ByteBuf> unprotectedBufs, Consumer<ByteBuf> ctxWrite, ByteBufAllocator alloc)
+        throws GeneralSecurityException {
       for (ByteBuf unprotectedBuf : unprotectedBufs) {
         ctxWrite.accept(unprotectedBuf);
       }

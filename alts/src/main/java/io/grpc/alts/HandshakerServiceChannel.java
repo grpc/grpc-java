@@ -55,11 +55,12 @@ final class HandshakerServiceChannel {
       /* Use its own event loop thread pool to avoid blocking. */
       EventLoopGroup eventGroup =
           new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
-      ManagedChannel channel = NettyChannelBuilder.forTarget(target)
-          .directExecutor()
-          .eventLoopGroup(eventGroup)
-          .usePlaintext()
-          .build();
+      ManagedChannel channel =
+          NettyChannelBuilder.forTarget(target)
+              .directExecutor()
+              .eventLoopGroup(eventGroup)
+              .usePlaintext()
+              .build();
       return new EventLoopHoldingChannel(channel, eventGroup);
     }
 

@@ -71,7 +71,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object event) throws Exception {
     if (logger.isLoggable(Level.FINEST)) {
-      logger.log(Level.FINEST, "TsiFrameHandler user event triggered", new Object[]{event});
+      logger.log(Level.FINEST, "TsiFrameHandler user event triggered", new Object[] {event});
     }
     if (event instanceof TsiHandshakeCompletionEvent) {
       TsiHandshakeCompletionEvent tsiEvent = (TsiHandshakeCompletionEvent) event;
@@ -96,9 +96,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
 
   @Override
   protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-    checkState(
-        state == State.PROTECTED,
-        "Cannot read frames while the TSI handshake is %s", state);
+    checkState(state == State.PROTECTED, "Cannot read frames while the TSI handshake is %s", state);
     protector.unprotect(in, out, ctx.alloc());
   }
 
@@ -106,8 +104,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   public void write(ChannelHandlerContext ctx, Object message, ChannelPromise promise)
       throws Exception {
     checkState(
-        state == State.PROTECTED,
-        "Cannot write frames while the TSI handshake state is %s", state);
+        state == State.PROTECTED, "Cannot write frames while the TSI handshake state is %s", state);
     ByteBuf msg = (ByteBuf) message;
     if (!msg.isReadable()) {
       // Nothing to encode.
@@ -193,7 +190,8 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
     if (state == State.CLOSED || state == State.HANDSHAKE_FAILED) {
       logger.fine(
-          String.format("FrameHandler is inactive(%s), channel id: %s",
+          String.format(
+              "FrameHandler is inactive(%s), channel id: %s",
               state, ctx.channel().id().asShortText()));
       return;
     }

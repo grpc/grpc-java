@@ -21,6 +21,7 @@ import com.google.common.base.Preconditions;
 import com.google.protobuf.Any;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
+import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
@@ -28,6 +29,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.alts.internal.TsiHandshakeHandler.TsiHandshakeCompletionEvent;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
@@ -47,18 +49,28 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
   @Grpc.TransportAttr
   public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+
   @Grpc.TransportAttr
   public static final Attributes.Key<AltsAuthContext> ALTS_CONTEXT_KEY =
       Attributes.Key.create("ALTS_CONTEXT_KEY");
+
   private static final AsciiString scheme = AsciiString.of("https");
 
   /** Creates a negotiator used for ALTS client. */
   public static AltsProtocolNegotiator createClientNegotiator(
-      final TsiHandshakerFactory handshakerFactory) {
+      final TsiHandshakerFactory handshakerFactory,
+      final ObjectPool<Channel> handshakerChannelPool) {
     final class ClientAltsProtocolNegotiator extends AltsProtocolNegotiator {
+
+      private Channel handshakerChannel = null;
+
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-        TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
+        if (handshakerChannel == null) {
+          handshakerChannel = handshakerChannelPool.getObject();
+        }
+        TsiHandshaker handshaker =
+            handshakerFactory.newHandshaker(handshakerChannel, grpcHandler.getAuthority());
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
             new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
@@ -68,20 +80,28 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Client ProtocolNegotiator Closed");
-        // TODO(jiangtaoli2016): release resources
+        handshakerChannelPool.returnObject(handshakerChannel);
       }
     }
-    
+
     return new ClientAltsProtocolNegotiator();
   }
 
   /** Creates a negotiator used for ALTS server. */
   public static AltsProtocolNegotiator createServerNegotiator(
-      final TsiHandshakerFactory handshakerFactory) {
+      final TsiHandshakerFactory handshakerFactory,
+      final ObjectPool<Channel> handshakerChannelPool) {
     final class ServerAltsProtocolNegotiator extends AltsProtocolNegotiator {
+
+      private Channel handshakerChannel = null;
+
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-        TsiHandshaker handshaker = handshakerFactory.newHandshaker(/*authority=*/ null);
+        if (handshakerChannel == null) {
+          handshakerChannel = handshakerChannelPool.getObject();
+        }
+        TsiHandshaker handshaker =
+            handshakerFactory.newHandshaker(handshakerChannel, /*authority=*/ null);
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
             new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
@@ -91,7 +111,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Server ProtocolNegotiator Closed");
-        // TODO(jiangtaoli2016): release resources
+        handshakerChannelPool.returnObject(handshakerChannel);
       }
     }
 
@@ -129,7 +149,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (logger.isLoggable(Level.FINEST)) {
-        logger.log(Level.FINEST, "User Event triggered while negotiating ALTS", new Object[]{evt});
+        logger.log(Level.FINEST, "User Event triggered while negotiating ALTS", new Object[] {evt});
       }
       if (evt instanceof TsiHandshakeCompletionEvent) {
         TsiHandshakeCompletionEvent altsEvt = (TsiHandshakeCompletionEvent) evt;

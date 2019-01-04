@@ -35,18 +35,19 @@ import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
 public final class HandshakerServiceChannelTest {
-  @Rule
-  public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
-  private Server server = grpcCleanup.register(
-      ServerBuilder.forPort(0)
-        .addService(new SimpleServiceGrpc.SimpleServiceImplBase() {
-          @Override
-          public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> so) {
-            so.onNext(SimpleResponse.getDefaultInstance());
-            so.onCompleted();
-          }
-        })
-        .build());
+  @Rule public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+  private Server server =
+      grpcCleanup.register(
+          ServerBuilder.forPort(0)
+              .addService(
+                  new SimpleServiceGrpc.SimpleServiceImplBase() {
+                    @Override
+                    public void unaryRpc(SimpleRequest request, StreamObserver<SimpleResponse> so) {
+                      so.onNext(SimpleResponse.getDefaultInstance());
+                      so.onCompleted();
+                    }
+                  })
+              .build());
   private Resource<Channel> resource;
 
   @Before

@@ -104,8 +104,9 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
   public AltsChannelBuilder setHandshakerAddressForTesting(String handshakerAddress) {
     // Instead of using the default shared channel to the handshaker service, create a separate
     // resource to the test address.
-    handshakerChannelPool = SharedResourcePool.forResource(
-        HandshakerServiceChannel.getHandshakerChannelForTesting(handshakerAddress));
+    handshakerChannelPool =
+        SharedResourcePool.forResource(
+            HandshakerServiceChannel.getHandshakerChannelForTesting(handshakerAddress));
     return this;
   }
 
@@ -147,10 +148,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
       TsiHandshakerFactory altsHandshakerFactory =
           new TsiHandshakerFactory() {
             @Override
-            public TsiHandshaker newHandshaker(String authority) {
-              // Used the shared grpc channel to connecting to the ALTS handshaker service.
-              // TODO: Release the channel if it is not used.
-              // https://github.com/grpc/grpc-java/issues/4755.
+            public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
               AltsClientOptions handshakerOptions =
                   new AltsClientOptions.Builder()
                       .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
@@ -158,12 +156,12 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
                       .setTargetName(authority)
                       .build();
               return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(handshakerChannelPool.getObject()),
-                  handshakerOptions);
+                  HandshakerServiceGrpc.newStub(handshakerChannel), handshakerOptions);
             }
           };
       return negotiatorForTest =
-          AltsProtocolNegotiator.createClientNegotiator(altsHandshakerFactory);
+          AltsProtocolNegotiator.createClientNegotiator(
+              altsHandshakerFactory, handshakerChannelPool);
     }
   }
 
