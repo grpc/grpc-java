@@ -62,7 +62,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       final ObjectPool<Channel> handshakerChannelPool) {
     final class ClientAltsProtocolNegotiator extends AltsProtocolNegotiator {
 
-      private Channel handshakerChannel = null;
+      private Channel handshakerChannel;
 
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
@@ -93,7 +93,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       final ObjectPool<Channel> handshakerChannelPool) {
     final class ServerAltsProtocolNegotiator extends AltsProtocolNegotiator {
 
-      private Channel handshakerChannel = null;
+      private Channel handshakerChannel;
 
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
