@@ -147,7 +147,7 @@ final class DnsNameResolver extends NameResolver {
 
   private final Runnable resolveRunnable;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
+  DnsNameResolver(@Nullable String nsAuthority, String name, CreationParams params,
       Resource<Executor> executorResource, ProxyDetector proxyDetector,
       Stopwatch stopwatch, boolean isAndroid) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
@@ -161,13 +161,7 @@ final class DnsNameResolver extends NameResolver {
         "nameUri (%s) doesn't have an authority", nameUri);
     host = nameUri.getHost();
     if (nameUri.getPort() == -1) {
-      Integer defaultPort = params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
-      if (defaultPort != null) {
-        port = defaultPort;
-      } else {
-        throw new IllegalArgumentException(
-            "name '" + name + "' doesn't contain a port, and default port is not set in params");
-      }
+      port = params.getDefaultPort();
     } else {
       port = nameUri.getPort();
     }

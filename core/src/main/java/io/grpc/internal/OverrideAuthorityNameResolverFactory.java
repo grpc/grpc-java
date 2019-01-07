@@ -43,7 +43,7 @@ final class OverrideAuthorityNameResolverFactory extends NameResolver.Factory {
 
   @Nullable
   @Override
-  public NameResolver newNameResolver(URI targetUri, Attributes params) {
+  public NameResolver newNameResolver(URI targetUri, CreationParams params) {
     final NameResolver resolver = delegate.newNameResolver(targetUri, params);
     // Do not wrap null values. We do not want to impede error signaling.
     if (resolver == null) {

@@ -43,7 +43,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   private static final String SCHEME = "dns";
 
   @Override
-  public DnsNameResolver newNameResolver(URI targetUri, Attributes params) {
+  public DnsNameResolver newNameResolver(URI targetUri, CreationParams params) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(targetPath.startsWith("/"),

@@ -44,6 +44,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * @since 1.0.0
    */
   @SuppressWarnings("unused") // Avoids outside callers accidentally depending on the super class.
+  @Deprecated
   public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
       NameResolver.Factory.PARAMS_DEFAULT_PORT;
 
@@ -106,7 +107,7 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
 
     @Override
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(URI targetUri, NameResolver.CreationParams params) {
       checkForProviders();
       for (NameResolverProvider provider : providers) {
         NameResolver resolver = provider.newNameResolver(targetUri, params);

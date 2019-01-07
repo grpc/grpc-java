@@ -125,7 +125,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final InternalLogId logId;
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
-  private final Attributes nameResolverParams;
+  private final NameResolver.CreationParams nameResolverParams;
   private final LoadBalancer.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorForBalancer scheduledExecutorForBalancer;
@@ -605,7 +605,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   @VisibleForTesting
   static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      Attributes nameResolverParams) {
+      NameResolver.CreationParams nameResolverParams) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;

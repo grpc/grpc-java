@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import com.google.common.base.MoreObjects;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -94,8 +95,12 @@ public abstract class NameResolver {
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
      *
+     * @deprecated this will be deleted along with {@link #newNameResolver(URI, Attributes)} in
+     *             a future release.
+     *
      * @since 1.0.0
      */
+    @Deprecated
     public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
         Attributes.Key.create("params-default-port");
 
@@ -107,10 +112,39 @@ public abstract class NameResolver {
      * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
      * @param params optional parameters. Canonical keys are defined as {@code PARAMS_*} fields in
      *               {@link Factory}.
+     *
+     * @deprecated Implement {@link #newNameResolver(URI, Params)} instead.  This is going to be
+     *             deleted in a future release.
+     *
      * @since 1.0.0
      */
     @Nullable
-    public abstract NameResolver newNameResolver(URI targetUri, Attributes params);
+    @Deprecated
+    public NameResolver newNameResolver(URI targetUri, final Attributes params) {
+      return newNameResolver(targetUri, new CreationParams() {
+          @Override
+          public int getDefaultPort() {
+            return params.get(PARAMS_DEFAULT_PORT);
+          }
+        });
+    }
+
+    /**
+     * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
+     * cannot be resolved by this factory. The decision should be solely based on the scheme of the
+     * URI.
+     *
+     * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
+     * @param params additional parameters that may be used by the NameResolver implementation
+     *
+     * @since 1.19.0
+     */
+    @Nullable
+    public NameResolver newNameResolver(URI targetUri, CreationParams params) {
+      return newNameResolver(
+          targetUri,
+          Attributes.newBuilder().set(PARAMS_DEFAULT_PORT, params.getDefaultPort()).build());
+    }
 
     /**
      * Returns the default scheme, which will be used to construct a URI when {@link
@@ -162,4 +196,21 @@ public abstract class NameResolver {
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface ResolutionResultAttr {}
+
+  /**
+   * Parameters passed to {@link Factory#newNameResolver(URI, CreationParams)}.
+   */
+  public static abstract class CreationParams {
+    /**
+     * The port number used in case the target or the underlying naming system doesn't provide a
+     * port number.
+     */
+    public abstract int getDefaultPort();
+
+    public final String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("defaultPort", getDefaultPort())
+          .toString();
+    }
+  }
 }
