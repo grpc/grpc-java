@@ -497,7 +497,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
                 address,
                 proxy.getProxyAddress(),
                 proxy.getUsername(),
-                proxy.getPassword() == null ? null : new String(proxy.getPassword())
+                proxy.getPassword()
             );
           }
 

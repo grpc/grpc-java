@@ -584,7 +584,7 @@ public class DnsNameResolverTest {
         .forAddress(
           new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000))
         .username("username")
-        .password("password".toCharArray()).build();
+        .password("password").build();
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
         .thenReturn(proxyParameters);
     DnsNameResolver resolver =

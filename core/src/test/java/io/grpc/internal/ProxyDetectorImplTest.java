@@ -195,7 +195,7 @@ public class ProxyDetectorImplTest {
                 InetAddress.getByName(unresolvedProxy.getHostName()),
                 unresolvedProxy.getPort()))
             .username(proxyUser)
-        .password(proxyPassword.toCharArray())
+        .password(proxyPassword)
         .build(),
         detected);
   }

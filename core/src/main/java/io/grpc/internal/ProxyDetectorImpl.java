@@ -263,11 +263,10 @@ class ProxyDetectorImpl implements ProxyDetector {
       return ProxyParameters.forAddress(resolvedProxyAddr).build();
     }
 
-    // TODO(spencerfang): users of ProxyParameters should clear the password when done
     return ProxyParameters
         .forAddress(resolvedProxyAddr)
         .username(auth.getUserName())
-        .password(auth.getPassword())
+        .password(new String(auth.getPassword()))
         .build();
   }
 

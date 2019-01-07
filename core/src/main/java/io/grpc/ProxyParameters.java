@@ -19,7 +19,6 @@ package io.grpc;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import javax.annotation.Nullable;
 
 /**
@@ -32,7 +31,7 @@ public final class ProxyParameters {
   @Nullable
   private final String username;
   @Nullable
-  private final char[] password;
+  private final String password;
 
   /**
    * Creates an instance.
@@ -40,7 +39,7 @@ public final class ProxyParameters {
   private ProxyParameters(
       InetSocketAddress proxyAddress,
       @Nullable String username,
-      @Nullable char[] password) {
+      @Nullable String password) {
     Preconditions.checkNotNull(proxyAddress);
     // The resolution must be done by the ProxyParameters producer, because consumers
     // may not be allowed to do IO.
@@ -51,7 +50,7 @@ public final class ProxyParameters {
   }
 
   @Nullable
-  public char[] getPassword() {
+  public String getPassword() {
     return password;
   }
 
@@ -72,12 +71,12 @@ public final class ProxyParameters {
     ProxyParameters that = (ProxyParameters) o;
     return Objects.equal(proxyAddress, that.proxyAddress)
         && Objects.equal(username, that.username)
-        && Arrays.equals(password, that.password);
+        && Objects.equal(password, that.password);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(proxyAddress, username, Arrays.hashCode(password));
+    return Objects.hashCode(proxyAddress, username, password);
   }
 
   /**
@@ -96,7 +95,7 @@ public final class ProxyParameters {
     @Nullable
     private String username;
     @Nullable
-    private char[] password;
+    private String password;
 
     private Builder(InetSocketAddress proxyAddress) {
       this.proxyAddress = Preconditions.checkNotNull(proxyAddress, "proxyAddress");
@@ -107,7 +106,7 @@ public final class ProxyParameters {
       return this;
     }
 
-    public Builder password(char[] password) {
+    public Builder password(String password) {
       this.password = password;
       return this;
     }

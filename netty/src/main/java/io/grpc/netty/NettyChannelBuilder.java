@@ -549,7 +549,7 @@ public final class NettyChannelBuilder
         localNegotiator = ProtocolNegotiators.httpProxy(
             proxyParams.getProxyAddress(),
             proxyParams.getUsername(),
-            proxyParams.getPassword() == null ? null : new String(proxyParams.getPassword()),
+            proxyParams.getPassword(),
             protocolNegotiator);
       }
 
