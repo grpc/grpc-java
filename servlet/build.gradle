@@ -17,7 +17,6 @@ dependencies {
             project(':grpc-core').sourceSets.test.output,
             project(':grpc-netty').sourceSets.test.output,
             libraries.junit,
-            libraries.oauth_client,
             'io.undertow:undertow-servlet:2.0.15.Final',
             'org.apache.tomcat.embed:tomcat-embed-core:9.0.12'
 }
