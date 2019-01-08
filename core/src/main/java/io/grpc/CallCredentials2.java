@@ -29,7 +29,7 @@ import java.util.concurrent.Executor;
  * IMPLEMENTIONS.  All consumers should still reference {@link CallCredentials}.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4901")
-public abstract class CallCredentials2 implements CallCredentials {
+public abstract class CallCredentials2 extends CallCredentials {
   /**
    * Pass the credential data to the given {@link CallCredentials.MetadataApplier}, which will
    * propagate it to the request metadata.
@@ -47,39 +47,15 @@ public abstract class CallCredentials2 implements CallCredentials {
    *        method returns.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
+  @Deprecated
   public abstract void applyRequestMetadata(
       RequestInfo requestInfo, Executor appExecutor, MetadataApplier applier);
 
   @Override
-  @SuppressWarnings("deprecation")
   public final void applyRequestMetadata(
-      final MethodDescriptor<?, ?> method, final Attributes attrs,
-      Executor appExecutor, final CallCredentials.MetadataApplier applier) {
-    final String authority = checkNotNull(attrs.get(ATTR_AUTHORITY), "authority");
-    final SecurityLevel securityLevel =
-        firstNonNull(attrs.get(ATTR_SECURITY_LEVEL), SecurityLevel.NONE);
-    RequestInfo requestInfo = new RequestInfo() {
-        @Override
-        public MethodDescriptor<?, ?> getMethodDescriptor() {
-          return method;
-        }
-
-        @Override
-        public SecurityLevel getSecurityLevel() {
-          return securityLevel;
-        }
-
-        @Override
-        public String getAuthority() {
-          return authority;
-        }
-
-        @Override
-        public Attributes getTransportAttrs() {
-          return attrs;
-        }
-      };
-    MetadataApplier applierAdapter = new MetadataApplier() {
+      RequestInfo requestInfo, Executor appExecutor,
+      final CallCredentials.MetadataApplier applier) {
+    applyRequestMetadata(requestInfo, appExecutor, new MetadataApplier() {
         @Override
         public void apply(Metadata headers) {
           applier.apply(headers);
@@ -89,11 +65,10 @@ public abstract class CallCredentials2 implements CallCredentials {
         public void fail(Status status) {
           applier.fail(status);
         }
-      };
-    applyRequestMetadata(requestInfo, appExecutor, applierAdapter);
+      });
   }
 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  @SuppressWarnings("deprecation")
-  public abstract static class MetadataApplier implements CallCredentials.MetadataApplier {}
+  @Deprecated
+  public abstract static class MetadataApplier extends CallCredentials.MetadataApplier {}
 }

@@ -74,11 +74,35 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
-        MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+        final MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
             delegate, method, headers, callOptions);
+        RequestInfo requestInfo = new RequestInfo() {
+            @Override
+            public MethodDescriptor<?, ?> getMethodDescriptor() {
+              return method;
+            }
+
+            @Override
+            public SecurityLevel getSecurityLevel() {
+              // TODO(zhangkun83): get from GrpcAttributes.ATTR_SECURITY_LEVEL out of the delegate's
+              // attributes.
+              return securityLevel;
+            }
+
+            @Override
+            public String getAuthority() {
+              return authority;
+            }
+
+            @Override
+            public Attributes getTransportAttrs() {
+              // TODO(zhangkun83): get from delegate attributes
+              return attrs;
+            }
+          };
         Attributes.Builder effectiveAttrsBuilder = Attributes.newBuilder()
             .set(CallCredentials.ATTR_AUTHORITY, authority)
             .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
