@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
+import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -74,7 +75,7 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
     @Override
     @SuppressWarnings("deprecation")
     public ClientStream newStream(
-        final MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
+        final MethodDescriptor<?, ?> method, Metadata headers, final CallOptions callOptions) {
       CallCredentials creds = callOptions.getCredentials();
       if (creds != null) {
         MetadataApplierImpl applier = new MetadataApplierImpl(
@@ -87,32 +88,24 @@ final class CallCredentialsApplyingTransportFactory implements ClientTransportFa
 
             @Override
             public SecurityLevel getSecurityLevel() {
-              // TODO(zhangkun83): get from GrpcAttributes.ATTR_SECURITY_LEVEL out of the delegate's
-              // attributes.
-              return securityLevel;
+              return firstNonNull(
+                  delegate.getAttributes().get(GrpcAttributes.ATTR_SECURITY_LEVEL),
+                  SecurityLevel.NONE);
             }
 
             @Override
             public String getAuthority() {
-              return authority;
+              return firstNonNull(callOptions.getAuthority(), authority);
             }
 
             @Override
             public Attributes getTransportAttrs() {
-              // TODO(zhangkun83): get from delegate attributes
-              return attrs;
+              return delegate.getAttributes();
             }
           };
-        Attributes.Builder effectiveAttrsBuilder = Attributes.newBuilder()
-            .set(CallCredentials.ATTR_AUTHORITY, authority)
-            .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
-            .setAll(delegate.getAttributes());
-        if (callOptions.getAuthority() != null) {
-          effectiveAttrsBuilder.set(CallCredentials.ATTR_AUTHORITY, callOptions.getAuthority());
-        }
         try {
-          creds.applyRequestMetadata(method, effectiveAttrsBuilder.build(),
-              firstNonNull(callOptions.getExecutor(), appExecutor), applier);
+          creds.applyRequestMetadata(
+              requestInfo, firstNonNull(callOptions.getExecutor(), appExecutor), applier);
         } catch (Throwable t) {
           applier.fail(Status.UNAUTHENTICATED
               .withDescription("Credentials should use fail() instead of throwing exceptions")

@@ -16,7 +16,6 @@
 
 package io.grpc;
 
-import io.grpc.Attributes.Key;
 import java.util.concurrent.Executor;
 
 /**
@@ -36,6 +35,26 @@ import java.util.concurrent.Executor;
  * CallCredentials} itself if it wishes to only use stable APIs.
  */
 public abstract class CallCredentials {
+
+  /**
+   * Pass the credential data to the given {@link CallCredentials.MetadataApplier}, which will
+   * propagate it to the request metadata.
+   *
+   * <p>It is called for each individual RPC, within the {@link Context} of the call, before the
+   * stream is about to be created on a transport. Implementations should not block in this
+   * method. If metadata is not immediately available, e.g., needs to be fetched from network, the
+   * implementation may give the {@code applier} to an asynchronous task which will eventually call
+   * the {@code applier}. The RPC proceeds only after the {@code applier} is called.
+   *
+   * @param requestInfo request-related information
+   * @param appExecutor The application thread-pool. It is provided to the implementation in case it
+   *        needs to perform blocking operations.
+   * @param applier The outlet of the produced headers. It can be called either before or after this
+   *        method returns.
+   */
+  public abstract void applyRequestMetadata(
+      RequestInfo requestInfo, Executor appExecutor, CallCredentials.MetadataApplier applier);
+
   /**
    * Should be a noop but never called; tries to make it clearer to implementors that they may break
    * in the future.
@@ -49,7 +68,7 @@ public abstract class CallCredentials {
    * <p>Exactly one of its methods must be called to make the RPC proceed.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  public abstract class MetadataApplier {
+  public abstract static class MetadataApplier {
     /**
      * Called when headers are successfully generated. They will be merged into the original
      * headers.

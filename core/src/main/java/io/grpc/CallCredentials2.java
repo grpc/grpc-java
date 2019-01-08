@@ -16,9 +16,6 @@
 
 package io.grpc;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import java.util.concurrent.Executor;
 
 /**
@@ -31,8 +28,8 @@ import java.util.concurrent.Executor;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4901")
 public abstract class CallCredentials2 extends CallCredentials {
   /**
-   * Pass the credential data to the given {@link CallCredentials.MetadataApplier}, which will
-   * propagate it to the request metadata.
+   * Pass the credential data to the given {@link MetadataApplier}, which will propagate it to the
+   * request metadata.
    *
    * <p>It is called for each individual RPC, within the {@link Context} of the call, before the
    * stream is about to be created on a transport. Implementations should not block in this
