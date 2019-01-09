@@ -399,9 +399,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void run() {
       scheduledNameResolverRefresh = null;
-      if (nameResolver != null) {
-        nameResolver.refresh();
-      }
+      refreshNameResolution();
     }
   }
 
@@ -421,11 +419,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  // Must be run from syncContext
-  private void refreshNameResolutionNow() {
+  /**
+   * Force name resolution refresh to happen immediately and reset refresh back-off. Must be run
+   * from syncContext.
+   */
+  private void forceNameResolutionRefresh() {
     syncContext.throwIfNotInThisSynchronizationContext();
     cancelNameResolverBackoff();
-    if (nameResolver != null) {
+    refreshNameResolution();
+  }
+
+  private void refreshNameResolution() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (nameResolverStarted) {
       nameResolver.refresh();
     }
   }
@@ -871,7 +877,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
           checkState(nameResolverStarted, "name resolver must be started");
-          refreshNameResolutionNow();
+          forceNameResolutionRefresh();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -990,7 +996,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must be called from syncContext
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
       if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-        refreshNameResolutionNow();
+        forceNameResolutionRefresh();
       }
     }
 
@@ -1122,7 +1128,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          refreshNameResolutionNow();
+          forceNameResolutionRefresh();
         }
       }
 
