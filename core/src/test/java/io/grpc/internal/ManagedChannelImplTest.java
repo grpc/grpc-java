@@ -1674,7 +1674,6 @@ public class ManagedChannelImplTest {
    * propagated to newStream() and applyRequestMetadata().
    */
   @Test
-  @SuppressWarnings("deprecation")
   public void informationPropagatedToNewStreamAndCallCredentials() {
     createChannel();
     CallOptions callOptions = CallOptions.DEFAULT.withCallCredentials(creds);
@@ -1688,7 +1687,7 @@ public class ManagedChannelImplTest {
           credsApplyContexts.add(Context.current());
           return null;
         }
-      }).when(creds).applyRequestMetadata(  // TODO(zhangkun83): remove suppression of deprecations
+      }).when(creds).applyRequestMetadata(
           any(RequestInfo.class), any(Executor.class), any(CallCredentials.MetadataApplier.class));
 
     // First call will be on delayed transport.  Only newCall() is run within the expected context,
