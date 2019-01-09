@@ -28,7 +28,7 @@ import java.util.concurrent.Executor;
  * response = stub.withCallCredentials(creds).bar(request);
  * </pre>
  *
- * <p>The contents and nature of this interface (and whether it remains an interface) is
+ * <p>The contents and nature of this class (and whether it remains an abstract class) is
  * experimental, in that it can change. However, we are guaranteeing stability for the
  * <em>name</em>. That is, we are guaranteeing stability for code to be returned a reference and
  * pass that reference to gRPC for usage. However, code may not call or implement the {@code
