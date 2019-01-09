@@ -46,6 +46,7 @@ import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Context;
+import io.grpc.Cork;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
@@ -91,15 +92,21 @@ public class ClientCallImplTest {
   private final CallTracer channelCallTracer = CallTracer.getDefaultFactory().create();
   private final DecompressorRegistry decompressorRegistry =
       DecompressorRegistry.getDefaultInstance().with(new Codec.Gzip(), true);
-  private final MethodDescriptor<Void, Void> method = MethodDescriptor.<Void, Void>newBuilder()
+  private final MethodDescriptor<Void, Void> unaryMethod = MethodDescriptor.<Void, Void>newBuilder()
       .setType(MethodType.UNARY)
       .setFullMethodName("service/method")
       .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
       .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
       .build();
 
-  @Mock private ClientStreamListener streamListener;
-  @Mock private ClientTransport clientTransport;
+  private final MethodDescriptor<Void, Void> clientStreamingMethod =
+      MethodDescriptor.<Void, Void>newBuilder()
+          .setType(MethodType.CLIENT_STREAMING)
+          .setFullMethodName("service/method")
+          .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
+          .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
+          .build();
+
   @Captor private ArgumentCaptor<Status> statusCaptor;
 
   @Mock
@@ -144,7 +151,7 @@ public class ClientCallImplTest {
   public void statusPropagatedFromStreamToCallListener() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         executor,
         baseCallOptions,
         provider,
@@ -166,7 +173,7 @@ public class ClientCallImplTest {
   public void exceptionInOnMessageTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         executor,
         baseCallOptions,
         provider,
@@ -203,7 +210,7 @@ public class ClientCallImplTest {
   public void exceptionInOnHeadersTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         executor,
         baseCallOptions,
         provider,
@@ -238,7 +245,7 @@ public class ClientCallImplTest {
   public void exceptionInOnReadyTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         executor,
         baseCallOptions,
         provider,
@@ -272,7 +279,7 @@ public class ClientCallImplTest {
   @Test
   public void advertisedEncodingsAreSent() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -284,7 +291,7 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     ArgumentCaptor<Metadata> metadataCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(transport).newStream(eq(method), metadataCaptor.capture(), same(baseCallOptions));
+    verify(transport).newStream(eq(unaryMethod), metadataCaptor.capture(), same(baseCallOptions));
     Metadata actual = metadataCaptor.getValue();
 
     // there should only be one.
@@ -296,7 +303,7 @@ public class ClientCallImplTest {
   @Test
   public void authorityPropagatedToStream() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions.withAuthority("overridden-authority"),
         provider,
@@ -313,7 +320,7 @@ public class ClientCallImplTest {
   public void callOptionsPropagatedToTransport() {
     final CallOptions callOptions = baseCallOptions.withAuthority("dummy_value");
     final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         callOptions,
         provider,
@@ -325,13 +332,13 @@ public class ClientCallImplTest {
 
     call.start(callListener, metadata);
 
-    verify(transport).newStream(same(method), same(metadata), same(callOptions));
+    verify(transport).newStream(same(unaryMethod), same(metadata), same(callOptions));
   }
 
   @Test
   public void authorityNotPropagatedToStream() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         // Don't provide an authority
         baseCallOptions,
@@ -503,7 +510,7 @@ public class ClientCallImplTest {
     Context previous = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
         provider,
@@ -581,7 +588,7 @@ public class ClientCallImplTest {
     Context previous = cancellableContext.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
         provider,
@@ -611,7 +618,7 @@ public class ClientCallImplTest {
     Context previous = cancellableContext.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
         provider,
@@ -656,7 +663,7 @@ public class ClientCallImplTest {
     CallOptions callOptions = baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS);
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         callOptions,
         provider,
@@ -679,7 +686,7 @@ public class ClientCallImplTest {
     Context origContext = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -704,7 +711,7 @@ public class ClientCallImplTest {
 
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(2000, TimeUnit.MILLISECONDS);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         callOpts,
         provider,
@@ -729,7 +736,7 @@ public class ClientCallImplTest {
 
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         callOpts,
         provider,
@@ -750,7 +757,7 @@ public class ClientCallImplTest {
   public void callOptionsDeadlineShouldBePropagatedToStream() {
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         callOpts,
         provider,
@@ -768,7 +775,7 @@ public class ClientCallImplTest {
   @Test
   public void noDeadlineShouldBePropagatedToStream() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -786,7 +793,7 @@ public class ClientCallImplTest {
     // The deadline needs to be a number large enough to get encompass the call to start, otherwise
     // the scheduled cancellation won't be created, and the call will fail early.
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
         provider,
@@ -811,7 +818,7 @@ public class ClientCallImplTest {
     Context origContext = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -834,7 +841,7 @@ public class ClientCallImplTest {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
         provider,
@@ -859,7 +866,7 @@ public class ClientCallImplTest {
   @Test
   public void timeoutShouldNotBeSet() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -877,7 +884,7 @@ public class ClientCallImplTest {
   @Test
   public void cancelInOnMessageShouldInvokeStreamCancel() throws Exception {
     final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         MoreExecutors.directExecutor(),
         baseCallOptions,
         provider,
@@ -915,7 +922,7 @@ public class ClientCallImplTest {
     CallOptions callOptions =
         baseCallOptions.withMaxInboundMessageSize(1).withMaxOutboundMessageSize(2);
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method,
+        unaryMethod,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         callOptions,
         provider,
@@ -933,7 +940,7 @@ public class ClientCallImplTest {
   @Test
   public void getAttributes() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
-        method, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        unaryMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
         deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
     Attributes attrs =
         Attributes.newBuilder().set(Key.<String>create("fake key"), "fake value").build();
@@ -944,6 +951,80 @@ public class ClientCallImplTest {
     call.start(callListener, new Metadata());
 
     assertEquals(attrs, call.getAttributes());
+  }
+
+  @Test
+  public void unary_withoutCork_shouldNotFlush() {
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        unaryMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
+
+    call.start(callListener, new Metadata());
+    call.sendMessage(null);
+    verify(stream, never()).flush();
+  }
+
+  @Test
+  public void unary_withCork_shouldNotFlush() {
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        unaryMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
+
+    call.start(callListener, new Metadata());
+    call.sendMessage(null);
+    verify(stream, never()).flush();
+  }
+
+  @Test
+  public void streaming_withoutCork_shouldFlush() {
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        clientStreamingMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
+
+    call.start(callListener, new Metadata());
+    call.sendMessage(null);
+    verify(stream, times(1)).flush();
+  }
+
+  @Test
+  public void streaming_withCork_shouldFlushAfterCorkRelease() throws IOException {
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        clientStreamingMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
+
+    final Cork cork = call.cork();
+    call.start(callListener, new Metadata());
+    call.sendMessage(null);
+    call.sendMessage(null);
+    call.sendMessage(null);
+    call.sendMessage(null);
+    verify(stream, never()).flush();
+    cork.close();
+
+    verify(stream, times(1)).flush();
+  }
+
+  @Test
+  public void streaming_withMultipleCorks_shouldFlushAfterCorkRelease() throws IOException {
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+        clientStreamingMethod, MoreExecutors.directExecutor(), baseCallOptions, provider,
+        deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
+
+    final Cork cork1 = call.cork();
+    final Cork cork2 = call.cork();
+    call.start(callListener, new Metadata());
+    call.sendMessage(null);
+    call.sendMessage(null);
+    call.sendMessage(null);
+    verify(stream, never()).flush();
+    cork1.close();
+    call.sendMessage(null);
+    call.sendMessage(null);
+    call.sendMessage(null);
+    verify(stream, never()).flush();
+    cork2.close();
+
+    verify(stream, times(1)).flush();
   }
 
   private static void assertTimeoutBetween(long timeout, long from, long to) {

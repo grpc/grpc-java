@@ -258,6 +258,25 @@ public abstract class ClientCall<ReqT, RespT> {
   }
 
   /**
+   * Defers flushing the messages written using {@link #sendMessage(Object)} until the cork is
+   * closed or as necessary to prevent excessive buffering. The amount of data buffered while
+   * corked is dependent on the transport implementation so users of this API should not make
+   * strong assumptions about how long data is buffered while corked.
+   *
+   * <p>Corking can provide throughput gains by allowing a transport to perform fewer writes to
+   * the underlying network.
+   *
+   * <p>In case of multiple {@link Cork}s being open, all of them need to be closed in order to
+   * trigger flushing.
+   *
+   * @since 1.14.0
+   */
+  @ExperimentalApi
+  public Cork cork() {
+    return new Cork.NoopCork();
+  }
+
+  /**
    * Returns additional properties of the call. May only be called after {@link Listener#onHeaders}
    * or {@link Listener#onClose}. If called prematurely, the implementation may throw {@code
    * IllegalStateException} or return arbitrary {@code Attributes}.
@@ -270,4 +289,5 @@ public abstract class ClientCall<ReqT, RespT> {
   public Attributes getAttributes() {
     return Attributes.EMPTY;
   }
+
 }

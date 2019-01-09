@@ -66,6 +66,11 @@ abstract class PartialForwardingServerCall<ReqT, RespT> extends ServerCall<ReqT,
   }
 
   @Override
+  public Cork cork() {
+    return delegate().cork();
+  }
+
+  @Override
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1779")
   public Attributes getAttributes() {
     return delegate().getAttributes();
