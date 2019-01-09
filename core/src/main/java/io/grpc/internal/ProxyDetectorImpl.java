@@ -266,7 +266,7 @@ class ProxyDetectorImpl implements ProxyDetector {
     return ProxyParameters
         .forAddress(resolvedProxyAddr)
         .username(auth.getUserName())
-        .password(new String(auth.getPassword()))
+        .password(auth.getPassword() == null ? null : new String(auth.getPassword()))
         .build();
   }
 
