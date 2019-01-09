@@ -22,7 +22,7 @@ import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.BaseEncoding;
-import io.grpc.CallCredentials;
+import io.grpc.CallCredentials2;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -46,7 +46,9 @@ import javax.annotation.Nullable;
 /**
  * Wraps {@link Credentials} as a {@link CallCredentials}.
  */
-final class GoogleAuthLibraryCallCredentials extends CallCredentials {
+// TODO(zhangkun83): remove the suppression after we change the base class to CallCredential
+@SuppressWarnings("deprecation")
+final class GoogleAuthLibraryCallCredentials extends CallCredentials2 {
   private static final Logger log
       = Logger.getLogger(GoogleAuthLibraryCallCredentials.class.getName());
   private static final JwtHelper jwtHelper
