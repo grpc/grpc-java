@@ -149,7 +149,7 @@ public class ProxyDetectorImplTest {
     Proxy proxy1 = new java.net.Proxy(java.net.Proxy.Type.HTTP, unresolvedProxy);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy1));
     ProxyParameters proxy = proxyDetector.proxyFor(destination);
-    assertFalse(proxy.getProxyAddress().isUnresolved());
+    assertFalse(((InetSocketAddress)proxy.getProxyAddress()).isUnresolved());
   }
 
   @Test

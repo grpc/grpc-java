@@ -19,6 +19,7 @@ package io.grpc;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import javax.annotation.Nullable;
 
 /**
@@ -27,7 +28,7 @@ import javax.annotation.Nullable;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
 public final class ProxyParameters {
 
-  private final InetSocketAddress proxyAddress;
+  private final SocketAddress proxyAddress;
   @Nullable
   private final String username;
   @Nullable
@@ -37,13 +38,15 @@ public final class ProxyParameters {
    * Creates an instance.
    */
   private ProxyParameters(
-      InetSocketAddress proxyAddress,
+      SocketAddress proxyAddress,
       @Nullable String username,
       @Nullable String password) {
     Preconditions.checkNotNull(proxyAddress);
     // The resolution must be done by the ProxyParameters producer, because consumers
     // may not be allowed to do IO.
-    Preconditions.checkState(!proxyAddress.isUnresolved());
+    if (proxyAddress instanceof InetSocketAddress) {
+      Preconditions.checkState(!((InetSocketAddress)proxyAddress).isUnresolved());
+    }
     this.proxyAddress = proxyAddress;
     this.username = username;
     this.password = password;
@@ -59,7 +62,7 @@ public final class ProxyParameters {
     return username;
   }
 
-  public InetSocketAddress getProxyAddress() {
+  public SocketAddress getProxyAddress() {
     return proxyAddress;
   }
 
@@ -82,7 +85,7 @@ public final class ProxyParameters {
   /**
    * Create a new builder.
    */
-  public static Builder forAddress(InetSocketAddress proxyAddress) {
+  public static Builder forAddress(SocketAddress proxyAddress) {
     return new Builder(proxyAddress);
   }
 
@@ -91,13 +94,13 @@ public final class ProxyParameters {
    */
   public static final class Builder {
 
-    private final InetSocketAddress proxyAddress;
+    private final SocketAddress proxyAddress;
     @Nullable
     private String username;
     @Nullable
     private String password;
 
-    private Builder(InetSocketAddress proxyAddress) {
+    private Builder(SocketAddress proxyAddress) {
       this.proxyAddress = Preconditions.checkNotNull(proxyAddress, "proxyAddress");
     }
 
