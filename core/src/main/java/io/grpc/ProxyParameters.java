@@ -101,11 +101,13 @@ public final class ProxyParameters {
       this.proxyAddress = Preconditions.checkNotNull(proxyAddress, "proxyAddress");
     }
 
+    @Nullable
     public Builder username(String username) {
       this.username = username;
       return this;
     }
 
+    @Nullable
     public Builder password(String password) {
       this.password = password;
       return this;
