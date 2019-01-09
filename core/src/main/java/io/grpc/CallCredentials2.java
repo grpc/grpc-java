@@ -22,9 +22,13 @@ import java.util.concurrent.Executor;
  * The new interface for {@link CallCredentials}.
  *
  * <p>THIS CLASS NAME IS TEMPORARY and is part of a migration. This class will BE DELETED as it
- * replaces {@link CallCredentials} in short-term.  THIS CLASS SHOULD ONLY BE REFERENCED BY
- * IMPLEMENTIONS.  All consumers should still reference {@link CallCredentials}.
+ * replaces {@link CallCredentials} in short-term.  THIS CLASS IS ONLY REFERENCED BY IMPLEMENTIONS.
+ * All consumers should be always referencing {@link CallCredentials}.
+ *
+ * @deprecated the new interface has been promoted into {@link CallCredentials}.  Implementations
+ *             should switch back to "{@code extends CallCredentials}".
  */
+@Deprecated
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4901")
 public abstract class CallCredentials2 extends CallCredentials {
   /**
@@ -44,7 +48,6 @@ public abstract class CallCredentials2 extends CallCredentials {
    *        method returns.
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  @Deprecated
   public abstract void applyRequestMetadata(
       RequestInfo requestInfo, Executor appExecutor, MetadataApplier applier);
 
@@ -66,6 +69,5 @@ public abstract class CallCredentials2 extends CallCredentials {
   }
 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1914")
-  @Deprecated
   public abstract static class MetadataApplier extends CallCredentials.MetadataApplier {}
 }
