@@ -36,12 +36,14 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
+import io.grpc.netty.NettyClientTransport.WriteBufferingAndExceptionHandler;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
@@ -73,6 +75,7 @@ import io.netty.handler.codec.http2.StreamBufferingEncoder;
 import io.netty.handler.codec.http2.WeightedFairQueueByteDistributor;
 import io.netty.handler.logging.LogLevel;
 import java.nio.channels.ClosedChannelException;
+import java.util.Map.Entry;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -299,6 +302,32 @@ class NettyClientHandler extends AbstractNettyHandler {
     return attributes;
   }
 
+  @Override
+  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
+      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
+        WriteBufferingAndExceptionHandler buffer =
+            (WriteBufferingAndExceptionHandler) entry.getValue();
+        buffer.writeBufferedAndRemove(ctx.pipeline().context(buffer));
+        break;
+      }
+    }
+    super.handlerAdded(ctx);
+  }
+
+  @Override
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
+      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
+        WriteBufferingAndExceptionHandler buffer =
+            (WriteBufferingAndExceptionHandler) entry.getValue();
+        buffer.writeBufferedAndRemove(ctx.pipeline().context(buffer));
+        break;
+      }
+    }
+    super.channelActive(ctx);
+  }
+
   /**
    * Handler for commands sent from the stream.
    */
@@ -395,9 +424,18 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     logger.fine("Network channel being closed by the application.");
+    Status status = Status.UNAVAILABLE.withDescription("Transport closed for unknown reason");
     if (ctx.channel().isActive()) { // Ignore notification that the socket was closed
-      lifecycleManager.notifyShutdown(
-          Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"));
+      lifecycleManager.notifyShutdown(status);
+    }
+
+    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
+      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
+        WriteBufferingAndExceptionHandler buffer =
+            (WriteBufferingAndExceptionHandler) entry.getValue();
+        buffer.exceptionCaught(ctx.pipeline().context(buffer), status.asRuntimeException());
+        break;
+      }
     }
     super.close(ctx, promise);
   }
@@ -458,7 +496,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   InternalChannelz.Security getSecurityInfo() {
     return securityInfo;
   }
-
 
   @Override
   protected void onConnectionError(ChannelHandlerContext ctx,  boolean outbound, Throwable cause,
