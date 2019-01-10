@@ -308,16 +308,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   // Must be called from syncContext
-  private void shutdownNameResolverAndLoadBalancer(boolean verifyActive) {
-    if (verifyActive) {
-      checkState(nameResolver != null, "nameResolver is null");
+  private void shutdownNameResolverAndLoadBalancer(boolean channelIsActive) {
+    if (channelIsActive) {
+      checkState(nameResolverStarted, "nameResolver is not started");
       checkState(lbHelper != null, "lbHelper is null");
     }
     if (nameResolver != null) {
       cancelNameResolverBackoff();
       nameResolver.shutdown();
-      nameResolver = null;
       nameResolverStarted = false;
+      if (channelIsActive) {
+        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+      } else {
+        nameResolver = null;
+      }
     }
     if (lbHelper != null) {
       lbHelper.lb.shutdown();
@@ -372,7 +376,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
-    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     if (inUseStateAggregator.isInUse()) {
@@ -423,7 +426,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
    * Force name resolution refresh to happen immediately and reset refresh back-off. Must be run
    * from syncContext.
    */
-  private void forceNameResolutionRefresh() {
+  private void refreshAndResetNameResolution() {
     syncContext.throwIfNotInThisSynchronizationContext();
     cancelNameResolverBackoff();
     refreshNameResolution();
@@ -877,7 +880,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
           checkState(nameResolverStarted, "name resolver must be started");
-          forceNameResolutionRefresh();
+          refreshAndResetNameResolution();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -996,7 +999,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must be called from syncContext
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
       if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-        forceNameResolutionRefresh();
+        refreshAndResetNameResolution();
       }
     }
 
@@ -1128,7 +1131,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          forceNameResolutionRefresh();
+          refreshAndResetNameResolution();
         }
       }
 
