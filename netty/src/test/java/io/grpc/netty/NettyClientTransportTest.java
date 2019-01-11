@@ -62,8 +62,22 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
+import io.grpc.netty.NettyClientTransport.WriteBufferingAndExceptionHandler;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerAdapter;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.DefaultEventLoop;
+import io.netty.channel.EventLoop;
+import io.netty.channel.embedded.EmbeddedChannel;
+import io.netty.channel.local.LocalAddress;
+import io.netty.channel.local.LocalChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -571,6 +585,41 @@ public class NettyClientTransportTest {
     rpc.waitForResponse();
 
     assertNull(transport.keepAliveManager());
+  }
+
+  @Test
+  public void writeBufferingAndExceptionHandler_buffers() throws Exception {
+    WriteBufferingAndExceptionHandler handler =
+        new WriteBufferingAndExceptionHandler(new ChannelOutboundHandlerAdapter() {
+          @Override
+          public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+              throws Exception {
+            super.write(ctx, msg, promise);
+          }
+        });
+
+    EventLoop group = new DefaultEventLoop();
+    ChannelFuture cf = new Bootstrap()
+        .channel(LocalChannel.class)
+        .handler(handler)
+        .group(group)
+        .register();
+
+    cf.sync();
+    final Channel chan = cf.channel();
+
+    chan.eventLoop().execute(new Runnable() {
+      @Override
+      public void run() {
+        chan.connect(new LocalAddress("A"));
+      }
+    });
+    chan.writeAndFlush(new Object()).addListener(new ChannelFutureListener() {
+      @Override
+      public void operationComplete(ChannelFuture future) throws Exception {
+        System.err.println(future.cause());
+      }
+    });
   }
 
   private Throwable getRootCause(Throwable t) {

@@ -429,7 +429,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     private Throwable failCause;
 
 
-    WriteBufferingAndExceptionHandler( ChannelHandler next) {
+    WriteBufferingAndExceptionHandler(ChannelHandler next) {
       this.next = next;
     }
 
