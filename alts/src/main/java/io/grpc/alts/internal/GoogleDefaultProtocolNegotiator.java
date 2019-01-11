@@ -18,6 +18,7 @@ package io.grpc.alts.internal;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Channel;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
@@ -35,9 +36,11 @@ public final class GoogleDefaultProtocolNegotiator implements ProtocolNegotiator
   public GoogleDefaultProtocolNegotiator(
       TsiHandshakerFactory altsFactory,
       ObjectPool<Channel> handshakerChannelPool,
+      LazyChannel lazyHandshakerChannel,
       SslContext sslContext) {
     altsProtocolNegotiator =
-        AltsProtocolNegotiator.createClientNegotiator(altsFactory, handshakerChannelPool);
+        AltsProtocolNegotiator.createClientNegotiator(
+            altsFactory, handshakerChannelPool, lazyHandshakerChannel);
     tlsProtocolNegotiator = ProtocolNegotiators.tls(sslContext);
   }
 

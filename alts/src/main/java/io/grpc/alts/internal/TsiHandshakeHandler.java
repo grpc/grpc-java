@@ -172,9 +172,10 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       try {
         ctx.pipeline().remove(this);
         protector = handshaker.createFrameProtector(ctx.alloc());
-        TsiHandshakeCompletionEvent evt =
-            new TsiHandshakeCompletionEvent(
-                protector, handshaker.extractPeer(), handshaker.extractPeerObject());
+        TsiHandshakeCompletionEvent evt = new TsiHandshakeCompletionEvent(
+            protector,
+            handshaker.extractPeer(),
+            handshaker.extractPeerObject());
         protector = null;
         ctx.fireUserEventTriggered(evt);
         // No need to do anything with the in buffer, it will be re added to the pipeline when this

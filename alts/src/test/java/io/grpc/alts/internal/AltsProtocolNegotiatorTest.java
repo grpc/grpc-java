@@ -30,6 +30,7 @@ import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.internal.FixedObjectPool;
@@ -138,8 +139,8 @@ public class AltsProtocolNegotiatorTest {
     TsiHandshakerFactory handshakerFactory =
         new DelegatingTsiHandshakerFactory(FakeTsiHandshaker.clientHandshakerFactory()) {
           @Override
-          public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
-            return new DelegatingTsiHandshaker(super.newHandshaker(handshakerChannel, authority)) {
+          public TsiHandshaker newHandshaker(String authority) {
+            return new DelegatingTsiHandshaker(super.newHandshaker(authority)) {
               @Override
               public TsiPeer extractPeer() throws GeneralSecurityException {
                 return mockedTsiPeer;
@@ -154,8 +155,10 @@ public class AltsProtocolNegotiatorTest {
         };
     ManagedChannel fakeChannel = NettyChannelBuilder.forTarget("localhost:8080").build();
     ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
+    LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
     handler =
-        AltsProtocolNegotiator.createServerNegotiator(handshakerFactory, fakeChannelPool)
+        AltsProtocolNegotiator.createServerNegotiator(
+                handshakerFactory, fakeChannelPool, lazyFakeChannel)
             .newHandler(grpcHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler, userEventHandler);
   }
@@ -432,8 +435,8 @@ public class AltsProtocolNegotiatorTest {
     }
 
     @Override
-    public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
-      return delegate.newHandshaker(handshakerChannel, authority);
+    public TsiHandshaker newHandshaker(String authority) {
+      return delegate.newHandshaker(authority);
     }
   }
 

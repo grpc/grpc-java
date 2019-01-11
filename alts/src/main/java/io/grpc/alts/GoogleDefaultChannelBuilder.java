@@ -28,6 +28,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsClientOptions;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.AltsTsiHandshaker;
 import io.grpc.alts.internal.GoogleDefaultProtocolNegotiator;
 import io.grpc.alts.internal.HandshakerServiceGrpc;
@@ -36,6 +37,7 @@ import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
@@ -97,17 +99,20 @@ public final class GoogleDefaultChannelBuilder
 
     @Override
     public GoogleDefaultProtocolNegotiator buildProtocolNegotiator() {
+      final ObjectPool<Channel> handshakerChannelPool =
+          SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
+      final LazyChannel lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
       TsiHandshakerFactory altsHandshakerFactory =
           new TsiHandshakerFactory() {
             @Override
-            public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
+            public TsiHandshaker newHandshaker(String authority) {
               AltsClientOptions handshakerOptions =
                   new AltsClientOptions.Builder()
                       .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
                       .setTargetName(authority)
                       .build();
               return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(handshakerChannel), handshakerOptions);
+                  HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
             }
           };
       SslContext sslContext;
@@ -118,9 +123,7 @@ public final class GoogleDefaultChannelBuilder
       }
       return negotiatorForTest =
           new GoogleDefaultProtocolNegotiator(
-              altsHandshakerFactory,
-              SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
-              sslContext);
+              altsHandshakerFactory, handshakerChannelPool, lazyHandshakerChannel, sslContext);
     }
   }
 

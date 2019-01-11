@@ -59,18 +59,13 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
   /** Creates a negotiator used for ALTS client. */
   public static AltsProtocolNegotiator createClientNegotiator(
       final TsiHandshakerFactory handshakerFactory,
-      final ObjectPool<Channel> handshakerChannelPool) {
+      final ObjectPool<Channel> handshakerChannelPool,
+      final LazyChannel lazyHandshakerChannel) {
     final class ClientAltsProtocolNegotiator extends AltsProtocolNegotiator {
-
-      private Channel handshakerChannel;
 
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-        if (handshakerChannel == null) {
-          handshakerChannel = handshakerChannelPool.getObject();
-        }
-        TsiHandshaker handshaker =
-            handshakerFactory.newHandshaker(handshakerChannel, grpcHandler.getAuthority());
+        TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
             new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
@@ -80,7 +75,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Client ProtocolNegotiator Closed");
-        handshakerChannelPool.returnObject(handshakerChannel);
+        handshakerChannelPool.returnObject(lazyHandshakerChannel.get());
       }
     }
 
@@ -90,18 +85,13 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
   /** Creates a negotiator used for ALTS server. */
   public static AltsProtocolNegotiator createServerNegotiator(
       final TsiHandshakerFactory handshakerFactory,
-      final ObjectPool<Channel> handshakerChannelPool) {
+      final ObjectPool<Channel> handshakerChannelPool,
+      final LazyChannel lazyHandshakerChannel) {
     final class ServerAltsProtocolNegotiator extends AltsProtocolNegotiator {
-
-      private Channel handshakerChannel;
 
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-        if (handshakerChannel == null) {
-          handshakerChannel = handshakerChannelPool.getObject();
-        }
-        TsiHandshaker handshaker =
-            handshakerFactory.newHandshaker(handshakerChannel, /*authority=*/ null);
+        TsiHandshaker handshaker = handshakerFactory.newHandshaker(/*authority=*/ null);
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
             new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
@@ -111,11 +101,32 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Server ProtocolNegotiator Closed");
-        handshakerChannelPool.returnObject(handshakerChannel);
+        handshakerChannelPool.returnObject(lazyHandshakerChannel.get());
       }
     }
 
     return new ServerAltsProtocolNegotiator();
+  }
+
+  /** Channel created from a channel pool lazily. */
+  public static class LazyChannel {
+    private ObjectPool<Channel> channelPool;
+    private Channel channel;
+
+    public LazyChannel(ObjectPool<Channel> channelPool) {
+      this.channelPool = channelPool;
+    }
+
+    /**
+     * On the first call, it gets a channel from the channel pool. On the remaining calls, it
+     * returns the cached channel.
+     */
+    public synchronized Channel get() {
+      if (channel == null) {
+        channel = channelPool.getObject();
+      }
+      return channel;
+    }
   }
 
   /** Buffers all writes until the ALTS handshake is complete. */

@@ -16,17 +16,11 @@
 
 package io.grpc.alts.internal;
 
-import io.grpc.Channel;
 import javax.annotation.Nullable;
 
 /** Factory that manufactures instances of {@link TsiHandshaker}. */
 public interface TsiHandshakerFactory {
 
-  /**
-   * Creates a new handshaker.
-   *
-   * @param handshakerChannel the shared channel to the handshaker service.
-   * @param authority the destination that the channel connects to.
-   */
-  TsiHandshaker newHandshaker(@Nullable Channel handshakerChannel, @Nullable String authority);
+  /** Creates a new handshaker. */
+  TsiHandshaker newHandshaker(@Nullable String authority);
 }

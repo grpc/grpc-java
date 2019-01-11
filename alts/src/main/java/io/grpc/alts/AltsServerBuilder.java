@@ -35,6 +35,7 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsHandshakerOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.AltsTsiHandshaker;
 import io.grpc.alts.internal.HandshakerServiceGrpc;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil;
@@ -197,17 +198,19 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
       }
     }
 
+    final LazyChannel lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
     delegate.protocolNegotiator(
         AltsProtocolNegotiator.createServerNegotiator(
             new TsiHandshakerFactory() {
               @Override
-              public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
+              public TsiHandshaker newHandshaker(String authority) {
                 return AltsTsiHandshaker.newServer(
-                    HandshakerServiceGrpc.newStub(handshakerChannel),
+                    HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()),
                     new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
               }
             },
-            handshakerChannelPool));
+            handshakerChannelPool,
+            lazyHandshakerChannel));
     return delegate.build();
   }
 

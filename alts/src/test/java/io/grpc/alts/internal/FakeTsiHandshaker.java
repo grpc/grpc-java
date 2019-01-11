@@ -19,7 +19,6 @@ package io.grpc.alts.internal;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.base.Preconditions;
-import io.grpc.Channel;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.netty.buffer.ByteBufAllocator;
 import java.nio.ByteBuffer;
@@ -38,7 +37,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   private static final TsiHandshakerFactory clientHandshakerFactory =
       new TsiHandshakerFactory() {
         @Override
-        public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
+        public TsiHandshaker newHandshaker(String authority) {
           return new FakeTsiHandshaker(true);
         }
       };
@@ -46,7 +45,7 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   private static final TsiHandshakerFactory serverHandshakerFactory =
       new TsiHandshakerFactory() {
         @Override
-        public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
+        public TsiHandshaker newHandshaker(String authority) {
           return new FakeTsiHandshaker(false);
         }
       };
@@ -84,11 +83,11 @@ public class FakeTsiHandshaker implements TsiHandshaker {
   }
 
   public static TsiHandshaker newFakeHandshakerClient() {
-    return clientHandshakerFactory.newHandshaker(null, null);
+    return clientHandshakerFactory.newHandshaker(null);
   }
 
   public static TsiHandshaker newFakeHandshakerServer() {
-    return serverHandshakerFactory.newHandshaker(null, null);
+    return serverHandshakerFactory.newHandshaker(null);
   }
 
   protected FakeTsiHandshaker(boolean isClient) {

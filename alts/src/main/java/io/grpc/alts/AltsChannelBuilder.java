@@ -30,6 +30,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.alts.internal.AltsClientOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.AltsTsiHandshaker;
 import io.grpc.alts.internal.HandshakerServiceGrpc;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil;
@@ -145,10 +146,11 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
     @Override
     public AltsProtocolNegotiator buildProtocolNegotiator() {
       final ImmutableList<String> targetServiceAccounts = targetServiceAccountsBuilder.build();
+      final LazyChannel lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
       TsiHandshakerFactory altsHandshakerFactory =
           new TsiHandshakerFactory() {
             @Override
-            public TsiHandshaker newHandshaker(Channel handshakerChannel, String authority) {
+            public TsiHandshaker newHandshaker(String authority) {
               AltsClientOptions handshakerOptions =
                   new AltsClientOptions.Builder()
                       .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
@@ -156,12 +158,12 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
                       .setTargetName(authority)
                       .build();
               return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(handshakerChannel), handshakerOptions);
+                  HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
             }
           };
       return negotiatorForTest =
           AltsProtocolNegotiator.createClientNegotiator(
-              altsHandshakerFactory, handshakerChannelPool);
+              altsHandshakerFactory, handshakerChannelPool, lazyHandshakerChannel);
     }
   }
 
