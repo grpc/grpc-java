@@ -58,9 +58,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
   /** Creates a negotiator used for ALTS client. */
   public static AltsProtocolNegotiator createClientNegotiator(
-      final TsiHandshakerFactory handshakerFactory,
-      final ObjectPool<Channel> handshakerChannelPool,
-      final LazyChannel lazyHandshakerChannel) {
+      final TsiHandshakerFactory handshakerFactory, final LazyChannel lazyHandshakerChannel) {
     final class ClientAltsProtocolNegotiator extends AltsProtocolNegotiator {
 
       @Override
@@ -75,7 +73,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Client ProtocolNegotiator Closed");
-        handshakerChannelPool.returnObject(lazyHandshakerChannel.get());
+        lazyHandshakerChannel.close();
       }
     }
 
@@ -84,9 +82,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
   /** Creates a negotiator used for ALTS server. */
   public static AltsProtocolNegotiator createServerNegotiator(
-      final TsiHandshakerFactory handshakerFactory,
-      final ObjectPool<Channel> handshakerChannelPool,
-      final LazyChannel lazyHandshakerChannel) {
+      final TsiHandshakerFactory handshakerFactory, final LazyChannel lazyHandshakerChannel) {
     final class ServerAltsProtocolNegotiator extends AltsProtocolNegotiator {
 
       @Override
@@ -101,7 +97,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
       @Override
       public void close() {
         logger.finest("ALTS Server ProtocolNegotiator Closed");
-        handshakerChannelPool.returnObject(lazyHandshakerChannel.get());
+        lazyHandshakerChannel.close();
       }
     }
 
@@ -110,7 +106,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
   /** Channel created from a channel pool lazily. */
   public static class LazyChannel {
-    private ObjectPool<Channel> channelPool;
+    private final ObjectPool<Channel> channelPool;
     private Channel channel;
 
     public LazyChannel(ObjectPool<Channel> channelPool) {
@@ -118,14 +114,21 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
     }
 
     /**
-     * On the first call, it gets a channel from the channel pool. On the remaining calls, it
-     * returns the cached channel.
+     * If channel is null, gets a channel from the channel pool, otherwise, returns the cached
+     * channel.
      */
     public synchronized Channel get() {
       if (channel == null) {
         channel = channelPool.getObject();
       }
       return channel;
+    }
+
+    /** Returns the cached channel to the channel pool. */
+    public synchronized void close() {
+      if (channel != null) {
+        channelPool.returnObject(channel);
+      }
     }
   }
 

@@ -209,7 +209,6 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
                     new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
               }
             },
-            handshakerChannelPool,
             lazyHandshakerChannel));
     return delegate.build();
   }

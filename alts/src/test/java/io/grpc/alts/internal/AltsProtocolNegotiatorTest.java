@@ -157,8 +157,7 @@ public class AltsProtocolNegotiatorTest {
     ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
     LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
     handler =
-        AltsProtocolNegotiator.createServerNegotiator(
-                handshakerFactory, fakeChannelPool, lazyFakeChannel)
+        AltsProtocolNegotiator.createServerNegotiator(handshakerFactory, lazyFakeChannel)
             .newHandler(grpcHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler, userEventHandler);
   }

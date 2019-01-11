@@ -163,7 +163,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
           };
       return negotiatorForTest =
           AltsProtocolNegotiator.createClientNegotiator(
-              altsHandshakerFactory, handshakerChannelPool, lazyHandshakerChannel);
+              altsHandshakerFactory, lazyHandshakerChannel);
     }
   }
 

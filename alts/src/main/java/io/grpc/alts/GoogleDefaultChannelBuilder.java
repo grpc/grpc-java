@@ -37,7 +37,6 @@ import io.grpc.alts.internal.TsiHandshaker;
 import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
@@ -99,9 +98,9 @@ public final class GoogleDefaultChannelBuilder
 
     @Override
     public GoogleDefaultProtocolNegotiator buildProtocolNegotiator() {
-      final ObjectPool<Channel> handshakerChannelPool =
-          SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
-      final LazyChannel lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
+      final LazyChannel lazyHandshakerChannel =
+          new LazyChannel(
+              SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL));
       TsiHandshakerFactory altsHandshakerFactory =
           new TsiHandshakerFactory() {
             @Override
@@ -123,7 +122,7 @@ public final class GoogleDefaultChannelBuilder
       }
       return negotiatorForTest =
           new GoogleDefaultProtocolNegotiator(
-              altsHandshakerFactory, handshakerChannelPool, lazyHandshakerChannel, sslContext);
+              altsHandshakerFactory, lazyHandshakerChannel, sslContext);
     }
   }
 
