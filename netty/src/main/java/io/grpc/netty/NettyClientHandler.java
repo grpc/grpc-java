@@ -36,7 +36,6 @@ import io.grpc.internal.InUseStateAggregator;
 import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2ClientHeadersDecoder;
-import io.grpc.netty.NettyClientTransport.WriteBufferingAndExceptionHandler;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;

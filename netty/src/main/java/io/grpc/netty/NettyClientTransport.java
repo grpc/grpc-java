@@ -31,7 +31,6 @@ import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.internal.ClientStream;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.FailingClientStream;
@@ -44,26 +43,20 @@ import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
-import java.util.ArrayDeque;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
@@ -412,148 +405,5 @@ class NettyClientTransport implements ConnectionClientTransport {
       return shutdownStatus;
     }
     return Utils.statusFromThrowable(t);
-  }
-
-  /**
-   * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
-   * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
-   * i.e.  before it's active or the TLS Handshake is complete.
-   */
-  static final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
-
-    private final Queue<ChannelWrite> bufferedWrites = new ArrayDeque<>();
-    private final ChannelHandler next;
-    private boolean writing;
-    private boolean flushRequested;
-    private Throwable failCause;
-
-
-    WriteBufferingAndExceptionHandler(ChannelHandler next) {
-      this.next = next;
-    }
-
-    @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      ctx.pipeline().addBefore(ctx.name(), null, next);
-      super.handlerAdded(ctx);
-    }
-
-    /**
-     * If this channel becomes inactive, then notify all buffered writes that we failed.
-     */
-    @Override
-    public void channelInactive(ChannelHandlerContext ctx) {
-      StatusRuntimeException unavailable =
-          unavailableException(
-              "Connection broken while performing protocol negotiation ("
-                  + ctx.pipeline().first() + ')');
-      failWrites(unavailable);
-    }
-
-    @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-      Status status = Utils.statusFromThrowable(cause);
-      failWrites(status.asRuntimeException());
-      if (ctx.channel().isActive()) {
-        ctx.close();
-      }
-    }
-
-    /**
-     * Buffers the write until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} is
-     * called, or we have somehow failed. If we have already failed in the past, then the write
-     * will fail immediately.
-     */
-    @Override
-    @SuppressWarnings("FutureReturnValueIgnored")
-    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
-      if (failCause != null) {
-        promise.setFailure(failCause);
-        ReferenceCountUtil.release(msg);
-      } else {
-        bufferedWrites.add(new ChannelWrite(msg, promise));
-      }
-    }
-
-    /**
-     * Calls to this method will not trigger an immediate flush. The flush will be deferred until
-     * {@link #writeBufferedAndRemove(ChannelHandlerContext)}.
-     */
-    @Override
-    public void flush(ChannelHandlerContext ctx) {
-      /**
-       * Swallowing any flushes is not only an optimization but also required
-       * for the SslHandler to work correctly. If the SslHandler receives multiple
-       * flushes while the handshake is still ongoing, then the handshake "randomly"
-       * times out. Not sure at this point why this is happening. Doing a single flush
-       * seems to work but multiple flushes don't ...
-       */
-      flushRequested = true;
-    }
-
-    /**
-     * If we are still performing protocol negotiation, then this will propagate failures to all
-     * buffered writes.
-     */
-    @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
-      StatusRuntimeException unavailable =
-          unavailableException(
-              "Connection closed while performing protocol negotiation ("
-                  + ctx.pipeline().first() + ')');
-      failWrites(unavailable);
-      super.close(ctx, future);
-    }
-
-    /**
-     * Propagate failures to all buffered writes.
-     */
-    @SuppressWarnings("FutureReturnValueIgnored")
-    private void failWrites(Throwable cause) {
-      if (failCause == null) {
-        failCause = cause;
-      }
-      while (!bufferedWrites.isEmpty()) {
-        ChannelWrite write = bufferedWrites.poll();
-        write.promise.setFailure(cause);
-        ReferenceCountUtil.release(write.msg);
-      }
-    }
-
-    @SuppressWarnings("FutureReturnValueIgnored")
-    final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
-      if (!ctx.channel().isActive() || writing) {
-        return;
-      }
-      // Make sure that method can't be reentered, so that the ordering
-      // in the queue can't be messed up.
-      writing = true;
-      while (!bufferedWrites.isEmpty()) {
-        ChannelWrite write = bufferedWrites.poll();
-        ctx.write(write.msg, write.promise);
-      }
-      if (flushRequested) {
-        ctx.flush();
-      }
-      // Removal has to happen last as the above writes will likely trigger
-      // new writes that have to be added to the end of queue in order to not
-      // mess up the ordering.
-      ctx.pipeline().remove(this);
-    }
-
-    private static StatusRuntimeException unavailableException(String msg) {
-      return Status.UNAVAILABLE.withDescription(msg).asRuntimeException();
-    }
-
-    private static final class ChannelWrite {
-      final Object msg;
-      final ChannelPromise promise;
-
-      ChannelWrite(Object msg, ChannelPromise promise) {
-        this.msg = msg;
-        this.promise = promise;
-      }
-    }
   }
 }
