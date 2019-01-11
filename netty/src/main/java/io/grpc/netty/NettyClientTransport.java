@@ -230,8 +230,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
     }
 
-    ChannelHandler bufferingHandler =
-        new WriteBufferingAndExceptionHandler(lifecycleManager, negotiationHandler);
+    ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
 
     /**
      * We don't use a ChannelInitializer in the client bootstrap because its "initChannel" method
@@ -275,7 +274,7 @@ class NettyClientTransport implements ConnectionClientTransport {
         if (!future.isSuccess()) {
           // Need to notify of this failure, because NettyClientHandler may not have been added to
           // the pipeline before the error occurred.
-          //lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
+          lifecycleManager.notifyTerminated(Utils.statusFromThrowable(future.cause()));
         }
       }
     });
@@ -429,11 +428,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     private boolean flushRequested;
     private Throwable failCause;
 
-    private final ClientTransportLifecycleManager lifecycleManager;
 
-    WriteBufferingAndExceptionHandler(
-        ClientTransportLifecycleManager lifecycleManager, ChannelHandler next) {
-      this.lifecycleManager = lifecycleManager;
+    WriteBufferingAndExceptionHandler( ChannelHandler next) {
       this.next = next;
     }
 
@@ -453,7 +449,6 @@ class NettyClientTransport implements ConnectionClientTransport {
               "Connection broken while performing protocol negotiation ("
                   + ctx.pipeline().first() + ')');
       failWrites(unavailable);
-      lifecycleManager.notifyTerminated(unavailable.getStatus());
     }
 
     @Override
@@ -461,10 +456,7 @@ class NettyClientTransport implements ConnectionClientTransport {
       Status status = Utils.statusFromThrowable(cause);
       failWrites(status.asRuntimeException());
       if (ctx.channel().isActive()) {
-        lifecycleManager.notifyShutdown(status);
         ctx.close();
-      } else {
-        lifecycleManager.notifyTerminated(status);
       }
     }
 
@@ -476,16 +468,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     @Override
     @SuppressWarnings("FutureReturnValueIgnored")
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
-      /**
-       * This check handles a race condition between Channel.write (in the calling thread) and the
-       * removal of this handler (in the event loop thread).
-       * The problem occurs in e.g. this sequence:
-       * 1) [caller thread] The write method identifies the context for this handler
-       * 2) [event loop] This handler removes itself from the pipeline
-       * 3) [caller thread] The write method delegates to the invoker to call the write method in
-       *    the event loop thread. When this happens, we identify that this handler has been
-       *    removed with "bufferedWrites == null".
-       */
       if (failCause != null) {
         promise.setFailure(failCause);
         ReferenceCountUtil.release(msg);
@@ -520,10 +502,7 @@ class NettyClientTransport implements ConnectionClientTransport {
           unavailableException(
               "Connection closed while performing protocol negotiation ("
                   + ctx.pipeline().first() + ')');
-      lifecycleManager.notifyShutdown(unavailable.getStatus());
-      if (ctx.channel().isActive()) { // This may be a notification that the socket was closed
-        failWrites(unavailable);
-      }
+      failWrites(unavailable);
       super.close(ctx, future);
     }
 

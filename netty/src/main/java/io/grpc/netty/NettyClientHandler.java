@@ -302,32 +302,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     return attributes;
   }
 
-  @Override
-  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
-      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
-        WriteBufferingAndExceptionHandler buffer =
-            (WriteBufferingAndExceptionHandler) entry.getValue();
-        buffer.writeBufferedAndRemove(ctx.pipeline().context(buffer));
-        break;
-      }
-    }
-    super.handlerAdded(ctx);
-  }
-
-  @Override
-  public void channelActive(ChannelHandlerContext ctx) throws Exception {
-    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
-      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
-        WriteBufferingAndExceptionHandler buffer =
-            (WriteBufferingAndExceptionHandler) entry.getValue();
-        buffer.writeBufferedAndRemove(ctx.pipeline().context(buffer));
-        break;
-      }
-    }
-    super.channelActive(ctx);
-  }
-
   /**
    * Handler for commands sent from the stream.
    */
@@ -400,7 +374,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-
   /**
    * Handler for an inbound HTTP/2 RST_STREAM frame, terminating a stream.
    */
@@ -427,15 +400,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     Status status = Status.UNAVAILABLE.withDescription("Transport closed for unknown reason");
     if (ctx.channel().isActive()) { // Ignore notification that the socket was closed
       lifecycleManager.notifyShutdown(status);
-    }
-
-    for (Entry<?, ChannelHandler> entry : ctx.pipeline()) {
-      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
-        WriteBufferingAndExceptionHandler buffer =
-            (WriteBufferingAndExceptionHandler) entry.getValue();
-        buffer.exceptionCaught(ctx.pipeline().context(buffer), status.asRuntimeException());
-        break;
-      }
     }
     super.close(ctx, promise);
   }
@@ -481,6 +445,15 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.attributes = attributes;
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
+    // Once protocol negotiator is complete, release all writes and remove the buffer.
+    for (Entry<?, ChannelHandler> entry : ctx().pipeline()) {
+      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
+        WriteBufferingAndExceptionHandler buffer =
+            (WriteBufferingAndExceptionHandler) entry.getValue();
+        buffer.writeBufferedAndRemove(ctx().pipeline().context(buffer));
+        break;
+      }
+    }
   }
 
   @Override
