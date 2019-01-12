@@ -24,10 +24,12 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
 import java.net.SocketAddress;
 import java.util.ArrayDeque;
+import java.util.List;
 import java.util.Queue;
 
 /**
@@ -60,7 +62,8 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   @Override
   public void channelInactive(ChannelHandlerContext ctx) {
     Status status = Status.UNAVAILABLE.withDescription(
-        "Connection closed while performing protocol negotiation for " + ctx.pipeline().first());
+        "Connection closed while performing protocol negotiation for "
+            + headHandlers(ctx.pipeline()));
     failWrites(status.asRuntimeException());
   }
 
@@ -135,13 +138,15 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise future) throws Exception {
     Status status = Status.UNAVAILABLE.withDescription(
-        "Connection closing while performing protocol negotiation for " + ctx.pipeline().first());
+        "Connection closing while performing protocol negotiation for "
+            + headHandlers(ctx.pipeline()));
     failWrites(status.asRuntimeException());
     super.close(ctx, future);
   }
 
   @SuppressWarnings("FutureReturnValueIgnored")
   final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
+    // TODO(carl-mastrangelo): remove the isActive check and just fail if not yet ready.
     if (!ctx.channel().isActive() || writing) {
       return;
     }
@@ -159,6 +164,25 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
     // new writes that have to be added to the end of queue in order to not
     // mess up the ordering.
     ctx.pipeline().remove(this);
+  }
+
+
+  private static String headHandlers(ChannelPipeline pipeline) {
+    List<String> names = pipeline.names();
+    int size = names.size();
+    StringBuilder sb = new StringBuilder();
+    sb.append("Handlers(");
+    if (size > 2) {
+      sb.append("...,");
+    }
+    if (size > 1) {
+      sb.append(names.get(size - 2)).append(',');
+    }
+    if (size > 0) {
+      sb.append(names.get(size - 1));
+    }
+    sb.append(')');
+    return sb.toString();
   }
 
   /**

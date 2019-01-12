@@ -104,7 +104,7 @@ public class WriteBufferingAndExceptionHandlerTest {
   public void channelInactiveFailuresPropagated() throws Exception {
     WriteBufferingAndExceptionHandler handler =
         new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
-    LocalAddress addr = new LocalAddress("bogus");
+    LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
         .channel(LocalChannel.class)
         .handler(handler)
@@ -139,7 +139,7 @@ public class WriteBufferingAndExceptionHandlerTest {
   public void channelCloseFailuresPropagated() throws Exception {
     WriteBufferingAndExceptionHandler handler =
         new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
-    LocalAddress addr = new LocalAddress("bogus");
+    LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
         .channel(LocalChannel.class)
         .handler(handler)
@@ -174,7 +174,7 @@ public class WriteBufferingAndExceptionHandlerTest {
   public void uncaughtExceptionFailuresPropagated() throws Exception {
     WriteBufferingAndExceptionHandler handler =
         new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
-    LocalAddress addr = new LocalAddress("bogus");
+    LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
         .channel(LocalChannel.class)
         .handler(handler)
@@ -229,7 +229,7 @@ public class WriteBufferingAndExceptionHandlerTest {
             promise.setSuccess();
           }
         });
-    LocalAddress addr = new LocalAddress("bogus");
+    LocalAddress addr = new LocalAddress("local");
     ChannelFuture cf = new Bootstrap()
         .channel(LocalChannel.class)
         .handler(handler)

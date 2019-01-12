@@ -396,9 +396,9 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
     logger.fine("Network channel being closed by the application.");
-    Status status = Status.UNAVAILABLE.withDescription("Transport closed for unknown reason");
     if (ctx.channel().isActive()) { // Ignore notification that the socket was closed
-      lifecycleManager.notifyShutdown(status);
+      lifecycleManager.notifyShutdown(
+          Status.UNAVAILABLE.withDescription("Transport closed for unknown reason"));
     }
     super.close(ctx, promise);
   }
@@ -445,13 +445,10 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
     // Once protocol negotiator is complete, release all writes and remove the buffer.
-    for (Entry<?, ChannelHandler> entry : ctx().pipeline()) {
-      if (entry.getValue() instanceof WriteBufferingAndExceptionHandler) {
-        WriteBufferingAndExceptionHandler buffer =
-            (WriteBufferingAndExceptionHandler) entry.getValue();
-        buffer.writeBufferedAndRemove(ctx().pipeline().context(buffer));
-        break;
-      }
+    ChannelHandlerContext handlerCtx =
+        ctx().pipeline().context(WriteBufferingAndExceptionHandler.class);
+    if (handlerCtx != null) {
+      ((WriteBufferingAndExceptionHandler) handlerCtx.handler()).writeBufferedAndRemove(handlerCtx);
     }
   }
 
