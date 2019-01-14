@@ -1,0 +1,52 @@
+load(":toolchain.bzl", "grpc_proto_toolchain")
+
+package(default_visibility = ["//visibility:public"])
+
+grpc_proto_toolchain(
+    name = "toolchain",
+    grpc_plugin = "//compiler:grpc_java_plugin",
+    grpc_plugin_opts = select({
+        "//protobuf-lite:android": ["lite"],
+        "//conditions:default": [],
+    }),
+    java_plugin = select({
+        "//protobuf-lite:android": "@com_google_protobuf_javalite//:protoc_gen_javalite",
+        "//conditions:default": None,
+    }),
+    output_prefix = select({
+        "//protobuf-lite:android": "lib{name}-grpc-lite",
+        "//conditions:default": "lib{name}-grpc",
+    }),
+    protoc = "@com_google_protobuf//:protoc",
+    single_jar = select({
+        "//protobuf-lite:android": True,
+        "//conditions:default": False,
+    }),
+    exports = [
+        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//stub",
+    ] + select({
+        "//protobuf-lite:android": ["@com_google_protobuf_javalite//:protobuf_java_lite"],
+        "//conditions:default": ["@com_google_protobuf//:protobuf_java"],
+    }),
+    runtime_deps = select({
+        "//protobuf-lite:android": ["@io_grpc_grpc_java//okhttp"],
+        "//conditions:default": ["@io_grpc_grpc_java//netty"],
+    }),
+    deps = [
+        "@com_google_errorprone_error_prone_annotations//jar",
+        "@com_google_guava_guava//jar",
+        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//stub",
+        "@javax_annotation_javax_annotation_api//jar",
+    ] + select({
+        "//protobuf-lite:android": [
+            "@com_google_protobuf_javalite//:protobuf_java_lite",
+            "@io_grpc_grpc_java//protobuf-lite",
+        ],
+        "//conditions:default": [
+            "@com_google_protobuf//:protobuf_java",
+            "@io_grpc_grpc_java//protobuf",
+        ],
+    }),
+)

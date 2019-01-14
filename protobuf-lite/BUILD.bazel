@@ -24,4 +24,5 @@ config_setting(
     values = {
         "crosstool_top": "//external:android/crosstool",
     },
+    visibility = ["//java_grpc_library:__pkg__"],
 )
