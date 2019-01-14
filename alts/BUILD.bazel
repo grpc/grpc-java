@@ -1,4 +1,4 @@
-load("//:java_grpc_library.bzl", "java_grpc_library")
+load("//java_grpc_library:def.bzl", "java_grpc_library")
 
 java_library(
     name = "alts_internal",
@@ -7,7 +7,6 @@ java_library(
     ]),
     deps = [
         ":handshaker_java_grpc",
-        ":handshaker_java_proto",
         "//core",
         "//core:internal",
         "//netty",
@@ -73,13 +72,7 @@ proto_library(
     ],
 )
 
-java_proto_library(
-    name = "handshaker_java_proto",
-    deps = [":handshaker_proto"],
-)
-
 java_grpc_library(
     name = "handshaker_java_grpc",
-    srcs = [":handshaker_proto"],
-    deps = [":handshaker_java_proto"],
+    deps = [":handshaker_proto"],
 )

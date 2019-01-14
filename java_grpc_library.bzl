@@ -90,6 +90,13 @@ def java_grpc_library(name, srcs, deps, flavor=None,
     visibility: (list) the visibility list
     **kwargs: Passed through to generated targets
   """
+
+  print("Deprecated. Please update your load path to @io_grpc_grpc_java//java_grpc_library:def.bzl "
+        + "for the new implementation which mirrors the native rule interface "
+        + "({repo}//{package})".format(
+            repo = native.repository_name(),
+            package = native.package_name(),
+        ))
   if flavor == None:
     flavor = "normal"
 
