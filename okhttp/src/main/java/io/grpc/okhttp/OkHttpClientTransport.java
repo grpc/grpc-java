@@ -27,10 +27,6 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.squareup.okhttp.Credentials;
-import com.squareup.okhttp.HttpUrl;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.internal.http.StatusLine;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Grpc;
@@ -90,6 +86,10 @@ import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import okhttp3.Credentials;
+import okhttp3.HttpUrl;
+import okhttp3.Request;
+import okhttp3.internal.http.StatusLine;
 import okio.Buffer;
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -585,7 +585,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
       // Prepare headers and request method line
       Request proxyRequest = createHttpProxyRequest(address, proxyUsername, proxyPassword);
-      HttpUrl url = proxyRequest.httpUrl();
+      HttpUrl url = proxyRequest.url();
       String requestLine = String.format("CONNECT %s:%d HTTP/1.1", url.host(), url.port());
 
       // Write request to socket
@@ -1063,7 +1063,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         in.require(length);
 
         Buffer buf = new Buffer();
-        buf.write(in.buffer(), length);
+        buf.write(in.getBuffer(), length);
         synchronized (lock) {
           stream.transportState().transportDataReceived(buf, inFinished);
         }

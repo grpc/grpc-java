@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 /*
- * Forked from OkHttp 2.5.0
+ * Forked from OkHttp 3.12.1
  */
 
 package io.grpc.okhttp.internal;
 
-import javax.net.ssl.SSLSocket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
- * Versions of TLS that can be offered when negotiating a secure socket. See
- * {@link SSLSocket#setEnabledProtocols}.
+ * Versions of TLS that can be offered when negotiating a secure socket. See {@link
+ * javax.net.ssl.SSLSocket#setEnabledProtocols}.
  */
 public enum TlsVersion {
+  TLS_1_3("TLSv1.3"), // 2016.
   TLS_1_2("TLSv1.2"), // 2008.
   TLS_1_1("TLSv1.1"), // 2006.
   TLS_1_0("TLSv1"),   // 1999.
@@ -34,12 +37,14 @@ public enum TlsVersion {
 
   final String javaName;
 
-  private TlsVersion(String javaName) {
+  TlsVersion(String javaName) {
     this.javaName = javaName;
   }
 
   public static TlsVersion forJavaName(String javaName) {
-    if ("TLSv1.2".equals(javaName)) {
+    if ("TLSv1.3".equals(javaName)) {
+      return TLS_1_3;
+    } else if ("TLSv1.2".equals(javaName)) {
       return TLS_1_2;
     } else if ("TLSv1.1".equals(javaName)) {
       return TLS_1_1;
@@ -49,6 +54,14 @@ public enum TlsVersion {
       return SSL_3_0;
     }
     throw new IllegalArgumentException("Unexpected TLS version: " + javaName);
+  }
+
+  static List<TlsVersion> forJavaNames(String... tlsVersions) {
+    List<TlsVersion> result = new ArrayList<>(tlsVersions.length);
+    for (String tlsVersion : tlsVersions) {
+      result.add(forJavaName(tlsVersion));
+    }
+    return Collections.unmodifiableList(result);
   }
 
   public String javaName() {
