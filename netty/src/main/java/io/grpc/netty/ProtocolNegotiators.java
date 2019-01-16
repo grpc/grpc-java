@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -29,6 +30,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -37,6 +39,7 @@ import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -374,17 +377,7 @@ public final class ProtocolNegotiators {
    * is active.
    */
   public static ProtocolNegotiator plaintext() {
-    return new PlaintextNegotiator();
-  }
-
-  static final class PlaintextNegotiator implements ProtocolNegotiator {
-    @Override
-    public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
-      return new BufferUntilChannelActiveHandler(handler);
-    }
-
-    @Override
-    public void close() {}
+    return new ProtocolNegotiators2.PlaintextProtocolNegotiator();
   }
 
   private static RuntimeException unavailableException(String msg) {

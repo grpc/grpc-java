@@ -30,6 +30,7 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
+import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
@@ -37,10 +38,14 @@ import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.DefaultEventLoop;
 import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.EventLoop;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
@@ -53,6 +58,8 @@ import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -60,10 +67,13 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.DisableOnDebug;
 import org.junit.rules.ExpectedException;
+import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -76,10 +86,13 @@ public class ProtocolNegotiatorsTest {
     @Override public void run() {}
   };
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(5);
+  private static final int TIMEOUT_SECONDS = 5;
+  @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
+  @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
+  private final EventLoop group = new DefaultEventLoop();
+  private Channel chan;
+  private Channel server;
 
   private GrpcHttp2ConnectionHandler grpcHandler = mock(GrpcHttp2ConnectionHandler.class);
 
@@ -97,6 +110,98 @@ public class ProtocolNegotiatorsTest {
         .ciphers(TestUtils.preferredTestCiphers(), SupportedCipherSuiteFilter.INSTANCE).build();
     engine = SSLContext.getDefault().createSSLEngine();
     engine.setUseClientMode(true);
+  }
+
+  @After
+  public void tearDown() {
+    if (server != null) {
+      server.close();
+    }
+    if (chan != null) {
+      chan.close();
+    }
+    group.shutdownGracefully();
+  }
+
+  @Test
+  public void waitUntilActiveHandler_handlerAdded() throws Exception {
+    final CountDownLatch latch = new CountDownLatch(1);
+
+    final WaitUntilActiveHandler handler =
+        new WaitUntilActiveHandler(new ChannelHandlerAdapter() {
+          @Override
+          public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+            assertTrue(ctx.channel().isActive());
+            latch.countDown();
+            super.handlerAdded(ctx);
+          }
+        });
+
+    ChannelHandler lateAddingHandler = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        ctx.pipeline().addLast(handler);
+        // do not propagate channelActive().
+      }
+    };
+
+    LocalAddress addr = new LocalAddress("local");
+    ChannelFuture cf = new Bootstrap()
+        .channel(LocalChannel.class)
+        .handler(lateAddingHandler)
+        .group(group)
+        .register();
+    chan = cf.channel();
+    cf.sync();
+    ChannelFuture sf = new ServerBootstrap()
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelHandlerAdapter() {})
+        .group(group)
+        .bind(addr);
+    server = sf.channel();
+    sf.sync();
+
+    assertEquals(1, latch.getCount());
+
+    chan.connect(addr).sync();
+    assertTrue(latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+    assertNull(chan.pipeline().context(WaitUntilActiveHandler.class));
+  }
+
+  @Test
+  public void waitUntilActiveHandler_channelActive() throws Exception {
+    final CountDownLatch latch = new CountDownLatch(1);
+    WaitUntilActiveHandler handler =
+        new WaitUntilActiveHandler(new ChannelHandlerAdapter() {
+          @Override
+          public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+            assertTrue(ctx.channel().isActive());
+            latch.countDown();
+            super.handlerAdded(ctx);
+          }
+        });
+
+    LocalAddress addr = new LocalAddress("local");
+    ChannelFuture cf = new Bootstrap()
+        .channel(LocalChannel.class)
+        .handler(handler)
+        .group(group)
+        .register();
+    chan = cf.channel();
+    cf.sync();
+    ChannelFuture sf = new ServerBootstrap()
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelHandlerAdapter() {})
+        .group(group)
+        .bind(addr);
+    server = sf.channel();
+    sf.sync();
+
+    assertEquals(1, latch.getCount());
+
+    chan.connect(addr).sync();
+    assertTrue(latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
+    assertNull(chan.pipeline().context(WaitUntilActiveHandler.class));
   }
 
   @Test
