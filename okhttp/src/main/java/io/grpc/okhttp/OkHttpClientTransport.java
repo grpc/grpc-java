@@ -493,10 +493,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           if (proxy == null) {
             sock = new Socket(address.getAddress(), address.getPort());
           } else {
-            if (proxy.getProxyAddress() == null) {
-              // This should never happen, case added for readability
-              throw new AssertionError();
-            } else if (proxy.getProxyAddress() instanceof InetSocketAddress) {
+            if (proxy.getProxyAddress() instanceof InetSocketAddress) {
               sock = createHttpProxySocket(
                   address,
                   (InetSocketAddress)proxy.getProxyAddress(),
@@ -504,8 +501,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
                   proxy.getPassword()
               );
             } else {
-              throw new Error(
-                  "Unsupported SocketAddress implementation " + proxy.getProxyAddress());
+              throw Status.INTERNAL.withDescription(
+                  "Unsupported SocketAddress implementation " + proxy.getProxyAddress().getClass())
+                  .asException();
             }
           }
           if (sslSocketFactory != null) {
