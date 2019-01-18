@@ -44,7 +44,7 @@ os:
 jdk:
   - oraclejdk8
   - oraclejdk9
-  - openjdk11
+  - oraclejdk11
 
 notifications:
   email: false
