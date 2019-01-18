@@ -240,8 +240,7 @@ public abstract class AbstractClientStream extends AbstractStream
      * #listenerClosed} because there may still be messages buffered to deliver to the application.
      */
     private boolean statusReported;
-    private Metadata trailers;
-    private Status trailerStatus;
+    private boolean deframerClosedWithPartialMessage;
 
     protected TransportState(
         int maxMessageSize,
@@ -270,17 +269,7 @@ public abstract class AbstractClientStream extends AbstractStream
     @Override
     public void deframerClosed(boolean hasPartialMessage) {
       deframerClosed = true;
-
-      if (trailerStatus != null) {
-        if (trailerStatus.isOk() && hasPartialMessage) {
-          trailerStatus = Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame");
-          trailers = new Metadata();
-        }
-        transportReportStatus(trailerStatus, false, trailers);
-      } else {
-        checkState(statusReported, "status should have been reported on deframer closed");
-      }
-
+      deframerClosedWithPartialMessage = hasPartialMessage;
       if (deframerClosedTask != null) {
         deframerClosedTask.run();
         deframerClosedTask = null;
@@ -387,10 +376,8 @@ public abstract class AbstractClientStream extends AbstractStream
             new Object[]{status, trailers});
         return;
       }
-      this.trailers = trailers;
       statsTraceCtx.clientInboundTrailers(trailers);
-      trailerStatus = status;
-      closeDeframer(false);
+      transportReportStatus(status, false, trailers);
     }
 
     /**
@@ -461,6 +448,10 @@ public abstract class AbstractClientStream extends AbstractStream
         Status status, RpcProgress rpcProgress, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
+        if (deframerClosedWithPartialMessage && status.isOk()) {
+          status = Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame");
+          trailers = new Metadata();
+        }
         statsTraceCtx.streamClosed(status);
         listener().closed(status, rpcProgress, trailers);
         if (getTransportTracer() != null) {
