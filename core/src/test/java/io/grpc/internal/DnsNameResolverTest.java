@@ -94,7 +94,10 @@ public class DnsNameResolverTest {
 
   private static final int DEFAULT_PORT = 887;
   private static final Attributes NAME_RESOLVER_PARAMS =
-      Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT).build();
+      Attributes.newBuilder()
+          .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT)
+          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
+          .build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
@@ -852,7 +855,7 @@ public class DnsNameResolverTest {
   public void shouldUseJndi_falseIfDisabledForLocalhost() {
     boolean enableJndi = true;
     boolean enableJndiLocalhost = false;
-    
+
     assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "localhost"));
     assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "LOCALHOST"));
   }

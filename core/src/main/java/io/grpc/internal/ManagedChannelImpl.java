@@ -535,7 +535,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.nameResolverFactory = builder.getNameResolverFactory();
-    this.proxyDetector = checkNotNull(builder.proxyDetector, "proxyDetector");
+    this.proxyDetector =
+        builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.nameResolverParams = addProxyToAttributes(this.proxyDetector,
         checkNotNull(builder.getNameResolverParams(), "nameResolverParams"));
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
