@@ -426,7 +426,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
           disabled = true;
           logger.log(
-              Level.SEVERE, "Health-check with {0} is disabled: {1}",
+              Level.SEVERE, "Health-check with {0} is disabled. Server returned: {1}",
               new Object[] {subchannel.getAllAddresses(), status});
           subchannelLogger.log(ChannelLogLevel.ERROR, "Health-check disabled: {0}", status);
           subchannelLogger.log(ChannelLogLevel.INFO, "{0} (no health-check)", rawState);
