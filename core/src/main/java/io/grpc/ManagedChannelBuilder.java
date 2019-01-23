@@ -529,7 +529,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * the default proxy detector will be used.
    *
    * @return this
-   * @since 1.18.0
+   * @since 1.19.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
   public T proxyDetector(ProxyDetector proxyDetector) {
