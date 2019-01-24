@@ -241,7 +241,7 @@ public abstract class AbstractClientStream extends AbstractStream
      */
     private boolean statusReported;
     /** True if the status to report (set via {@link #transportReportStatus}) is OK. */
-    private boolean statusToReportIsOk;
+    private boolean statusReportedIsOk;
 
     protected TransportState(
         int maxMessageSize,
@@ -271,7 +271,7 @@ public abstract class AbstractClientStream extends AbstractStream
     public void deframerClosed(boolean hasPartialMessage) {
       checkState(statusReported, "status should have been reported on deframer closed");
       deframerClosed = true;
-      if (statusToReportIsOk && hasPartialMessage) {
+      if (statusReportedIsOk && hasPartialMessage) {
         transportReportStatus(
             Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame"),
             true,
@@ -431,7 +431,7 @@ public abstract class AbstractClientStream extends AbstractStream
         return;
       }
       statusReported = true;
-      statusToReportIsOk = status.isOk();
+      statusReportedIsOk = status.isOk();
       onStreamDeallocated();
 
       if (deframerClosed) {
