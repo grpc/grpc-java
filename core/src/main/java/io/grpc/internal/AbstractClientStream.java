@@ -240,7 +240,8 @@ public abstract class AbstractClientStream extends AbstractStream
      * #listenerClosed} because there may still be messages buffered to deliver to the application.
      */
     private boolean statusReported;
-    private boolean deframerClosedWithPartialMessage;
+    /** True if the status to report (set via {@link #transportReportStatus}) is OK. */
+    private boolean statusToReportIsOk;
 
     protected TransportState(
         int maxMessageSize,
@@ -268,8 +269,14 @@ public abstract class AbstractClientStream extends AbstractStream
 
     @Override
     public void deframerClosed(boolean hasPartialMessage) {
+      checkState(statusReported, "status should have been reported on deframer closed");
       deframerClosed = true;
-      deframerClosedWithPartialMessage = hasPartialMessage;
+      if (statusToReportIsOk && hasPartialMessage) {
+        transportReportStatus(
+            Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame"),
+            true,
+            new Metadata());
+      }
       if (deframerClosedTask != null) {
         deframerClosedTask.run();
         deframerClosedTask = null;
@@ -406,14 +413,16 @@ public abstract class AbstractClientStream extends AbstractStream
      *        {@link ClientStreamListener#closed(Status, RpcProgress, Metadata)}
      *        will receive
      * @param stopDelivery if {@code true}, interrupts any further delivery of inbound messages that
-     *        may already be queued up in the deframer. If {@code false}, the listener will be
-     *        notified immediately after all currently completed messages in the deframer have been
-     *        delivered to the application.
+     *        may already be queued up in the deframer and overrides any previously queued status.
+     *        If {@code false}, the listener will be notified immediately after all currently
+     *        completed messages in the deframer have been delivered to the application.
      * @param trailers new instance of {@code Trailers}, either empty or those returned by the
      *        server
      */
     public final void transportReportStatus(
-        final Status status, final RpcProgress rpcProgress, boolean stopDelivery,
+        final Status status,
+        final RpcProgress rpcProgress,
+        boolean stopDelivery,
         final Metadata trailers) {
       checkNotNull(status, "status");
       checkNotNull(trailers, "trailers");
@@ -422,6 +431,7 @@ public abstract class AbstractClientStream extends AbstractStream
         return;
       }
       statusReported = true;
+      statusToReportIsOk = status.isOk();
       onStreamDeallocated();
 
       if (deframerClosed) {
@@ -448,10 +458,6 @@ public abstract class AbstractClientStream extends AbstractStream
         Status status, RpcProgress rpcProgress, Metadata trailers) {
       if (!listenerClosed) {
         listenerClosed = true;
-        if (deframerClosedWithPartialMessage && status.isOk()) {
-          status = Status.INTERNAL.withDescription("Encountered end-of-stream mid-frame");
-          trailers = new Metadata();
-        }
         statsTraceCtx.streamClosed(status);
         listener().closed(status, rpcProgress, trailers);
         if (getTransportTracer() != null) {
