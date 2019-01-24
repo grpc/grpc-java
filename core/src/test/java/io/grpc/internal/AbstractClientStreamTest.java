@@ -353,7 +353,7 @@ public class AbstractClientStreamTest {
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(mockListener)
         .closed(statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
-    assertSame(Status.Code.OK, statusCaptor.getValue().getCode());
+    assertTrue(statusCaptor.getValue().isOk());
   }
 
   @Test

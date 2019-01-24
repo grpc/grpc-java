@@ -500,7 +500,7 @@ public class OkHttpClientTransportTest {
     stream.request(1);
     listener.waitUntilStreamClosed();
 
-    assertThat(listener.status.getCode()).isEqualTo(Code.OK);
+    assertTrue(listener.status.isOk());
     shutdownAndVerify();
   }
 
