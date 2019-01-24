@@ -240,7 +240,7 @@ public abstract class AbstractClientStream extends AbstractStream
      * #listenerClosed} because there may still be messages buffered to deliver to the application.
      */
     private boolean statusReported;
-    /** True if the status to report (set via {@link #transportReportStatus}) is OK. */
+    /** True if the status reported (set via {@link #transportReportStatus}) is OK. */
     private boolean statusReportedIsOk;
 
     protected TransportState(
