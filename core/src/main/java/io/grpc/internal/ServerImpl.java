@@ -56,6 +56,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -105,7 +106,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   private final Object lock = new Object();
   @GuardedBy("lock") private boolean transportServersTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
-  @GuardedBy("lock") private final Collection<ServerTransport> transports = new HashSet<>();
+  @GuardedBy("lock") private final Set<ServerTransport> transports = new HashSet<>();
 
   private final Context rootContext;
 
@@ -335,7 +336,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         if (executor != null) {
           executor = executorPool.returnObject(executor);
         }
-        // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
       }
     }
