@@ -229,7 +229,7 @@ dependencies {
 
 If not using the Netty transport (or you are unable to use OpenSSL for some reason) another alternative is to use the JDK for TLS.
 
-Starting with release 9, Java has built-in support for ALPN ([check this issue](https://bugs.openjdk.java.net/browse/JDK-8051498)) so we need to use the [Jetty-ALPN](https://github.com/jetty-project/jetty-alpn) (or [Jetty-NPN](https://github.com/jetty-project/jetty-npn) if on Java < 8) bootclasspath extension for earlier OpenJDK releases. To do this, add an `Xbootclasspath` JVM option referencing the path to the Jetty `alpn-boot` jar.
+Note that starting with JDK-9, Java has built-in support for ALPN ([this issue resolved for JDK-9](https://bugs.openjdk.java.net/browse/JDK-8051498)) so you don't need to use an external ALPN library. However earlier Java releases did not have this support so you will need to use the [Jetty-ALPN](https://github.com/jetty-project/jetty-alpn) (or [Jetty-NPN](https://github.com/jetty-project/jetty-npn) if on Java < 8) bootclasspath extension for these older JDK releases. To do this, add an `Xbootclasspath` JVM option referencing the path to the Jetty `alpn-boot` jar.
 
 ```sh
 java -Xbootclasspath/p:/path/to/jetty/alpn/extension.jar ...
