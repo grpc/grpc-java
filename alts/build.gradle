@@ -94,7 +94,7 @@ publishing {
                     netty.artifactId*.value = 'grpc-netty-shaded'
                     netty.version*.value = "[" + netty.version.text() + "]"
                 }
-	        }
+            }
         }
     }
 }

@@ -421,8 +421,7 @@ subprojects {
                     }
                     def releaseUrl = stagingUrl
                     def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
-                    //url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
-                    url = "http://jihuncho0.svl.corp.google.com:8081/repository/jihun_staging/"
+                    url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
                 }
             }
             mavenLocal()
@@ -435,7 +434,7 @@ subprojects {
     }
 
     publishMavenJavaPublicationToMavenRepository.onlyIf {
-        !name.contains("grpc-gae-interop-testing")
+        !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
     }
 
     // At a test failure, log the stack trace to the console so that we don't
