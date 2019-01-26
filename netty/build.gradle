@@ -33,9 +33,3 @@ test {
     // Allow testing Jetty ALPN in TlsTest
     jvmArgs "-javaagent:" + configurations.alpnagent.asPath
 }
-
-jmh {
-    // Workaround
-    // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
-    includeTests = true
-}

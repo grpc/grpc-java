@@ -46,14 +46,6 @@ shadowJar {
     mergeServiceFiles()
 }
 
-// This is a hack to have shadow plugin modify the uploadArchives POM's
-// dependencies. If we delete the uploadShadow task, then the plugin will no
-// longer modify the POM. This probably can break horribly with parallel build,
-// but that's broken anyway with install/uploadArchives
-uploadShadow.repositories.addAll(uploadArchives.repositories)
-// And then we use a further hack to share that POM with install
-install.repositories.mavenInstaller.pom = uploadArchives.repositories.mavenDeployer.pom
-
 task testShadow(type: Test) {
     testClassesDirs = sourceSets.testShadow.output.classesDirs
     classpath = sourceSets.testShadow.runtimeClasspath

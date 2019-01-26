@@ -82,14 +82,19 @@ shadowJar {
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
 }
 
-[
-    install.repositories.mavenInstaller,
-    uploadArchives.repositories.mavenDeployer,
-]*.pom*.whenConfigured { pom ->
-    def netty = pom.dependencies.find {dep -> dep.artifactId == 'grpc-netty'}
-    // Swap our dependency to grpc-netty-shaded. Projects depending on this via
-    // project(':grpc-alts') will still be using the non-shaded form.
-    netty.artifactId = "grpc-netty-shaded"
-    // Depend on specific version of grpc-netty-shaded because it is unstable API
-    netty.version = "[" + netty.version + "]"
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            pom.withXml {
+                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
+                // project(':grpc-alts') will still be using the non-shaded form.
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-netty'
+                }.each() { netty ->
+                    netty.artifactId*.value = 'grpc-netty-shaded'
+                    netty.version*.value = "[" + netty.version.text() + "]"
+                }
+	        }
+        }
+    }
 }

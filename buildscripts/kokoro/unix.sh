@@ -46,7 +46,7 @@ export CXXFLAGS="-I/tmp/protobuf/include"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
-  ./gradlew assemble generateTestProto install $GRADLE_FLAGS
+  ./gradlew assemble generateTestProto publishToMavenLocal $GRADLE_FLAGS
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
