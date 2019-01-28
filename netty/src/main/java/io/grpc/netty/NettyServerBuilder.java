@@ -22,6 +22,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
@@ -118,6 +119,14 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   @CheckReturnValue
   private NettyServerBuilder(SocketAddress address) {
     this.listenAddresses.add(address);
+  }
+
+
+  // TODO(notcarl): expose this API at a higher level.
+  @VisibleForTesting
+  NettyServerBuilder addPort(int port) {
+    this.listenAddresses.add(new InetSocketAddress(port));
+    return this;
   }
 
   /**

@@ -216,6 +216,7 @@ public class ServerImplTest {
   public void multiport() throws Exception {
     final CountDownLatch starts = new CountDownLatch(2);
     final CountDownLatch shutdowns = new CountDownLatch(2);
+
     final class Serv extends SimpleServer {
       @Override
       public void start(ServerListener listener) throws IOException {
@@ -229,6 +230,7 @@ public class ServerImplTest {
         shutdowns.countDown();
       }
     }
+
     SimpleServer transportServer1 = new Serv();
     SimpleServer transportServer2 = new Serv();
     assertNull(server);
@@ -236,6 +238,7 @@ public class ServerImplTest {
     builder.executorPool = executorPool;
     server = new ServerImpl(
         builder, ImmutableList.of(transportServer1, transportServer2), SERVER_CONTEXT);
+
     server.start();
     assertTrue(starts.await(1, TimeUnit.SECONDS));
     assertEquals(2, shutdowns.getCount());
