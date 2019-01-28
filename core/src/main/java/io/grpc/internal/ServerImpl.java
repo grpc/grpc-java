@@ -107,6 +107,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   @GuardedBy("lock") private boolean transportServersTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
   @GuardedBy("lock") private final Set<ServerTransport> transports = new HashSet<>();
+  @GuardedBy("lock") private int activeTransportServers;
 
   private final Context rootContext;
 
@@ -169,9 +170,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       checkState(!shutdown, "Shutting down");
       // Start and wait for any ports to actually be bound.
 
+      ServerListenerImpl listener = new ServerListenerImpl();
       for (InternalServer ts : transportServers) {
-        ServerListenerImpl listener = new ServerListenerImpl(ts);
         ts.start(listener);
+        activeTransportServers++;
       }
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
@@ -343,10 +345,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
   private final class ServerListenerImpl implements ServerListener {
 
-    ServerListenerImpl(InternalServer transportServer) {
-
-    }
-
     @Override
     public ServerTransportListener transportCreated(ServerTransport transport) {
       synchronized (lock) {
@@ -362,6 +360,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
       synchronized (lock) {
+        activeTransportServers--;
+        if (activeTransportServers != 0) {
+          return;
+        }
+
         // transports collection can be modified during shutdown(), even if we hold the lock, due
         // to reentrancy.
         copiedTransports = new ArrayList<>(transports);
