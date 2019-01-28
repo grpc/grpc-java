@@ -313,7 +313,7 @@ public final class ServiceConfigUtil {
           {"xds" :
             {
               "balancerName": "balancer1",
-              "childPolicy": [...,]
+              "childPolicy": [...],
               "fallbackPolicy": [...],
             }
           },
