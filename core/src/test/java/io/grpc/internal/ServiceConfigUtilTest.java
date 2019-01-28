@@ -42,6 +42,20 @@ public class ServiceConfigUtilTest {
 
   @SuppressWarnings("unchecked")
   @Test
+  public void getBalancerNameFromXdsConfig() throws Exception {
+    String lbConfig = "{\"xds_experimental\" : { "
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
+        + "}}";
+    assertEquals(
+        "dns:///balancer.example.com:8080",
+        ServiceConfigUtil.getBalancerNameFromXdsConfig(
+            (Map<String, Object>) JsonParser.parse(lbConfig)));
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void getChildPolicyFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -61,6 +75,20 @@ public class ServiceConfigUtilTest {
 
   @SuppressWarnings("unchecked")
   @Test
+  public void getChildPolicyFromXdsConfig_null() throws Exception {
+    String lbConfig = "{\"xds_experimental\" : { "
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
+        + "}}";
+
+    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
+        (Map<String, Object>) JsonParser.parse(lbConfig));
+
+    assertThat(childPolicies).isNull();
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
   public void getFallbackPolicyFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -76,5 +104,19 @@ public class ServiceConfigUtilTest {
         (Map<String, Object>) JsonParser.parse(lbConfig));
 
     assertThat(childPolicies).containsExactly(expectedFallbackPolicy1, expectedFallbackPolicy2);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void getFallbackPolicyFromXdsConfig_null() throws Exception {
+    String lbConfig = "{\"xds_experimental\" : { "
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
+        + "}}";
+
+    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
+        (Map<String, Object>) JsonParser.parse(lbConfig));
+
+    assertThat(childPolicies).isNull();
   }
 }
