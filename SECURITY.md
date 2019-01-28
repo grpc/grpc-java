@@ -92,6 +92,7 @@ supported platforms. For Maven:
       <groupId>io.netty</groupId>
       <artifactId>netty-tcnative-boringssl-static</artifactId>
       <version>2.0.20.Final</version> <!-- See table for correct version -->
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
 ```
@@ -101,7 +102,7 @@ And for Gradle:
 ```gradle
 dependencies {
   // See table for correct version
-  compile 'io.netty:netty-tcnative-boringssl-static:2.0.20.Final'
+  runtime 'io.netty:netty-tcnative-boringssl-static:2.0.20.Final'
 }
 ```
 
@@ -140,6 +141,7 @@ the dependency.
       <artifactId>netty-tcnative</artifactId>
       <version>2.0.20.Final</version> <!-- see table for correct version -->
       <classifier>${tcnative.classifier}</classifier>
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
 
@@ -205,7 +207,7 @@ if (osdetector.os == "linux" && osdetector.release.isLike("fedora")) {
 }
 
 dependencies {
-    compile 'io.netty:netty-tcnative:2.0.20.Final:' + tcnative_classifier
+    runtime 'io.netty:netty-tcnative:2.0.20.Final:' + tcnative_classifier
 }
 ```
 
