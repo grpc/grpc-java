@@ -251,9 +251,8 @@ class CronetClientStream extends AbstractClientStream {
     @GuardedBy("lock")
     @Override
     protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
-      if (stream != null) {
-        stream.cancel();
-      }
+      Preconditions.checkNotNull(self.stream, "stream must not be null");
+      stream.cancel();
       transportReportStatus(status, stopDelivery, trailers);
     }
 
@@ -273,10 +272,8 @@ class CronetClientStream extends AbstractClientStream {
     @GuardedBy("lock")
     @Override
     public void bytesRead(int processedBytes) {
+      Preconditions.checkNotNull(self.stream, "stream must not be null");
       bytesPendingProcess -= processedBytes;
-      if (stream == null) {
-        return;
-      }
       if (bytesPendingProcess == 0 && !readClosed) {
         if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
           Log.v(LOG_TAG, "BidirectionalStream.read");
@@ -399,14 +396,10 @@ class CronetClientStream extends AbstractClientStream {
     public void onResponseHeadersReceived(BidirectionalStream stream, UrlResponseInfo info) {
       if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
         Log.v(LOG_TAG, "onResponseHeadersReceived. Header=" + info.getAllHeadersAsList());
+        Log.v(LOG_TAG, "BidirectionalStream.read");
       }
       reportHeaders(info.getAllHeadersAsList(), false);
-      if (stream != null) {
-        if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
-          Log.v(LOG_TAG, "BidirectionalStream.read");
-        }
-        stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
-      }
+      stream.read(ByteBuffer.allocateDirect(READ_BUFFER_CAPACITY));
     }
 
     @Override
