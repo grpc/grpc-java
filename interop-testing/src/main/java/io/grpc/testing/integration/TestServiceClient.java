@@ -16,6 +16,9 @@
 
 package io.grpc.testing.integration;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
@@ -301,6 +304,13 @@ public class TestServiceClient {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
         tester.perRpcCreds(jsonKey, credentialsStream, oauthScope);
+        break;
+      }
+
+      case GOOGLE_DEFAULT_CREDENTIALS: {
+        assertNotNull(customCredentialsType);
+        assertEquals(customCredentialsType, "google_default_credentials");
+        tester.googleDefaultCredentials(defaultServiceAccount);
         break;
       }
 
