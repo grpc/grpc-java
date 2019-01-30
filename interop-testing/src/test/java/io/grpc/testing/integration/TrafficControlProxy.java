@@ -222,6 +222,7 @@ public final class TrafficControlProxy {
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
       next.close();
+      // TODO(carl-mastrangelo): maybe fail the promises.
       super.channelInactive(ctx);
     }
 
@@ -261,21 +262,29 @@ public final class TrafficControlProxy {
           }
           int writableBytes = writableBytes(absNanoTime);
           if (writableBytes > 0) {
-            int toWrite = Math.min(writableBytes, desiredBytes);
+            final int toWrite = Math.min(writableBytes, desiredBytes);
             availableBytes = Math.max(availableBytes - toWrite, 0);
             absLastWriteNanos = absNanoTime;
+            ChannelFuture flushed;
             if (toWrite == desiredBytes) {
-              ctx.writeAndFlush(peekedWrite.content(), peekedWrite.promise);
+              flushed = ctx.writeAndFlush(peekedWrite.content(), peekedWrite.promise);
               bufsToWrite.poll();
               peekedWrite = bufsToWrite.peek();
             } else {
-              ctx.writeAndFlush(peekedWrite.content().readRetainedSlice(toWrite))
+              flushed = ctx.writeAndFlush(peekedWrite.content().readRetainedSlice(toWrite))
                   .addListener(new LogAndClose());
             }
-            currentBloat -= toWrite;
-            if (currentBloat < maxBloat) {
-              next.read();
-            }
+            flushed.addListener(new ChannelFutureListener() {
+              @Override
+              public void operationComplete(ChannelFuture future) {
+                if (future.isSuccess()) {
+                  currentBloat -= toWrite;
+                  if (currentBloat < maxBloat) {
+                    next.read();
+                  }
+                }
+              }
+            });
             continue;
           }
         }
@@ -286,15 +295,15 @@ public final class TrafficControlProxy {
 
     private int writableBytes(long absNanos) {
       int baseBytes = availableBytes;
+      int additionalBytesPerSecond = 0;
       if (absNanos > absLastWriteNanos) {
         long nanosSinceLastWrite = Math.min(absNanos - absLastWriteNanos, NANOS_PER_SECOND);
         assert Long.MAX_VALUE / maxBytesPerSecond > nanosSinceLastWrite;
         long nanoBytesSinceLastWrite = nanosSinceLastWrite * maxBytesPerSecond;
-        int additionalBytesPerSecond = (int) Math.min(
+        additionalBytesPerSecond = (int) Math.min(
             nanoBytesSinceLastWrite / NANOS_PER_SECOND, Integer.MAX_VALUE - baseBytes);
-        baseBytes += additionalBytesPerSecond;
       }
-      return baseBytes;
+      return baseBytes + additionalBytesPerSecond;
     }
   }
 
@@ -318,7 +327,7 @@ public final class TrafficControlProxy {
     bindFuture.channel().close().addListener(new ChannelFutureListener() {
 
       @Override
-      public void operationComplete(ChannelFuture future) throws Exception {
+      public void operationComplete(ChannelFuture future) {
 
         if (future.isSuccess()) {
           for (ChannelFuture cf : connectFutures) {
