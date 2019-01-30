@@ -10,14 +10,14 @@ description = "gRPC: Netty Shaded"
 sourceSets { testShadow {} }
 
 dependencies {
-    compile project(':grpc-netty')
-    runtime libraries.netty_tcnative
+    compileOnly project(':grpc-netty')
+    compileOnly libraries.netty_tcnative
     testShadowCompile files(shadowJar),
             configurations.shadow,
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
-    shadow project(':grpc-core')
+    runtime project(':grpc-core')
 }
 
 artifacts { // We want uploadArchives to handle the shadowJar; we don't care about
@@ -28,7 +28,6 @@ jar {
     // Must use a different classifier to avoid conflicting with shadowJar
     classifier = 'original'
 }
-configurations.archives.artifacts.removeAll { it.classifier == "original" }
 
 shadowJar {
     classifier = null
@@ -44,6 +43,16 @@ shadowJar {
     relocate 'META-INF/native/libnetty', 'META-INF/native/libio_grpc_netty_shaded_netty'
     relocate 'META-INF/native/netty', 'META-INF/native/io_grpc_netty_shaded_netty'
     mergeServiceFiles()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            artifact shadowJar
+
+            artifacts.removeAll { it.classifier == 'original'}
+        }
+    }
 }
 
 task testShadow(type: Test) {
