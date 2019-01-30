@@ -251,7 +251,7 @@ class CronetClientStream extends AbstractClientStream {
     @GuardedBy("lock")
     @Override
     protected void http2ProcessingFailed(Status status, boolean stopDelivery, Metadata trailers) {
-      Preconditions.checkNotNull(self.stream, "stream must not be null");
+      Preconditions.checkNotNull(stream, "stream must not be null");
       stream.cancel();
       transportReportStatus(status, stopDelivery, trailers);
     }
@@ -272,7 +272,7 @@ class CronetClientStream extends AbstractClientStream {
     @GuardedBy("lock")
     @Override
     public void bytesRead(int processedBytes) {
-      Preconditions.checkNotNull(self.stream, "stream must not be null");
+      Preconditions.checkNotNull(stream, "stream must not be null");
       bytesPendingProcess -= processedBytes;
       if (bytesPendingProcess == 0 && !readClosed) {
         if (Log.isLoggable(LOG_TAG, Log.VERBOSE)) {
