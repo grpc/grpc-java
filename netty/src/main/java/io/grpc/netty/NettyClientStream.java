@@ -24,6 +24,7 @@ import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import com.google.common.base.Preconditions;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
+import io.grpc.CallOptions;
 import io.grpc.InternalKnownTransport;
 import io.grpc.InternalMethodDescriptor;
 import io.grpc.Metadata;
@@ -70,12 +71,14 @@ class NettyClientStream extends AbstractClientStream {
       AsciiString scheme,
       AsciiString userAgent,
       StatsTraceContext statsTraceCtx,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      CallOptions callOptions) {
     super(
         new NettyWritableBufferAllocator(channel.alloc()),
         statsTraceCtx,
         transportTracer,
         headers,
+        callOptions,
         useGet(method));
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
@@ -111,7 +114,6 @@ class NettyClientStream extends AbstractClientStream {
   }
 
   private class Sink implements AbstractClientStream.Sink {
-    @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
     @Override
     public void writeHeaders(Metadata headers, byte[] requestPayload) {
       // Convert the headers into Netty HTTP/2 headers.
@@ -152,7 +154,8 @@ class NettyClientStream extends AbstractClientStream {
       };
 
       // Write the command requesting the creation of the stream.
-      writeQueue.enqueue(new CreateStreamCommand(http2Headers, transportState(), get),
+      writeQueue.enqueue(
+          new CreateStreamCommand(http2Headers, transportState(), shouldBeCountedForInUse(), get),
           !method.getType().clientSendsOneMessage() || get).addListener(failureListener);
     }
 
@@ -209,6 +212,8 @@ class NettyClientStream extends AbstractClientStream {
   /** This should only called from the transport thread. */
   public abstract static class TransportState extends Http2ClientStreamTransportState
       implements StreamIdHolder {
+    private static final int NON_EXISTENT_ID = -1;
+
     private final NettyClientHandler handler;
     private final EventLoop eventLoop;
     private int id;
@@ -227,12 +232,27 @@ class NettyClientStream extends AbstractClientStream {
 
     @Override
     public int id() {
+      // id should be positive
       return id;
     }
 
     public void setId(int id) {
-      checkArgument(id > 0, "id must be positive");
+      checkArgument(id > 0, "id must be positive %s", id);
+      checkState(this.id == 0, "id has been previously set: %s", this.id);
       this.id = id;
+    }
+
+    /**
+     * Marks the stream state as if it had never existed.  This can happen if the stream is
+     * cancelled after it is created, but before it has been started.
+     */
+    void setNonExistent() {
+      checkState(this.id == 0, "Id has been previously set: %s", this.id);
+      this.id = NON_EXISTENT_ID;
+    }
+
+    boolean isNonExistent() {
+      return this.id == NON_EXISTENT_ID;
     }
 
     /**

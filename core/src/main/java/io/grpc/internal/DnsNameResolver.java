@@ -19,12 +19,16 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -42,7 +46,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -68,10 +72,10 @@ final class DnsNameResolver extends NameResolver {
   private static final String SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY = "serviceConfig";
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
-  static final String SERVICE_CONFIG_PREFIX = "_grpc_config=";
+  static final String SERVICE_CONFIG_PREFIX = "grpc_config=";
   private static final Set<String> SERVICE_CONFIG_CHOICE_KEYS =
       Collections.unmodifiableSet(
-          new HashSet<String>(
+          new HashSet<>(
               Arrays.asList(
                   SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY,
                   SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY,
@@ -85,6 +89,8 @@ final class DnsNameResolver extends NameResolver {
 
   private static final String JNDI_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
+  private static final String JNDI_LOCALHOST_PROPERTY =
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
   private static final String JNDI_SRV_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "false");
   private static final String JNDI_TXT_PROPERTY =
@@ -96,6 +102,8 @@ final class DnsNameResolver extends NameResolver {
    * <p>Default value is -1 (cache forever) if security manager is installed. If security manager is
    * not installed, the ttl value is {@code null} which falls back to {@link
    * #DEFAULT_NETWORK_CACHE_TTL_SECONDS gRPC default value}.
+   *
+   * <p>For android, gRPC doesn't attempt to cache; this property value will be ignored.
    */
   @VisibleForTesting
   static final String NETWORKADDRESS_CACHE_TTL_PROPERTY = "networkaddress.cache.ttl";
@@ -106,10 +114,11 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
   @VisibleForTesting
+  static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
+  @VisibleForTesting
   static boolean enableSrv = Boolean.parseBoolean(JNDI_SRV_PROPERTY);
   @VisibleForTesting
   static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
-
 
   private static final ResourceResolverFactory resourceResolverFactory =
       getResourceResolverFactory(DnsNameResolver.class.getClassLoader());
@@ -123,28 +132,26 @@ final class DnsNameResolver extends NameResolver {
   private final Random random = new Random();
 
   private volatile AddressResolver addressResolver = JdkAddressResolver.INSTANCE;
-  private final AtomicReference<ResourceResolver> resourceResolver =
-      new AtomicReference<ResourceResolver>();
+  private final AtomicReference<ResourceResolver> resourceResolver = new AtomicReference<>();
 
   private final String authority;
   private final String host;
   private final int port;
-  private final Resource<ExecutorService> executorResource;
-  private final long networkAddressCacheTtlNanos;
-  private final Stopwatch stopwatch;
+  private final Resource<Executor> executorResource;
   @GuardedBy("this")
   private boolean shutdown;
   @GuardedBy("this")
-  private ExecutorService executor;
+  private Executor executor;
   @GuardedBy("this")
   private boolean resolving;
   @GuardedBy("this")
   private Listener listener;
-  private ResolutionResults cachedResolutionResults;
+
+  private final Runnable resolveRunnable;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
-      Resource<ExecutorService> executorResource, ProxyDetector proxyDetector,
-      Stopwatch stopwatch) {
+      Resource<Executor> executorResource, ProxyDetector proxyDetector,
+      Stopwatch stopwatch, boolean isAndroid) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -167,8 +174,7 @@ final class DnsNameResolver extends NameResolver {
       port = nameUri.getPort();
     }
     this.proxyDetector = proxyDetector;
-    this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
-    this.networkAddressCacheTtlNanos = getNetworkAddressCacheTtlNanos();
+    this.resolveRunnable = new Resolve(this, stopwatch, getNetworkAddressCacheTtlNanos(isAndroid));
   }
 
   @Override
@@ -190,115 +196,136 @@ final class DnsNameResolver extends NameResolver {
     resolve();
   }
 
-  private final Runnable resolutionRunnable = new Runnable() {
-      @Override
-      public void run() {
-        Listener savedListener;
-        synchronized (DnsNameResolver.this) {
-          if (shutdown) {
-            return;
-          }
-          boolean resourceRefreshRequired = cachedResolutionResults == null
-              || networkAddressCacheTtlNanos == 0
-              || (networkAddressCacheTtlNanos > 0
-                  && stopwatch.elapsed(TimeUnit.NANOSECONDS) > networkAddressCacheTtlNanos);
-          if (!resourceRefreshRequired) {
-            return;
-          }
-          savedListener = listener;
-          resolving = true;
-        }
-        try {
-          InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
-          ProxyParameters proxy;
-          try {
-            proxy = proxyDetector.proxyFor(destination);
-          } catch (IOException e) {
-            savedListener.onError(
-                Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-            return;
-          }
-          if (proxy != null) {
-            EquivalentAddressGroup server =
-                new EquivalentAddressGroup(
-                    new ProxySocketAddress(destination, proxy));
-            savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
-            return;
-          }
+  @VisibleForTesting
+  static final class Resolve implements Runnable {
 
-          ResolutionResults resolutionResults;
-          try {
-            ResourceResolver resourceResolver = null;
-            if (enableJndi) {
-              resourceResolver = getResourceResolver();
-            }
-            resolutionResults =
-                resolveAll(addressResolver, resourceResolver, enableSrv, enableTxt, host);
-            cachedResolutionResults = resolutionResults;
-            if (networkAddressCacheTtlNanos > 0) {
-              stopwatch.reset().start();
-            }
-          } catch (Exception e) {
-            savedListener.onError(
-                Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-            return;
-          }
-          // Each address forms an EAG
-          List<EquivalentAddressGroup> servers = new ArrayList<>();
-          for (InetAddress inetAddr : resolutionResults.addresses) {
-            servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
-          }
-          servers.addAll(resolutionResults.balancerAddresses);
+    private final DnsNameResolver resolver;
+    private final Stopwatch stopwatch;
+    private final long cacheTtlNanos;
+    private ResolutionResults cachedResolutionResults = null;
 
-          Attributes.Builder attrs = Attributes.newBuilder();
-          if (!resolutionResults.txtRecords.isEmpty()) {
-            Map<String, Object> serviceConfig = null;
-            try {
-              for (Map<String, Object> possibleConfig :
-                  parseTxtResults(resolutionResults.txtRecords)) {
-                try {
-                  serviceConfig =
-                      maybeChooseServiceConfig(possibleConfig, random, getLocalHostname());
-                } catch (RuntimeException e) {
-                  logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
-                }
-                if (serviceConfig != null) {
-                  break;
-                }
-              }
-            } catch (RuntimeException e) {
-              logger.log(Level.WARNING, "Can't parse service Configs", e);
-            }
-            if (serviceConfig != null) {
-              attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig);
-            }
-          } else {
-            logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
-          }
-          savedListener.onAddresses(servers, attrs.build());
-        } finally {
-          synchronized (DnsNameResolver.this) {
-            resolving = false;
-          }
-        }
+    Resolve(DnsNameResolver resolver, Stopwatch stopwatch, long cacheTtlNanos) {
+      this.resolver = resolver;
+      this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
+      this.cacheTtlNanos = cacheTtlNanos;
+    }
+
+    @Override
+    public void run() {
+      if (logger.isLoggable(Level.FINER)) {
+        logger.finer("Attempting DNS resolution of " + resolver.host);
       }
-    };
-
-  /** Returns value of network address cache ttl property. */
-  private static long getNetworkAddressCacheTtlNanos() {
-    String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
-    long cacheTtl = DEFAULT_NETWORK_CACHE_TTL_SECONDS;
-    if (cacheTtlPropertyValue != null) {
+      Listener savedListener;
+      synchronized (resolver) {
+        if (resolver.shutdown || !cacheRefreshRequired()) {
+          return;
+        }
+        savedListener = resolver.listener;
+        resolver.resolving = true;
+      }
       try {
-        cacheTtl = Long.parseLong(cacheTtlPropertyValue);
-      } catch (NumberFormatException e) {
-        logger.log(
-            Level.WARNING,
-            "Property({0}) valid is not valid number format({1}), fall back to default({2})",
-            new Object[] {NETWORKADDRESS_CACHE_TTL_PROPERTY, cacheTtlPropertyValue, cacheTtl});
+        resolveInternal(savedListener);
+      } finally {
+        synchronized (resolver) {
+          resolver.resolving = false;
+        }
       }
     }
-    return cacheTtl > 0 ? TimeUnit.SECONDS.toNanos(cacheTtl) : cacheTtl;
+
+    private boolean cacheRefreshRequired() {
+      return cachedResolutionResults == null
+          || cacheTtlNanos == 0
+          || (cacheTtlNanos > 0 && stopwatch.elapsed(TimeUnit.NANOSECONDS) > cacheTtlNanos);
+    }
+
+    @VisibleForTesting
+    void resolveInternal(Listener savedListener) {
+      InetSocketAddress destination =
+          InetSocketAddress.createUnresolved(resolver.host, resolver.port);
+      ProxyParameters proxy;
+      try {
+        proxy = resolver.proxyDetector.proxyFor(destination);
+      } catch (IOException e) {
+        savedListener.onError(
+            Status.UNAVAILABLE.withDescription("Unable to resolve host " + resolver.host)
+                .withCause(e));
+        return;
+      }
+      if (proxy != null) {
+        if (logger.isLoggable(Level.FINER)) {
+          logger.finer("Using proxy " + proxy.getProxyAddress() + " for " + resolver.host);
+        }
+        EquivalentAddressGroup server =
+            new EquivalentAddressGroup(
+                new ProxySocketAddress(destination, proxy));
+        savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
+        return;
+      }
+
+      ResolutionResults resolutionResults;
+      try {
+        ResourceResolver resourceResolver = null;
+        if (shouldUseJndi(enableJndi, enableJndiLocalhost, resolver.host)) {
+          resourceResolver = resolver.getResourceResolver();
+        }
+        resolutionResults = resolveAll(
+            resolver.addressResolver,
+            resourceResolver,
+            enableSrv,
+            enableTxt,
+            resolver.host);
+        cachedResolutionResults = resolutionResults;
+        if (cacheTtlNanos > 0) {
+          stopwatch.reset().start();
+        }
+        if (logger.isLoggable(Level.FINER)) {
+          logger.finer("Found DNS results " + resolutionResults + " for " + resolver.host);
+        }
+      } catch (Exception e) {
+        savedListener.onError(
+            Status.UNAVAILABLE.withDescription("Unable to resolve host " + resolver.host)
+                .withCause(e));
+        return;
+      }
+      // Each address forms an EAG
+      List<EquivalentAddressGroup> servers = new ArrayList<>();
+      for (InetAddress inetAddr : resolutionResults.addresses) {
+        servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, resolver.port)));
+      }
+      servers.addAll(resolutionResults.balancerAddresses);
+      if (servers.isEmpty()) {
+        savedListener.onError(Status.UNAVAILABLE.withDescription(
+            "No DNS backend or balancer addresses found for " + resolver.host));
+        return;
+      }
+
+      Attributes.Builder attrs = Attributes.newBuilder();
+      if (!resolutionResults.txtRecords.isEmpty()) {
+        Map<String, Object> serviceConfig = null;
+        try {
+          for (Map<String, Object> possibleConfig :
+              parseTxtResults(resolutionResults.txtRecords)) {
+            try {
+              serviceConfig =
+                  maybeChooseServiceConfig(possibleConfig, resolver.random, getLocalHostname());
+            } catch (RuntimeException e) {
+              logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
+            }
+            if (serviceConfig != null) {
+              break;
+            }
+          }
+        } catch (RuntimeException e) {
+          logger.log(Level.WARNING, "Can't parse service Configs", e);
+        }
+        if (serviceConfig != null) {
+          attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig);
+        }
+      } else {
+        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{resolver.host});
+      }
+      savedListener.onAddresses(servers, attrs.build());
+    }
   }
 
   @GuardedBy("this")
@@ -306,7 +333,7 @@ final class DnsNameResolver extends NameResolver {
     if (resolving || shutdown) {
       return;
     }
-    executor.execute(resolutionRunnable);
+    executor.execute(resolveRunnable);
   }
 
   @Override
@@ -368,7 +395,9 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     try {
-      if (addressesException != null && balancerAddressesException != null) {
+      if (addressesException != null
+          && (balancerAddressesException != null || balancerAddresses.isEmpty())) {
+        Throwables.throwIfUnchecked(addressesException);
         throw new RuntimeException(addressesException);
       }
     } finally {
@@ -446,6 +475,31 @@ final class DnsNameResolver extends NameResolver {
   }
 
   /**
+   * Returns value of network address cache ttl property if not Android environment. For android,
+   * DnsNameResolver does not cache the dns lookup result.
+   */
+  private static long getNetworkAddressCacheTtlNanos(boolean isAndroid) {
+    if (isAndroid) {
+      // on Android, ignore dns cache.
+      return 0;
+    }
+
+    String cacheTtlPropertyValue = System.getProperty(NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    long cacheTtl = DEFAULT_NETWORK_CACHE_TTL_SECONDS;
+    if (cacheTtlPropertyValue != null) {
+      try {
+        cacheTtl = Long.parseLong(cacheTtlPropertyValue);
+      } catch (NumberFormatException e) {
+        logger.log(
+            Level.WARNING,
+            "Property({0}) valid is not valid number format({1}), fall back to default({2})",
+            new Object[] {NETWORKADDRESS_CACHE_TTL_PROPERTY, cacheTtlPropertyValue, cacheTtl});
+      }
+    }
+    return cacheTtl > 0 ? TimeUnit.SECONDS.toNanos(cacheTtl) : cacheTtl;
+  }
+
+  /**
    * Determines if a given Service Config choice applies, and if so, returns it.
    *
    * @see <a href="https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md">
@@ -454,7 +508,6 @@ final class DnsNameResolver extends NameResolver {
    * @return The service config object or {@code null} if this choice does not apply.
    */
   @Nullable
-  @SuppressWarnings("BetaApi") // Verify isn't all that beta
   @VisibleForTesting
   static Map<String, Object> maybeChooseServiceConfig(
       Map<String, Object> choice, Random random, String hostname) {
@@ -517,11 +570,25 @@ final class DnsNameResolver extends NameResolver {
       this.balancerAddresses =
           Collections.unmodifiableList(checkNotNull(balancerAddresses, "balancerAddresses"));
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("addresses", addresses)
+          .add("txtRecords", txtRecords)
+          .add("balancerAddresses", balancerAddresses)
+          .toString();
+    }
   }
 
   @VisibleForTesting
   void setAddressResolver(AddressResolver addressResolver) {
     this.addressResolver = addressResolver;
+  }
+
+  @VisibleForTesting
+  void setResourceResolver(ResourceResolver resourceResolver) {
+    this.resourceResolver.set(resourceResolver);
   }
 
   /**
@@ -625,5 +692,29 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     return localHostname;
+  }
+
+  @VisibleForTesting
+  static boolean shouldUseJndi(boolean jndiEnabled, boolean jndiLocalhostEnabled, String target) {
+    if (!jndiEnabled) {
+      return false;
+    }
+    if ("localhost".equalsIgnoreCase(target)) {
+      return jndiLocalhostEnabled;
+    }
+    // Check if this name looks like IPv6
+    if (target.contains(":")) {
+      return false;
+    }
+    // Check if this might be IPv4.  Such addresses have no alphabetic characters.  This also
+    // checks the target is empty.
+    boolean alldigits = true;
+    for (int i = 0; i < target.length(); i++) {
+      char c = target.charAt(i);
+      if (c != '.') {
+        alldigits &= (c >= '0' && c <= '9');
+      }
+    }
+    return !alldigits;
   }
 }

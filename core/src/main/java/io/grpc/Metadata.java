@@ -104,6 +104,8 @@ public final class Metadata {
         }
       };
 
+  static final BaseEncoding BASE64_ENCODING_OMIT_PADDING = BaseEncoding.base64().omitPadding();
+
   /**
    * Constructor called by the transport layer when it receives binary metadata. Metadata will
    * mutate the passed in array.
@@ -455,7 +457,6 @@ public final class Metadata {
     }
   }
 
-  @SuppressWarnings("BetaApi") // BaseEncoding is stable in Guava 20.0
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder("Metadata(");
@@ -466,7 +467,7 @@ public final class Metadata {
       String headerName = new String(name(i), US_ASCII);
       sb.append(headerName).append('=');
       if (headerName.endsWith(BINARY_HEADER_SUFFIX)) {
-        sb.append(BaseEncoding.base64().encode(value(i)));
+        sb.append(BASE64_ENCODING_OMIT_PADDING.encode(value(i)));
       } else {
         String headerValue = new String(value(i), US_ASCII);
         sb.append(headerValue);
@@ -667,8 +668,9 @@ public final class Metadata {
     /**
      * Returns true if the two objects are both Keys, and their names match (case insensitive).
      */
+    @SuppressWarnings("EqualsGetClass")
     @Override
-    public boolean equals(Object o) {
+    public final boolean equals(Object o) {
       if (this == o) {
         return true;
       }
@@ -680,7 +682,7 @@ public final class Metadata {
     }
 
     @Override
-    public int hashCode() {
+    public final int hashCode() {
       return name.hashCode();
     }
 

@@ -22,18 +22,14 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.InternalLogId;
-import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.ObjectPool;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 
 /**
@@ -42,38 +38,26 @@ import javax.annotation.Nullable;
  * <p>Optionally, when requested by the naming system, will delegate the work to a local pick-first
  * or round-robin balancer.
  */
-class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
+class GrpclbLoadBalancer extends LoadBalancer {
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
   private final SubchannelPool subchannelPool;
-  private final ObjectPool<ScheduledExecutorService> timerServicePool;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
-  private ScheduledExecutorService timerService;
-
   @Nullable
   private GrpclbState grpclbState;
 
   GrpclbLoadBalancer(
       Helper helper,
       SubchannelPool subchannelPool,
-      ObjectPool<ScheduledExecutorService> timerServicePool,
       TimeProvider time,
       BackoffPolicy.Provider backoffPolicyProvider) {
     checkNotNull(helper, "helper");
-    this.timerServicePool = checkNotNull(timerServicePool, "timerServicePool");
-    this.timerService = checkNotNull(timerServicePool.getObject(), "timerService");
     checkNotNull(time, "time provider");
     checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, timerService);
+    this.subchannelPool.init(helper);
     grpclbState =
-        new GrpclbState(helper, subchannelPool, time, timerService, backoffPolicyProvider, logId);
-  }
-
-  @Override
-  public InternalLogId getLogId() {
-    return logId;
+        new GrpclbState(helper, subchannelPool, time, backoffPolicyProvider);
   }
 
   @Override
@@ -113,7 +97,6 @@ class GrpclbLoadBalancer extends LoadBalancer implements InternalWithLogId {
   @Override
   public void shutdown() {
     resetStates();
-    timerService = timerServicePool.returnObject(timerService);
   }
 
   @Override

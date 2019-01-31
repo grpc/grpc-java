@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -37,11 +38,18 @@ import com.google.common.testing.FakeTicker;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
+import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
 import io.grpc.internal.DnsNameResolver.ResolutionResults;
 import io.grpc.internal.DnsNameResolver.ResourceResolver;
 import io.grpc.internal.DnsNameResolver.ResourceResolverFactory;
+import io.grpc.internal.JndiResourceResolverFactory.JndiResourceResolver;
+import io.grpc.internal.JndiResourceResolverFactory.RecordFetcher;
 import io.grpc.internal.SharedResourceHolder.Resource;
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -54,8 +62,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -82,25 +92,28 @@ public class DnsNameResolverTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
-  private final Map<String, Object> serviceConfig = new LinkedHashMap<String, Object>();
+  private final Map<String, Object> serviceConfig = new LinkedHashMap<>();
 
   private static final int DEFAULT_PORT = 887;
   private static final Attributes NAME_RESOLVER_PARAMS =
-      Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT).build();
+      Attributes.newBuilder()
+          .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT)
+          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
+          .build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
 
-  private final Resource<ExecutorService> fakeExecutorResource =
-      new Resource<ExecutorService>() {
+  private final Resource<Executor> fakeExecutorResource =
+      new Resource<Executor>() {
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return fakeExecutor.getScheduledExecutorService();
         }
 
         @Override
-        public void close(ExecutorService instance) {
+        public void close(Executor instance) {
         }
       };
 
@@ -110,9 +123,17 @@ public class DnsNameResolverTest {
   private ArgumentCaptor<List<EquivalentAddressGroup>> resultCaptor;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
+  @Mock
+  private RecordFetcher recordFetcher;
 
   private DnsNameResolver newResolver(String name, int port) {
     return newResolver(name, port, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted());
+  }
+
+  private DnsNameResolver newResolver(String name, int port, boolean isAndroid) {
+    return
+        newResolver(
+            name, port, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(), isAndroid);
   }
 
   private DnsNameResolver newResolver(
@@ -120,13 +141,25 @@ public class DnsNameResolverTest {
       int port,
       ProxyDetector proxyDetector,
       Stopwatch stopwatch) {
+    return newResolver(name, port, proxyDetector, stopwatch, false);
+  }
+
+  private DnsNameResolver newResolver(
+      String name,
+      int port,
+      ProxyDetector proxyDetector,
+      Stopwatch stopwatch,
+      boolean isAndroid) {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
         Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
         fakeExecutorResource,
         proxyDetector,
-        stopwatch);
+        stopwatch,
+        isAndroid);
+    // By default, using the mocked ResourceResolver to avoid I/O
+    dnsResolver.setResourceResolver(new JndiResourceResolver(recordFetcher));
     return dnsResolver;
   }
 
@@ -198,13 +231,29 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void resolve_androidIgnoresPropertyValue() throws Exception {
+    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(2));
+    resolveNeverCache(true);
+  }
+
+  @Test
+  public void resolve_androidIgnoresPropertyValueCacheForever() throws Exception {
+    System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, Long.toString(-1));
+    resolveNeverCache(true);
+  }
+
+  @Test
   public void resolve_neverCache() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "0");
+    resolveNeverCache(false);
+  }
+
+  private void resolveNeverCache(boolean isAndroid) throws Exception {
     final List<InetAddress> answer1 = createAddressList(2);
     final List<InetAddress> answer2 = createAddressList(1);
     String name = "foo.googleapis.com";
 
-    DnsNameResolver resolver = newResolver(name, 81);
+    DnsNameResolver resolver = newResolver(name, 81, isAndroid);
     AddressResolver mockResolver = mock(AddressResolver.class);
     when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
@@ -224,6 +273,29 @@ public class DnsNameResolverTest {
     resolver.shutdown();
 
     verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+  }
+
+  @Test
+  public void resolveAll_failsOnEmptyResult() throws Exception {
+    String hostname = "dns:///addr.fake:1234";
+    DnsNameResolver nrf =
+        new DnsNameResolverProvider().newNameResolver(new URI(hostname),  Attributes.newBuilder()
+            .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
+            .build());
+    nrf.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return Collections.emptyList();
+      }
+    });
+
+    new DnsNameResolver.Resolve(nrf, Stopwatch.createUnstarted(), 0).resolveInternal(mockListener);
+
+    ArgumentCaptor<Status> ac = ArgumentCaptor.forClass(Status.class);
+    verify(mockListener).onError(ac.capture());
+    verifyNoMoreInteractions(mockListener);
+    assertThat(ac.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(ac.getValue().getDescription()).contains("No DNS backend or balancer addresses");
   }
 
   @Test
@@ -397,6 +469,23 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void resolveAll_nullResourceResolver_addressFailure() throws Exception {
+    final String hostname = "addr.fake";
+
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(Matchers.anyString()))
+        .thenThrow(new IOException("no addr"));
+    ResourceResolver resourceResolver = null;
+    boolean resovleSrv = true;
+    boolean resolveTxt = true;
+
+    thrown.expect(RuntimeException.class);
+    thrown.expectMessage("no addr");
+
+    DnsNameResolver.resolveAll(mockResolver, resourceResolver, resovleSrv, resolveTxt, hostname);
+  }
+
+  @Test
   public void resolveAll_presentResourceResolver() throws Exception {
     final String hostname = "addr.fake";
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
@@ -496,10 +585,11 @@ public class DnsNameResolverTest {
     final String name = "foo.googleapis.com";
     final int port = 81;
     ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
-    ProxyParameters proxyParameters = new ProxyParameters(
-        new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000),
-        "username",
-        "password");
+    ProxyParameters proxyParameters = ProxyParameters
+        .forAddress(
+          new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000))
+        .username("username")
+        .password("password").build();
     when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
         .thenReturn(proxyParameters);
     DnsNameResolver resolver =
@@ -752,6 +842,146 @@ public class DnsNameResolverTest {
     choice.put("serviceConfig", serviceConfig);
 
     assertNotNull(DnsNameResolver.maybeChooseServiceConfig(choice, new Random(), "localhost"));
+  }
+
+  @Test
+  public void parseTxtResults_misspelledName() {
+    List<String> txtRecords = new ArrayList<>();
+    txtRecords.add("some_record");
+    txtRecords.add("_grpc_config=[]");
+
+    List<Map<String, Object>> results = DnsNameResolver.parseTxtResults(txtRecords);
+
+    assertThat(results).isEmpty();
+  }
+
+  @Test
+  public void parseTxtResults_badTypeIgnored() {
+    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
+    Level level = logger.getLevel();
+    logger.setLevel(Level.SEVERE);
+    try {
+      List<String> txtRecords = new ArrayList<>();
+      txtRecords.add("some_record");
+      txtRecords.add("grpc_config={}");
+
+      List<Map<String, Object>> results = DnsNameResolver.parseTxtResults(txtRecords);
+
+      assertThat(results).isEmpty();
+    } finally {
+      logger.setLevel(level);
+    }
+  }
+
+  @Test
+  public void parseTxtResults_badInnerTypeIgnored() {
+    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
+    Level level = logger.getLevel();
+    logger.setLevel(Level.SEVERE);
+    try {
+      List<String> txtRecords = new ArrayList<>();
+      txtRecords.add("some_record");
+      txtRecords.add("grpc_config=[\"bogus\"]");
+
+      List<Map<String, Object>> results = DnsNameResolver.parseTxtResults(txtRecords);
+
+      assertThat(results).isEmpty();
+    } finally {
+      logger.setLevel(level);
+    }
+  }
+
+  @Test
+  public void parseTxtResults_combineAll() {
+    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
+    Level level = logger.getLevel();
+    logger.setLevel(Level.SEVERE);
+    try {
+      List<String> txtRecords = new ArrayList<>();
+      txtRecords.add("some_record");
+      txtRecords.add("grpc_config=[\"bogus\", {}]");
+      txtRecords.add("grpc_config=[{}, {}]"); // 2 records
+      txtRecords.add("grpc_config=[{\"\":{}}]"); // 1 record
+
+      List<Map<String, Object>> results = DnsNameResolver.parseTxtResults(txtRecords);
+
+      assertThat(results).hasSize(2 + 1);
+    } finally {
+      logger.setLevel(level);
+    }
+  }
+
+  @Test
+  public void shouldUseJndi_alwaysFalseIfDisabled() {
+    boolean enableJndi = false;
+    boolean enableJndiLocalhost = true;
+    String host = "seemingly.valid.host";
+
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, host));
+  }
+
+  @Test
+  public void shouldUseJndi_falseIfDisabledForLocalhost() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = false;
+
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "localhost"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "LOCALHOST"));
+  }
+
+  @Test
+  public void shouldUseJndi_trueIfLocalhostOverriden() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = true;
+    String host = "localhost";
+
+    assertTrue(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, host));
+  }
+
+  @Test
+  public void shouldUseJndi_falseForIpv6() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = false;
+
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "::"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "::1"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "2001:db8:1234::"));
+    assertFalse(DnsNameResolver.shouldUseJndi(
+        enableJndi, enableJndiLocalhost, "[2001:db8:1234::]"));
+    assertFalse(DnsNameResolver.shouldUseJndi(
+        enableJndi, enableJndiLocalhost, "2001:db8:1234::%3"));
+  }
+
+  @Test
+  public void shouldUseJndi_falseForIpv4() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = false;
+
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "127.0.0.1"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "192.168.0.1"));
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "134744072"));
+  }
+
+  @Test
+  public void shouldUseJndi_falseForEmpty() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = false;
+
+    assertFalse(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, ""));
+  }
+
+  @Test
+  public void shouldUseJndi_trueIfItMightPossiblyBeValid() {
+    boolean enableJndi = true;
+    boolean enableJndiLocalhost = false;
+
+    assertTrue(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "remotehost"));
+    assertTrue(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "remotehost.gov"));
+    assertTrue(DnsNameResolver.shouldUseJndi(enableJndi, enableJndiLocalhost, "f.q.d.n."));
+    assertTrue(DnsNameResolver.shouldUseJndi(
+        enableJndi, enableJndiLocalhost, "8.8.8.8.in-addr.arpa."));
+    assertTrue(DnsNameResolver.shouldUseJndi(
+        enableJndi, enableJndiLocalhost, "2001-db8-1234--as3.ipv6-literal.net"));
   }
 
   private void testInvalidUri(URI uri) {

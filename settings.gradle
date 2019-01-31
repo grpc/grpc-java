@@ -13,12 +13,12 @@ include ":grpc-grpclb"
 include ":grpc-testing"
 include ":grpc-testing-proto"
 include ":grpc-interop-testing"
-include ":grpc-gae-interop-testing-jdk7"
 include ":grpc-gae-interop-testing-jdk8"
 include ":grpc-all"
 include ":grpc-alts"
 include ":grpc-benchmarks"
 include ":grpc-services"
+include ":grpc-xds"
 
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
@@ -34,12 +34,12 @@ project(':grpc-grpclb').projectDir = "$rootDir/grpclb" as File
 project(':grpc-testing').projectDir = "$rootDir/testing" as File
 project(':grpc-testing-proto').projectDir = "$rootDir/testing-proto" as File
 project(':grpc-interop-testing').projectDir = "$rootDir/interop-testing" as File
-project(':grpc-gae-interop-testing-jdk7').projectDir = "$rootDir/gae-interop-testing/gae-jdk7" as File
 project(':grpc-gae-interop-testing-jdk8').projectDir = "$rootDir/gae-interop-testing/gae-jdk8" as File
 project(':grpc-all').projectDir = "$rootDir/all" as File
 project(':grpc-alts').projectDir = "$rootDir/alts" as File
 project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
+project(':grpc-xds').projectDir = "$rootDir/xds" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'

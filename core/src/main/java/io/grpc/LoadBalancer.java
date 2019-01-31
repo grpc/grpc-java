@@ -21,6 +21,8 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -36,9 +38,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>A LoadBalancer typically implements three interfaces:
  * <ol>
  *   <li>{@link LoadBalancer} is the main interface.  All methods on it are invoked sequentially
- *       from the Channel Executor.  It receives the results from the {@link NameResolver}, updates
- *       of subchannels' connectivity states, and the channel's request for the LoadBalancer to
- *       shutdown.</li>
+ *       in the same <strong>synchronization context</strong> (see next section) as returned by
+ *       {@link io.grpc.LoadBalancer.Helper#getSynchronizationContext}.  It receives the results
+ *       from the {@link NameResolver}, updates of subchannels' connectivity states, and the
+ *       channel's request for the LoadBalancer to shutdown.</li>
  *   <li>{@link SubchannelPicker SubchannelPicker} does the actual load-balancing work.  It selects
  *       a {@link Subchannel Subchannel} for each new RPC.</li>
  *   <li>{@link Factory Factory} creates a new {@link LoadBalancer} instance.
@@ -48,30 +51,31 @@ import javax.annotation.concurrent.ThreadSafe;
  * Factory}. It provides functionalities that a {@code LoadBalancer} implementation would typically
  * need.
  *
- * <h3>Channel Executor</h3>
+ * <h3>The Synchronization Context</h3>
  *
- * <p>Channel Executor is an internal executor of the channel, which is used to serialize all the
- * callback methods on the {@link LoadBalancer} interface, thus the balancer implementation doesn't
- * need to worry about synchronization among them.  However, the actual thread of the Channel
- * Executor is typically the network thread, thus the following rules must be followed to prevent
- * blocking or even dead-locking in a network
+ * <p>All methods on the {@link LoadBalancer} interface are called from a Synchronization Context,
+ * meaning they are serialized, thus the balancer implementation doesn't need to worry about
+ * synchronization among them.  {@link io.grpc.LoadBalancer.Helper#getSynchronizationContext}
+ * allows implementations to schedule tasks to be run in the same Synchronization Context, with or
+ * without a delay, thus those tasks don't need to worry about synchronizing with the balancer
+ * methods.
+ * 
+ * <p>However, the actual running thread may be the network thread, thus the following rules must be
+ * followed to prevent blocking or even dead-locking in a network:
  *
  * <ol>
  *
- *   <li><strong>Never block in Channel Executor</strong>.  The callback methods must return
- *   quickly.  Examples or work that must be avoided: CPU-intensive calculation, waiting on
+ *   <li><strong>Never block in the Synchronization Context</strong>.  The callback methods must
+ *   return quickly.  Examples or work that must be avoided: CPU-intensive calculation, waiting on
  *   synchronization primitives, blocking I/O, blocking RPCs, etc.</li>
  *
- *   <li><strong>Avoid calling into other components with lock held</strong>.  Channel Executor may
- *   run callbacks under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer has a
+ *   <li><strong>Avoid calling into other components with lock held</strong>.  The Synchronization
+ *   Context may be under a lock, e.g., the transport lock of OkHttp.  If your LoadBalancer has a
  *   lock, holds the lock in a callback method (e.g., {@link #handleSubchannelState
  *   handleSubchannelState()}) while calling into another class that may involve locks, be cautious
  *   of deadlock.  Generally you wouldn't need any locking in the LoadBalancer.</li>
  *
  * </ol>
- *
- * <p>{@link Helper#runSerialized Helper.runSerialized()} allows you to schedule a task to be run in
- * the Channel Executor.
  *
  * <h3>The canonical implementation pattern</h3>
  *
@@ -100,6 +104,15 @@ import javax.annotation.concurrent.ThreadSafe;
 @NotThreadSafe
 public abstract class LoadBalancer {
   /**
+   * The load-balancing config converted from an JSON object injected by the GRPC library.
+   *
+   * <p>{@link NameResolver}s should not produce this attribute.
+   */
+  @NameResolver.ResolutionResultAttr
+  public static final Attributes.Key<Map<String, Object>> ATTR_LOAD_BALANCING_CONFIG =
+      Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
+
+  /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
    * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
    * but may be flattened into a single list if needed.
@@ -107,11 +120,12 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code servers}.
    *
    * @param servers the resolved server addresses, never empty.
-   * @param attributes extra metadata from naming system.
+   * @param attributes extra information from naming system.
    * @since 1.2.0
    */
   public abstract void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes);
+      List<EquivalentAddressGroup> servers,
+      @NameResolver.ResolutionResultAttr Attributes attributes);
 
   /**
    * Handles an error from the name resolution system.
@@ -154,9 +168,18 @@ public abstract class LoadBalancer {
    */
   public abstract void shutdown();
 
-  @Override
-  public String toString() {
-    return getClass().getSimpleName();
+  /**
+   * Whether this LoadBalancer can handle empty address group list to be passed to {@link
+   * #handleResolvedAddressGroups}.  The default implementation returns {@code false}, meaning that
+   * if the NameResolver returns an empty list, the Channel will turn that into an error and call
+   * {@link #handleNameResolutionError}.  LoadBalancers that want to accept empty lists should
+   * override this method and return {@code true}.
+   *
+   * <p>This method should always return a constant value.  It's not specified when this will be
+   * called.
+   */
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return false;
   }
 
   /**
@@ -166,6 +189,7 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @ThreadSafe
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class SubchannelPicker {
     /**
      * Make a balancing decision for a new RPC.
@@ -192,6 +216,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.2.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class PickSubchannelArgs {
 
     /**
@@ -236,6 +261,7 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @Immutable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public static final class PickResult {
     private static final PickResult NO_RESULT = new PickResult(null, null, Status.OK, false);
 
@@ -451,22 +477,15 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @ThreadSafe
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Helper {
     /**
-     * Creates a Subchannel, which is a logical connection to the given group of addresses which are
-     * considered equivalent.  The {@code attrs} are custom attributes associated with this
-     * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
-     * Subchannel.getAttributes()}.
-     *
-     * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
-     * Subchannels within {@link #shutdown}.
-     *
-     * <p>The default implementation calls {@link #createSubchannel(List, Attributes)}.
-     * Implementations should not override this method.
+     * Equivalent to {@link #createSubchannel(List, Attributes)} with the given single {@code
+     * EquivalentAddressGroup}.
      *
      * @since 1.2.0
      */
-    public Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
+    public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
       Preconditions.checkNotNull(addrs, "addrs");
       return createSubchannel(Collections.singletonList(addrs), attrs);
     }
@@ -476,6 +495,10 @@ public abstract class LoadBalancer {
      * considered equivalent.  The {@code attrs} are custom attributes associated with this
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
      * Subchannel.getAttributes()}.
+     *
+     * <p>It is recommended you call this method from the Synchronization Context, otherwise your
+     * logic around the creation may race with {@link #handleSubchannelState}.  See
+     * <a href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
      *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
@@ -488,18 +511,12 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Replaces the existing addresses used with {@code subchannel}. This method is superior to
-     * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
-     * continue using an existing connection.
+     * Equivalent to {@link #updateSubchannelAddresses(io.grpc.LoadBalancer.Subchannel, List)} with
+     * the given single {@code EquivalentAddressGroup}.
      *
-     * <p>The default implementation calls {@link #updateSubchannelAddresses(
-     * LoadBalancer.Subchannel, List)}. Implementations should not override this method.
-     *
-     * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
-     *     #createSubchannel}
      * @since 1.4.0
      */
-    public void updateSubchannelAddresses(
+    public final void updateSubchannelAddresses(
         Subchannel subchannel, EquivalentAddressGroup addrs) {
       Preconditions.checkNotNull(addrs, "addrs");
       updateSubchannelAddresses(subchannel, Collections.singletonList(addrs));
@@ -567,12 +584,55 @@ public abstract class LoadBalancer {
         @Nonnull ConnectivityState newState, @Nonnull SubchannelPicker newPicker);
 
     /**
-     * Schedule a task to be run in the Channel Executor, which serializes the task with the
+     * Call {@link NameResolver#refresh} on the channel's resolver.
+     *
+     * @since 1.18.0
+     */
+    public void refreshNameResolution() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Schedule a task to be run in the Synchronization Context, which serializes the task with the
      * callback methods on the {@link LoadBalancer} interface.
      *
      * @since 1.2.0
+     * @deprecated use/implement {@code getSynchronizationContext()} instead
      */
-    public abstract void runSerialized(Runnable task);
+    @Deprecated
+    public void runSerialized(Runnable task) {
+      getSynchronizationContext().execute(task);
+    }
+
+    /**
+     * Returns a {@link SynchronizationContext} that runs tasks in the same Synchronization Context
+     * as that the callback methods on the {@link LoadBalancer} interface are run in.
+     *
+     * <p>Pro-tip: in order to call {@link SynchronizationContext#schedule}, you need to provide a
+     * {@link ScheduledExecutorService}.  {@link #getScheduledExecutorService} is provided for your
+     * convenience.
+     *
+     * @since 1.17.0
+     */
+    public SynchronizationContext getSynchronizationContext() {
+      // TODO(zhangkun): make getSynchronizationContext() abstract after runSerialized() is deleted
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a {@link ScheduledExecutorService} for scheduling delayed tasks.
+     *
+     * <p>This service is a shared resource and is only meant for quick tasks.  DO NOT block or run
+     * time-consuming tasks.
+     *
+     * <p>The returned service doesn't support {@link ScheduledExecutorService#shutdown shutdown()}
+     * and {@link ScheduledExecutorService#shutdownNow shutdownNow()}.  They will throw if called.
+     *
+     * @since 1.17.0
+     */
+    public ScheduledExecutorService getScheduledExecutorService() {
+      throw new UnsupportedOperationException();
+    }
 
     /**
      * Returns the NameResolver of the channel.
@@ -587,6 +647,15 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract String getAuthority();
+
+    /**
+     * Returns the {@link ChannelLogger} for the Channel served by this LoadBalancer.
+     *
+     * @since 1.17.0
+     */
+    public ChannelLogger getChannelLogger() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -604,6 +673,7 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @ThreadSafe
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Subchannel {
     /**
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
@@ -621,17 +691,15 @@ public abstract class LoadBalancer {
     public abstract void requestConnection();
 
     /**
-     * Returns the addresses that this Subchannel is bound to. The default implementation calls
-     * getAllAddresses().
-     *
-     * <p>The default implementation calls {@link #getAllAddresses()}. Implementations should not
-     * override this method.
+     * Returns the addresses that this Subchannel is bound to.  This can be called only if
+     * the Subchannel has only one {@link EquivalentAddressGroup}.  Under the hood it calls
+     * {@link #getAllAddresses}.
      *
      * @throws IllegalStateException if this subchannel has more than one EquivalentAddressGroup.
-     *     Use getAllAddresses() instead
+     *         Use {@link #getAllAddresses} instead
      * @since 1.2.0
      */
-    public EquivalentAddressGroup getAddresses() {
+    public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
       Preconditions.checkState(groups.size() == 1, "Does not have exactly one group");
       return groups.get(0);
@@ -654,6 +722,44 @@ public abstract class LoadBalancer {
      * @since 1.2.0
      */
     public abstract Attributes getAttributes();
+
+    /**
+     * (Internal use only) returns a {@link Channel} that is backed by this Subchannel.  This allows
+     * a LoadBalancer to issue its own RPCs for auxiliary purposes, such as health-checking, on
+     * already-established connections.  This channel has certain restrictions:
+     * <ol>
+     *   <li>It can issue RPCs only if the Subchannel is {@code READY}. If {@link
+     *   Channel#newCall} is called when the Subchannel is not {@code READY}, the RPC will fail
+     *   immediately.</li>
+     *   <li>It doesn't support {@link CallOptions#withWaitForReady wait-for-ready} RPCs. Such RPCs
+     *   will fail immediately.</li>
+     * </ol>
+     *
+     * <p>RPCs made on this Channel is not counted when determining ManagedChannel's {@link
+     * ManagedChannelBuilder#idleTimeout idle mode}.  In other words, they won't prevent
+     * ManagedChannel from entering idle mode.
+     *
+     * <p>Warning: RPCs made on this channel will prevent a shut-down transport from terminating. If
+     * you make long-running RPCs, you need to make sure they will finish in time after the
+     * Subchannel has transitioned away from {@code READY} state
+     * (notified through {@link #handleSubchannelState}).
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue.
+     */
+    @Internal
+    public Channel asChannel() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a {@link ChannelLogger} for this Subchannel.
+     *
+     * @since 1.17.0
+     */
+    public ChannelLogger getChannelLogger() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -662,6 +768,7 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @ThreadSafe
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
     /**
      * Creates a {@link LoadBalancer} that will be used inside a channel.

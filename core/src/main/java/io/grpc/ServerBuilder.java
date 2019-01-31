@@ -94,7 +94,8 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   /**
    * Adds a {@link ServerInterceptor} that is run for all services on the server.  Interceptors
    * added through this method always run before per-service interceptors added through {@link
-   * ServerInterceptors}.  Interceptors run in the reverse order in which they are added.
+   * ServerInterceptors}.  Interceptors run in the reverse order in which they are added, just as
+   * with consecutive calls to {@code ServerInterceptors.intercept()}.
    *
    * @param interceptor the all-service interceptor
    * @return this
@@ -119,7 +120,7 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
 
   /**
    * Adds a {@link ServerStreamTracer.Factory} to measure server-side traffic.  The order of
-   * factories being added is the order they will be executed.
+   * factories being added is the order they will be executed.  Tracers should not
    *
    * @return this
    * @since 1.3.0
@@ -222,6 +223,28 @@ public abstract class ServerBuilder<T extends ServerBuilder<T>> {
   public T maxInboundMessageSize(int bytes) {
     // intentional noop rather than throw, this method is only advisory.
     Preconditions.checkArgument(bytes >= 0, "bytes must be >= 0");
+    return thisT();
+  }
+
+  /**
+   * Sets the maximum size of metadata allowed to be received. {@code Integer.MAX_VALUE} disables
+   * the enforcement. The default is implementation-dependent, but is not generally less than 8 KiB
+   * and may be unlimited.
+   *
+   * <p>This is cumulative size of the metadata. The precise calculation is
+   * implementation-dependent, but implementations are encouraged to follow the calculation used for
+   * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">
+   * HTTP/2's SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value,
+   * plus 32 bytes of overhead per entry.
+   *
+   * @param bytes the maximum size of received metadata
+   * @return this
+   * @throws IllegalArgumentException if bytes is non-positive
+   * @since 1.17.0
+   */
+  public T maxInboundMetadataSize(int bytes) {
+    Preconditions.checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    // intentional noop rather than throw, this method is only advisory.
     return thisT();
   }
 

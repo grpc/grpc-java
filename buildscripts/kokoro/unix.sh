@@ -30,7 +30,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
-GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH $GRADLE_FLAGS"
+GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
@@ -59,6 +59,9 @@ if [[ -z "${SKIP_TESTS:-}" ]]; then
   ./gradlew clean $GRADLE_FLAGS
   ./gradlew build $GRADLE_FLAGS
   # --batch-mode reduces log spam
+  mvn clean verify --batch-mode
+  popd
+  pushd examples/example-tls
   mvn clean verify --batch-mode
   popd
   # TODO(zpencer): also build the GAE examples

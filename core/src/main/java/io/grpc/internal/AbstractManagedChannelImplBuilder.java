@@ -33,6 +33,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -77,7 +78,6 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * An idle timeout smaller than this would be capped to it.
    */
-  @VisibleForTesting
   static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
 
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
@@ -114,8 +114,9 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   String authorityOverride;
 
-
   @Nullable LoadBalancer.Factory loadBalancerFactory;
+
+  String defaultLbPolicy = GrpcUtil.DEFAULT_LB_POLICY;
 
   boolean fullStreamDecompression;
 
@@ -145,6 +146,9 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   BinaryLog binlog;
 
+  @Nullable
+  ProxyDetector proxyDetector;
+
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
    * larger than this limit is received it will not be processed and the RPC will fail with
@@ -165,6 +169,7 @@ public abstract class AbstractManagedChannelImplBuilder
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
+  private boolean recordRealTimeMetrics = false;
   private boolean tracingEnabled = true;
 
   @Nullable
@@ -235,12 +240,23 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Deprecated
   @Override
   public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
     Preconditions.checkState(directServerAddress == null,
         "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
         directServerAddress);
     this.loadBalancerFactory = loadBalancerFactory;
+    return thisT();
+  }
+
+  @Override
+  public final T defaultLoadBalancingPolicy(String policy) {
+    Preconditions.checkState(directServerAddress == null,
+        "directServerAddress is set (%s), which forbids the use of load-balancing policy",
+        directServerAddress);
+    Preconditions.checkArgument(policy != null, "policy cannot be null");
+    this.defaultLbPolicy = policy;
     return thisT();
   }
 
@@ -330,6 +346,8 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public final T enableRetry() {
     retryEnabled = true;
+    statsEnabled = false;
+    tracingEnabled = false;
     return thisT();
   }
 
@@ -355,8 +373,17 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  public T proxyDetector(@Nullable ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
+    return thisT();
+  }
+
   /**
-   * Disable or enable stats features.  Enabled by default.
+   * Disable or enable stats features. Enabled by default.
+   *
+   * <p>For the current release, calling {@code setStatsEnabled(true)} may have a side effect that
+   * disables retry.
    */
   protected void setStatsEnabled(boolean value) {
     statsEnabled = value;
@@ -379,7 +406,18 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   /**
+   * Disable or enable real-time metrics recording.  Effective only if {@link #setStatsEnabled} is
+   * set to true.  Disabled by default.
+   */
+  protected void setStatsRecordRealTimeMetrics(boolean value) {
+    recordRealTimeMetrics = value;
+  }
+
+  /**
    * Disable or enable tracing features.  Enabled by default.
+   *
+   * <p>For the current release, calling {@code setTracingEnabled(true)} may have a side effect that
+   * disables retry.
    */
   protected void setTracingEnabled(boolean value) {
     tracingEnabled = value;
@@ -424,12 +462,13 @@ public abstract class AbstractManagedChannelImplBuilder
       temporarilyDisableRetry = true;
       CensusStatsModule censusStats = this.censusStatsOverride;
       if (censusStats == null) {
-        censusStats = new CensusStatsModule(GrpcUtil.STOPWATCH_SUPPLIER, true);
+        censusStats = new CensusStatsModule(
+            GrpcUtil.STOPWATCH_SUPPLIER, true, recordStartedRpcs, recordFinishedRpcs,
+            recordRealTimeMetrics);
       }
       // First interceptor runs last (see ClientInterceptors.intercept()), so that no
       // other interceptor can override the tracer factory we set in CallOptions.
-      effectiveInterceptors.add(
-          0, censusStats.getClientInterceptor(recordStartedRpcs, recordFinishedRpcs));
+      effectiveInterceptors.add(0, censusStats.getClientInterceptor());
     }
     if (tracingEnabled) {
       temporarilyDisableRetry = true;

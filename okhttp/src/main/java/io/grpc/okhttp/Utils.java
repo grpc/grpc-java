@@ -29,6 +29,7 @@ import java.net.SocketException;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.CheckReturnValue;
 
 /**
  * Common utility methods for OkHttp transport.
@@ -36,7 +37,11 @@ import java.util.logging.Logger;
 class Utils {
   private static final Logger log = Logger.getLogger(Utils.class.getName());
 
-  static final int DEFAULT_WINDOW_SIZE = 65535;
+  /**
+   * The default ratio of window size to initial window size below which a {@code WINDOW_UPDATE}
+   * is sent to expand the window.
+   */
+  static final float DEFAULT_WINDOW_UPDATE_RATIO = 0.5f;
   static final int CONNECTION_STREAM_ID = 0;
 
   public static Metadata convertHeaders(List<Header> http2Headers) {
@@ -47,6 +52,7 @@ class Utils {
     return InternalMetadata.newMetadata(convertHeadersToArray(http2Headers));
   }
 
+  @CheckReturnValue
   private static byte[][] convertHeadersToArray(List<Header> http2Headers) {
     byte[][] headerValues = new byte[http2Headers.size() * 2][];
     int i = 0;

@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.io.BaseEncoding;
+import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
@@ -36,8 +37,10 @@ import io.grpc.internal.NoopClientStreamListener;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.internal.framed.ErrorCode;
+import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -56,9 +59,11 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class OkHttpClientStreamTest {
   private static final int MAX_MESSAGE_SIZE = 100;
+  private static final int INITIAL_WINDOW_SIZE = 65535;
 
   @Mock private MethodDescriptor.Marshaller<Void> marshaller;
-  @Mock private AsyncFrameWriter frameWriter;
+  @Mock private FrameWriter mockedFrameWriter;
+  private ExceptionHandlingFrameWriter frameWriter;
   @Mock private OkHttpClientTransport transport;
   @Mock private OutboundFlowController flowController;
   @Captor private ArgumentCaptor<List<Header>> headersCaptor;
@@ -79,6 +84,8 @@ public class OkHttpClientStreamTest {
         .setResponseMarshaller(marshaller)
         .build();
 
+    frameWriter =
+        new ExceptionHandlingFrameWriter(transport, mockedFrameWriter);
     stream = new OkHttpClientStream(
         methodDescriptor,
         new Metadata(),
@@ -87,10 +94,12 @@ public class OkHttpClientStreamTest {
         flowController,
         lock,
         MAX_MESSAGE_SIZE,
+        INITIAL_WINDOW_SIZE,
         "localhost",
         "userAgent",
         StatsTraceContext.NOOP,
-        transportTracer);
+        transportTracer,
+        CallOptions.DEFAULT);
   }
 
   @Test
@@ -140,35 +149,37 @@ public class OkHttpClientStreamTest {
 
     stream.transportState().start(1234);
 
-    verifyNoMoreInteractions(frameWriter);
+    verifyNoMoreInteractions(mockedFrameWriter);
   }
 
   @Test
-  public void start_userAgentRemoved() {
+  public void start_userAgentRemoved() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
-        StatsTraceContext.NOOP, transportTracer);
+        flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
 
-    verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
+    verify(mockedFrameWriter)
+        .synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
     assertThat(headersCaptor.getValue())
         .contains(new Header(GrpcUtil.USER_AGENT_KEY.name(), "good-application"));
   }
 
   @Test
-  public void start_headerFieldOrder() {
+  public void start_headerFieldOrder() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
-        StatsTraceContext.NOOP, transportTracer);
+        flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
 
-    verify(frameWriter).synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
+    verify(mockedFrameWriter)
+        .synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
     assertThat(headersCaptor.getValue()).containsExactly(
         Headers.SCHEME_HEADER,
         Headers.METHOD_HEADER,
@@ -181,7 +192,7 @@ public class OkHttpClientStreamTest {
   }
 
   @Test
-  public void getUnaryRequest() {
+  public void getUnaryRequest() throws IOException {
     MethodDescriptor<?, ?> getMethod = MethodDescriptor.<Void, Void>newBuilder()
         .setType(MethodDescriptor.MethodType.UNARY)
         .setFullMethodName("service/method")
@@ -191,12 +202,12 @@ public class OkHttpClientStreamTest {
         .setResponseMarshaller(marshaller)
         .build();
     stream = new OkHttpClientStream(getMethod, new Metadata(), frameWriter, transport,
-        flowController, lock, MAX_MESSAGE_SIZE, "localhost", "good-application",
-        StatsTraceContext.NOOP, transportTracer);
+        flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
     stream.start(new BaseClientStreamListener());
 
     // GET streams send headers after halfClose is called.
-    verify(frameWriter, times(0)).synStream(
+    verify(mockedFrameWriter, times(0)).synStream(
         eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
     verify(transport, times(0)).streamReadyToStart(isA(OkHttpClientStream.class));
 
@@ -206,7 +217,7 @@ public class OkHttpClientStreamTest {
     verify(transport).streamReadyToStart(eq(stream));
     stream.transportState().start(3);
 
-    verify(frameWriter)
+    verify(mockedFrameWriter)
         .synStream(eq(true), eq(false), eq(3), eq(0), headersCaptor.capture());
     assertThat(headersCaptor.getValue()).contains(Headers.METHOD_GET_HEADER);
     assertThat(headersCaptor.getValue()).contains(

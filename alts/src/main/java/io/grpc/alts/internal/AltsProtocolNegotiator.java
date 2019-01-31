@@ -20,7 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.Any;
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
+import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.OtherSecurity;
 import io.grpc.InternalChannelz.Security;
@@ -28,12 +28,16 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.alts.internal.RpcProtocolVersionsUtil.RpcVersionsCheckResult;
 import io.grpc.alts.internal.TsiHandshakeHandler.TsiHandshakeCompletionEvent;
+import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.ProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.util.AsciiString;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * A GRPC {@link ProtocolNegotiator} for ALTS. This class creates a Netty handler that provides ALTS
@@ -41,52 +45,96 @@ import io.netty.util.AsciiString;
  */
 public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
-  private static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
-  private static final Attributes.Key<AltsAuthContext> ALTS_CONTEXT_KEY =
+  private static final Logger logger = Logger.getLogger(AltsProtocolNegotiator.class.getName());
+
+  @Grpc.TransportAttr
+  public static final Attributes.Key<TsiPeer> TSI_PEER_KEY = Attributes.Key.create("TSI_PEER");
+
+  @Grpc.TransportAttr
+  public static final Attributes.Key<AltsAuthContext> ALTS_CONTEXT_KEY =
       Attributes.Key.create("ALTS_CONTEXT_KEY");
+
   private static final AsciiString scheme = AsciiString.of("https");
-
-  public static Attributes.Key<TsiPeer> getTsiPeerAttributeKey() {
-    return TSI_PEER_KEY;
-  }
-
-  public static Attributes.Key<AltsAuthContext> getAltsAuthContextAttributeKey() {
-    return ALTS_CONTEXT_KEY;
-  }
 
   /** Creates a negotiator used for ALTS client. */
   public static AltsProtocolNegotiator createClientNegotiator(
-      final TsiHandshakerFactory handshakerFactory) {
-    return new AltsProtocolNegotiator() {
+      final TsiHandshakerFactory handshakerFactory, final LazyChannel lazyHandshakerChannel) {
+    final class ClientAltsProtocolNegotiator extends AltsProtocolNegotiator {
+
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        TsiHandshaker handshaker = handshakerFactory.newHandshaker(grpcHandler.getAuthority());
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
-            new TsiHandshakeHandler(
-                new NettyTsiHandshaker(
-                    handshakerFactory.newHandshaker(grpcHandler.getAuthority()))),
+            new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
             new TsiFrameHandler());
       }
-    };
+
+      @Override
+      public void close() {
+        logger.finest("ALTS Client ProtocolNegotiator Closed");
+        lazyHandshakerChannel.close();
+      }
+    }
+
+    return new ClientAltsProtocolNegotiator();
   }
 
   /** Creates a negotiator used for ALTS server. */
   public static AltsProtocolNegotiator createServerNegotiator(
-      final TsiHandshakerFactory handshakerFactory) {
-    return new AltsProtocolNegotiator() {
+      final TsiHandshakerFactory handshakerFactory, final LazyChannel lazyHandshakerChannel) {
+    final class ServerAltsProtocolNegotiator extends AltsProtocolNegotiator {
+
       @Override
       public Handler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+        TsiHandshaker handshaker = handshakerFactory.newHandshaker(/*authority=*/ null);
         return new BufferUntilAltsNegotiatedHandler(
             grpcHandler,
-            new TsiHandshakeHandler(new NettyTsiHandshaker(handshakerFactory.newHandshaker(null))),
+            new TsiHandshakeHandler(new NettyTsiHandshaker(handshaker)),
             new TsiFrameHandler());
       }
-    };
+
+      @Override
+      public void close() {
+        logger.finest("ALTS Server ProtocolNegotiator Closed");
+        lazyHandshakerChannel.close();
+      }
+    }
+
+    return new ServerAltsProtocolNegotiator();
+  }
+
+  /** Channel created from a channel pool lazily. */
+  public static class LazyChannel {
+    private final ObjectPool<Channel> channelPool;
+    private Channel channel;
+
+    public LazyChannel(ObjectPool<Channel> channelPool) {
+      this.channelPool = channelPool;
+    }
+
+    /**
+     * If channel is null, gets a channel from the channel pool, otherwise, returns the cached
+     * channel.
+     */
+    public synchronized Channel get() {
+      if (channel == null) {
+        channel = channelPool.getObject();
+      }
+      return channel;
+    }
+
+    /** Returns the cached channel to the channel pool. */
+    public synchronized void close() {
+      if (channel != null) {
+        channelPool.returnObject(channel);
+      }
+    }
   }
 
   /** Buffers all writes until the ALTS handshake is complete. */
   @VisibleForTesting
-  static class BufferUntilAltsNegotiatedHandler extends AbstractBufferingHandler
+  static final class BufferUntilAltsNegotiatedHandler extends AbstractBufferingHandler
       implements ProtocolNegotiator.Handler {
 
     private final GrpcHttp2ConnectionHandler grpcHandler;
@@ -101,7 +149,8 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
     // TODO: Remove this once https://github.com/grpc/grpc-java/pull/3715 is in.
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+      logger.log(Level.FINEST, "Exception while buffering for ALTS Negotiation", cause);
       fail(ctx, cause);
       ctx.fireExceptionCaught(cause);
     }
@@ -113,6 +162,9 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
 
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (logger.isLoggable(Level.FINEST)) {
+        logger.log(Level.FINEST, "User Event triggered while negotiating ALTS", new Object[] {evt});
+      }
       if (evt instanceof TsiHandshakeCompletionEvent) {
         TsiHandshakeCompletionEvent altsEvt = (TsiHandshakeCompletionEvent) evt;
         if (altsEvt.isSuccess()) {
@@ -134,6 +186,7 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
                       + RpcProtocolVersionsUtil.getRpcProtocolVersions().toString()
                       + "are not compatible with peer Rpc Protocol Versions "
                       + altsContext.getPeerRpcVersions().toString();
+              logger.finest(errorMessage);
               fail(ctx, Status.UNAVAILABLE.withDescription(errorMessage).asRuntimeException());
             }
             grpcHandler.handleProtocolNegotiationCompleted(
@@ -141,14 +194,16 @@ public abstract class AltsProtocolNegotiator implements ProtocolNegotiator {
                     .set(TSI_PEER_KEY, altsEvt.peer())
                     .set(ALTS_CONTEXT_KEY, altsContext)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                    .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+                    .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
+                    .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
                     .build(),
                 new Security(new OtherSecurity("alts", Any.pack(altsContext.context))));
           }
-
+          logger.finest("Flushing ALTS buffered data");
           // Now write any buffered data and remove this handler.
           writeBufferedAndRemove(ctx);
         } else {
+          logger.log(Level.FINEST, "ALTS handshake failed", altsEvt.cause());
           fail(ctx, unavailableException("ALTS handshake failed", altsEvt.cause()));
         }
       }

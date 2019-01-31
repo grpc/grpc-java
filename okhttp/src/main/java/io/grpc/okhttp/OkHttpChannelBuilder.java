@@ -61,6 +61,8 @@ import javax.net.ssl.TrustManagerFactory;
 public class OkHttpChannelBuilder extends
         AbstractManagedChannelImplBuilder<OkHttpChannelBuilder> {
 
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 65535;
+
   /** Identifies the negotiation used for starting up HTTP/2. */
   private enum NegotiationType {
     /** Uses TLS ALPN/NPN negotiation, assumes an SSL connection. */
@@ -122,16 +124,16 @@ public class OkHttpChannelBuilder extends
           .build();
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
-  private static final Resource<ExecutorService> SHARED_EXECUTOR =
-      new Resource<ExecutorService>() {
+  private static final Resource<Executor> SHARED_EXECUTOR =
+      new Resource<Executor>() {
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return Executors.newCachedThreadPool(GrpcUtil.getThreadFactory("grpc-okhttp-%d", true));
         }
 
         @Override
-        public void close(ExecutorService executor) {
-          executor.shutdown();
+        public void close(Executor executor) {
+          ((ExecutorService) executor).shutdown();
         }
       };
 
@@ -157,7 +159,9 @@ public class OkHttpChannelBuilder extends
   private NegotiationType negotiationType = NegotiationType.TLS;
   private long keepAliveTimeNanos = KEEPALIVE_TIME_NANOS_DISABLED;
   private long keepAliveTimeoutNanos = DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
+  private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private boolean keepAliveWithoutCalls;
+  private int maxInboundMetadataSize = Integer.MAX_VALUE;
 
   protected OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
@@ -270,6 +274,16 @@ public class OkHttpChannelBuilder extends
     Preconditions.checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive");
     keepAliveTimeoutNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutNanos = KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutNanos);
+    return this;
+  }
+
+  /**
+   * Sets the flow control window in bytes. If not called, the default value
+   * is {@link #DEFAULT_FLOW_CONTROL_WINDOW}).
+   */
+  public OkHttpChannelBuilder flowControlWindow(int flowControlWindow) {
+    Preconditions.checkState(flowControlWindow > 0, "flowControlWindow must be positive");
+    this.flowControlWindow = flowControlWindow;
     return this;
   }
 
@@ -392,14 +406,34 @@ public class OkHttpChannelBuilder extends
     return this;
   }
 
+  /**
+   * Sets the maximum size of metadata allowed to be received. {@code Integer.MAX_VALUE} disables
+   * the enforcement. Defaults to no limit ({@code Integer.MAX_VALUE}).
+   *
+   * <p>The implementation does not currently limit memory usage; this value is checked only after
+   * the metadata is decoded from the wire. It does prevent large metadata from being passed to the
+   * application.
+   *
+   * @param bytes the maximum size of received metadata
+   * @return this
+   * @throws IllegalArgumentException if bytes is non-positive
+   * @since 1.17.0
+   */
+  @Override
+  public OkHttpChannelBuilder maxInboundMetadataSize(int bytes) {
+    Preconditions.checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    this.maxInboundMetadataSize = bytes;
+    return this;
+  }
+
   @Override
   @Internal
   protected final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
     return new OkHttpTransportFactory(transportExecutor, scheduledExecutorService,
         createSocketFactory(), hostnameVerifier, connectionSpec, maxInboundMessageSize(),
-        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory);
+        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, flowControlWindow,
+        keepAliveWithoutCalls, maxInboundMetadataSize, transportTracerFactory);
   }
 
   @Override
@@ -476,7 +510,9 @@ public class OkHttpChannelBuilder extends
     private final boolean enableKeepAlive;
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
+    private final int flowControlWindow;
     private final boolean keepAliveWithoutCalls;
+    private final int maxInboundMetadataSize;
     private final ScheduledExecutorService timeoutService;
     private boolean closed;
 
@@ -489,7 +525,9 @@ public class OkHttpChannelBuilder extends
         boolean enableKeepAlive,
         long keepAliveTimeNanos,
         long keepAliveTimeoutNanos,
+        int flowControlWindow,
         boolean keepAliveWithoutCalls,
+        int maxInboundMetadataSize,
         TransportTracer.Factory transportTracerFactory) {
       usingSharedScheduler = timeoutService == null;
       this.timeoutService = usingSharedScheduler
@@ -501,7 +539,9 @@ public class OkHttpChannelBuilder extends
       this.enableKeepAlive = enableKeepAlive;
       this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
+      this.flowControlWindow = flowControlWindow;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
+      this.maxInboundMetadataSize = maxInboundMetadataSize;
 
       usingSharedExecutor = executor == null;
       this.transportTracerFactory =
@@ -537,8 +577,10 @@ public class OkHttpChannelBuilder extends
           hostnameVerifier,
           connectionSpec,
           maxMessageSize,
+          flowControlWindow,
           options.getProxyParameters(),
           tooManyPingsRunnable,
+          maxInboundMetadataSize,
           transportTracerFactory.create());
       if (enableKeepAlive) {
         transport.enableKeepAlive(
@@ -564,7 +606,7 @@ public class OkHttpChannelBuilder extends
       }
 
       if (usingSharedExecutor) {
-        SharedResourceHolder.release(SHARED_EXECUTOR, (ExecutorService) executor);
+        SharedResourceHolder.release(SHARED_EXECUTOR, executor);
       }
     }
   }

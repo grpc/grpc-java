@@ -21,15 +21,10 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-testing'),
+            libraries.google_auth_oauth2_http,
             libraries.junit,
             libraries.mockito,
-            libraries.oauth_client
-    compile (libraries.truth) {
-        // Disable because it uses Java 8 bytecode, which breaks gae-java7
-        exclude group: 'com.google.auto.value', module: 'auto-value-annotations'
-        // Disable because it uses Java 8 bytecode, which breaks gae-java7
-        exclude group: 'org.checkerframework', module: 'checker-qual'
-    }
+            libraries.truth
     compileOnly libraries.javax_annotation
     runtime libraries.opencensus_impl,
             libraries.netty_tcnative
@@ -38,9 +33,11 @@ dependencies {
 
 configureProtoCompilation()
 
+import net.ltgt.gradle.errorprone.CheckSeverity
+
 compileJava {
     // This isn't a library; it can use beta APIs
-    it.options.compilerArgs += ["-Xep:BetaApi:OFF"]
+    options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
 
 test {

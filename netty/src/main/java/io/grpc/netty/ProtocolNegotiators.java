@@ -22,12 +22,12 @@ import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.InternalChannelz;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
@@ -42,6 +42,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpClientCodec;
 import io.netty.handler.codec.http.HttpClientUpgradeHandler;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.Http2ClientUpgradeCodec;
@@ -90,6 +91,7 @@ public final class ProtocolNegotiators {
             // Set sttributes before replace to be sure we pass it before accepting any requests.
             handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
                 .build(),
                 /*securityInfo=*/ null);
             // Just replace this handler with the gRPC handler.
@@ -104,6 +106,9 @@ public final class ProtocolNegotiators {
 
         return new PlaintextHandler();
       }
+
+      @Override
+      public void close() {}
     };
   }
 
@@ -117,6 +122,9 @@ public final class ProtocolNegotiators {
       public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
         return new ServerTlsHandler(sslContext, handler);
       }
+
+      @Override
+      public void close() {}
     };
   }
 
@@ -157,6 +165,7 @@ public final class ProtocolNegotiators {
                 Attributes.newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                    .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
                     .build(),
                 new InternalChannelz.Security(new InternalChannelz.Tls(session)));
             // Replace this handler with the GRPC handler.
@@ -176,6 +185,7 @@ public final class ProtocolNegotiators {
       return pipeline.get(SslHandler.class);
     }
 
+    @SuppressWarnings("FutureReturnValueIgnored")
     private void fail(ChannelHandlerContext ctx, Throwable exception) {
       logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed for new client.", exception);
       ctx.close();
@@ -206,6 +216,13 @@ public final class ProtocolNegotiators {
         }
         return new BufferUntilProxyTunnelledHandler(
             proxyHandler, negotiator.newHandler(http2Handler));
+      }
+
+      // This method is not normally called, because we use httpProxy on a per-connection basis in
+      // NettyChannelBuilder. Instead, we expect `negotiator' to be closed by NettyTransportFactory.
+      @Override
+      public void close() {
+        negotiator.close();
       }
     }
 
@@ -310,6 +327,9 @@ public final class ProtocolNegotiators {
       };
       return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
     }
+
+    @Override
+    public void close() {}
   }
 
   /** A tuple of (host, port). */
@@ -332,6 +352,7 @@ public final class ProtocolNegotiators {
   }
 
   static final class PlaintextUpgradeNegotiator implements ProtocolNegotiator {
+
     @Override
     public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
       // Register the plaintext upgrader
@@ -339,8 +360,12 @@ public final class ProtocolNegotiators {
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       final HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-      return new BufferingHttp2UpgradeHandler(upgrader, handler);
+      return new BufferingHttp2UpgradeHandler(httpClientCodec, upgrader, handler,
+          handler.getAuthority());
     }
+
+    @Override
+    public void close() {}
   }
 
   /**
@@ -357,6 +382,9 @@ public final class ProtocolNegotiators {
     public Handler newHandler(GrpcHttp2ConnectionHandler handler) {
       return new BufferUntilChannelActiveHandler(handler);
     }
+
+    @Override
+    public void close() {}
   }
 
   private static RuntimeException unavailableException(String msg) {
@@ -501,6 +529,7 @@ public final class ProtocolNegotiators {
      * will fail immediately.
      */
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
         throws Exception {
       /**
@@ -558,6 +587,7 @@ public final class ProtocolNegotiators {
     /**
      * Propagate failures to all buffered writes.
      */
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected final void fail(ChannelHandlerContext ctx, Throwable cause) {
       if (failCause == null) {
         failCause = cause;
@@ -571,13 +601,10 @@ public final class ProtocolNegotiators {
         bufferedWrites = null;
       }
 
-      /**
-       * In case something goes wrong ensure that the channel gets closed as the
-       * NettyClientTransport relies on the channel's close future to get completed.
-       */
-      ctx.close();
+      ctx.fireExceptionCaught(cause);
     }
 
+    @SuppressWarnings("FutureReturnValueIgnored")
     protected final void writeBufferedAndRemove(ChannelHandlerContext ctx) {
       if (!ctx.channel().isActive() || writing) {
         return;
@@ -651,7 +678,8 @@ public final class ProtocolNegotiators {
                 Attributes.newBuilder()
                     .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
                     .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                    .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+                    .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
+                    .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
                     .build(),
                 new InternalChannelz.Security(new InternalChannelz.Tls(session)));
             writeBufferedAndRemove(ctx);
@@ -699,7 +727,8 @@ public final class ProtocolNegotiators {
           Attributes
               .newBuilder()
               .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-              .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
+              .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
+              .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
               .build(),
           /*securityInfo=*/ null);
       super.channelActive(ctx);
@@ -714,9 +743,13 @@ public final class ProtocolNegotiators {
 
     private final GrpcHttp2ConnectionHandler grpcHandler;
 
-    BufferingHttp2UpgradeHandler(ChannelHandler handler, GrpcHttp2ConnectionHandler grpcHandler) {
-      super(handler);
+    private final String authority;
+
+    BufferingHttp2UpgradeHandler(ChannelHandler handler, ChannelHandler upgradeHandler,
+        GrpcHttp2ConnectionHandler grpcHandler, String authority) {
+      super(handler, upgradeHandler);
       this.grpcHandler = grpcHandler;
+      this.authority = authority;
     }
 
     @Override
@@ -725,11 +758,13 @@ public final class ProtocolNegotiators {
     }
 
     @Override
+    @SuppressWarnings("FutureReturnValueIgnored")
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
       // Trigger the HTTP/1.1 plaintext upgrade protocol by issuing an HTTP request
       // which causes the upgrade headers to be added
       DefaultHttpRequest upgradeTrigger =
           new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+      upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
       ctx.writeAndFlush(upgradeTrigger);
       super.channelActive(ctx);
     }
@@ -742,7 +777,8 @@ public final class ProtocolNegotiators {
             Attributes
                 .newBuilder()
                 .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                .set(CallCredentials.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
+                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
+                .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
                 .build(),
             /*securityInfo=*/ null);
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {

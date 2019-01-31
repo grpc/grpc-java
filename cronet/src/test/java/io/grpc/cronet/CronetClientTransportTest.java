@@ -25,7 +25,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
 import io.grpc.CallOptions;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -33,6 +32,7 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.cronet.CronetChannelBuilder.StreamBuilderFactory;
 import io.grpc.internal.ClientStreamListener;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.TransportTracer;
 import io.grpc.testing.TestMethodDescriptors;
@@ -82,9 +82,8 @@ public final class CronetClientTransportTest {
   @Test
   public void transportAttributes() {
     Attributes attrs = transport.getAttributes();
-    assertEquals(AUTHORITY, attrs.get(CallCredentials.ATTR_AUTHORITY));
     assertEquals(
-        SecurityLevel.PRIVACY_AND_INTEGRITY, attrs.get(CallCredentials.ATTR_SECURITY_LEVEL));
+        SecurityLevel.PRIVACY_AND_INTEGRITY, attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL));
   }
 
   @Test
@@ -121,5 +120,37 @@ public final class CronetClientTransportTest {
     callback2.onCanceled(cronetStream1, null);
     // All streams are gone now.
     verify(clientTransportListener, times(1)).transportTerminated();
+  }
+
+  @Test
+  public void startStreamAfterShutdown() throws Exception {
+    CronetClientStream stream =
+        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT);
+    transport.shutdown();
+    BaseClientStreamListener listener = new BaseClientStreamListener();
+    stream.start(listener);
+
+    assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
+  }
+
+  private static class BaseClientStreamListener implements ClientStreamListener {
+    private Status status;
+
+    @Override
+    public void messagesAvailable(MessageProducer producer) {}
+
+    @Override
+    public void onReady() {}
+
+    @Override
+    public void headersRead(Metadata headers) {}
+
+    @Override
+    public void closed(Status status, Metadata trailers) {}
+
+    @Override
+    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+      this.status = status;
+    }
   }
 }

@@ -104,7 +104,9 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Adds interceptors that will be called before the channel performs its real work. This is
    * functionally equivalent to using {@link ClientInterceptors#intercept(Channel, List)}, but while
-   * still having access to the original {@code ManagedChannel}.
+   * still having access to the original {@code ManagedChannel}. Interceptors run in the reverse
+   * order in which they are added, just as with consecutive calls to {@code
+   * ClientInterceptors.intercept()}.
    *
    * @return this
    * @since 1.0.0
@@ -115,6 +117,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * Adds interceptors that will be called before the channel performs its real work. This is
    * functionally equivalent to using {@link ClientInterceptors#intercept(Channel,
    * ClientInterceptor...)}, but while still having access to the original {@code ManagedChannel}.
+   * Interceptors run in the reverse order in which they are added, just as with consecutive calls
+   * to {@code ClientInterceptors.intercept()}.
    *
    * @return this
    * @since 1.0.0
@@ -224,11 +228,34 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * are shipped with gRPC, but may not be implemented by custom channel builders, in which case
    * this method will throw.
    *
+   * @deprecated this method disables service-config-based policy selection, and may cause problems
+   *             if NameResolver returns GRPCLB balancer addresses but a non-GRPCLB LoadBalancer
+   *             is passed in here.  Use {@link #defaultLoadBalancingPolicy} instead.
+   *
    * @return this
    * @since 1.0.0
    */
+  @Deprecated
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);
+
+  /**
+   * Sets the default load-balancing policy that will be used if the service config doesn't specify
+   * one.  If not set, the default will be the "pick_first" policy.
+   *
+   * <p>Policy implementations are looked up in the
+   * {@link LoadBalancerRegistry#getDefaultRegistry default LoadBalancerRegistry}.
+   *
+   * <p>This method is implemented by all stock channel builders that are shipped with gRPC, but may
+   * not be implemented by custom channel builders, in which case this method will throw.
+   *
+   * @return this
+   * @since 1.18.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+  public T defaultLoadBalancingPolicy(String policy) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Enables full-stream decompression of inbound streams. This will cause the channel's outbound
@@ -302,6 +329,28 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public T maxInboundMessageSize(int bytes) {
     // intentional noop rather than throw, this method is only advisory.
     Preconditions.checkArgument(bytes >= 0, "bytes must be >= 0");
+    return thisT();
+  }
+
+  /**
+   * Sets the maximum size of metadata allowed to be received. {@code Integer.MAX_VALUE} disables
+   * the enforcement. The default is implementation-dependent, but is not generally less than 8 KiB
+   * and may be unlimited.
+   *
+   * <p>This is cumulative size of the metadata. The precise calculation is
+   * implementation-dependent, but implementations are encouraged to follow the calculation used for
+   * <a href="http://httpwg.org/specs/rfc7540.html#rfc.section.6.5.2">
+   * HTTP/2's SETTINGS_MAX_HEADER_LIST_SIZE</a>. It sums the bytes from each entry's key and value,
+   * plus 32 bytes of overhead per entry.
+   *
+   * @param bytes the maximum size of received metadata
+   * @return this
+   * @throws IllegalArgumentException if bytes is non-positive
+   * @since 1.17.0
+   */
+  public T maxInboundMetadataSize(int bytes) {
+    Preconditions.checkArgument(bytes > 0, "maxInboundMetadataSize must be > 0");
+    // intentional noop rather than throw, this method is only advisory.
     return thisT();
   }
 
@@ -439,8 +488,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Enables the retry and hedging mechanism provided by the gRPC library.
    *
-   * <p>This method may not work as expected for the current release because retry is not fully
-   * implemented yet.
+   * <p>For the current release, this method may have a side effect that disables Census stats and
+   * tracing. Hedging support is not implemented yet.
    *
    * @return this
    * @since 1.11.0
@@ -472,6 +521,18 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4471")
   public T maxTraceEvents(int maxTraceEvents) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Sets the proxy detector to be used in addresses name resolution. If <code>null</code> is passed
+   * the default proxy detector will be used.
+   *
+   * @return this
+   * @since 1.19.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+  public T proxyDetector(ProxyDetector proxyDetector) {
     throw new UnsupportedOperationException();
   }
 

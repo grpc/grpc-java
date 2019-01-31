@@ -24,14 +24,19 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import io.grpc.Attributes;
-import io.grpc.CallCredentials;
+import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
+import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
-import io.grpc.alts.internal.Handshaker.HandshakerResult;
+import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
+import io.grpc.internal.FixedObjectPool;
+import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.NettyChannelBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.CompositeByteBuf;
@@ -148,8 +153,12 @@ public class AltsProtocolNegotiatorTest {
             };
           }
         };
+    ManagedChannel fakeChannel = NettyChannelBuilder.forTarget("localhost:8080").build();
+    ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
+    LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
     handler =
-        AltsProtocolNegotiator.createServerNegotiator(handshakerFactory).newHandler(grpcHandler);
+        AltsProtocolNegotiator.createServerNegotiator(handshakerFactory, lazyFakeChannel)
+            .newHandler(grpcHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler, userEventHandler);
   }
 
@@ -341,13 +350,14 @@ public class AltsProtocolNegotiatorTest {
   public void peerPropagated() throws Exception {
     doHandshake();
 
-    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.getTsiPeerAttributeKey()))
-        .isEqualTo(mockedTsiPeer);
-    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.getAltsAuthContextAttributeKey()))
+    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.TSI_PEER_KEY)).isEqualTo(mockedTsiPeer);
+    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.ALTS_CONTEXT_KEY))
         .isEqualTo(mockedAltsContext);
     assertThat(grpcHandler.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString())
         .isEqualTo("embedded");
-    assertThat(grpcHandler.attrs.get(CallCredentials.ATTR_SECURITY_LEVEL))
+    assertThat(grpcHandler.attrs.get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR).toString())
+        .isEqualTo("embedded");
+    assertThat(grpcHandler.attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL))
         .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
   }
 

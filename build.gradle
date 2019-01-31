@@ -7,12 +7,13 @@ buildscript {
         classpath "com.diffplug.spotless:spotless-plugin-gradle:3.13.0"
         classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
         classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.5'
-        classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.0.13'
-        classpath 'net.ltgt.gradle:gradle-apt-plugin:0.13'
+        classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.6'
         classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.5"
         classpath 'me.champeau.gradle:japicmp-gradle-plugin:0.2.5'
     }
 }
+
+import net.ltgt.gradle.errorprone.CheckSeverity
 
 subprojects {
     apply plugin: "checkstyle"
@@ -26,34 +27,28 @@ subprojects {
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
-    // jdk10 not supported by errorprone: https://github.com/google/error-prone/issues/860
-    if (!JavaVersion.current().isJava10Compatible() &&
-        rootProject.properties.get('errorProne', true)) {
-        apply plugin: "net.ltgt.errorprone"
-        apply plugin: "net.ltgt.apt"
 
+    apply plugin: "net.ltgt.errorprone"
+    if (rootProject.properties.get('errorProne', true)) {
         dependencies {
-            // The ErrorProne plugin defaults to the latest, which would break our
-            // build if error prone releases a new version with a new check
-            errorprone 'com.google.errorprone:error_prone_core:2.2.0'
-            apt 'com.google.guava:guava-beta-checker:1.0'
+            errorprone 'com.google.errorprone:error_prone_core:2.3.2'
+            errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
+
+            annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
         }
     } else {
-        // Remove per-project error-prone checker config
+        // Disable Error Prone
         allprojects {
             afterEvaluate { project ->
                 project.tasks.withType(JavaCompile) {
-                    options.compilerArgs.removeAll { it.startsWith("-Xep") }
+                    options.errorprone.enabled = false
                 }
             }
         }
     }
-    // TODO(zpencer): remove when intellij 2017.2 is released
-    // https://github.com/gradle/gradle/issues/2315
-    idea.module.inheritOutputDirs = true
 
     group = "io.grpc"
-    version = "1.16.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.19.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.7
     targetCompatibility = 1.7
@@ -83,11 +78,11 @@ subprojects {
 
     compileTestJava {
         // serialVersionUID is basically guaranteed to be useless in our tests
-        // LinkedList doesn't hurt much in tests and has lots of usages
         options.compilerArgs += [
-            "-Xlint:-serial",
-            "-Xep:JdkObsolete:OFF"
+            "-Xlint:-serial"
         ]
+        // LinkedList doesn't hurt much in tests and has lots of usages
+        options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
     }
 
     jar.manifest {
@@ -103,6 +98,7 @@ subprojects {
         encoding = 'UTF-8'
         use = true
         links 'https://docs.oracle.com/javase/8/docs/api/'
+        source = "8"
     }
 
     ext {
@@ -110,12 +106,15 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.27.Final'
-        guavaVersion = '20.0'
+        nettyVersion = '4.1.32.Final'
+        googleauthVersion = '0.9.0'
+        // Temporarily use a slightly older version of Guava. Will want to bump
+        // to 27.0.1+ with grpc 1.19 or 1.20 for the listenablefuture dep changes.
+        guavaVersion = '25.1-android'
         protobufVersion = '3.5.1'
         protocVersion = '3.5.1-1'
         protobufNanoVersion = '3.0.0-alpha-5'
-        opencensusVersion = '0.12.3'
+        opencensusVersion = '0.18.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -184,8 +183,8 @@ subprojects {
                 // https://github.com/google/protobuf/issues/2718
                 it.options.compilerArgs += [
                     "-Xlint:-cast",
-                    "-XepExcludedPaths:.*/src/generated/[^/]+/java/.*",
                 ]
+                it.options.errorprone.excludedPaths = ".*/src/generated/[^/]+/java/.*"
             }
         }
 
@@ -196,16 +195,16 @@ subprojects {
         }
         libraries = [
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.17",
+            checker_compat_qual: "org.checkerframework:checker-compat-qual:2.5.2",
             errorprone: "com.google.errorprone:error_prone_annotations:2.2.0",
             gson: "com.google.code.gson:gson:2.7",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
             javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
-            jsr305: 'com.google.code.findbugs:jsr305:3.0.0',
-            oauth_client: 'com.google.auth:google-auth-library-oauth2-http:0.9.0',
-            google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.0.0',
-            google_auth_credentials: 'com.google.auth:google-auth-library-credentials:0.9.0',
-            google_auth_oauth2_http: 'com.google.auth:google-auth-library-oauth2-http:0.9.0',
+            jsr305: 'com.google.code.findbugs:jsr305:3.0.2',
+            google_api_protos: 'com.google.api.grpc:proto-google-common-protos:1.12.0',
+            google_auth_credentials: "com.google.auth:google-auth-library-credentials:${googleauthVersion}",
+            google_auth_oauth2_http: "com.google.auth:google-auth-library-oauth2-http:${googleauthVersion}",
             okhttp: 'com.squareup.okhttp:okhttp:2.5.0',
             okio: 'com.squareup.okio:okio:1.13.0',
             opencensus_api: "io.opencensus:opencensus-api:${opencensusVersion}",
@@ -224,7 +223,12 @@ subprojects {
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
             netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
             netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
-            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.12.Final',
+
+            // Keep the following references of tcnative version in sync whenever it's updated
+            // SECURITY.md (multiple occurrences)
+            // examples/example-tls/build.gradle
+            // examples/example-tls/pom.xml
+            netty_tcnative: 'io.netty:netty-tcnative-boringssl-static:2.0.20.Final',
 
             conscrypt: 'org.conscrypt:conscrypt-openjdk-uber:1.0.1',
             re2j: 'com.google.re2j:re2j:1.2',
@@ -233,14 +237,14 @@ subprojects {
             junit: 'junit:junit:4.12',
             mockito: 'org.mockito:mockito-core:1.9.5',
             truth: 'com.google.truth:truth:0.42',
-            guava_testlib: 'com.google.guava:guava-testlib:20.0',
+            guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
 
             // Benchmark dependencies
             hdrhistogram: 'org.hdrhistogram:HdrHistogram:2.1.10',
             math: 'org.apache.commons:commons-math3:3.6',
 
             // Jetty ALPN dependencies
-            jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.7'
+            jetty_alpn_agent: 'org.mortbay.jetty.alpn:jetty-alpn-agent:2.0.9'
         ]
     }
 
@@ -254,7 +258,6 @@ subprojects {
             if (!(project.name in [
                 'grpc-benchmarks',
                 'grpc-interop-testing',
-                'grpc-gae-interop-testing-jdk7',
                 'grpc-gae-interop-testing-jdk8',
             ])) {
                 resolutionStrategy.failOnVersionConflict()
@@ -295,6 +298,10 @@ subprojects {
                 options.addBooleanOption('html4', true)
             }
         }
+    }
+
+    jacoco {
+        toolVersion = "0.8.2"
     }
 
     checkstyle {
@@ -364,7 +371,7 @@ subprojects {
             snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
         }
     }
-    uploadArchives.onlyIf { !name.contains("grpc-gae-interop-testing") }
+    uploadArchives.onlyIf { !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds") }
 
     [
         install.repositories.mavenInstaller,

@@ -55,23 +55,23 @@ public class NettyTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+  protected List<? extends InternalServer> newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forPort(0)
         .flowControlWindow(65 * 1024)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServer(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
-  protected InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    int port = server.getPort();
+  protected List<? extends InternalServer> newServer(
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
         .forPort(port)
         .flowControlWindow(65 * 1024)
         .setTransportTracerFactory(fakeClockTransportTracer)
-        .buildTransportServer(streamTracerFactories);
+        .buildTransportServers(streamTracerFactories);
   }
 
   @Override
@@ -96,5 +96,12 @@ public class NettyTransportTest extends AbstractTransportTest {
         new InetSocketAddress("localhost", port),
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(testAuthority(server)));
+  }
+
+  @org.junit.Ignore
+  @org.junit.Test
+  @Override
+  public void clientChecksInboundMetadataSize_trailer() throws Exception {
+    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
   }
 }

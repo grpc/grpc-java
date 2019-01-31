@@ -64,7 +64,9 @@ public final class StatsTraceContext {
    * Factory method for the server-side.
    */
   public static StatsTraceContext newServerContext(
-      List<ServerStreamTracer.Factory> factories, String fullMethodName, Metadata headers) {
+      List<? extends ServerStreamTracer.Factory> factories,
+      String fullMethodName,
+      Metadata headers) {
     if (factories.isEmpty()) {
       return NOOP;
     }
@@ -107,6 +109,17 @@ public final class StatsTraceContext {
   public void clientInboundHeaders() {
     for (StreamTracer tracer : tracers) {
       ((ClientStreamTracer) tracer).inboundHeaders();
+    }
+  }
+
+  /**
+   * See {@link ClientStreamTracer#inboundTrailers}.  For client-side only.
+   *
+   * <p>Called from abstract stream implementations.
+   */
+  public void clientInboundTrailers(Metadata trailers) {
+    for (StreamTracer tracer : tracers) {
+      ((ClientStreamTracer) tracer).inboundTrailers(trailers);
     }
   }
 

@@ -23,7 +23,6 @@ import static io.netty.channel.ChannelOption.SO_LINGER;
 import static io.netty.channel.ChannelOption.SO_TIMEOUT;
 import static io.netty.util.CharsetUtil.UTF_8;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
@@ -48,11 +47,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.CheckReturnValue;
 
 /**
  * Common utility methods.
  */
-@VisibleForTesting
 class Utils {
 
   public static final AsciiString STATUS_OK = AsciiString.of("200");
@@ -72,9 +71,6 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
       new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
 
-  @VisibleForTesting
-  static boolean validateHeaders = false;
-
   public static Metadata convertHeaders(Http2Headers http2Headers) {
     if (http2Headers instanceof GrpcHttp2InboundHeaders) {
       GrpcHttp2InboundHeaders h = (GrpcHttp2InboundHeaders) http2Headers;
@@ -83,6 +79,7 @@ class Utils {
     return InternalMetadata.newMetadata(convertHeadersToArray(http2Headers));
   }
 
+  @CheckReturnValue
   private static byte[][] convertHeadersToArray(Http2Headers http2Headers) {
     // The Netty AsciiString class is really just a wrapper around a byte[] and supports
     // arbitrary binary data, not just ASCII.

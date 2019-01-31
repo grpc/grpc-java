@@ -47,7 +47,9 @@ public class AbstractServerImplBuilderTest {
   @Test
   public void getTracerFactories_default() {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    List<ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
     assertEquals(3, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
     assertThat(factories.get(1)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
@@ -58,7 +60,9 @@ public class AbstractServerImplBuilderTest {
   public void getTracerFactories_disableStats() {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
     builder.setStatsEnabled(false);
-    List<ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
     assertEquals(2, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
     assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
@@ -68,7 +72,9 @@ public class AbstractServerImplBuilderTest {
   public void getTracerFactories_disableTracing() {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
     builder.setTracingEnabled(false);
-    List<ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
     assertEquals(2, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
     assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
@@ -79,7 +85,7 @@ public class AbstractServerImplBuilderTest {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
     builder.setTracingEnabled(false);
     builder.setStatsEnabled(false);
-    List<ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
     assertThat(factories).containsExactly(DUMMY_USER_TRACER);
   }
 
@@ -91,12 +97,12 @@ public class AbstractServerImplBuilderTest {
               new FakeTagContextBinarySerializer(),
               new FakeStatsRecorder(),
               GrpcUtil.STOPWATCH_SUPPLIER,
-              true));
+              true, true, true, true));
     }
 
     @Override
-    protected io.grpc.internal.InternalServer buildTransportServer(
-        List<ServerStreamTracer.Factory> streamTracerFactories) {
+    protected List<io.grpc.internal.InternalServer> buildTransportServers(
+        List<? extends ServerStreamTracer.Factory> streamTracerFactories) {
       throw new UnsupportedOperationException();
     }
 

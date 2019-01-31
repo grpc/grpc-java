@@ -12,13 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// The canonical version of this proto can be found at
+// https://github.com/grpc/grpc-proto/blob/master/grpc/gcp/handshaker.proto
+
 syntax = "proto3";
 
 package grpc.gcp;
 
 import "grpc/gcp/transport_security_common.proto";
 
+option go_package = "google.golang.org/grpc/credentials/alts/internal/proto/grpc_gcp";
+option java_multiple_files = true;
+option java_outer_classname = "HandshakerProto";
 option java_package = "io.grpc.alts.internal";
+
 
 enum HandshakeProtocol {
   // Default value.
@@ -57,6 +64,9 @@ message Identity {
     // Hostname of a connection endpoint.
     string hostname = 2;
   }
+
+  // Additional attributes of the identity.
+  map<string, string> attributes = 3;
 }
 
 message StartClientHandshakeReq {

@@ -108,7 +108,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final long keepAliveTimeoutInNanos;
   private final long maxConnectionAgeInNanos;
   private final long maxConnectionAgeGraceInNanos;
-  private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
   /** Incomplete attributes produced by negotiator. */
@@ -132,7 +132,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   static NettyServerHandler newHandler(
       ServerTransportListener transportListener,
       ChannelPromise channelUnused,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
@@ -178,7 +178,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       Http2FrameReader frameReader,
       Http2FrameWriter frameWriter,
       ServerTransportListener transportListener,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
@@ -236,7 +236,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       ChannelPromise channelUnused,
       final Http2Connection connection,
       ServerTransportListener transportListener,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       Http2ConnectionDecoder decoder,
       Http2ConnectionEncoder encoder,
@@ -365,7 +365,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
-    if (!teWarningLogged && !TE_TRAILERS.equals(headers.get(TE_HEADER))) {
+    if (!teWarningLogged && !TE_TRAILERS.contentEquals(headers.get(TE_HEADER))) {
       logger.warning(String.format("Expected header TE: %s, but %s is received. This means "
               + "some intermediate proxy may not support trailers",
           TE_TRAILERS, headers.get(TE_HEADER)));
@@ -405,7 +405,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         return;
       }
 
-      if (!HTTP_METHOD.equals(headers.method())) {
+      if (!HTTP_METHOD.contentEquals(headers.method())) {
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
             String.format("Method '%s' is not supported", headers.method()));
         return;

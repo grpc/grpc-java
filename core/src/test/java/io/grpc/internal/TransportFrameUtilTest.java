@@ -19,11 +19,14 @@ package io.grpc.internal;
 import static com.google.common.base.Charsets.US_ASCII;
 import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
+import static io.grpc.Metadata.BINARY_BYTE_MARSHALLER;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.google.common.collect.Iterables;
 import com.google.common.io.BaseEncoding;
 import io.grpc.InternalMetadata;
 import io.grpc.Metadata;
@@ -59,6 +62,7 @@ public class TransportFrameUtilTest {
   private static final Key<String> BINARY_STRING = Key.of("string-bin", UTF8_STRING_MARSHALLER);
   private static final Key<String> BINARY_STRING_WITHOUT_SUFFIX =
       Key.of("string", ASCII_STRING_MARSHALLER);
+  private static final Key<byte[]> BINARY_BYTES = Key.of("bytes-bin", BINARY_BYTE_MARSHALLER);
 
   @Test
   public void testToHttp2Headers() {
@@ -99,6 +103,31 @@ public class TransportFrameUtilTest {
     assertNull(recoveredHeaders.get(BINARY_STRING_WITHOUT_SUFFIX));
   }
 
+  @Test
+  public void dupBinHeadersWithComma() {
+    byte[][] http2Headers = new byte[][] {
+        BINARY_BYTES.name().getBytes(US_ASCII),
+        "BaS,e6,,4+,padding==".getBytes(US_ASCII),
+        BINARY_BYTES.name().getBytes(US_ASCII),
+        "more".getBytes(US_ASCII),
+        BINARY_BYTES.name().getBytes(US_ASCII),
+        "".getBytes(US_ASCII)};
+    byte[][] rawSerialized = TransportFrameUtil.toRawSerializedHeaders(http2Headers);
+    Metadata recoveredHeaders = InternalMetadata.newMetadata(rawSerialized);
+    byte[][] values = Iterables.toArray(recoveredHeaders.getAll(BINARY_BYTES), byte[].class);
+
+    assertTrue(Arrays.deepEquals(
+        new byte[][] {
+            BaseEncoding.base64().decode("BaS"),
+            BaseEncoding.base64().decode("e6"),
+            BaseEncoding.base64().decode(""),
+            BaseEncoding.base64().decode("4+"),
+            BaseEncoding.base64().decode("padding"),
+            BaseEncoding.base64().decode("more"),
+            BaseEncoding.base64().decode("")},
+        values));
+  }
+
   private static void assertContains(byte[][] headers, byte[] key, byte[] value) {
     String keyString = new String(key, US_ASCII);
     for (int i = 0; i < headers.length; i += 2) {
@@ -111,7 +140,7 @@ public class TransportFrameUtilTest {
   }
 
   private static byte[] base64Encode(byte[] input) {
-    return BaseEncoding.base64().encode(input).getBytes(US_ASCII);
+    return InternalMetadata.BASE64_ENCODING_OMIT_PADDING.encode(input).getBytes(US_ASCII);
   }
 
 }

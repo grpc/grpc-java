@@ -14,17 +14,12 @@ PREREQUISITES
 INSTALL
 -------
 
-1. (Only for non-released versions) Install gRPC Java
-```sh
-$ cd ../..
-$ ./gradlew install -PskipCodegen=true
-$ cd examples/android
-```
+1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
 2. Install the app
 ```sh
 $ cd helloworld  # or "cd routeguide"
-$ ./gradlew installDebug
+$ ../../gradlew installDebug
 ```
 
 Please refer to the

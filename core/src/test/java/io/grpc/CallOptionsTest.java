@@ -168,7 +168,7 @@ public class CallOptionsTest {
 
   @Test
   public void toStringMatches_withDeadline() {
-    assertThat(allSet.toString()).contains("1 ns from now");
+    assertThat(allSet.toString()).contains("0.000000001s from now");
   }
 
   @Test
@@ -194,6 +194,17 @@ public class CallOptionsTest {
     CallOptions opts = CallOptions.DEFAULT.withOption(OPTION_1, "v1").withOption(OPTION_2, "v2");
     assertThat(opts.getOption(OPTION_1)).isEqualTo("v1");
     assertThat(opts.getOption(OPTION_2)).isEqualTo("v2");
+  }
+
+  @Test
+  public void withOptionDoesNotMutateOriginal() {
+    CallOptions defaultOpt = CallOptions.DEFAULT;
+    CallOptions opt1 = defaultOpt.withOption(OPTION_1, "v1");
+    CallOptions opt2 = opt1.withOption(OPTION_1, "v2");
+
+    assertThat(defaultOpt.getOption(OPTION_1)).isEqualTo("default");
+    assertThat(opt1.getOption(OPTION_1)).isEqualTo("v1");
+    assertThat(opt2.getOption(OPTION_1)).isEqualTo("v2");
   }
 
   @Test

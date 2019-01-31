@@ -17,10 +17,6 @@
 package io.grpc.alts.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.alts.internal.Altscontext.AltsContext;
-import io.grpc.alts.internal.Handshaker.HandshakerResult;
-import io.grpc.alts.internal.TransportSecurityCommon.RpcProtocolVersions;
-import io.grpc.alts.internal.TransportSecurityCommon.SecurityLevel;
 
 /** AltsAuthContext contains security-related context information about an ALTs connection. */
 public final class AltsAuthContext {

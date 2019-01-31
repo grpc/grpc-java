@@ -16,8 +16,8 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.ProxyParameters;
 import java.net.SocketAddress;
 
 /**
@@ -29,7 +29,6 @@ final class ProxySocketAddress extends SocketAddress {
   private final SocketAddress address;
   private final ProxyParameters proxyParameters;
 
-  @VisibleForTesting
   ProxySocketAddress(SocketAddress address, ProxyParameters proxyParameters) {
     this.address = Preconditions.checkNotNull(address);
     this.proxyParameters = Preconditions.checkNotNull(proxyParameters);

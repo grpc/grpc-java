@@ -37,6 +37,8 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
@@ -200,7 +202,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.16.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
+  private static final String IMPLEMENTATION_VERSION = "1.19.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default delay in nanos before we send a keepalive.
@@ -247,6 +249,27 @@ public final class GrpcUtil {
       return null;
     }
   };
+
+  /**
+   * The very default load-balancing policy.
+   */
+  public static final String DEFAULT_LB_POLICY = "pick_first";
+
+  /**
+   * RPCs created on the Channel returned by {@link io.grpc.LoadBalancer.Subchannel#asChannel}
+   * will have this option with value {@code true}.  They will be treated differently from
+   * the ones created by application.
+   */
+  public static final CallOptions.Key<Boolean> CALL_OPTIONS_RPC_OWNED_BY_BALANCER =
+      CallOptions.Key.create("io.grpc.internal.CALL_OPTIONS_RPC_OWNED_BY_BALANCER");
+
+  /**
+   * Returns true if an RPC with the given properties should be counted when calculating the
+   * in-use state of a transport.
+   */
+  public static boolean shouldBeCountedForInUse(CallOptions callOptions) {
+    return !Boolean.TRUE.equals(callOptions.getOption(CALL_OPTIONS_RPC_OWNED_BY_BALANCER));
+  }
 
   /**
    * Returns a proxy detector appropriate for the current environment.
@@ -485,17 +508,17 @@ public final class GrpcUtil {
   /**
    * Shared executor for channels.
    */
-  public static final Resource<ExecutorService> SHARED_CHANNEL_EXECUTOR =
-      new Resource<ExecutorService>() {
+  public static final Resource<Executor> SHARED_CHANNEL_EXECUTOR =
+      new Resource<Executor>() {
         private static final String NAME = "grpc-default-executor";
         @Override
-        public ExecutorService create() {
+        public Executor create() {
           return Executors.newCachedThreadPool(getThreadFactory(NAME + "-%d", true));
         }
 
         @Override
-        public void close(ExecutorService instance) {
-          instance.shutdown();
+        public void close(Executor instance) {
+          ((ExecutorService) instance).shutdown();
         }
 
         @Override
@@ -533,7 +556,7 @@ public final class GrpcUtil {
             throw new RuntimeException(e);
           }
 
-          return service;
+          return Executors.unconfigurableScheduledExecutorService(service);
         }
 
         @Override

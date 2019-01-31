@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.STATE_INFO;
+import static io.grpc.util.RoundRobinLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -60,11 +60,10 @@ import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.util.RoundRobinLoadBalancerFactory.EmptyPicker;
-import io.grpc.util.RoundRobinLoadBalancerFactory.ReadyPicker;
-import io.grpc.util.RoundRobinLoadBalancerFactory.Ref;
-import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer;
-import io.grpc.util.RoundRobinLoadBalancerFactory.RoundRobinLoadBalancer.StickinessState;
+import io.grpc.util.RoundRobinLoadBalancer.EmptyPicker;
+import io.grpc.util.RoundRobinLoadBalancer.ReadyPicker;
+import io.grpc.util.RoundRobinLoadBalancer.Ref;
+import io.grpc.util.RoundRobinLoadBalancer.StickinessState;
 import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,21 +85,23 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-/** Unit test for {@link RoundRobinLoadBalancerFactory}. */
+/** Unit test for {@link RoundRobinLoadBalancer}. */
 @RunWith(JUnit4.class)
 public class RoundRobinLoadBalancerTest {
-  private RoundRobinLoadBalancer loadBalancer;
-  private List<EquivalentAddressGroup> servers = Lists.newArrayList();
-  private Map<EquivalentAddressGroup, Subchannel> subchannels = Maps.newLinkedHashMap();
   private static final Attributes.Key<String> MAJOR_KEY = Attributes.Key.create("major-key");
-  private Attributes affinity = Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
+
+  private RoundRobinLoadBalancer loadBalancer;
+  private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
+  private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
+  private final Attributes affinity =
+      Attributes.newBuilder().set(MAJOR_KEY, "I got the keys").build();
 
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
   @Captor
   private ArgumentCaptor<ConnectivityState> stateCaptor;
   @Captor
-  private ArgumentCaptor<EquivalentAddressGroup> eagCaptor;
+  private ArgumentCaptor<List<EquivalentAddressGroup>> eagListCaptor;
   @Mock
   private Helper mockHelper;
 
@@ -108,6 +109,7 @@ public class RoundRobinLoadBalancerTest {
   private PickSubchannelArgs mockArgs;
 
   @Before
+  @SuppressWarnings("unchecked")
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
@@ -116,11 +118,11 @@ public class RoundRobinLoadBalancerTest {
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
       servers.add(eag);
       Subchannel sc = mock(Subchannel.class);
-      when(sc.getAddresses()).thenReturn(eag);
-      subchannels.put(eag, sc);
+      when(sc.getAllAddresses()).thenReturn(Arrays.asList(eag));
+      subchannels.put(Arrays.asList(eag), sc);
     }
 
-    when(mockHelper.createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class)))
+    when(mockHelper.createSubchannel(any(List.class), any(Attributes.class)))
         .then(new Answer<Subchannel>() {
           @Override
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
@@ -131,8 +133,7 @@ public class RoundRobinLoadBalancerTest {
           }
         });
 
-    loadBalancer = (RoundRobinLoadBalancer) RoundRobinLoadBalancerFactory.getInstance()
-        .newLoadBalancer(mockHelper);
+    loadBalancer = new RoundRobinLoadBalancer(mockHelper);
   }
 
   @After
@@ -146,10 +147,10 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
     loadBalancer.handleSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
-    verify(mockHelper, times(3)).createSubchannel(eagCaptor.capture(),
+    verify(mockHelper, times(3)).createSubchannel(eagListCaptor.capture(),
         any(Attributes.class));
 
-    assertThat(eagCaptor.getAllValues()).containsAllIn(subchannels.keySet());
+    assertThat(eagListCaptor.getAllValues()).containsAllIn(subchannels.keySet());
     for (Subchannel subchannel : subchannels.values()) {
       verify(subchannel).requestConnection();
       verify(subchannel, never()).shutdown();
@@ -165,26 +166,34 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void pickAfterResolvedUpdatedHosts() throws Exception {
     Subchannel removedSubchannel = mock(Subchannel.class);
     Subchannel oldSubchannel = mock(Subchannel.class);
     Subchannel newSubchannel = mock(Subchannel.class);
 
-    for (Subchannel subchannel : Lists.newArrayList(removedSubchannel, oldSubchannel,
-        newSubchannel)) {
-      when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
-          new Ref<ConnectivityStateInfo>(
-              ConnectivityStateInfo.forNonError(READY))).build());
-    }
-
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
     FakeSocketAddress oldAddr = new FakeSocketAddress("old");
     FakeSocketAddress newAddr = new FakeSocketAddress("new");
 
-    final Map<EquivalentAddressGroup, Subchannel> subchannels2 = Maps.newHashMap();
-    subchannels2.put(new EquivalentAddressGroup(removedAddr), removedSubchannel);
-    subchannels2.put(new EquivalentAddressGroup(oldAddr), oldSubchannel);
+    List<Subchannel> allSubchannels =
+        Lists.newArrayList(removedSubchannel, oldSubchannel, newSubchannel);
+    List<FakeSocketAddress> allAddrs =
+        Lists.newArrayList(removedAddr, oldAddr, newAddr);
+    for (int i = 0; i < allSubchannels.size(); i++) {
+      Subchannel subchannel = allSubchannels.get(i);
+      List<EquivalentAddressGroup> eagList =
+          Arrays.asList(new EquivalentAddressGroup(allAddrs.get(i)));
+      when(subchannel.getAttributes()).thenReturn(Attributes.newBuilder().set(STATE_INFO,
+          new Ref<ConnectivityStateInfo>(
+              ConnectivityStateInfo.forNonError(READY))).build());
+      when(subchannel.getAllAddresses()).thenReturn(eagList);
+    }
+
+    final Map<List<EquivalentAddressGroup>, Subchannel> subchannels2 = Maps.newHashMap();
+    subchannels2.put(Arrays.asList(new EquivalentAddressGroup(removedAddr)), removedSubchannel);
+    subchannels2.put(Arrays.asList(new EquivalentAddressGroup(oldAddr)), oldSubchannel);
 
     List<EquivalentAddressGroup> currentServers =
         Lists.newArrayList(
@@ -197,7 +206,7 @@ public class RoundRobinLoadBalancerTest {
         Object[] args = invocation.getArguments();
         return subchannels2.get(args[0]);
       }
-    }).when(mockHelper).createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class));
+    }).when(mockHelper).createSubchannel(any(List.class), any(Attributes.class));
 
     loadBalancer.handleResolvedAddressGroups(currentServers, affinity);
 
@@ -214,8 +223,8 @@ public class RoundRobinLoadBalancerTest {
         oldSubchannel);
 
     subchannels2.clear();
-    subchannels2.put(new EquivalentAddressGroup(oldAddr), oldSubchannel);
-    subchannels2.put(new EquivalentAddressGroup(newAddr), newSubchannel);
+    subchannels2.put(Arrays.asList(new EquivalentAddressGroup(oldAddr)), oldSubchannel);
+    subchannels2.put(Arrays.asList(new EquivalentAddressGroup(newAddr)), newSubchannel);
 
     List<EquivalentAddressGroup> latestServers =
         Lists.newArrayList(
@@ -233,8 +242,7 @@ public class RoundRobinLoadBalancerTest {
     assertThat(loadBalancer.getSubchannels()).containsExactly(oldSubchannel,
         newSubchannel);
 
-    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
-        any(Attributes.class));
+    verify(mockHelper, times(3)).createSubchannel(any(List.class), any(Attributes.class));
     inOrder.verify(mockHelper).updateBalancingState(eq(READY), pickerCaptor.capture());
 
     picker = pickerCaptor.getValue();
@@ -250,6 +258,7 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
@@ -282,8 +291,7 @@ public class RoundRobinLoadBalancerTest {
         ConnectivityStateInfo.forNonError(IDLE));
 
     verify(subchannel, times(2)).requestConnection();
-    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
-        any(Attributes.class));
+    verify(mockHelper, times(3)).createSubchannel(any(List.class), any(Attributes.class));
     verifyNoMoreInteractions(mockHelper);
   }
 
@@ -329,6 +337,7 @@ public class RoundRobinLoadBalancerTest {
     verifyNoMoreInteractions(mockHelper);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
@@ -336,8 +345,7 @@ public class RoundRobinLoadBalancerTest {
     loadBalancer.handleSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
-    verify(mockHelper, times(3)).createSubchannel(any(EquivalentAddressGroup.class),
-        any(Attributes.class));
+    verify(mockHelper, times(3)).createSubchannel(any(List.class), any(Attributes.class));
     verify(mockHelper, times(3))
         .updateBalancingState(stateCaptor.capture(), pickerCaptor.capture());
 
@@ -617,6 +625,7 @@ public class RoundRobinLoadBalancerTest {
     picker = pickerCaptor.getValue();
 
     // second pick with a different stickiness value
+    @SuppressWarnings("unused")
     Subchannel sc2 = picker.pickSubchannel(mockArgs).getSubchannel();
 
     // go back to ready

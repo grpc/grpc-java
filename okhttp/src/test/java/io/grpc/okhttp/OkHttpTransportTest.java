@@ -20,6 +20,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
@@ -41,6 +42,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
           .forAddress("localhost", 0)
           .usePlaintext()
           .setTransportTracerFactory(fakeClockTransportTracer)
+          .maxInboundMetadataSize(GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE)
           .buildTransportFactory();
 
   @After
@@ -49,19 +51,19 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+  protected List<? extends InternalServer> newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
-          .forPort(0)
-          .flowControlWindow(65 * 1024),
+            .forPort(0)
+            .flowControlWindow(65 * 1024),
         streamTracerFactories,
         fakeClockTransportTracer);
   }
 
   @Override
-  protected InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    int port = server.getPort();
+  protected List<? extends InternalServer> newServer(
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
             .forPort(port)
@@ -97,5 +99,12 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   @Override
   protected boolean haveTransportTracer() {
     return true;
+  }
+
+  @Override
+  @org.junit.Test
+  @org.junit.Ignore
+  public void clientChecksInboundMetadataSize_trailer() {
+    // Server-side is flaky due to https://github.com/netty/netty/pull/8332
   }
 }

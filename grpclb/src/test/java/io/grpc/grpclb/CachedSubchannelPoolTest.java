@@ -19,6 +19,7 @@ package io.grpc.grpclb;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.grpclb.CachedSubchannelPool.SHUTDOWN_TIMEOUT_MS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doAnswer;
@@ -29,16 +30,16 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelScheduledTask;
+import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
-import io.grpc.internal.SerializingExecutor;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -57,44 +58,47 @@ public class CachedSubchannelPoolTest {
   private static final Attributes.Key<String> ATTR_KEY = Attributes.Key.create("test-attr");
   private static final Attributes ATTRS1 = Attributes.newBuilder().set(ATTR_KEY, "1").build();
   private static final Attributes ATTRS2 = Attributes.newBuilder().set(ATTR_KEY, "2").build();
-  private static final FakeClock.TaskFilter SHUTDOWN_SCHEDULED_TASK_FILTER =
+  private static final FakeClock.TaskFilter SHUTDOWN_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command instanceof ShutdownSubchannelScheduledTask;
+          // The task is wrapped by SynchronizationContext, so we can't compare the type
+          // directly.
+          return command.toString().contains(ShutdownSubchannelTask.class.getSimpleName());
         }
       };
 
-  private final SerializingExecutor channelExecutor =
-      new SerializingExecutor(MoreExecutors.directExecutor());
   private final Helper helper = mock(Helper.class);
   private final FakeClock clock = new FakeClock();
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
   private final CachedSubchannelPool pool = new CachedSubchannelPool();
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
 
   @Before
+  @SuppressWarnings("unchecked")
   public void setUp() {
     doAnswer(new Answer<Subchannel>() {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
           Subchannel subchannel = mock(Subchannel.class);
-          EquivalentAddressGroup eag = (EquivalentAddressGroup) invocation.getArguments()[0];
+          List<EquivalentAddressGroup> eagList =
+              (List<EquivalentAddressGroup>) invocation.getArguments()[0];
           Attributes attrs = (Attributes) invocation.getArguments()[1];
-          when(subchannel.getAddresses()).thenReturn(eag);
+          when(subchannel.getAllAddresses()).thenReturn(eagList);
           when(subchannel.getAttributes()).thenReturn(attrs);
           mockSubchannels.add(subchannel);
           return subchannel;
         }
-      }).when(helper).createSubchannel(any(EquivalentAddressGroup.class), any(Attributes.class));
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          Runnable task = (Runnable) invocation.getArguments()[0];
-          channelExecutor.execute(task);
-          return null;
-        }
-      }).when(helper).runSerialized(any(Runnable.class));
-    pool.init(helper, clock.getScheduledExecutorService());
+      }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
+    when(helper.getSynchronizationContext()).thenReturn(syncContext);
+    when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
+    pool.init(helper);
   }
 
   @After
@@ -109,12 +113,12 @@ public class CachedSubchannelPoolTest {
   public void subchannelExpireAfterReturned() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
     assertThat(subchannel1).isNotNull();
-    verify(helper).createSubchannel(same(EAG1), same(ATTRS1));
+    verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
     assertThat(subchannel2).isNotNull();
     assertThat(subchannel2).isNotSameAs(subchannel1);
-    verify(helper).createSubchannel(same(EAG2), same(ATTRS2));
+    verify(helper).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
 
     pool.returnSubchannel(subchannel1);
 
@@ -133,19 +137,18 @@ public class CachedSubchannelPoolTest {
     verify(subchannel2).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, times(2)).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
   public void subchannelReused() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
     assertThat(subchannel1).isNotNull();
-    verify(helper).createSubchannel(same(EAG1), same(ATTRS1));
+    verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
     assertThat(subchannel2).isNotNull();
     assertThat(subchannel2).isNotSameAs(subchannel1);
-    verify(helper).createSubchannel(same(EAG2), same(ATTRS2));
+    verify(helper).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
 
     pool.returnSubchannel(subchannel1);
 
@@ -167,7 +170,7 @@ public class CachedSubchannelPoolTest {
     // pool will create a new channel for EAG2 when requested
     Subchannel subchannel2a = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
     assertThat(subchannel2a).isNotSameAs(subchannel2);
-    verify(helper, times(2)).createSubchannel(same(EAG2), same(ATTRS2));
+    verify(helper, times(2)).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
 
     // subchannel1 expires SHUTDOWN_TIMEOUT_MS after being returned
     pool.returnSubchannel(subchannel1a);
@@ -177,7 +180,6 @@ public class CachedSubchannelPoolTest {
     verify(subchannel1a).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, times(2)).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
@@ -187,26 +189,25 @@ public class CachedSubchannelPoolTest {
     Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS1);
     assertThat(subchannel1).isNotSameAs(subchannel2);
 
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).isEmpty();
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).isEmpty();
     pool.returnSubchannel(subchannel2);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(1);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(1);
 
     // If the subchannel being returned has an address that is the same as a subchannel in the pool,
     // the returned subchannel will be shut down.
     verify(subchannel1, never()).shutdown();
     pool.returnSubchannel(subchannel1);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(1);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(1);
     verify(subchannel1).shutdown();
 
     pool.returnSubchannel(subchannel3);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(2);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(2);
     // Returning the same subchannel twice has no effect.
     pool.returnSubchannel(subchannel3);
-    assertThat(clock.getPendingTasks(SHUTDOWN_SCHEDULED_TASK_FILTER)).hasSize(2);
+    assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).hasSize(2);
 
     verify(subchannel2, never()).shutdown();
     verify(subchannel3, never()).shutdown();
-    verify(helper, never()).runSerialized(any(ShutdownSubchannelTask.class));
   }
 
   @Test
@@ -226,6 +227,5 @@ public class CachedSubchannelPoolTest {
 
     verify(subchannel3, never()).shutdown();
     assertThat(clock.numPendingTasks()).isEqualTo(0);
-    verify(helper, never()).runSerialized(any(ShutdownSubchannelTask.class));
   }
 }

@@ -37,6 +37,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
@@ -46,16 +47,16 @@ import java.util.logging.Logger;
  * The Netty-based server transport.
  */
 class NettyServerTransport implements ServerTransport {
-  private static final Logger log = Logger.getLogger(NettyServerTransport.class.getName());
   // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
       String.format("%s.connections", NettyServerTransport.class.getName()));
   // Some exceptions are not very useful and add too much noise to the log
   private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
       "Connection reset by peer",
-      "An existing connection was forcibly closed by the remote host");
+      "An existing connection was forcibly closed by the remote host",
+      "An established connection was aborted by the software in your host machine");
 
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final Channel channel;
   private final ChannelPromise channelUnused;
   private final ProtocolNegotiator protocolNegotiator;
@@ -74,14 +75,14 @@ class NettyServerTransport implements ServerTransport {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
-  private final List<ServerStreamTracer.Factory> streamTracerFactories;
+  private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
 
   NettyServerTransport(
       Channel channel,
       ChannelPromise channelUnused,
       ProtocolNegotiator protocolNegotiator,
-      List<ServerStreamTracer.Factory> streamTracerFactories,
+      List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer transportTracer,
       int maxStreams,
       int flowControlWindow,
@@ -111,6 +112,8 @@ class NettyServerTransport implements ServerTransport {
     this.maxConnectionAgeGraceInNanos = maxConnectionAgeGraceInNanos;
     this.permitKeepAliveWithoutCalls = permitKeepAliveWithoutCalls;
     this.permitKeepAliveTimeInNanos = permitKeepAliveTimeInNanos;
+    SocketAddress remote = channel.remoteAddress();
+    this.logId = InternalLogId.allocate(getClass(), remote != null ? remote.toString() : null);
   }
 
   public void start(ServerTransportListener listener) {

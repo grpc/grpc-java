@@ -40,10 +40,12 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.KeepAliveManager.ClientKeepAlivePinger;
 import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
+import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
@@ -62,9 +64,9 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
-  private final InternalLogId logId = InternalLogId.allocate(getClass().getName());
+  private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
-  private final SocketAddress address;
+  private final SocketAddress remoteAddress;
   private final Class<? extends Channel> channelType;
   private final EventLoopGroup group;
   private final ProtocolNegotiator negotiator;
@@ -91,6 +93,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   /** Since not thread-safe, may only be used from event loop. */
   private final TransportTracer transportTracer;
   private final Attributes eagAttributes;
+  private final LocalSocketPicker localSocketPicker;
 
   NettyClientTransport(
       SocketAddress address, Class<? extends Channel> channelType,
@@ -98,9 +101,10 @@ class NettyClientTransport implements ConnectionClientTransport {
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
-      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes) {
+      Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
+      LocalSocketPicker localSocketPicker) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
-    this.address = Preconditions.checkNotNull(address, "address");
+    this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
@@ -117,6 +121,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         Preconditions.checkNotNull(tooManyPingsRunnable, "tooManyPingsRunnable");
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.eagAttributes = Preconditions.checkNotNull(eagAttributes, "eagAttributes");
+    this.localSocketPicker = Preconditions.checkNotNull(localSocketPicker, "localSocketPicker");
+    this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
   }
 
   @Override
@@ -174,7 +180,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         negotiationHandler.scheme(),
         userAgent,
         statsTraceCtx,
-        transportTracer);
+        transportTracer,
+        callOptions);
   }
 
   @SuppressWarnings("unchecked")
@@ -216,12 +223,14 @@ class NettyClientTransport implements ConnectionClientTransport {
       b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
     }
 
+    ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
+
     /**
      * We don't use a ChannelInitializer in the client bootstrap because its "initChannel" method
      * is executed in the event loop and we need this handler to be in the pipeline immediately so
      * that it may begin buffering writes.
      */
-    b.handler(negotiationHandler);
+    b.handler(bufferingHandler);
     ChannelFuture regFuture = b.register();
     if (regFuture.isDone() && !regFuture.isSuccess()) {
       channel = null;
@@ -263,7 +272,13 @@ class NettyClientTransport implements ConnectionClientTransport {
       }
     });
     // Start the connection operation to the server.
-    channel.connect(address);
+    SocketAddress localAddress =
+        localSocketPicker.createSocketAddress(remoteAddress, eagAttributes);
+    if (localAddress != null) {
+      channel.connect(remoteAddress, localAddress);
+    } else {
+      channel.connect(remoteAddress);
+    }
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportStarted();
@@ -305,7 +320,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("logId", logId.getId())
-        .add("address", address)
+        .add("remoteAddress", remoteAddress)
         .add("channel", channel)
         .toString();
   }

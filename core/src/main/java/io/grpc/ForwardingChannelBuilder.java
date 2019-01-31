@@ -121,9 +121,16 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
+  @Deprecated
   @Override
   public T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
     delegate().loadBalancerFactory(loadBalancerFactory);
+    return thisT();
+  }
+
+  @Override
+  public T defaultLoadBalancingPolicy(String policy) {
+    delegate().defaultLoadBalancingPolicy(policy);
     return thisT();
   }
 
@@ -154,6 +161,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T maxInboundMessageSize(int max) {
     delegate().maxInboundMessageSize(max);
+    return thisT();
+  }
+
+  @Override
+  public T maxInboundMetadataSize(int max) {
+    delegate().maxInboundMetadataSize(max);
     return thisT();
   }
 
@@ -220,6 +233,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T maxTraceEvents(int maxTraceEvents) {
     delegate().maxTraceEvents(maxTraceEvents);
+    return thisT();
+  }
+
+  @Override
+  public T proxyDetector(ProxyDetector proxyDetector) {
+    delegate().proxyDetector(proxyDetector);
     return thisT();
   }
 
