@@ -25,13 +25,13 @@ import io.grpc.xds.shaded.envoy.api.v2.DiscoveryResponse;
 import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub;
 
 /**
- * Ads client implementation.
+ * ADS client implementation.
  */
 final class AdsStream implements StreamObserver<DiscoveryResponse> {
   private final AggregatedDiscoveryServiceStub stub;
 
   private StreamObserver<DiscoveryRequest> xdsRequestWriter;
-  private boolean closed;
+  private boolean cancelled;
 
   AdsStream(AggregatedDiscoveryServiceStub stub) {
     this.stub = checkNotNull(stub, "stub");
@@ -56,13 +56,13 @@ final class AdsStream implements StreamObserver<DiscoveryResponse> {
     // TODO: impl
   }
 
-  void close(Status status) {
-    if (closed) {
+  void cancel(String message) {
+    if (cancelled) {
       return;
     }
-    closed = true;
+    cancelled = true;
     try {
-      xdsRequestWriter.onError(status.asRuntimeException());
+      xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
     } catch (Exception e) {
       // Don't care
     }

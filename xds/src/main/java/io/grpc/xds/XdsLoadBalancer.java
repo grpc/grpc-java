@@ -77,13 +77,13 @@ final class XdsLoadBalancer extends LoadBalancer {
         ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig))) {
       XdsLbState.Mode currentMode = xdsLbState.mode();
       Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
-      Status cancel = Status.CANCELLED.withDescription("Changing loadbalancing mode");
+      String cancelMessage = "Changing loadbalancing mode";
       switch (currentMode) {
         case STANDARD:
           if (childPolicy != null) {
             // GOTO CUSTOM mode, close the stream but reuse the channel
             xdsLbState.shutdown();
-            xdsLbState.shutdownLbRpc(cancel);
+            xdsLbState.shutdownLbRpc(cancelMessage);
             updateXdsLbState(
                 helper, newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
                 null);
@@ -93,7 +93,7 @@ final class XdsLoadBalancer extends LoadBalancer {
           if (childPolicy != null) {
             // GOTO a new CUSTOM mode, close the stream but reuse the channel
             xdsLbState.shutdown();
-            xdsLbState.shutdownLbRpc(cancel);
+            xdsLbState.shutdownLbRpc(cancelMessage);
             updateXdsLbState(
                 helper, newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
                 null);

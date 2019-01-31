@@ -113,7 +113,7 @@ public class XdsLbStateTest {
 
   @Test
   public void shutdownLbRpc_verifyChannelNotShutdown() throws Exception {
-    xdsLbState.shutdownLbRpc(Status.DATA_LOSS);
+    xdsLbState.shutdownLbRpc("shutdown msg1");
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
     assertFalse(channel.isShutdown());

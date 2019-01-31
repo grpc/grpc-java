@@ -352,7 +352,7 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extracts the loadbalancer name from loadbalancer config.
+   * Extracts the loadbalancer name from xds loadbalancer config.
    */
   @SuppressWarnings("unchecked")
   public static String getBalancerNameFromXdsConfig(
@@ -362,7 +362,7 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extracts list of child policies from loadbalancer config.
+   * Extracts list of child policies from xds loadbalancer config.
    */
   @SuppressWarnings("unchecked")
   @Nullable
@@ -379,7 +379,7 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extracts list of child policies from loadbalancer config.
+   * Extracts list of fallback policies from xds loadbalancer config.
    */
   @SuppressWarnings("unchecked")
   @Nullable

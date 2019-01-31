@@ -93,8 +93,8 @@ public class AdsStreamTest {
   }
 
   @Test
-  public void close() throws Exception {
-    adsStream.close(Status.DATA_LOSS.withDescription("cause1"));
+  public void cancel() throws Exception {
+    adsStream.cancel("cause1");
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
   }

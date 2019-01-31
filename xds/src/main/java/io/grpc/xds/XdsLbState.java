@@ -49,13 +49,12 @@ abstract class XdsLbState {
     if (lbCommChannel() != null) {
       lbCommChannel().shutdown();
     }
-    shutdownLbRpc(Status.CANCELLED.withDescription("Loadbalancer client shutdown"));
+    shutdownLbRpc("Loadbalancer client shutdown");
   }
 
-  final void shutdownLbRpc(Status status) {
+  final void shutdownLbRpc(String message) {
     if (adsStream() != null) {
-      adsStream().close(status);
-      // lbStream will be set to null in LbStream.cleanup()
+      adsStream().cancel(message);
     }
   }
 

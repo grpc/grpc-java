@@ -114,9 +114,9 @@ public class ServiceConfigUtilTest {
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
         + "}}";
 
-    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
+    List<Map<String, Object>> fallbackPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
         (Map<String, Object>) JsonParser.parse(lbConfig));
 
-    assertThat(childPolicies).isNull();
+    assertThat(fallbackPolicies).isNull();
   }
 }
