@@ -96,7 +96,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private long perRpcBufferUsed;
 
   private ClientStreamListener masterListener;
-  private Future<?> scheduledRetry;
+  private ScheduledRetry scheduledRetry;
   @GuardedBy("lock")
   private ScheduledHedging scheduledHedging;
   private long nextBackoffIntervalNanos;
@@ -418,10 +418,9 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Runnable runnable = commit(noopSubstream);
 
     if (runnable != null) {
-      Future<?> savedScheduledRetry = scheduledRetry;
+      ScheduledRetry savedScheduledRetry = scheduledRetry;
       if (savedScheduledRetry != null) {
-        savedScheduledRetry.cancel(false);
-        scheduledRetry = null;
+        savedScheduledRetry.cancel();
       }
       masterListener.closed(reason, new Metadata());
       runnable.run();
@@ -775,24 +774,28 @@ abstract class RetriableStream<ReqT> implements ClientStream {
           if (retryPlan.shouldRetry) {
             // The check state.winningSubstream == null, checking if is not already committed, is
             // racy, but is still safe b/c the retry will also handle committed/cancellation
-            scheduledRetry = scheduledExecutorService.schedule(
+            ScheduledRetry scheduledRetry = new ScheduledRetry();
+            RetriableStream.this.scheduledRetry = scheduledRetry;
+            scheduledRetry.setFuture(scheduledExecutorService.schedule(
                 new Runnable() {
                   @Override
                   public void run() {
-                    scheduledRetry = null;
                     callExecutor.execute(new Runnable() {
                       @Override
                       public void run() {
                         // retry
                         Substream newSubstream
                             = createSubstream(substream.previousAttemptCount + 1);
+
+                        // This will check commitment, so it's still safe if the retry is started in
+                        // a race.
                         drain(newSubstream);
                       }
                     });
                   }
                 },
                 retryPlan.backoffNanos,
-                TimeUnit.NANOSECONDS);
+                TimeUnit.NANOSECONDS));
             return;
           }
           isFatal = retryPlan.isFatal;
@@ -1304,6 +1307,20 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       this.isFatal = isFatal;
       this.backoffNanos = backoffNanos;
       this.hedgingPushbackMillis = hedgingPushbackMillis;
+    }
+  }
+
+  private static final class ScheduledRetry {
+    Future<?> future;
+
+    void setFuture(Future<?> future) {
+      this.future = future;
+    }
+
+    void cancel() {
+      if (future != null) {
+        future.cancel(false);
+      }
     }
   }
 
