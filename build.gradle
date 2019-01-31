@@ -355,7 +355,7 @@ subprojects {
                 artifact sourcesJar
 
                 pom {
-                    name = "$project.group:$project.name".toString()
+                    name = project.group + ":" + project.name
                     url = 'https://github.com/grpc/grpc-java'
                     afterEvaluate {
                         // description is not available until evaluated.
@@ -381,7 +381,6 @@ subprojects {
                             name = "gRPC Contributors"
                             email = "grpc-io@googlegroups.com"
                             url = "https://grpc.io/"
-                            // https://issues.gradle.org/browse/GRADLE-2719
                             organization = "gRPC Authors"
                             organizationUrl = "https://www.google.com"
                         }
@@ -428,7 +427,6 @@ subprojects {
                     url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
                 }
             }
-            mavenLocal()
         }
     }
 

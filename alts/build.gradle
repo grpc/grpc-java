@@ -61,12 +61,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 javadoc { exclude 'io/grpc/alts/internal/**' }
 
-artifacts {
-    archives shadowJar
-}
-
 jar {
-  // Must use a different classifier to avoid conflicting with shadowJar
+    // Must use a different classifier to avoid conflicting with shadowJar
     classifier = 'original'
 }
 
@@ -86,7 +82,6 @@ publishing {
         maven(MavenPublication) {
             artifact shadowJar
 
-            // TODO: manually add deps?
             pom.withXml {
                 // Swap our dependency to grpc-netty-shaded. Projects depending on this via
                 // project(':grpc-alts') will still be using the non-shaded form.

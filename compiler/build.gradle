@@ -1,6 +1,5 @@
 apply plugin: "cpp"
 apply plugin: "com.google.protobuf"
-apply plugin: "java"
 
 description = 'The protoc plugin for gRPC Java'
 

@@ -11,7 +11,7 @@ sourceSets { testShadow {} }
 
 dependencies {
     compile project(':grpc-netty')
-    compile libraries.netty_tcnative
+    runtime libraries.netty_tcnative
     testShadowCompile files(shadowJar),
             configurations.shadow,
             project(':grpc-testing-proto'),
@@ -46,7 +46,20 @@ publishing {
         maven(MavenPublication) {
             // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
             artifact shadowJar
+
+            pom.withXml {
+                def dependencies = asNode().appendNode('dependencies')
+                project.configurations.shadow.allDependencies.each { dep ->
+                    def dependencyNode = dependencies.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', dep.group)
+                    dependencyNode.appendNode('artifactId', dep.name)
+                    def version = (dep.name == 'grpc-core') ? '[' + dep.version + ']' : dep.version
+                    dependencyNode.appendNode('version', version)
+                    dependencyNode.appendNode('scope', 'runtime')
+                }
+            }
             // TODO: manually add deps
+
         }
     }
 }
