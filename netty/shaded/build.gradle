@@ -10,19 +10,15 @@ description = "gRPC: Netty Shaded"
 sourceSets { testShadow {} }
 
 dependencies {
-    compileOnly project(':grpc-netty')
-    compileOnly libraries.netty_tcnative
+    compile project(':grpc-netty')
+    compile libraries.netty_tcnative
     testShadowCompile files(shadowJar),
             configurations.shadow,
             project(':grpc-testing-proto'),
             project(':grpc-testing'),
             libraries.truth
-    runtime project(':grpc-core')
+    shadow project(':grpc-core')
 }
-
-artifacts { // We want uploadArchives to handle the shadowJar; we don't care about
-    // uploadShadow
-    archives shadowJar }
 
 jar {
     // Must use a different classifier to avoid conflicting with shadowJar
@@ -47,10 +43,10 @@ shadowJar {
 
 publishing {
     publications {
-        mavenJava(MavenPublication) {
+        maven(MavenPublication) {
+            // Ideally swap to project.shadow.component(it) when it isn't broken for project deps
             artifact shadowJar
-
-            artifacts.removeAll { it.classifier == 'original'}
+            // TODO: manually add deps
         }
     }
 }

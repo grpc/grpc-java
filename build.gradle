@@ -344,8 +344,12 @@ subprojects {
 
     publishing {
         publications {
-            mavenJava(MavenPublication) {
-                from components.java
+            // do not use mavenJava, as java plugin will modify it via "magic"
+            maven(MavenPublication) {
+                if (!project.name.contains("grpc-netty-shaded") && !name.contains("grpc-alts")
+                      && !name.contains("grpc-compiler")) {
+                    from components.java
+                }
 
                 artifact javadocJar
                 artifact sourcesJar
@@ -430,10 +434,10 @@ subprojects {
 
     signing {
         required false
-        sign publishing.publications.mavenJava
+        sign publishing.publications.maven
     }
 
-    publishMavenJavaPublicationToMavenRepository.onlyIf {
+    publishMavenPublicationToMavenRepository.onlyIf {
         !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
     }
 
