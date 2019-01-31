@@ -58,8 +58,6 @@ publishing {
                     dependencyNode.appendNode('scope', 'runtime')
                 }
             }
-            // TODO: manually add deps
-
         }
     }
 }
