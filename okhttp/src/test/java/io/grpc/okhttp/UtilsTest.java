@@ -42,7 +42,7 @@ public class UtilsTest {
 
   @Test
   public void convertSpecRejectsPlaintext() {
-    com.squareup.okhttp.ConnectionSpec plaintext = com.squareup.okhttp.ConnectionSpec.CLEARTEXT;
+    okhttp3.ConnectionSpec plaintext = okhttp3.ConnectionSpec.CLEARTEXT;
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("plaintext ConnectionSpec is not accepted");
     Utils.convertSpec(plaintext);
@@ -50,13 +50,13 @@ public class UtilsTest {
 
   @Test
   public void convertSpecKeepsAllData() {
-    com.squareup.okhttp.ConnectionSpec squareSpec = com.squareup.okhttp.ConnectionSpec.MODERN_TLS;
+    okhttp3.ConnectionSpec squareSpec = okhttp3.ConnectionSpec.MODERN_TLS;
     ConnectionSpec spec = Utils.convertSpec(squareSpec);
 
-    List<com.squareup.okhttp.TlsVersion> squareTlsVersions = squareSpec.tlsVersions();
+    List<okhttp3.TlsVersion> squareTlsVersions = squareSpec.tlsVersions();
     List<TlsVersion> tlsVersions = spec.tlsVersions();
     int versionsSize = squareTlsVersions.size();
-    List<com.squareup.okhttp.CipherSuite> squareCipherSuites = squareSpec.cipherSuites();
+    List<okhttp3.CipherSuite> squareCipherSuites = squareSpec.cipherSuites();
     List<CipherSuite> cipherSuites = spec.cipherSuites();
     int cipherSuitesSize = squareCipherSuites.size();
 
@@ -64,11 +64,13 @@ public class UtilsTest {
     assertTrue(spec.supportsTlsExtensions());
     assertEquals(versionsSize, tlsVersions.size());
     for (int i = 0; i < versionsSize; i++) {
-      assertEquals(TlsVersion.forJavaName(squareTlsVersions.get(i).javaName()), tlsVersions.get(i));
+      assertEquals(TlsVersion.forJavaName(
+          squareTlsVersions.get(i).javaName()), tlsVersions.get(i));
     }
     assertEquals(cipherSuitesSize, cipherSuites.size());
     for (int i = 0; i < cipherSuitesSize; i++) {
-      assertEquals(CipherSuite.forJavaName(squareCipherSuites.get(i).name()), cipherSuites.get(i));
+      assertEquals(CipherSuite.forJavaName(
+          squareCipherSuites.get(i).javaName()), cipherSuites.get(i));
     }
   }
 

@@ -21,7 +21,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.google.common.base.Throwables;
-import com.squareup.okhttp.ConnectionSpec;
 import io.grpc.ManagedChannel;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -42,6 +41,7 @@ import java.io.IOException;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
+import okhttp3.ConnectionSpec;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;

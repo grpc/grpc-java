@@ -90,19 +90,19 @@ public class OkHttpChannelBuilder extends
    * @deprecated Deemed of little benefit and users weren't using it. Just define one yourself
    */
   @Deprecated
-  public static final com.squareup.okhttp.ConnectionSpec DEFAULT_CONNECTION_SPEC =
-      new com.squareup.okhttp.ConnectionSpec.Builder(com.squareup.okhttp.ConnectionSpec.MODERN_TLS)
+  public static final okhttp3.ConnectionSpec DEFAULT_CONNECTION_SPEC =
+      new okhttp3.ConnectionSpec.Builder(okhttp3.ConnectionSpec.MODERN_TLS)
           .cipherSuites(
               // The following items should be sync with Netty's Http2SecurityUtil.CIPHERS.
-              com.squareup.okhttp.CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-              com.squareup.okhttp.CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
-              com.squareup.okhttp.CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-              com.squareup.okhttp.CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
-              com.squareup.okhttp.CipherSuite.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
-              com.squareup.okhttp.CipherSuite.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
-              com.squareup.okhttp.CipherSuite.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
-              com.squareup.okhttp.CipherSuite.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384)
-          .tlsVersions(com.squareup.okhttp.TlsVersion.TLS_1_2)
+              okhttp3.CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+              okhttp3.CipherSuite.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+              okhttp3.CipherSuite.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+              okhttp3.CipherSuite.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+              okhttp3.CipherSuite.TLS_DHE_RSA_WITH_AES_128_GCM_SHA256,
+              okhttp3.CipherSuite.TLS_DHE_DSS_WITH_AES_128_GCM_SHA256,
+              okhttp3.CipherSuite.TLS_DHE_RSA_WITH_AES_256_GCM_SHA384,
+              okhttp3.CipherSuite.TLS_DHE_DSS_WITH_AES_256_GCM_SHA384)
+          .tlsVersions(okhttp3.TlsVersion.TLS_1_2)
           .supportsTlsExtensions(true)
           .build();
 
@@ -346,7 +346,7 @@ public class OkHttpChannelBuilder extends
    *         If {@code connectionSpec} is not with TLS
    */
   public final OkHttpChannelBuilder connectionSpec(
-      com.squareup.okhttp.ConnectionSpec connectionSpec) {
+      okhttp3.ConnectionSpec connectionSpec) {
     Preconditions.checkArgument(connectionSpec.isTls(), "plaintext ConnectionSpec is not accepted");
     this.connectionSpec = Utils.convertSpec(connectionSpec);
     return this;

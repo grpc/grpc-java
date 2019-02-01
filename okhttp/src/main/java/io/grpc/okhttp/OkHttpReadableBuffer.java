@@ -40,7 +40,11 @@ class OkHttpReadableBuffer extends AbstractReadableBuffer {
 
   @Override
   public int readUnsignedByte() {
-    return buffer.readByte() & 0x000000FF;
+    try {
+      return buffer.readByte() & 0x000000FF;
+    } catch (EOFException e) {
+      throw new IndexOutOfBoundsException(e.getMessage());
+    }
   }
 
   @Override
