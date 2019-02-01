@@ -17,6 +17,7 @@
 package io.grpc;
 
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +49,19 @@ public abstract class Server {
    */
   public int getPort() {
     return -1;
+  }
+
+  /**
+   * Returns a list of listening sockets for this server.  May be different than the originally
+   * requested sockets (e.g. listening on port '0' maye end up listening on a different port).
+   * Callers should not modify the returned list or the addresses.
+   *
+   * @throws IllegalStateException if the server has not yet been started.
+   * @since 1.19.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/FIXME")
+  public List<? extends SocketAddress> getListenSockets() {
+    throw new UnsupportedOperationException();
   }
 
   /**

@@ -74,6 +74,7 @@ import io.grpc.internal.TransportTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -364,7 +365,11 @@ public abstract class AbstractTransportTest {
   public void serverAlreadyListening() throws Exception {
     client = null;
     server.start(serverListener);
-    int port = server.getPort();
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
     InternalServer server2 =
         Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
     thrown.expect(IOException.class);
@@ -374,7 +379,11 @@ public abstract class AbstractTransportTest {
   @Test
   public void openStreamPreventsTermination() throws Exception {
     server.start(serverListener);
-    int port = server.getPort();
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener

@@ -25,7 +25,6 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
 import io.grpc.netty.NettyServerBuilder;
-import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -74,14 +73,13 @@ public class OkHttpTransportTest extends AbstractTransportTest {
 
   @Override
   protected String testAuthority(InternalServer server) {
-    return "thebestauthority:" + server.getPort();
+    return "thebestauthority:" + server.getListenSocketAddress();
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    int port = server.getPort();
     return clientFactory.newClientTransport(
-        new InetSocketAddress("localhost", port),
+        server.getListenSocketAddress(),
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(testAuthority(server)));
   }

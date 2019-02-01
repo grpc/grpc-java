@@ -146,7 +146,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void testToString() throws Exception {
-    address = TestUtils.testServerAddress(12345);
+    address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     String s = newTransport(newNegotiator()).toString();
     transports.clear();
@@ -415,7 +415,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void failingToConstructChannelShouldFailGracefully() throws Exception {
-    address = TestUtils.testServerAddress(12345);
+    address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     NettyClientTransport transport = new NettyClientTransport(
         address, CantConstructChannel.class, new HashMap<ChannelOption<?>, Object>(), group,
@@ -507,7 +507,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void getAttributes_negotiatorHandler() throws Exception {
-    address = TestUtils.testServerAddress(12345);
+    address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
 
     NettyClientTransport transport = newTransport(new NoopProtocolNegotiator());
@@ -518,7 +518,7 @@ public class NettyClientTransportTest {
 
   @Test
   public void getEagAttributes_negotiatorHandler() throws Exception {
-    address = TestUtils.testServerAddress(12345);
+    address = TestUtils.testServerAddress(new InetSocketAddress(12345));
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
 
     NoopProtocolNegotiator npn = new NoopProtocolNegotiator();
@@ -615,7 +615,7 @@ public class NettyClientTransportTest {
 
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
     server = new NettyServer(
-        TestUtils.testServerAddress(0),
+        TestUtils.testServerAddress(new InetSocketAddress(0)),
         NioServerSocketChannel.class,
         new HashMap<ChannelOption<?>, Object>(),
         group, group, negotiator,
@@ -628,7 +628,7 @@ public class NettyClientTransportTest {
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
         channelz);
     server.start(serverListener);
-    address = TestUtils.testServerAddress(server.getPort());
+    address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
   }
 
