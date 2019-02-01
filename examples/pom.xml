@@ -12,6 +12,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <grpc.version>1.19.0-SNAPSHOT</grpc.version><!-- CURRENT_GRPC_VERSION -->
     <protobuf.version>3.5.1</protobuf.version>
     <protoc.version>3.5.1-1</protoc.version>
     <!-- required for jdk9 -->
@@ -24,7 +25,7 @@
       <dependency>
         <groupId>io.grpc</groupId>
         <artifactId>grpc-bom</artifactId>
-        <version>${project.version}</version>
+        <version>${grpc.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -46,11 +47,6 @@
       <artifactId>grpc-stub</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java-util</artifactId>
-      <version>${protobuf.version}</version>
-    </dependency>
-    <dependency>
       <groupId>javax.annotation</groupId>
       <artifactId>javax.annotation-api</artifactId>
       <version>1.2</version>
@@ -60,6 +56,11 @@
       <groupId>io.grpc</groupId>
       <artifactId>grpc-testing</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java-util</artifactId>
+      <version>${protobuf.version}</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
@@ -91,7 +92,7 @@
         <configuration>
           <protocArtifact>com.google.protobuf:protoc:${protoc.version}:exe:${os.detected.classifier}</protocArtifact>
           <pluginId>grpc-java</pluginId>
-          <pluginArtifact>io.grpc:protoc-gen-grpc-java:${project.version}:exe:${os.detected.classifier}</pluginArtifact>
+          <pluginArtifact>io.grpc:protoc-gen-grpc-java:${grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
         </configuration>
         <executions>
           <execution>
