@@ -65,13 +65,13 @@ final class XdsLoadBalancer extends LoadBalancer {
     Map<String, Object> fallbackPolicy = selectFallbackPolicy(newLbConfig);
     if (lbConfig == null) {
       updateXdsLbState(
-          helper, newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
+          newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
     } else if (!newBalancerName.equals(
         ServiceConfigUtil.getBalancerNameFromXdsConfig(lbConfig))) {
       xdsLbState.shutdown();
       xdsLbState.shutdownLbComm();
       updateXdsLbState(
-          helper, newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
+          newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
     } else if (!Objects.equals(
         ServiceConfigUtil.getChildPolicyFromXdsConfig(newLbConfig),
         ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig))) {
@@ -85,7 +85,7 @@ final class XdsLoadBalancer extends LoadBalancer {
             xdsLbState.shutdown();
             xdsLbState.shutdownLbRpc(cancelMessage);
             updateXdsLbState(
-                helper, newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
+                newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
                 null);
           } // else, still STANDARD mode
           break;
@@ -95,12 +95,12 @@ final class XdsLoadBalancer extends LoadBalancer {
             xdsLbState.shutdown();
             xdsLbState.shutdownLbRpc(cancelMessage);
             updateXdsLbState(
-                helper, newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
+                newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
                 null);
           } else {
             // GOTO STANDARD mode, reuse the stream
             updateXdsLbState(
-                helper, newBalancerName, null, fallbackPolicy, xdsLbState.lbCommChannel(),
+                newBalancerName, null, fallbackPolicy, xdsLbState.lbCommChannel(),
                 xdsLbState.adsStream());
           }
           break;
@@ -112,7 +112,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   private void updateXdsLbState(
-      Helper helper,
       String balancerName,
       @Nullable final Map<String, Object> childPolicy,
       @Nullable Map<String, Object> fallbackPolicy,
@@ -172,6 +171,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     return selectSupportedLbPolicy(fallbackConfigs);
   }
 
+  @Nullable
   private static Map<String, Object> selectSupportedLbPolicy(List<Map<String, Object>> lbConfigs) {
     if (lbConfigs == null) {
       return null;
