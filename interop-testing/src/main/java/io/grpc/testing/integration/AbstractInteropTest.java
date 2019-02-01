@@ -1712,7 +1712,7 @@ public abstract class AbstractInteropTest {
     oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
   }
 
-  /** Sends an unary rpc with "google default credentials" */
+  /** Sends an unary rpc with "google default credentials". */
   public void googleDefaultCredentials(String defaultServiceAccount)
       throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
