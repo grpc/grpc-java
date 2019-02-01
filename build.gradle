@@ -346,8 +346,7 @@ subprojects {
         publications {
             // do not use mavenJava, as java plugin will modify it via "magic"
             maven(MavenPublication) {
-                def noJavaPluginProjects = ["grpc-netty-shaded", "grpc-alts", "grpc-compiler", "grpc-bom"]
-                if (!noJavaPluginProjects.contains(project.name)) {
+                if (project.name != 'grpc-netty-shaded') {
                     from components.java
                 }
 

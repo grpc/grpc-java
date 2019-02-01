@@ -1,18 +1,5 @@
 description = 'gRPC: BOM'
 
-buildscript {
-    repositories {
-        mavenLocal()
-        maven {
-            url 'https://plugins.gradle.org/m2/'
-        }
-    }
-}
-
-archivesBaseName = "bom"
-
-project.version = "1.19.0-SNAPSHOT" // CURRENT_GRPC_VERSION
-
 publishing {
     publications {
         maven(MavenPublication) {
@@ -26,12 +13,13 @@ publishing {
                 def dependencyManagement = asNode().appendNode('dependencyManagement')
                 def dependencies = dependencyManagement.appendNode('dependencies')
                 rootProject.subprojects.each { subproject ->
-                    if (!internalProjects.contains(subproject.name)) {
-                        def dependencyNode = dependencies.appendNode('dependency')
-                        dependencyNode.appendNode('groupId', subproject.group)
-                        dependencyNode.appendNode('artifactId', subproject.name)
-                        dependencyNode.appendNode('version', subproject.version)
-                    }
+                    if (internalProjects.contains(subproject.name)) {
+		        return
+		    }
+                    def dependencyNode = dependencies.appendNode('dependency')
+                    dependencyNode.appendNode('groupId', subproject.group)
+                    dependencyNode.appendNode('artifactId', subproject.name)
+                    dependencyNode.appendNode('version', subproject.version)
                 }
 	    }
         }
