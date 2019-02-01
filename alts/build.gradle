@@ -80,11 +80,12 @@ shadowJar {
 publishing {
     publications {
         maven(MavenPublication) {
+            // use shadowJar and remove the original Jar
             artifact shadowJar
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
 
             pom.withXml {
-                // copy dependencies to shadowJar's pom
-                copyDependencies(asNode().appendNode('dependencies'))
                 // Swap our dependency to grpc-netty-shaded. Projects depending on this via
                 // project(':grpc-alts') will still be using the non-shaded form.
                 asNode().dependencies.'*'.findAll() { dep ->
@@ -95,21 +96,5 @@ publishing {
                 }
             }
         }
-    }
-}
-
-private void copyDependencies(dependencies) {
-    copyDependencies(dependencies, project.configurations.compile.dependencies, 'compile')
-    copyDependencies(dependencies, project.configurations.runtime.dependencies, 'runtime')
-}
-
-private static Set<Dependency> copyDependencies(dependenciesNode, dependencies, type) {
-    dependencies.each() { dep ->
-        def dependencyNode = dependenciesNode.appendNode('dependency')
-        dependencyNode.appendNode('groupId', dep.group)
-        dependencyNode.appendNode('artifactId', dep.name)
-        def version = (dep.name == 'grpc-core') ? '[' + dep.version + ']' : dep.version
-        dependencyNode.appendNode('version', version)
-        dependencyNode.appendNode('scope', type)
     }
 }
