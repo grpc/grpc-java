@@ -23,7 +23,8 @@ publishing {
                 // Generate bom using subprojects
                 def internalProjects = [project.name, 'grpc-xds', 'grpc-gae-interop-testing-jdk8']
 
-                def dependencies = asNode().appendNode('dependencies')
+                def dependencyManagement = asNode().appendNode('dependencyManagement')
+                def dependencies = dependencyManagement.appendNode('dependencies')
                 rootProject.subprojects.each { subproject ->
                     if (!internalProjects.contains(subproject.name)) {
                         def dependencyNode = dependencies.appendNode('dependency')
