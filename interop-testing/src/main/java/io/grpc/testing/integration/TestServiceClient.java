@@ -16,9 +16,6 @@
 
 package io.grpc.testing.integration;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
@@ -308,7 +305,8 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-        ManagedChannel channel = GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort).build();
+        ManagedChannel channel = GoogleDefaultChannelBuilder.forAddress(
+            serverHost, serverPort).build();
         try {
           TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
               TestServiceGrpc.newBlockingStub(channel);
