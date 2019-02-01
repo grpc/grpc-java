@@ -61,10 +61,6 @@ final class AdsStream implements StreamObserver<DiscoveryResponse> {
       return;
     }
     cancelled = true;
-    try {
-      xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
-    } catch (Exception e) {
-      // Don't care
-    }
+    xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
   }
 }
