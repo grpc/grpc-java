@@ -1713,16 +1713,16 @@ public abstract class AbstractInteropTest {
   }
 
   /** Sends an unary rpc with "google default credentials". */
-  public void googleDefaultCredentials(String defaultServiceAccount)
-      throws Exception {
+  public void googleDefaultCredentials(
+      String defaultServiceAccount,
+      TestServiceGrpc.TestServiceBlockingStub googleDefaultStub) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillUsername(true)
         .setResponseSize(314159)
         .setPayload(Payload.newBuilder()
             .setBody(ByteString.copyFrom(new byte[271828])))
         .build();
-
-    final SimpleResponse response = blockingStub.unaryCall(request);
+    final SimpleResponse response = googleDefaultStub.unaryCall(request);
     assertEquals(defaultServiceAccount, response.getUsername());
 
     final SimpleResponse goldenResponse = SimpleResponse.newBuilder()

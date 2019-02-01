@@ -308,9 +308,14 @@ public class TestServiceClient {
       }
 
       case GOOGLE_DEFAULT_CREDENTIALS: {
-        assertNotNull(customCredentialsType);
-        assertEquals(customCredentialsType, "google_default_credentials");
-        tester.googleDefaultCredentials(defaultServiceAccount);
+        ManagedChannel channel = GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort).build();
+        try {
+          TestServiceGrpc.TestServiceBlockingStub googleDefaultStub =
+              TestServiceGrpc.newBlockingStub(channel);
+          tester.googleDefaultCredentials(defaultServiceAccount, googleDefaultStub);
+        } finally {
+          channel.shutdownNow();
+        }
         break;
       }
 
