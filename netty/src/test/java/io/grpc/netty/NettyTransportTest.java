@@ -68,7 +68,7 @@ public class NettyTransportTest extends AbstractTransportTest {
   protected List<? extends InternalServer> newServer(
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return NettyServerBuilder
-        .forAddress(new InetSocketAddress("localhost", 0))
+        .forAddress(new InetSocketAddress("localhost", port))
         .flowControlWindow(65 * 1024)
         .setTransportTracerFactory(fakeClockTransportTracer)
         .buildTransportServers(streamTracerFactories);

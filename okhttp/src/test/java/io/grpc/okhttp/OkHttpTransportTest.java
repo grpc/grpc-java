@@ -25,6 +25,7 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.testing.AbstractTransportTest;
 import io.grpc.netty.NettyServerBuilder;
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -65,7 +66,7 @@ public class OkHttpTransportTest extends AbstractTransportTest {
       int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
-            .forPort(port)
+            .forAddress(new InetSocketAddress("localhost", port))
             .flowControlWindow(65 * 1024),
         streamTracerFactories,
         fakeClockTransportTracer);
