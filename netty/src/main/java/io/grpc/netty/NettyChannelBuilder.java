@@ -40,6 +40,7 @@ import io.grpc.internal.KeepAliveManager;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -71,6 +72,8 @@ public final class NettyChannelBuilder
   private NegotiationType negotiationType = NegotiationType.TLS;
   private OverrideAuthorityChecker authorityChecker;
   private Class<? extends Channel> channelType = NioSocketChannel.class;
+  @Nullable
+  private ChannelFactory<? extends Channel> channelFactory;
 
   @Nullable
   private EventLoopGroup eventLoopGroup;
@@ -138,9 +141,23 @@ public final class NettyChannelBuilder
 
   /**
    * Specifies the channel type to use, by default we use {@link NioSocketChannel}.
+   *
+   * <p>If {@link #channelFactory(ChannelFactory)} is provided, the builder will use {@code
+   * ChannelFactory} over channel type.
    */
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
+    return this;
+  }
+
+  /**
+   * Specifies the {@link ChannelFactory} to use.
+   *
+   * <p>When {@code ChannelFactory} is provided, builder will ignore {@link
+   * #channelType(Class) channqel type}.
+   */
+  public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
+    this.channelFactory = Preconditions.checkNotNull(channelFactory, "channelFactory");
     return this;
   }
 
@@ -390,7 +407,7 @@ public final class NettyChannelBuilder
       negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
     }
     return new NettyTransportFactory(
-        negotiator, channelType, channelOptions,
+        negotiator, channelType, channelFactory, channelOptions,
         eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory.create(), localSocketPicker);
@@ -508,16 +525,21 @@ public final class NettyChannelBuilder
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer transportTracer;
     private final LocalSocketPicker localSocketPicker;
+    @Nullable
+    private final ChannelFactory<? extends Channel> channelFactory;
 
     private boolean closed;
 
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
-        Class<? extends Channel> channelType, Map<ChannelOption<?>, ?> channelOptions,
+        Class<? extends Channel> channelType,
+        @Nullable ChannelFactory<? extends Channel> channelFactory,
+        Map<ChannelOption<?>, ?> channelOptions,
         EventLoopGroup group, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
       this.channelType = channelType;
+      this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
@@ -562,7 +584,7 @@ public final class NettyChannelBuilder
       };
 
       NettyClientTransport transport = new NettyClientTransport(
-          serverAddress, channelType, channelOptions, group,
+          serverAddress, channelType, channelFactory, channelOptions, group,
           localNegotiator, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
