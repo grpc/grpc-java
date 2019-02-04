@@ -67,6 +67,7 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.channel.local.LocalChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -181,7 +182,7 @@ public class NettyClientTransportTest {
     int soLinger = 123;
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
     NettyClientTransport transport = new NettyClientTransport(
-        address, NioSocketChannel.class, null /* channelFactory */, channelOptions, group,
+        address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
@@ -422,7 +423,7 @@ public class NettyClientTransportTest {
     address = TestUtils.testServerAddress(12345);
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     NettyClientTransport transport = new NettyClientTransport(
-        address, CantConstructChannel.class, null /* channelFactory */,
+        address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
         new HashMap<ChannelOption<?>, Object>(), group,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
@@ -471,21 +472,29 @@ public class NettyClientTransportTest {
   }
 
   @Test
-  public void channelFactoryShouldIgnoreChannelType() throws Exception {
+  public void channelFactoryShouldSetSocketOptionKeepAlive() throws Exception {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        CantConstructChannel.class, new ReflectiveChannelFactory<>(NioSocketChannel.class));
+        new ReflectiveChannelFactory<>(NioSocketChannel.class));
 
     callMeMaybe(transport.start(clientTransportListener));
 
-    new Rpc(transport, new Metadata()).halfClose().waitForResponse();
+    assertThat(transport.channel().config().getOption(ChannelOption.SO_KEEPALIVE))
+        .isTrue();
+  }
 
-    // Verify that the received headers contained the User-Agent.
-    assertEquals(1, serverListener.streamListeners.size());
-    Metadata receivedHeaders = serverListener.streamListeners.get(0).headers;
-    assertEquals(GrpcUtil.getGrpcUserAgent("netty", "testUserAgent"),
-        receivedHeaders.get(USER_AGENT_KEY));
+  @Test
+  public void channelFactoryShouldNNotSetSocketOptionKeepAlive() throws Exception {
+    startServer();
+    NettyClientTransport transport = newTransport(newNegotiator(),
+        DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
+        new ReflectiveChannelFactory<>(LocalChannel.class));
+
+    callMeMaybe(transport.start(clientTransportListener));
+
+    assertThat(transport.channel().config().getOption(ChannelOption.SO_KEEPALIVE))
+        .isNull();
   }
 
   @Test
@@ -618,19 +627,19 @@ public class NettyClientTransportTest {
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive) {
     return newTransport(negotiator, maxMsgSize, maxHeaderListSize, userAgent, enableKeepAlive,
-        NioSocketChannel.class, null /* channelFactory */);
+        new ReflectiveChannelFactory<>(NioSocketChannel.class));
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive,
-      Class<? extends Channel> channelType, ChannelFactory<? extends Channel> channelFactory) {
+      ChannelFactory<? extends Channel> channelFactory) {
     long keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     long keepAliveTimeoutNano = TimeUnit.SECONDS.toNanos(1L);
     if (enableKeepAlive) {
       keepAliveTimeNano = TimeUnit.SECONDS.toNanos(10L);
     }
     NettyClientTransport transport = new NettyClientTransport(
-        address, channelType, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
+        address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,

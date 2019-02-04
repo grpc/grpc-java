@@ -17,13 +17,13 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -43,6 +43,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
@@ -71,9 +72,8 @@ public final class NettyChannelBuilder
 
   private NegotiationType negotiationType = NegotiationType.TLS;
   private OverrideAuthorityChecker authorityChecker;
-  private Class<? extends Channel> channelType = NioSocketChannel.class;
-  @Nullable
-  private ChannelFactory<? extends Channel> channelFactory;
+  private ChannelFactory<? extends Channel> channelFactory =
+      new ReflectiveChannelFactory<>(NioSocketChannel.class);
 
   @Nullable
   private EventLoopGroup eventLoopGroup;
@@ -142,22 +142,22 @@ public final class NettyChannelBuilder
   /**
    * Specifies the channel type to use, by default we use {@link NioSocketChannel}.
    *
-   * <p>If {@link #channelFactory(ChannelFactory)} is provided, the builder will use {@code
-   * ChannelFactory} over channel type.
+   * <p>You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
+   * {@link Channel} implementation has no no-args constructor.
    */
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
-    this.channelType = Preconditions.checkNotNull(channelType, "channelType");
-    return this;
+    checkNotNull(channelType, "channelType");
+    return channelFactory(new ReflectiveChannelFactory<>(channelType));
   }
 
   /**
-   * Specifies the {@link ChannelFactory} to use.
-   *
-   * <p>When {@code ChannelFactory} is provided, builder will ignore {@link
-   * #channelType(Class) channqel type}.
+   * Specifies the {@link ChannelFactory} to create {@link Channel} instances. This method is
+   * usually only used if the specific {@code Channel} requires complex logic which requires
+   * additional information to create the {@code Channel}. Otherwise, recommend to use {@link
+   * #channelType(Class)}.
    */
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
-    this.channelFactory = Preconditions.checkNotNull(channelFactory, "channelFactory");
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     return this;
   }
 
@@ -407,7 +407,7 @@ public final class NettyChannelBuilder
       negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
     }
     return new NettyTransportFactory(
-        negotiator, channelType, channelFactory, channelOptions,
+        negotiator, channelFactory, channelOptions,
         eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory.create(), localSocketPicker);
@@ -470,7 +470,7 @@ public final class NettyChannelBuilder
 
   void protocolNegotiatorFactory(ProtocolNegotiatorFactory protocolNegotiatorFactory) {
     this.protocolNegotiatorFactory
-        = Preconditions.checkNotNull(protocolNegotiatorFactory, "protocolNegotiatorFactory");
+        = checkNotNull(protocolNegotiatorFactory, "protocolNegotiatorFactory");
   }
 
   @Override
@@ -513,7 +513,7 @@ public final class NettyChannelBuilder
   @CheckReturnValue
   private static final class NettyTransportFactory implements ClientTransportFactory {
     private final ProtocolNegotiator protocolNegotiator;
-    private final Class<? extends Channel> channelType;
+    private final ChannelFactory<? extends Channel> channelFactory;
     private final Map<ChannelOption<?>, ?> channelOptions;
     private final EventLoopGroup group;
     private final boolean usingSharedGroup;
@@ -525,20 +525,15 @@ public final class NettyChannelBuilder
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer transportTracer;
     private final LocalSocketPicker localSocketPicker;
-    @Nullable
-    private final ChannelFactory<? extends Channel> channelFactory;
 
     private boolean closed;
 
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
-        Class<? extends Channel> channelType,
-        @Nullable ChannelFactory<? extends Channel> channelFactory,
-        Map<ChannelOption<?>, ?> channelOptions,
+        ChannelFactory<? extends Channel> channelFactory, Map<ChannelOption<?>, ?> channelOptions,
         EventLoopGroup group, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
-      this.channelType = channelType;
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.flowControlWindow = flowControlWindow;
@@ -584,7 +579,7 @@ public final class NettyChannelBuilder
       };
 
       NettyClientTransport transport = new NettyClientTransport(
-          serverAddress, channelType, channelFactory, channelOptions, group,
+          serverAddress, channelFactory, channelOptions, group,
           localNegotiator, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),

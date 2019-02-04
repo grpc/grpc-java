@@ -67,8 +67,6 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress remoteAddress;
-  private final Class<? extends Channel> channelType;
-  @Nullable
   private final ChannelFactory<? extends Channel> channelFactory;
   private final EventLoopGroup group;
   private final ProtocolNegotiator negotiator;
@@ -98,8 +96,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final LocalSocketPicker localSocketPicker;
 
   NettyClientTransport(
-      SocketAddress address, Class<? extends Channel> channelType,
-      ChannelFactory<? extends Channel> channelFactory,
+      SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
@@ -109,7 +106,6 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
-    this.channelType = Preconditions.checkNotNull(channelType, "channelType");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.flowControlWindow = flowControlWindow;
@@ -216,11 +212,7 @@ class NettyClientTransport implements ConnectionClientTransport {
 
     Bootstrap b = new Bootstrap();
     b.group(eventLoop);
-    if (channelFactory == null) {
-      b.channel(channelType);
-    } else {
-      b.channelFactory(channelFactory);
-    }
+    b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
