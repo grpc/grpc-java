@@ -691,44 +691,6 @@ public final class ProtocolNegotiators {
   }
 
   /**
-   * Buffers all writes until the {@link io.netty.channel.Channel} is active.
-   */
-  private static class BufferUntilChannelActiveHandler extends AbstractBufferingHandler
-      implements ProtocolNegotiator.Handler {
-
-    private final GrpcHttp2ConnectionHandler handler;
-
-    BufferUntilChannelActiveHandler(GrpcHttp2ConnectionHandler handler) {
-      super(handler);
-      this.handler = handler;
-    }
-
-    @Override
-    public AsciiString scheme() {
-      return Utils.HTTP;
-    }
-
-    @Override
-    public void handlerAdded(ChannelHandlerContext ctx) {
-      writeBufferedAndRemove(ctx);
-    }
-
-    @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-      writeBufferedAndRemove(ctx);
-      handler.handleProtocolNegotiationCompleted(
-          Attributes
-              .newBuilder()
-              .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-              .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
-              .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
-              .build(),
-          /*securityInfo=*/ null);
-      super.channelActive(ctx);
-    }
-  }
-
-  /**
    * Buffers all writes until the HTTP to HTTP/2 upgrade is complete.
    */
   private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler
