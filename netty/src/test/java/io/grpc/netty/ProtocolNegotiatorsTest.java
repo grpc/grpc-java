@@ -17,14 +17,12 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
@@ -36,13 +34,15 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoop;
@@ -50,6 +50,23 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpRequestDecoder;
+import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.codec.http2.DefaultHttp2Connection;
+import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
+import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
+import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
+import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
+import io.netty.handler.codec.http2.Http2ConnectionDecoder;
+import io.netty.handler.codec.http2.Http2ConnectionEncoder;
+import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
@@ -58,7 +75,9 @@ import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Filter;
 import java.util.logging.Level;
@@ -77,8 +96,6 @@ import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
 
 @RunWith(JUnit4.class)
 public class ProtocolNegotiatorsTest {
@@ -94,7 +111,8 @@ public class ProtocolNegotiatorsTest {
   private Channel chan;
   private Channel server;
 
-  private GrpcHttp2ConnectionHandler grpcHandler = mock(GrpcHttp2ConnectionHandler.class);
+  private final GrpcHttp2ConnectionHandler grpcHandler =
+      FakeGrpcHttp2ConnectionHandler.newHandler();
 
   private EmbeddedChannel channel = new EmbeddedChannel();
   private ChannelPipeline pipeline = channel.pipeline();
@@ -424,60 +442,65 @@ public class ProtocolNegotiatorsTest {
     LocalAddress proxy = new LocalAddress("httpProxy_completes");
     SocketAddress host = InetSocketAddress.createUnresolved("specialHost", 314);
 
-    ChannelInboundHandler mockHandler = mock(ChannelInboundHandler.class);
+    final BlockingQueue<Object> serverReads = new LinkedBlockingQueue<>();
+    ChannelHandler childHandler = new ChannelInitializer<Channel>() {
+
+      @Override
+      protected void initChannel(Channel ch) {
+        ch.pipeline().addLast(new HttpResponseEncoder());
+        ch.pipeline().addLast(new HttpRequestDecoder());
+        ch.pipeline().addLast(new ChannelDuplexHandler() {
+          @Override
+          public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            serverReads.add(msg);
+            if (msg instanceof LastHttpContent) {
+              ctx.writeAndFlush(
+                  new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK));
+              ctx.pipeline().remove(HttpRequestDecoder.class);
+            }
+          }
+        });
+      }
+    };
     Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
-        .childHandler(mockHandler)
+        .childHandler(childHandler)
         .bind(proxy).sync().channel();
 
     ProtocolNegotiator nego =
         ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
-    ChannelHandler handler = nego.newHandler(grpcHandler);
+    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
     Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
         .register().sync().channel();
     pipeline = channel.pipeline();
     // Wait for initialization to complete
     channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    // The grpcHandler must be in the pipeline, but we don't actually want it during our test
-    // because it will consume all events since it is a mock. We only use it because it is required
-    // to construct the Handler.
-    pipeline.remove(grpcHandler);
     channel.connect(host).sync();
     serverChannel.close();
-    ArgumentCaptor<ChannelHandlerContext> contextCaptor =
-        ArgumentCaptor.forClass(ChannelHandlerContext.class);
-    Mockito.verify(mockHandler).channelActive(contextCaptor.capture());
-    ChannelHandlerContext serverContext = contextCaptor.getValue();
 
-    final String golden = "isThisThingOn?";
-    ChannelFuture negotiationFuture = channel.writeAndFlush(bb(golden, channel));
+    Object first = serverReads.poll(5, TimeUnit.SECONDS);
+    assertThat(first).isInstanceOf(HttpRequest.class);
+    HttpRequest req = (HttpRequest) first;
 
-    // Wait for sending initial request to complete
-    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    ArgumentCaptor<Object> objectCaptor = ArgumentCaptor.forClass(Object.class);
-    Mockito.verify(mockHandler)
-        .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
-    ByteBuf b = (ByteBuf) objectCaptor.getValue();
-    String request = b.toString(UTF_8);
-    b.release();
-    assertTrue("No trailing newline: " + request, request.endsWith("\r\n\r\n"));
-    assertTrue("No CONNECT: " + request, request.startsWith("CONNECT specialHost:314 "));
-    assertTrue("No host header: " + request, request.contains("host: specialHost:314"));
+    assertThat(req.method()).isEqualTo(HttpMethod.CONNECT);
+    assertThat(req.uri()).isEqualTo("specialHost:314");
+    assertThat(req.headers().get(HttpHeaderNames.HOST)).isEqualTo("specialHost:314");
 
-    assertFalse(negotiationFuture.isDone());
-    serverContext.writeAndFlush(bb("HTTP/1.1 200 OK\r\n\r\n", serverContext.channel())).sync();
-    negotiationFuture.sync();
+    Object second = serverReads.poll(5, TimeUnit.SECONDS);
+    assertThat(second).isInstanceOf(LastHttpContent.class);
 
-    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    objectCaptor.getAllValues().clear();
-    Mockito.verify(mockHandler, times(2))
-        .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
-    b = (ByteBuf) objectCaptor.getAllValues().get(1);
-    // If we were using the real grpcHandler, this would have been the HTTP/2 preface
-    String preface = b.toString(UTF_8);
-    b.release();
-    assertEquals(golden, preface);
+    channel.writeAndFlush(ByteBufUtil.writeUtf8(channel.alloc(), "isThisThingOn"));
+    Object third = serverReads.poll(5, TimeUnit.SECONDS);
+    assertThat(third).isInstanceOf(ByteBuf.class);
+
+    ByteBuf data = (ByteBuf) third;
+    try {
+      assertThat(data.toString(UTF_8)).isEqualTo("isThisThingOn");
+    } finally {
+      data.release();
+    }
 
     channel.close();
+    elg.shutdownGracefully();
   }
 
   @Test
@@ -488,53 +511,104 @@ public class ProtocolNegotiatorsTest {
     LocalAddress proxy = new LocalAddress("httpProxy_500");
     SocketAddress host = InetSocketAddress.createUnresolved("specialHost", 314);
 
-    ChannelInboundHandler mockHandler = mock(ChannelInboundHandler.class);
+    final BlockingQueue<Object> serverReads = new LinkedBlockingQueue<>();
+    ChannelHandler childHandler = new ChannelInitializer<Channel>() {
+
+      @Override
+      protected void initChannel(Channel ch) {
+        ch.pipeline().addLast(new HttpResponseEncoder());
+        ch.pipeline().addLast(new HttpRequestDecoder());
+        ch.pipeline().addLast(new ChannelDuplexHandler() {
+          @Override
+          public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            serverReads.add(msg);
+            if (msg instanceof LastHttpContent) {
+              DefaultHttpResponse res = new DefaultHttpResponse(
+                  HttpVersion.HTTP_1_1, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+              res.headers().add(HttpHeaderNames.CONTENT_LENGTH, "0");
+              ctx.writeAndFlush(res);
+              ctx.close();
+            }
+          }
+        });
+      }
+    };
     Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
-        .childHandler(mockHandler)
+        .childHandler(childHandler)
         .bind(proxy).sync().channel();
 
     ProtocolNegotiator nego =
         ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
-    ChannelHandler handler = nego.newHandler(grpcHandler);
+    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
     Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
         .register().sync().channel();
     pipeline = channel.pipeline();
     // Wait for initialization to complete
     channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    // The grpcHandler must be in the pipeline, but we don't actually want it during our test
-    // because it will consume all events since it is a mock. We only use it because it is required
-    // to construct the Handler.
-    pipeline.remove(grpcHandler);
+    ChannelFuture wf =
+        channel.writeAndFlush(ByteBufUtil.writeUtf8(channel.alloc(), "isThisThingOn"));
     channel.connect(host).sync();
     serverChannel.close();
-    ArgumentCaptor<ChannelHandlerContext> contextCaptor =
-        ArgumentCaptor.forClass(ChannelHandlerContext.class);
-    Mockito.verify(mockHandler).channelActive(contextCaptor.capture());
-    ChannelHandlerContext serverContext = contextCaptor.getValue();
 
-    final String golden = "isThisThingOn?";
-    ChannelFuture negotiationFuture = channel.writeAndFlush(bb(golden, channel));
+    Object first = serverReads.poll(5, TimeUnit.SECONDS);
+    assertThat(first).isInstanceOf(HttpRequest.class);
+    HttpRequest req = (HttpRequest) first;
 
-    // Wait for sending initial request to complete
-    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    ArgumentCaptor<Object> objectCaptor = ArgumentCaptor.forClass(Object.class);
-    Mockito.verify(mockHandler)
-        .channelRead(any(ChannelHandlerContext.class), objectCaptor.capture());
-    ByteBuf request = (ByteBuf) objectCaptor.getValue();
-    request.release();
+    assertThat(req.method()).isEqualTo(HttpMethod.CONNECT);
+    assertThat(req.uri()).isEqualTo("specialHost:314");
+    assertThat(req.headers().get(HttpHeaderNames.HOST)).isEqualTo("specialHost:314");
 
-    assertFalse(negotiationFuture.isDone());
-    String response = "HTTP/1.1 500 OMG\r\nContent-Length: 4\r\n\r\noops";
-    serverContext.writeAndFlush(bb(response, serverContext.channel())).sync();
-    thrown.expect(ProxyConnectException.class);
-    try {
-      negotiationFuture.sync();
-    } finally {
-      channel.close();
+    Object second = serverReads.poll(5, TimeUnit.SECONDS);
+    assertThat(second).isInstanceOf(LastHttpContent.class);
+
+    if (true) {
+      Throwable cause = wf.await().cause();
+      assertThat(cause).isInstanceOf(ProxyConnectException.class);
     }
+
+    channel.close();
+    elg.shutdownGracefully();
   }
 
-  private static ByteBuf bb(String s, Channel c) {
-    return ByteBufUtil.writeUtf8(c.alloc(), s);
+  private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
+
+    static GrpcHttp2ConnectionHandler noopHandler() {
+      return newHandler(true);
+    }
+
+    static GrpcHttp2ConnectionHandler newHandler() {
+      return newHandler(false);
+    }
+
+    private static GrpcHttp2ConnectionHandler newHandler(boolean noop) {
+      DefaultHttp2Connection conn = new DefaultHttp2Connection(/*server=*/ false);
+      DefaultHttp2ConnectionEncoder encoder =
+          new DefaultHttp2ConnectionEncoder(conn, new DefaultHttp2FrameWriter());
+      DefaultHttp2ConnectionDecoder decoder =
+          new DefaultHttp2ConnectionDecoder(conn, encoder, new DefaultHttp2FrameReader());
+      Http2Settings settings = new Http2Settings();
+      return new FakeGrpcHttp2ConnectionHandler(
+          /*channelUnused=*/ null, decoder, encoder, settings, noop);
+    }
+
+    private final boolean noop;
+
+    FakeGrpcHttp2ConnectionHandler(ChannelPromise channelUnused,
+        Http2ConnectionDecoder decoder,
+        Http2ConnectionEncoder encoder,
+        Http2Settings initialSettings,
+        boolean noop) {
+      super(channelUnused, decoder, encoder, initialSettings);
+      this.noop = noop;
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      if (noop) {
+        ctx.pipeline().remove(ctx.name());
+      } else {
+        super.handlerAdded(ctx);
+      }
+    }
   }
 }

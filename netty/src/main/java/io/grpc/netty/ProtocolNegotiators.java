@@ -924,6 +924,8 @@ public final class ProtocolNegotiators {
       Attributes attrs = protocolNegotiationEvent.getAttributes().toBuilder()
           .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
           .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+          // Later handlers are expected to overwrite this.
+          .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
           .build();
       ctx.fireUserEventTriggered(protocolNegotiationEvent.withAttributes(attrs));
     }
