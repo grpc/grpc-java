@@ -19,6 +19,8 @@ package io.grpc.xds;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -34,6 +36,7 @@ import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceG
 import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -100,6 +103,13 @@ public class XdsLbStateTest {
     xdsComms = new XdsComms(channel, adsStream);
   }
 
+  @After
+  public void tearDown() {
+    if (!channel.isShutdown()) {
+      channel.shutdownNow();
+    }
+  }
+
   @Test
   public void shutdownLbComm() throws Exception {
     xdsComms.shutdownChannel();
@@ -114,5 +124,12 @@ public class XdsLbStateTest {
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
     assertFalse(channel.isShutdown());
+  }
+
+  @Test
+  public void shutdownAndReleaseXdsCommsDoesShutdown() {
+    XdsLbState xdsLbState = mock(XdsLbState.class);
+    xdsLbState.shutdownAndReleaseXdsComms();
+    verify(xdsLbState).shutdown();
   }
 }

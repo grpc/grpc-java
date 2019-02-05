@@ -79,6 +79,7 @@ abstract class XdsLbState {
 
   @Nullable
   final XdsComms shutdownAndReleaseXdsComms() {
+    shutdown();
     XdsComms xdsComms = this.xdsComms;
     this.xdsComms = null;
     return xdsComms;
