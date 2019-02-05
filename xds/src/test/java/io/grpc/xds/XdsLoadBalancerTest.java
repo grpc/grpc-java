@@ -28,7 +28,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.XdsLbState.Mode;
 import java.util.Collections;
 import java.util.Map;
 import org.junit.After;
@@ -162,7 +161,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.STANDARD);
+    assertThat(lb.getXdsLbState().childPolicy).isNull();
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -173,7 +172,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.STANDARD);
+    assertThat(lb.getXdsLbState().childPolicy).isNull();
 
     // TODO(zdapeng): test adsStream is unchanged.
   }
@@ -190,7 +189,6 @@ public class XdsLoadBalancerTest {
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
-    AdsStream adsStream1 = lb.getXdsLbState().adsStream();
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -202,7 +200,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.CUSTOM);
+    assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
     // TODO(zdapeng): test adsStream is reset, channel is unchanged.
   }
@@ -220,7 +218,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.CUSTOM);
+    assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -232,7 +230,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.STANDARD);
+    assertThat(lb.getXdsLbState().childPolicy).isNull();
 
     // TODO(zdapeng): test adsStream is unchanged.
   }
@@ -250,7 +248,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.CUSTOM);
+    assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -262,7 +260,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
 
-    assertThat(lb.getXdsLbState().mode()).isSameAs(Mode.CUSTOM);
+    assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
     // TODO(zdapeng): test adsStream is reset, channel is unchanged.
   }

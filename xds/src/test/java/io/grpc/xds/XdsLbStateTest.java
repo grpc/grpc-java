@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.doReturn;
 
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -28,6 +27,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsLbState.XdsComms;
 import io.grpc.xds.shaded.envoy.api.v2.DiscoveryRequest;
 import io.grpc.xds.shaded.envoy.api.v2.DiscoveryResponse;
 import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
@@ -39,7 +39,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
@@ -52,8 +51,7 @@ public class XdsLbStateTest {
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
 
-  @Mock
-  private XdsLbState xdsLbState;
+  private XdsComms xdsComms;
 
   private ManagedChannel channel;
 
@@ -99,13 +97,12 @@ public class XdsLbStateTest {
     AggregatedDiscoveryServiceStub stub = AggregatedDiscoveryServiceGrpc.newStub(channel);
     AdsStream adsStream = new AdsStream(stub);
     adsStream.start();
-    doReturn(adsStream).when(xdsLbState).adsStream();
-    doReturn(channel).when(xdsLbState).lbCommChannel();
+    xdsComms = new XdsComms(channel, adsStream);
   }
 
   @Test
   public void shutdownLbComm() throws Exception {
-    xdsLbState.shutdownLbComm();
+    xdsComms.shutdownChannel();
     assertTrue(channel.isShutdown());
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
@@ -113,7 +110,7 @@ public class XdsLbStateTest {
 
   @Test
   public void shutdownLbRpc_verifyChannelNotShutdown() throws Exception {
-    xdsLbState.shutdownLbRpc("shutdown msg1");
+    xdsComms.shutdownLbRpc("shutdown msg1");
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
     assertFalse(channel.isShutdown());

@@ -24,12 +24,13 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
@@ -38,9 +39,6 @@ import javax.annotation.Nullable;
 final class XdsLoadBalancer extends LoadBalancer {
 
   final Helper helper;
-
-  @Nullable
-  Map<String, Object> lbConfig;
 
   @Nullable
   private XdsLbState xdsLbState;
@@ -54,72 +52,48 @@ final class XdsLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> servers, Attributes attributes) {
     Map<String, Object> newLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
-    if (!newLbConfig.equals(lbConfig)) {
-      handleNewConfig(newLbConfig);
-    }
+    handleNewConfig(newLbConfig);
     xdsLbState.handleResolvedAddressGroups(servers, attributes);
   }
 
   private void handleNewConfig(Map<String, Object> newLbConfig) {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
+    Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
     Map<String, Object> fallbackPolicy = selectFallbackPolicy(newLbConfig);
-    if (lbConfig == null) {
-      updateXdsLbState(
-          newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
-    } else if (!newBalancerName.equals(
-        ServiceConfigUtil.getBalancerNameFromXdsConfig(lbConfig))) {
-      xdsLbState.shutdown();
-      xdsLbState.shutdownLbComm();
-      updateXdsLbState(
-          newBalancerName, selectChildPolicy(newLbConfig), fallbackPolicy, null, null);
-    } else if (!Objects.equals(
-        ServiceConfigUtil.getChildPolicyFromXdsConfig(newLbConfig),
-        ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig))) {
-      XdsLbState.Mode currentMode = xdsLbState.mode();
-      Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
-      String cancelMessage = "Changing loadbalancing mode";
-      switch (currentMode) {
-        case STANDARD:
-          if (childPolicy != null) {
-            // GOTO CUSTOM mode, close the stream but reuse the channel
-            xdsLbState.shutdown();
-            xdsLbState.shutdownLbRpc(cancelMessage);
-            updateXdsLbState(
-                newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
-                null);
-          } // else, still STANDARD mode
-          break;
-        case CUSTOM:
-          if (childPolicy != null) {
-            // GOTO a new CUSTOM mode, close the stream but reuse the channel
-            xdsLbState.shutdown();
-            xdsLbState.shutdownLbRpc(cancelMessage);
-            updateXdsLbState(
-                newBalancerName, childPolicy, fallbackPolicy, xdsLbState.lbCommChannel(),
-                null);
-          } else {
-            // GOTO STANDARD mode, reuse the stream
-            updateXdsLbState(
-                newBalancerName, null, fallbackPolicy, xdsLbState.lbCommChannel(),
-                xdsLbState.adsStream());
-          }
-          break;
-        default:
-          throw new AssertionError("Unsupported xds plugin mode: " + currentMode);
+    XdsComms xdsComms = null;
+    if (xdsLbState != null) { // may release and re-use/shutdown xdsComms from current xdsLbState
+      if (!newBalancerName.equals(xdsLbState.balancerName)) {
+        xdsComms = xdsLbState.shutdownAndReleaseXdsComms();
+        if (xdsComms != null) {
+          xdsComms.shutdownChannel();
+          xdsComms = null;
+        }
+      } else if (!Objects.equals(childPolicy, xdsLbState.childPolicy)
+          // There might be optimization when only fallbackPolicy is changed.
+          || !Objects.equals(fallbackPolicy, xdsLbState.fallbackPolicy)) {
+        String cancelMessage = "Changing loadbalancing mode";
+        xdsComms = xdsLbState.shutdownAndReleaseXdsComms();
+        // close the stream but reuse the channel
+        if (xdsComms != null) {
+          xdsComms.shutdownLbRpc(cancelMessage);
+        }
+      } else { // effectively no change in policy, keep xdsLbState unchanged
+        return;
       }
     }
-    lbConfig = newLbConfig;
+    xdsLbState = newXdsLbState(
+        newBalancerName, childPolicy, fallbackPolicy, xdsComms);
   }
 
-  private void updateXdsLbState(
+  @CheckReturnValue
+  private XdsLbState newXdsLbState(
       String balancerName,
       @Nullable final Map<String, Object> childPolicy,
       @Nullable Map<String, Object> fallbackPolicy,
-      @Nullable final ManagedChannel channel,
-      @Nullable final AdsStream adsStream) {
+      @Nullable final XdsComms xdsComms) {
 
     // TODO: impl
-    xdsLbState = new XdsLbState() {
+    return new XdsLbState(balancerName, childPolicy, fallbackPolicy, xdsComms) {
       @Override
       void handleResolvedAddressGroups(
           List<EquivalentAddressGroup> servers, Attributes attributes) {}
@@ -132,23 +106,6 @@ final class XdsLoadBalancer extends LoadBalancer {
 
       @Override
       void shutdown() {}
-
-      @Nullable
-      @Override
-      ManagedChannel lbCommChannel() {
-        return channel;
-      }
-
-      @Nullable
-      @Override
-      AdsStream adsStream() {
-        return adsStream;
-      }
-
-      @Override
-      Mode mode() {
-        return childPolicy == null ? Mode.STANDARD : Mode.CUSTOM;
-      }
     };
   }
 
@@ -209,8 +166,10 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     if (xdsLbState != null) {
-      xdsLbState.shutdown();
-      xdsLbState.shutdownLbComm();
+      XdsComms xdsComms = xdsLbState.shutdownAndReleaseXdsComms();
+      if (xdsComms != null) {
+        xdsComms.shutdownChannel();
+      }
       xdsLbState = null;
     }
   }

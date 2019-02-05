@@ -23,14 +23,46 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
  * The states of an XDS working session of {@link XdsLoadBalancer}.  Created when XdsLoadBalancer
  * switches to the current mode.  Shutdown and discarded when XdsLoadBalancer switches to another
  * mode.
+ *
+ * <p>There might be two implementations:
+ *
+ * <ul>
+ *   <li>Standard plugin: No child plugin specified in lb config. Lb will send CDS request,
+ *       and then EDS requests. EDS requests request for endpoints.</li>
+ *   <li>Custom plugin: Child plugin specified in lb config. Lb will send EDS directly. EDS requests
+ *       do not request for endpoints.</li>
+ * </ul>
  */
 abstract class XdsLbState {
+
+  final String balancerName;
+
+  @Nullable
+  final Map<String, Object> childPolicy;
+
+  @Nullable
+  final Map<String, Object> fallbackPolicy;
+
+  @Nullable
+  private XdsComms xdsComms;
+
+  XdsLbState(
+      String balancerName,
+      @Nullable Map<String, Object> childPolicy,
+      @Nullable Map<String, Object> fallbackPolicy,
+      @Nullable XdsComms xdsComms) {
+    this.balancerName = balancerName;
+    this.childPolicy = childPolicy;
+    this.fallbackPolicy = fallbackPolicy;
+    this.xdsComms = xdsComms;
+  }
 
   abstract void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes);
@@ -45,38 +77,33 @@ abstract class XdsLbState {
    */
   abstract void shutdown();
 
-  final void shutdownLbComm() {
-    if (lbCommChannel() != null) {
-      lbCommChannel().shutdown();
-    }
-    shutdownLbRpc("Loadbalancer client shutdown");
+  @Nullable
+  final XdsComms shutdownAndReleaseXdsComms() {
+    XdsComms xdsComms = this.xdsComms;
+    this.xdsComms = null;
+    return xdsComms;
   }
 
-  final void shutdownLbRpc(String message) {
-    if (adsStream() != null) {
-      adsStream().cancel(message);
+  static final class XdsComms {
+    private final ManagedChannel channel;
+    private final AdsStream adsStream;
+
+    XdsComms(ManagedChannel channel, AdsStream adsStream) {
+      this.channel = channel;
+      this.adsStream = adsStream;
     }
-  }
 
-  @Nullable
-  abstract ManagedChannel lbCommChannel();
+    void shutdownChannel() {
+      if (channel != null) {
+        channel.shutdown();
+      }
+      shutdownLbRpc("Loadbalancer client shutdown");
+    }
 
-  @Nullable
-  abstract AdsStream adsStream();
-
-  abstract Mode mode();
-
-  enum Mode {
-    /**
-     * Standard plugin: No child plugin specified in lb config. Lb will send CDS request, and then
-     * EDS requests. EDS requests request for endpoints.
-     */
-    STANDARD,
-
-    /**
-     * Custom plugin: Child plugin specified in lb config. Lb will send EDS directly. EDS requests
-     * do not request for endpoints.
-     */
-    CUSTOM,
+    void shutdownLbRpc(String message) {
+      if (adsStream != null) {
+        adsStream.cancel(message);
+      }
+    }
   }
 }
