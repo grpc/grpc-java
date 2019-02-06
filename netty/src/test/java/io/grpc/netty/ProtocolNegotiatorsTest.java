@@ -176,7 +176,6 @@ public class ProtocolNegotiatorsTest {
         .group(group)
         .register();
     chan = cf.channel();
-    cf.sync();
     ChannelFuture sf = new ServerBootstrap()
         .channel(LocalServerChannel.class)
         .childHandler(new ChannelHandlerAdapter() {})
@@ -212,7 +211,6 @@ public class ProtocolNegotiatorsTest {
         .group(group)
         .register();
     chan = cf.channel();
-    cf.sync();
     ChannelFuture sf = new ServerBootstrap()
         .channel(LocalServerChannel.class)
         .childHandler(new ChannelHandlerAdapter() {})
