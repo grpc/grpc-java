@@ -24,6 +24,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import io.grpc.Attributes;
+import io.grpc.Grpc;
+import io.grpc.SecurityLevel;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -46,6 +50,7 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
 import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoop;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
@@ -79,6 +84,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
@@ -570,7 +576,51 @@ public class ProtocolNegotiatorsTest {
     elg.shutdownGracefully();
   }
 
-  private static final class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
+  @Test
+  public void waitUntilActiveHandler_firesNegotiation() throws Exception {
+    EventLoopGroup elg = new DefaultEventLoopGroup(1);
+    SocketAddress addr = new LocalAddress("addr");
+    final AtomicReference<Object> event = new AtomicReference<>();
+    ChannelHandler next = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        event.set(evt);
+        ctx.close();
+      }
+    };
+    Channel s = new ServerBootstrap()
+        .childHandler(new ChannelInboundHandlerAdapter())
+        .group(elg)
+        .channel(LocalServerChannel.class)
+        .bind(addr)
+        .sync()
+        .channel();
+    Channel c = new Bootstrap()
+        .handler(new WaitUntilActiveHandler(next))
+        .channel(LocalChannel.class).group(group)
+        .connect(addr)
+        .sync()
+        .channel();
+    SocketAddress localAddr = c.localAddress();
+    ProtocolNegotiationEvent expectedEvent = ProtocolNegotiationEvent.DEFAULT
+        .withAttributes(
+            Attributes.newBuilder()
+                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, localAddr)
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, addr)
+                .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
+                .build());
+
+    assertNull(event.get());
+    c.closeFuture().sync();
+    assertThat(event.get()).isInstanceOf(ProtocolNegotiationEvent.class);
+    ProtocolNegotiationEvent actual = (ProtocolNegotiationEvent) event.get();
+    assertThat(actual).isEqualTo(expectedEvent);
+
+    s.close();
+    elg.shutdownGracefully();
+  }
+
+  private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     static GrpcHttp2ConnectionHandler noopHandler() {
       return newHandler(true);
