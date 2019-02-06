@@ -139,7 +139,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
   @Override
   public SocketAddress getListenSocketAddress() {
     if (channel == null) {
-      log.fine("server not yet listening on " + address);
+      // server is not listening/bound yet, just return the original port.
       return address;
     }
     return channel.localAddress();
