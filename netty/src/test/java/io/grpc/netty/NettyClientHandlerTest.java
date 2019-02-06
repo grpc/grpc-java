@@ -106,6 +106,7 @@ import org.mockito.stubbing.Answer;
  * Tests for {@link NettyClientHandler}.
  */
 @RunWith(JUnit4.class)
+@SuppressWarnings("FutureReturnValueIgnored")
 public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHandler> {
 
   private NettyClientStream.TransportState streamTransportState;

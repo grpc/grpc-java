@@ -63,6 +63,7 @@ import javax.annotation.Nullable;
 /**
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
+@SuppressWarnings("FutureReturnValueIgnored")
 class NettyClientTransport implements ConnectionClientTransport {
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
