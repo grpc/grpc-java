@@ -79,8 +79,9 @@ public class OkHttpTransportTest extends AbstractTransportTest {
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
+    int port = ((InetSocketAddress) server.getListenSocketAddress()).getPort();
     return clientFactory.newClientTransport(
-        server.getListenSocketAddress(),
+        new InetSocketAddress("localhost", port),
         new ClientTransportFactory.ClientTransportOptions()
           .setAuthority(testAuthority(server)));
   }
