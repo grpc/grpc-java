@@ -1809,15 +1809,15 @@ public abstract class AbstractTransportTest {
     SocketAddress clientAddress = serverStream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
 
     SocketStats clientSocketStats = client.getStats().get();
-    assertEquals(clientAddress, clientSocketStats.local);
-    assertEquals(serverAddress, clientSocketStats.remote);
+    assertEquals("clientStatsLocal", clientAddress, clientSocketStats.local);
+    assertEquals("clientStatsRemove", serverAddress, clientSocketStats.remote);
     // very basic sanity check that socket options are populated
     assertNotNull(clientSocketStats.socketOptions.lingerSeconds);
     assertTrue(clientSocketStats.socketOptions.others.containsKey("SO_SNDBUF"));
 
     SocketStats serverSocketStats = serverTransportListener.transport.getStats().get();
-    assertEquals(serverAddress, serverSocketStats.local);
-    assertEquals(clientAddress, serverSocketStats.remote);
+    assertEquals("serverStatsLocal", serverAddress, serverSocketStats.local);
+    assertEquals("serverStatsRemove", serverSocketStats.remote);
     // very basic sanity check that socket options are populated
     assertNotNull(serverSocketStats.socketOptions.lingerSeconds);
     assertTrue(serverSocketStats.socketOptions.others.containsKey("SO_SNDBUF"));
