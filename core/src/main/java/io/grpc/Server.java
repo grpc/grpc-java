@@ -42,8 +42,10 @@ public abstract class Server {
   /**
    * Returns the port number the server is listening on.  This can return -1 if there is no actual
    * port or the result otherwise does not make sense.  Result is undefined after the server is
-   * terminated.
+   * terminated.  If there are multiple possible ports, this will return one arbitrarily.
+   * Implementations are encouraged to return the same port on each call.
    *
+   * @see #getListenSockets()
    * @throws IllegalStateException if the server has not yet been started.
    * @since 1.0.0
    */
@@ -53,8 +55,8 @@ public abstract class Server {
 
   /**
    * Returns a list of listening sockets for this server.  May be different than the originally
-   * requested sockets (e.g. listening on port '0' maye end up listening on a different port).
-   * Callers should not modify the returned list or the addresses.
+   * requested sockets (e.g. listening on port '0' may end up listening on a different port).
+   * The list is unmodifiable.
    *
    * @throws IllegalStateException if the server has not yet been started.
    * @since 1.19.0
