@@ -565,10 +565,8 @@ public class ProtocolNegotiatorsTest {
     Object second = serverReads.poll(5, TimeUnit.SECONDS);
     assertThat(second).isInstanceOf(LastHttpContent.class);
 
-    if (true) {
-      Throwable cause = wf.await().cause();
-      assertThat(cause).isInstanceOf(ProxyConnectException.class);
-    }
+    Throwable cause = wf.await().cause();
+    assertThat(cause).isInstanceOf(ProxyConnectException.class);
 
     channel.close();
     elg.shutdownGracefully();
