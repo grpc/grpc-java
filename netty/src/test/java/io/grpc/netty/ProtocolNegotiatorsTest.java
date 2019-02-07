@@ -575,7 +575,6 @@ public class ProtocolNegotiatorsTest {
                 .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
                 .build());
 
-    assertNull(event.get());
     c.closeFuture().sync();
     assertThat(event.get()).isInstanceOf(ProtocolNegotiationEvent.class);
     ProtocolNegotiationEvent actual = (ProtocolNegotiationEvent) event.get();
