@@ -106,8 +106,12 @@ public abstract class NameResolver {
 
     /**
      * Proxy detector used in name resolution.
+     *
+     * @deprecated this will be deleted along with {@link #newNameResolver(URI, Attributes)} in
+     *             a future release
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+    @Deprecated
     public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
         Attributes.Key.create("params-proxy-detector");
 
@@ -213,6 +217,12 @@ public abstract class NameResolver {
      * port number.
      */
     public abstract int getDefaultPort();
+
+    /**
+     * If the resolver wants to support proxy, it needs to use this proxy detector to generate
+     * {@link ProxySocketAddress}s.
+     */
+    public abstract ProxyDetector getProxyDetector();
 
     public final String toString() {
       return MoreObjects.toStringHelper(this)
