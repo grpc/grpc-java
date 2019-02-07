@@ -445,7 +445,7 @@ public final class ProtocolNegotiators {
   public abstract static class AbstractBufferingHandler extends ChannelDuplexHandler {
 
     private ChannelHandler[] handlers;
-    private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<ChannelWrite>();
+    private Queue<ChannelWrite> bufferedWrites = new ArrayDeque<>();
     private boolean writing;
     private boolean flushRequested;
     private Throwable failCause;
@@ -601,9 +601,7 @@ public final class ProtocolNegotiators {
         bufferedWrites = null;
       }
 
-      // In case something goes wrong ensure that the channel gets closed as the
-      // NettyClientTransport relies on the channel's close future to get completed.
-      ctx.close();
+      ctx.fireExceptionCaught(cause);
     }
 
     @SuppressWarnings("FutureReturnValueIgnored")

@@ -27,6 +27,8 @@ import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -70,7 +72,7 @@ final class DnsNameResolver extends NameResolver {
   private static final String SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY = "serviceConfig";
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
-  static final String SERVICE_CONFIG_PREFIX = "_grpc_config=";
+  static final String SERVICE_CONFIG_PREFIX = "grpc_config=";
   private static final Set<String> SERVICE_CONFIG_CHOICE_KEYS =
       Collections.unmodifiableSet(
           new HashSet<>(
@@ -90,7 +92,7 @@ final class DnsNameResolver extends NameResolver {
   private static final String JNDI_LOCALHOST_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
   private static final String JNDI_SRV_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "true");
+      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "false");
   private static final String JNDI_TXT_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_service_config", "false");
 
@@ -245,7 +247,7 @@ final class DnsNameResolver extends NameResolver {
       }
       if (proxy != null) {
         if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Using proxy " + proxy.proxyAddress + " for " + resolver.host);
+          logger.finer("Using proxy " + proxy.getProxyAddress() + " for " + resolver.host);
         }
         EquivalentAddressGroup server =
             new EquivalentAddressGroup(
@@ -409,7 +411,7 @@ final class DnsNameResolver extends NameResolver {
   @SuppressWarnings("unchecked")
   @VisibleForTesting
   static List<Map<String, Object>> parseTxtResults(List<String> txtRecords) {
-    List<Map<String, Object>> serviceConfigs = new ArrayList<Map<String, Object>>();
+    List<Map<String, Object>> serviceConfigs = new ArrayList<>();
     for (String txtRecord : txtRecords) {
       if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
         List<Map<String, Object>> choices;
@@ -500,7 +502,6 @@ final class DnsNameResolver extends NameResolver {
    * @return The service config object or {@code null} if this choice does not apply.
    */
   @Nullable
-  @SuppressWarnings("BetaApi") // Verify isn't all that beta
   @VisibleForTesting
   static Map<String, Object> maybeChooseServiceConfig(
       Map<String, Object> choice, Random random, String hostname) {

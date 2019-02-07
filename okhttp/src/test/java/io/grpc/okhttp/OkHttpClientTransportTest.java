@@ -62,6 +62,7 @@ import io.grpc.InternalStatus;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
+import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StatusException;
@@ -70,7 +71,6 @@ import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.TransportTracer;
 import io.grpc.okhttp.OkHttpClientTransport.ClientFrameHandler;
 import io.grpc.okhttp.internal.ConnectionSpec;
@@ -134,8 +134,6 @@ public class OkHttpClientTransportTest {
   private static final int HEADER_LENGTH = 5;
   private static final Status SHUTDOWN_REASON = Status.UNAVAILABLE.withDescription("for test");
   private static final ProxyParameters NO_PROXY = null;
-  private static final String NO_USER = null;
-  private static final String NO_PW = null;
   private static final int DEFAULT_START_STREAM_ID = 3;
   private static final int DEFAULT_MAX_INBOUND_METADATA_SIZE = Integer.MAX_VALUE;
 
@@ -480,6 +478,27 @@ public class OkHttpClientTransportTest {
 
     assertThat(listener.status.getDescription()).contains("Rst Stream");
     assertThat(listener.status.getCode()).isEqualTo(Code.INTERNAL);
+    shutdownAndVerify();
+  }
+
+
+  @Test
+  public void receiveResetNoError() throws Exception {
+    initTransport();
+    MockStreamListener listener = new MockStreamListener();
+    OkHttpClientStream stream =
+        clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
+    stream.start(listener);
+    assertContainStream(3);
+    frameHandler().headers(false, false, 3, 0, grpcResponseHeaders(), HeadersMode.HTTP_20_HEADERS);
+    Buffer buffer = createMessageFrame("a message");
+    frameHandler().data(false, 3, buffer, (int) buffer.size());
+    frameHandler().headers(true, true, 3, 0, grpcResponseTrailers(), HeadersMode.HTTP_20_HEADERS);
+    frameHandler().rstStream(3, ErrorCode.NO_ERROR);
+    stream.request(1);
+    listener.waitUntilStreamClosed();
+
+    assertTrue(listener.status.isOk());
     shutdownAndVerify();
   }
 
@@ -1573,8 +1592,7 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
@@ -1625,8 +1643,7 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
@@ -1676,8 +1693,7 @@ public class OkHttpClientTransportTest {
         ConnectionSpec.CLEARTEXT,
         DEFAULT_MAX_MESSAGE_SIZE,
         INITIAL_WINDOW_SIZE,
-        new ProxyParameters(
-            (InetSocketAddress) serverSocket.getLocalSocketAddress(), NO_USER, NO_PW),
+        ProxyParameters.forAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
         transportTracer);
@@ -1909,7 +1925,7 @@ public class OkHttpClientTransportTest {
       THROW_ERROR
     }
 
-    final LinkedBlockingQueue<Result> nextResults = new LinkedBlockingQueue<Result>();
+    final LinkedBlockingQueue<Result> nextResults = new LinkedBlockingQueue<>();
 
     @Override
     public void close() throws IOException {

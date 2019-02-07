@@ -60,6 +60,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
@@ -135,6 +136,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ExecutorHolder balancerRpcExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
+  private final ProxyDetector proxyDetector;
 
   @VisibleForTesting
   final SynchronizationContext syncContext = new SynchronizationContext(
@@ -193,10 +195,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated from syncContext
   // If any monitoring hook to be added later needs to get a snapshot of this Set, we could
   // switch to a ConcurrentHashMap.
-  private final Set<InternalSubchannel> subchannels = new HashSet<InternalSubchannel>(16, .75f);
+  private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
   // Must be mutated from syncContext
-  private final Set<OobChannel> oobChannels = new HashSet<OobChannel>(1, .75f);
+  private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
 
   // reprocess() must be run from syncContext
   private final DelayedClientTransport delayedTransport;
@@ -308,16 +310,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   // Must be called from syncContext
-  private void shutdownNameResolverAndLoadBalancer(boolean verifyActive) {
-    if (verifyActive) {
-      checkState(nameResolver != null, "nameResolver is null");
+  private void shutdownNameResolverAndLoadBalancer(boolean channelIsActive) {
+    if (channelIsActive) {
+      checkState(nameResolverStarted, "nameResolver is not started");
       checkState(lbHelper != null, "lbHelper is null");
     }
     if (nameResolver != null) {
       cancelNameResolverBackoff();
       nameResolver.shutdown();
-      nameResolver = null;
       nameResolverStarted = false;
+      if (channelIsActive) {
+        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+      } else {
+        nameResolver = null;
+      }
     }
     if (lbHelper != null) {
       lbHelper.lb.shutdown();
@@ -372,7 +378,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // which are bugs.
     shutdownNameResolverAndLoadBalancer(true);
     delayedTransport.reprocess(null);
-    nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     channelLogger.log(ChannelLogLevel.INFO, "Entering IDLE state");
     channelStateManager.gotoState(IDLE);
     if (inUseStateAggregator.isInUse()) {
@@ -399,9 +404,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void run() {
       scheduledNameResolverRefresh = null;
-      if (nameResolver != null) {
-        nameResolver.refresh();
-      }
+      refreshNameResolution();
     }
   }
 
@@ -421,11 +424,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  // Must be run from syncContext
-  private void refreshNameResolutionNow() {
+  /**
+   * Force name resolution refresh to happen immediately and reset refresh back-off. Must be run
+   * from syncContext.
+   */
+  private void refreshAndResetNameResolution() {
     syncContext.throwIfNotInThisSynchronizationContext();
     cancelNameResolverBackoff();
-    if (nameResolver != null) {
+    refreshNameResolution();
+  }
+
+  private void refreshNameResolution() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (nameResolverStarted) {
       nameResolver.refresh();
     }
   }
@@ -534,7 +545,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.nameResolverFactory = builder.getNameResolverFactory();
-    this.nameResolverParams = checkNotNull(builder.getNameResolverParams(), "nameResolverParams");
+    this.proxyDetector =
+        builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
+    this.nameResolverParams = addProxyToAttributes(this.proxyDetector,
+        checkNotNull(builder.getNameResolverParams(), "nameResolverParams"));
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
@@ -601,6 +615,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelCallTracer = callTracerFactory.create();
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
+  }
+
+  private static Attributes addProxyToAttributes(ProxyDetector proxyDetector,
+      Attributes attributes) {
+    if (attributes.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR) == null) {
+      return attributes.toBuilder()
+          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, proxyDetector).build();
+    } else {
+      return attributes;
+    }
   }
 
   @VisibleForTesting
@@ -791,14 +815,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      return new ClientCallImpl<ReqT, RespT>(
-              method,
-              getCallExecutor(callOptions),
-              callOptions,
-              transportProvider,
-              terminated ? null : transportFactory.getScheduledExecutorService(),
-              channelCallTracer,
-              retryEnabled)
+      return new ClientCallImpl<>(
+          method,
+          getCallExecutor(callOptions),
+          callOptions,
+          transportProvider,
+          terminated ? null : transportFactory.getScheduledExecutorService(),
+          channelCallTracer,
+          retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);
@@ -871,7 +895,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
         if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
           checkState(nameResolverStarted, "name resolver must be started");
-          refreshNameResolutionNow();
+          refreshAndResetNameResolution();
         }
         for (InternalSubchannel subchannel : subchannels) {
           subchannel.resetConnectBackoff();
@@ -990,7 +1014,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // Must be called from syncContext
     private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
       if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-        refreshNameResolutionNow();
+        refreshAndResetNameResolution();
       }
     }
 
@@ -1122,7 +1146,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
-          refreshNameResolutionNow();
+          refreshAndResetNameResolution();
         }
       }
 

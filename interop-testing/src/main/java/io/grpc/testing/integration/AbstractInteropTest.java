@@ -246,8 +246,8 @@ public abstract class AbstractInteropTest {
   }
 
   @VisibleForTesting
-  final int getPort() {
-    return server.getPort();
+  final SocketAddress getListenAddress() {
+    return server.getListenSockets().iterator().next();
   }
 
   protected ManagedChannel channel;
@@ -1710,6 +1710,27 @@ public abstract class AbstractInteropTest {
     // for that purpose.
     // So, this test is identical to oauth2_auth_token test.
     oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
+  }
+
+  /** Sends an unary rpc with "google default credentials". */
+  public void googleDefaultCredentials(
+      String defaultServiceAccount,
+      TestServiceGrpc.TestServiceBlockingStub googleDefaultStub) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillUsername(true)
+        .setResponseSize(314159)
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[271828])))
+        .build();
+    final SimpleResponse response = googleDefaultStub.unaryCall(request);
+    assertEquals(defaultServiceAccount, response.getUsername());
+
+    final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setUsername(defaultServiceAccount)
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[314159])))
+        .build();
+    assertResponse(goldenResponse, response);
   }
 
   protected static void assertSuccess(StreamRecorder<?> recorder) {

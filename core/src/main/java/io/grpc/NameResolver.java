@@ -105,6 +105,13 @@ public abstract class NameResolver {
         Attributes.Key.create("params-default-port");
 
     /**
+     * Proxy detector used in name resolution.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+    public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
+        Attributes.Key.create("params-proxy-detector");
+
+    /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
      * URI.

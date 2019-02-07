@@ -33,6 +33,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
+import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -77,7 +78,6 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * An idle timeout smaller than this would be capped to it.
    */
-  @VisibleForTesting
   static final long IDLE_MODE_MIN_TIMEOUT_MILLIS = TimeUnit.SECONDS.toMillis(1);
 
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
@@ -146,6 +146,9 @@ public abstract class AbstractManagedChannelImplBuilder
   @Nullable
   BinaryLog binlog;
 
+  @Nullable
+  ProxyDetector proxyDetector;
+
   /**
    * Sets the maximum message size allowed for a single gRPC frame. If an inbound messages
    * larger than this limit is received it will not be processed and the RPC will fail with
@@ -206,7 +209,7 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public final T executor(Executor executor) {
     if (executor != null) {
-      this.executorPool = new FixedObjectPool<Executor>(executor);
+      this.executorPool = new FixedObjectPool<>(executor);
     } else {
       this.executorPool = DEFAULT_EXECUTOR_POOL;
     }
@@ -367,6 +370,12 @@ public abstract class AbstractManagedChannelImplBuilder
   @VisibleForTesting
   protected final T overrideCensusStatsModule(CensusStatsModule censusStats) {
     this.censusStatsOverride = censusStats;
+    return thisT();
+  }
+
+  @Override
+  public T proxyDetector(@Nullable ProxyDetector proxyDetector) {
+    this.proxyDetector = proxyDetector;
     return thisT();
   }
 

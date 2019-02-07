@@ -204,7 +204,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       final int port;
     }
 
-    @SuppressWarnings("BetaApi") // Verify is only kinda beta
     private static SrvRecord parseSrvRecord(String rawRecord) {
       String[] parts = whitespace.split(rawRecord);
       Verify.verify(parts.length == 4, "Bad SRV Record: %s", rawRecord);
@@ -252,7 +251,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       List<String> records = new ArrayList<>();
 
       @SuppressWarnings("JdkObsolete")
-      Hashtable<String, String> env = new Hashtable<String, String>();
+      Hashtable<String, String> env = new Hashtable<>();
       env.put("com.sun.jndi.ldap.connect.timeout", "5000");
       env.put("com.sun.jndi.ldap.read.timeout", "5000");
       DirContext dirContext = new InitialDirContext(env);

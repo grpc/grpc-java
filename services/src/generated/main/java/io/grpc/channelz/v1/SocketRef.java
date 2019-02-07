@@ -93,6 +93,10 @@ private static final long serialVersionUID = 0L;
   public static final int SOCKET_ID_FIELD_NUMBER = 3;
   private long socketId_;
   /**
+   * <pre>
+   * The globally unique id for this socket.  Must be a positive number.
+   * </pre>
+   *
    * <code>int64 socket_id = 3;</code>
    */
   public long getSocketId() {
@@ -448,12 +452,20 @@ private static final long serialVersionUID = 0L;
 
     private long socketId_ ;
     /**
+     * <pre>
+     * The globally unique id for this socket.  Must be a positive number.
+     * </pre>
+     *
      * <code>int64 socket_id = 3;</code>
      */
     public long getSocketId() {
       return socketId_;
     }
     /**
+     * <pre>
+     * The globally unique id for this socket.  Must be a positive number.
+     * </pre>
+     *
      * <code>int64 socket_id = 3;</code>
      */
     public Builder setSocketId(long value) {
@@ -463,6 +475,10 @@ private static final long serialVersionUID = 0L;
       return this;
     }
     /**
+     * <pre>
+     * The globally unique id for this socket.  Must be a positive number.
+     * </pre>
+     *
      * <code>int64 socket_id = 3;</code>
      */
     public Builder clearSocketId() {

@@ -28,6 +28,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.isNull;
 import static org.mockito.Matchers.same;
@@ -916,7 +917,7 @@ public final class BinlogHelperTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   public void serverDeadlineLogged() {
     final AtomicReference<ServerCall> interceptedCall =
-        new AtomicReference<ServerCall>();
+        new AtomicReference<>();
     final ServerCall.Listener mockListener = mock(ServerCall.Listener.class);
 
     final MethodDescriptor<byte[], byte[]> method =
@@ -994,7 +995,7 @@ public final class BinlogHelperTest {
                   public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
                       MethodDescriptor<RequestT, ResponseT> methodDescriptor,
                       CallOptions callOptions) {
-                    return new NoopClientCall<RequestT, ResponseT>();
+                    return new NoopClientCall<>();
                   }
 
                   @Override
@@ -1004,15 +1005,16 @@ public final class BinlogHelperTest {
                 });
     call.start(mockListener, new Metadata());
     ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
-    verify(mockSinkWriter).logClientHeader(
-        any(Integer.class),
-        any(String.class),
-        any(String.class),
-        callOptTimeoutCaptor.capture(),
-        any(Metadata.class),
-        any(GrpcLogEntry.Logger.class),
-        any(Long.class),
-        any(SocketAddress.class));
+    verify(mockSinkWriter)
+        .logClientHeader(
+            anyLong(),
+            any(String.class),
+            any(String.class),
+            callOptTimeoutCaptor.capture(),
+            any(Metadata.class),
+            any(GrpcLogEntry.Logger.class),
+            anyLong(),
+            any(SocketAddress.class));
     Duration timeout = callOptTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
@@ -1047,7 +1049,7 @@ public final class BinlogHelperTest {
                       public <RequestT, ResponseT> ClientCall<RequestT, ResponseT> newCall(
                           MethodDescriptor<RequestT, ResponseT> methodDescriptor,
                           CallOptions callOptions) {
-                        return new NoopClientCall<RequestT, ResponseT>();
+                        return new NoopClientCall<>();
                       }
 
                       @Override
@@ -1060,15 +1062,16 @@ public final class BinlogHelperTest {
     ClientCall.Listener<byte[]> mockListener = mock(ClientCall.Listener.class);
     callFuture.get().start(mockListener, new Metadata());
     ArgumentCaptor<Duration> callOptTimeoutCaptor = ArgumentCaptor.forClass(Duration.class);
-    verify(mockSinkWriter).logClientHeader(
-        any(Integer.class),
-        any(String.class),
-        any(String.class),
-        callOptTimeoutCaptor.capture(),
-        any(Metadata.class),
-        any(GrpcLogEntry.Logger.class),
-        any(Long.class),
-        any(SocketAddress.class));
+    verify(mockSinkWriter)
+        .logClientHeader(
+            anyLong(),
+            any(String.class),
+            any(String.class),
+            callOptTimeoutCaptor.capture(),
+            any(Metadata.class),
+            any(GrpcLogEntry.Logger.class),
+            anyLong(),
+            any(SocketAddress.class));
     Duration timeout = callOptTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
@@ -1078,10 +1081,10 @@ public final class BinlogHelperTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   public void clientInterceptor() throws Exception {
     final AtomicReference<ClientCall.Listener> interceptedListener =
-        new AtomicReference<ClientCall.Listener>();
+        new AtomicReference<>();
     // capture these manually because ClientCall can not be mocked
-    final AtomicReference<Metadata> actualClientInitial = new AtomicReference<Metadata>();
-    final AtomicReference<Object> actualRequest = new AtomicReference<Object>();
+    final AtomicReference<Metadata> actualClientInitial = new AtomicReference<>();
+    final AtomicReference<Object> actualRequest = new AtomicReference<>();
 
     final SettableFuture<Void> halfCloseCalled = SettableFuture.create();
     final SettableFuture<Void> cancelCalled = SettableFuture.create();
@@ -1245,10 +1248,10 @@ public final class BinlogHelperTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   public void clientInterceptor_trailersOnlyResponseLogsPeerAddress() throws Exception {
     final AtomicReference<ClientCall.Listener> interceptedListener =
-        new AtomicReference<ClientCall.Listener>();
+        new AtomicReference<>();
     // capture these manually because ClientCall can not be mocked
-    final AtomicReference<Metadata> actualClientInitial = new AtomicReference<Metadata>();
-    final AtomicReference<Object> actualRequest = new AtomicReference<Object>();
+    final AtomicReference<Metadata> actualClientInitial = new AtomicReference<>();
+    final AtomicReference<Object> actualRequest = new AtomicReference<>();
 
     Channel channel = new Channel() {
       @Override
@@ -1330,14 +1333,14 @@ public final class BinlogHelperTest {
   @SuppressWarnings({"rawtypes", "unchecked"})
   public void serverInterceptor() throws Exception {
     final AtomicReference<ServerCall> interceptedCall =
-        new AtomicReference<ServerCall>();
+        new AtomicReference<>();
     ServerCall.Listener<byte[]> capturedListener;
     final ServerCall.Listener mockListener = mock(ServerCall.Listener.class);
     // capture these manually because ServerCall can not be mocked
-    final AtomicReference<Metadata> actualServerInitial = new AtomicReference<Metadata>();
-    final AtomicReference<byte[]> actualResponse = new AtomicReference<byte[]>();
-    final AtomicReference<Status> actualStatus = new AtomicReference<Status>();
-    final AtomicReference<Metadata> actualTrailers = new AtomicReference<Metadata>();
+    final AtomicReference<Metadata> actualServerInitial = new AtomicReference<>();
+    final AtomicReference<byte[]> actualResponse = new AtomicReference<>();
+    final AtomicReference<Status> actualStatus = new AtomicReference<>();
+    final AtomicReference<Metadata> actualTrailers = new AtomicReference<>();
 
     // begin call and receive client header
     {

@@ -20,6 +20,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyBoolean;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Matchers.same;
 import static org.mockito.Mockito.mock;
@@ -83,7 +85,7 @@ public class AbstractServerStreamTest {
    */
   @Test
   public void frameShouldBeIgnoredAfterDeframerClosed() {
-    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
+    final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
     stream.transportState().setListener(new ServerStreamListenerBase() {
       @Override
       public void messagesAvailable(MessageProducer producer) {
@@ -270,8 +272,7 @@ public class AbstractServerStreamTest {
 
     stream.writeMessage(new ByteArrayInputStream(new byte[]{}));
 
-    verify(sink, never())
-        .writeFrame(any(WritableBuffer.class), any(Boolean.class), any(Integer.class));
+    verify(sink, never()).writeFrame(any(WritableBuffer.class), anyBoolean(), anyInt());
   }
 
   @Test

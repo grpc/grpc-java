@@ -40,6 +40,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Objects;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -73,6 +74,7 @@ import io.grpc.internal.TransportTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -98,7 +100,7 @@ import org.mockito.stubbing.OngoingStubbing;
 /** Standard unit tests for {@link ClientTransport}s and {@link ServerTransport}s. */
 @RunWith(JUnit4.class)
 public abstract class AbstractTransportTest {
-  private static final int TIMEOUT_MS = 1000;
+  private static final int TIMEOUT_MS = 5000;
 
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.create("additional-attr");
@@ -115,14 +117,14 @@ public abstract class AbstractTransportTest {
    * Returns a new server that when started will be able to be connected to from the client. Each
    * returned instance should be new and yet be accessible by new client transports.
    */
-  protected abstract InternalServer newServer(
+  protected abstract List<? extends InternalServer> newServer(
       List<ServerStreamTracer.Factory> streamTracerFactories);
 
   /**
-   * Builds a new server that is listening on the same location as the given server instance does.
+   * Builds a new server that is listening on the same port as the given server instance does.
    */
-  protected abstract InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories);
+  protected abstract List<? extends InternalServer> newServer(
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories);
 
   /**
    * Returns a new transport that when started will be able to connect to {@code server}.
@@ -182,7 +184,7 @@ public abstract class AbstractTransportTest {
 
   @Before
   public void setUp() {
-    server = newServer(Arrays.asList(serverStreamTracerFactory));
+    server = Iterables.getOnlyElement(newServer(Arrays.asList(serverStreamTracerFactory)));
     OngoingStubbing<ClientStreamTracer> clientStubbing =
         when(clientStreamTracerFactory
             .newClientStreamTracer(any(CallOptions.class), any(Metadata.class)))
@@ -363,7 +365,13 @@ public abstract class AbstractTransportTest {
   public void serverAlreadyListening() throws Exception {
     client = null;
     server.start(serverListener);
-    InternalServer server2 = newServer(server, Arrays.asList(serverStreamTracerFactory));
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
+    InternalServer server2 =
+        Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
     thrown.expect(IOException.class);
     server2.start(new MockServerListener());
   }
@@ -371,6 +379,11 @@ public abstract class AbstractTransportTest {
   @Test
   public void openStreamPreventsTermination() throws Exception {
     server.start(serverListener);
+    int port = -1;
+    SocketAddress addr = server.getListenSocketAddress();
+    if (addr instanceof InetSocketAddress) {
+      port = ((InetSocketAddress) addr).getPort();
+    }
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener
@@ -399,7 +412,7 @@ public abstract class AbstractTransportTest {
     // resources. There may be cases this is impossible in the future, but for now it is a useful
     // property.
     serverListener = new MockServerListener();
-    server = newServer(server, Arrays.asList(serverStreamTracerFactory));
+    server = Iterables.getOnlyElement(newServer(port, Arrays.asList(serverStreamTracerFactory)));
     server.start(serverListener);
 
     // Try to "flush" out any listener notifications on client and server. This also ensures that
@@ -1796,15 +1809,19 @@ public abstract class AbstractTransportTest {
     SocketAddress clientAddress = serverStream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
 
     SocketStats clientSocketStats = client.getStats().get();
-    assertEquals(clientAddress, clientSocketStats.local);
-    assertEquals(serverAddress, clientSocketStats.remote);
+    assertEquals(
+        "clientLocal " + clientStream.getAttributes(), clientAddress, clientSocketStats.local);
+    assertEquals(
+        "clientRemote " + clientStream.getAttributes(), serverAddress, clientSocketStats.remote);
     // very basic sanity check that socket options are populated
     assertNotNull(clientSocketStats.socketOptions.lingerSeconds);
     assertTrue(clientSocketStats.socketOptions.others.containsKey("SO_SNDBUF"));
 
     SocketStats serverSocketStats = serverTransportListener.transport.getStats().get();
-    assertEquals(serverAddress, serverSocketStats.local);
-    assertEquals(clientAddress, serverSocketStats.remote);
+    assertEquals(
+        "serverLocal " + serverStream.getAttributes(), serverAddress, serverSocketStats.local);
+    assertEquals(
+        "serverRemote " + serverStream.getAttributes(), clientAddress, serverSocketStats.remote);
     // very basic sanity check that socket options are populated
     assertNotNull(serverSocketStats.socketOptions.lingerSeconds);
     assertTrue(serverSocketStats.socketOptions.others.containsKey("SO_SNDBUF"));
@@ -2013,7 +2030,7 @@ public abstract class AbstractTransportTest {
 
   private static class MockServerListener implements ServerListener {
     public final BlockingQueue<MockServerTransportListener> listeners
-        = new LinkedBlockingQueue<MockServerTransportListener>();
+        = new LinkedBlockingQueue<>();
     private final SettableFuture<?> shutdown = SettableFuture.create();
 
     @Override
@@ -2044,7 +2061,7 @@ public abstract class AbstractTransportTest {
 
   private static class MockServerTransportListener implements ServerTransportListener {
     public final ServerTransport transport;
-    public final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<StreamCreation>();
+    public final BlockingQueue<StreamCreation> streams = new LinkedBlockingQueue<>();
     private final SettableFuture<?> terminated = SettableFuture.create();
 
     public MockServerTransportListener(ServerTransport transport) {
@@ -2090,9 +2107,9 @@ public abstract class AbstractTransportTest {
   }
 
   private static class ServerStreamListenerBase implements ServerStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<InputStream>();
+    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
-    private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<Object>();
+    private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final CountDownLatch halfClosedLatch = new CountDownLatch(1);
     private final SettableFuture<Status> status = SettableFuture.create();
 
@@ -2150,9 +2167,9 @@ public abstract class AbstractTransportTest {
   }
 
   private static class ClientStreamListenerBase implements ClientStreamListener {
-    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<InputStream>();
+    private final BlockingQueue<InputStream> messageQueue = new LinkedBlockingQueue<>();
     // Would have used Void instead of Object, but null elements are not allowed
-    private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<Object>();
+    private final BlockingQueue<Object> readyQueue = new LinkedBlockingQueue<>();
     private final SettableFuture<Metadata> headers = SettableFuture.create();
     private final SettableFuture<Metadata> trailers = SettableFuture.create();
     private final SettableFuture<Status> status = SettableFuture.create();

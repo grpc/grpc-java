@@ -38,6 +38,7 @@ import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.ServerStats;
+import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalServerInterceptors;
@@ -51,11 +52,14 @@ import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
@@ -101,12 +105,12 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   @GuardedBy("lock") private boolean serverShutdownCallbackInvoked;
   @GuardedBy("lock") private boolean terminated;
   /** Service encapsulating something similar to an accept() socket. */
-  private final InternalServer transportServer;
+  private final List<? extends InternalServer> transportServers;
   private final Object lock = new Object();
-  @GuardedBy("lock") private boolean transportServerTerminated;
+  @GuardedBy("lock") private boolean transportServersTerminated;
   /** {@code transportServer} and services encapsulating something similar to a TCP connection. */
-  @GuardedBy("lock") private final Collection<ServerTransport> transports =
-      new HashSet<ServerTransport>();
+  @GuardedBy("lock") private final Set<ServerTransport> transports = new HashSet<>();
+  @GuardedBy("lock") private int activeTransportServers;
 
   private final Context rootContext;
 
@@ -126,14 +130,17 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    */
   ServerImpl(
       AbstractServerImplBuilder<?> builder,
-      InternalServer transportServer,
+      List<? extends InternalServer> transportServers,
       Context rootContext) {
     this.executorPool = Preconditions.checkNotNull(builder.executorPool, "executorPool");
     this.registry = Preconditions.checkNotNull(builder.registryBuilder.build(), "registryBuilder");
     this.fallbackRegistry =
         Preconditions.checkNotNull(builder.fallbackRegistry, "fallbackRegistry");
-    this.transportServer = Preconditions.checkNotNull(transportServer, "transportServer");
-    this.logId = InternalLogId.allocate("Server", String.valueOf(transportServer.getPort()));
+    Preconditions.checkNotNull(transportServers, "transportServers");
+    Preconditions.checkArgument(!transportServers.isEmpty(), "no servers provided");
+    this.transportServers = new ArrayList<>(transportServers);
+    this.logId =
+        InternalLogId.allocate("Server", String.valueOf(getListenSocketsIgnoringLifecycle()));
     // Fork from the passed in context so that it does not propagate cancellation, it only
     // inherits values.
     this.rootContext = Preconditions.checkNotNull(rootContext, "rootContext").fork();
@@ -163,20 +170,51 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     synchronized (lock) {
       checkState(!started, "Already started");
       checkState(!shutdown, "Shutting down");
-      // Start and wait for any port to actually be bound.
-      transportServer.start(new ServerListenerImpl());
+      // Start and wait for any ports to actually be bound.
+
+      ServerListenerImpl listener = new ServerListenerImpl();
+      for (InternalServer ts : transportServers) {
+        ts.start(listener);
+        activeTransportServers++;
+      }
       executor = Preconditions.checkNotNull(executorPool.getObject(), "executor");
       started = true;
       return this;
     }
   }
 
+
   @Override
   public int getPort() {
     synchronized (lock) {
       checkState(started, "Not started");
       checkState(!terminated, "Already terminated");
-      return transportServer.getPort();
+      for (InternalServer ts : transportServers) {
+        SocketAddress addr = ts.getListenSocketAddress();
+        if (addr instanceof InetSocketAddress) {
+          return ((InetSocketAddress) addr).getPort();
+        }
+      }
+      return -1;
+    }
+  }
+
+  @Override
+  public List<SocketAddress> getListenSockets() {
+    synchronized (lock) {
+      checkState(started, "Not started");
+      checkState(!terminated, "Already terminated");
+      return getListenSocketsIgnoringLifecycle();
+    }
+  }
+
+  private List<SocketAddress> getListenSocketsIgnoringLifecycle() {
+    synchronized (lock) {
+      List<SocketAddress> addrs = new ArrayList<>(transportServers.size());
+      for (InternalServer ts : transportServers) {
+        addrs.add(ts.getListenSocketAddress());
+      }
+      return Collections.unmodifiableList(addrs);
     }
   }
 
@@ -211,20 +249,22 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    */
   @Override
   public ServerImpl shutdown() {
-    boolean shutdownTransportServer;
+    boolean shutdownTransportServers;
     synchronized (lock) {
       if (shutdown) {
         return this;
       }
       shutdown = true;
-      shutdownTransportServer = started;
-      if (!shutdownTransportServer) {
-        transportServerTerminated = true;
+      shutdownTransportServers = started;
+      if (!shutdownTransportServers) {
+        transportServersTerminated = true;
         checkForTermination();
       }
     }
-    if (shutdownTransportServer) {
-      transportServer.shutdown();
+    if (shutdownTransportServers) {
+      for (InternalServer ts : transportServers) {
+        ts.shutdown();
+      }
     }
     return this;
   }
@@ -311,7 +351,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   /** Notify of complete shutdown if necessary. */
   private void checkForTermination() {
     synchronized (lock) {
-      if (shutdown && transports.isEmpty() && transportServerTerminated) {
+      if (shutdown && transports.isEmpty() && transportServersTerminated) {
         if (terminated) {
           throw new AssertionError("Server already terminated");
         }
@@ -320,13 +360,13 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         if (executor != null) {
           executor = executorPool.returnObject(executor);
         }
-        // TODO(carl-mastrangelo): move this outside the synchronized block.
         lock.notifyAll();
       }
     }
   }
 
   private final class ServerListenerImpl implements ServerListener {
+
     @Override
     public ServerTransportListener transportCreated(ServerTransport transport) {
       synchronized (lock) {
@@ -342,6 +382,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       ArrayList<ServerTransport> copiedTransports;
       Status shutdownNowStatusCopy;
       synchronized (lock) {
+        activeTransportServers--;
+        if (activeTransportServers != 0) {
+          return;
+        }
+
         // transports collection can be modified during shutdown(), even if we hold the lock, due
         // to reentrancy.
         copiedTransports = new ArrayList<>(transports);
@@ -356,7 +401,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         }
       }
       synchronized (lock) {
-        transportServerTerminated = true;
+        transportServersTerminated = true;
         checkForTermination();
       }
     }
@@ -531,7 +576,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       statsTraceCtx.serverCallStarted(
-          new ServerCallInfoImpl<ReqT, RespT>(
+          new ServerCallInfoImpl<>(
               methodDef.getMethodDescriptor(), // notify with original method descriptor
               stream.getAttributes(),
               stream.getAuthority()));
@@ -551,7 +596,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerStream stream,
         Metadata headers,
         Context.CancellableContext context) {
-      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<WReqT, WRespT>(
+      ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<>(
           stream,
           methodDef.getMethodDescriptor(),
           headers,
@@ -577,9 +622,14 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
   @Override
   public ListenableFuture<ServerStats> getStats() {
-    ServerStats.Builder builder
-        = new ServerStats.Builder()
-        .setListenSockets(transportServer.getListenSockets());
+    ServerStats.Builder builder = new ServerStats.Builder();
+    for (InternalServer ts : transportServers) {
+      // TODO(carl-mastrangelo): remove the list and just add directly.
+      InternalInstrumented<SocketStats> stats = ts.getListenSocketStats();
+      if (stats != null ) {
+        builder.addListenSockets(Collections.singletonList(stats));
+      }
+    }
     serverCallTracer.updateBuilder(builder);
     SettableFuture<ServerStats> ret = SettableFuture.create();
     ret.set(builder.build());
@@ -590,7 +640,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
   public String toString() {
     return MoreObjects.toStringHelper(this)
         .add("logId", logId.getId())
-        .add("transportServer", transportServer)
+        .add("transportServers", transportServers)
         .toString();
   }
 

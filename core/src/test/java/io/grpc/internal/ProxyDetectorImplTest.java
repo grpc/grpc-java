@@ -23,11 +23,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.PasswordAuthentication;
@@ -44,8 +47,6 @@ import org.mockito.MockitoAnnotations;
 
 @RunWith(JUnit4.class)
 public class ProxyDetectorImplTest {
-  private static final String NO_USER = null;
-  private static final String NO_PW = null;
   @Mock private ProxySelector proxySelector;
   @Mock private ProxyDetectorImpl.AuthenticationProvider authenticator;
   private InetSocketAddress destination = InetSocketAddress.createUnresolved("10.10.10.10", 5678);
@@ -66,10 +67,10 @@ public class ProxyDetectorImplTest {
     proxyDetector = new ProxyDetectorImpl(proxySelectorSupplier, authenticator, null);
     int proxyPort = 1234;
     unresolvedProxy = InetSocketAddress.createUnresolved("10.0.0.1", proxyPort);
-    proxyParmeters = new ProxyParameters(
-        new InetSocketAddress(InetAddress.getByName(unresolvedProxy.getHostName()), proxyPort),
-        NO_USER,
-        NO_PW);
+    proxyParmeters = ProxyParameters
+        .forAddress(
+          new InetSocketAddress(InetAddress.getByName(unresolvedProxy.getHostName()), proxyPort))
+        .build();
   }
 
   @Test
@@ -84,10 +85,10 @@ public class ProxyDetectorImplTest {
     ProxyParameters detected = proxyDetector.proxyFor(destination);
     assertNotNull(detected);
     assertEquals(
-        new ProxyParameters(
-            new InetSocketAddress(InetAddress.getByName(overrideHost), overridePort),
-            NO_USER,
-            NO_PW),
+        ProxyParameters
+            .forAddress(
+            new InetSocketAddress(InetAddress.getByName(overrideHost), overridePort))
+            .build(),
         detected);
   }
 
@@ -102,11 +103,10 @@ public class ProxyDetectorImplTest {
     ProxyParameters detected = proxyDetector.proxyFor(destination);
     assertNotNull(detected);
     assertEquals(
-        new ProxyParameters(
+        ProxyParameters.forAddress(
             new InetSocketAddress(
-                InetAddress.getByName(overrideHostWithoutPort), defaultPort),
-            NO_USER,
-            NO_PW),
+                InetAddress.getByName(overrideHostWithoutPort), defaultPort))
+        .build(),
         detected);
   }
 
@@ -148,7 +148,7 @@ public class ProxyDetectorImplTest {
     Proxy proxy1 = new java.net.Proxy(java.net.Proxy.Type.HTTP, unresolvedProxy);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy1));
     ProxyParameters proxy = proxyDetector.proxyFor(destination);
-    assertFalse(proxy.proxyAddress.isUnresolved());
+    assertFalse(((InetSocketAddress)proxy.getProxyAddress()).isUnresolved());
   }
 
   @Test
@@ -179,22 +179,24 @@ public class ProxyDetectorImplTest {
         proxyUser,
         proxyPassword.toCharArray());
     when(authenticator.requestPasswordAuthentication(
-        any(String.class),
-        any(InetAddress.class),
-        any(Integer.class),
-        any(String.class),
-        any(String.class),
-        any(String.class))).thenReturn(auth);
+            any(String.class),
+            any(InetAddress.class),
+            anyInt(),
+            any(String.class),
+            any(String.class),
+            any(String.class)))
+      .thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 
     ProxyParameters detected = proxyDetector.proxyFor(destination);
     assertEquals(
-        new ProxyParameters(
+        ProxyParameters.forAddress(
             new InetSocketAddress(
                 InetAddress.getByName(unresolvedProxy.getHostName()),
-                unresolvedProxy.getPort()),
-            proxyUser,
-            proxyPassword),
+                unresolvedProxy.getPort()))
+            .username(proxyUser)
+        .password(proxyPassword)
+        .build(),
         detected);
   }
 
