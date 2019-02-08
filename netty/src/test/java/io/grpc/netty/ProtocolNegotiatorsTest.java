@@ -58,6 +58,10 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
+import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
@@ -65,6 +69,7 @@ import io.netty.handler.codec.http2.DefaultHttp2FrameReader;
 import io.netty.handler.codec.http2.DefaultHttp2FrameWriter;
 import io.netty.handler.codec.http2.Http2ConnectionDecoder;
 import io.netty.handler.codec.http2.Http2ConnectionEncoder;
+import io.netty.handler.codec.http2.Http2ServerUpgradeCodec;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.SslContext;
@@ -653,6 +658,41 @@ public class ProtocolNegotiatorsTest {
     // This is not part of the ClientTls negotiation, but shows that the negotiation event happens
     // in the right order.
     assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)).isEqualTo(addr);
+  }
+
+  @Test
+  public void plaintextUpgradeNegotiator() throws Exception {
+    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
+    LocalAddress addr = new LocalAddress("plaintextUpgradeNegotiator");
+    UpgradeCodecFactory ucf = new UpgradeCodecFactory() {
+
+      @Override
+      public UpgradeCodec newUpgradeCodec(CharSequence protocol) {
+        return new Http2ServerUpgradeCodec(FakeGrpcHttp2ConnectionHandler.newHandler());
+      }
+    };
+    HttpServerCodec serverCodec = new HttpServerCodec();
+    HttpServerUpgradeHandler serverUpgradeHandler =
+        new HttpServerUpgradeHandler(serverCodec, ucf);
+    Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
+        .childHandler(serverUpgradeHandler)
+        .bind(addr).sync().channel();
+
+    ProtocolNegotiator nego = ProtocolNegotiators.plaintextUpgrade();
+    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
+        .register().sync().channel();
+    pipeline = channel.pipeline();
+    // Wait for initialization to complete
+    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
+    channel.connect(addr).sync();
+    serverChannel.close();
+    channel.writeAndFlush("hi").sync();
+
+    // TODO(carl-mastrangelo): this doesn't actually test anything, fix the server to actually do
+    // upgrade.
+    channel.close().sync();
+    elg.shutdownGracefully();
   }
 
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
