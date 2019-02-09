@@ -25,14 +25,27 @@ import javax.annotation.Nullable;
  * {@link java.net.SocketAddress}. This class performs network requests to resolve address names,
  * and should only be used in places that are expected to do IO such as the
  * {@link io.grpc.NameResolver}.
+ *
+ * <h1>How Proxy works in gRPC</h1>
+ *
+ * <p>In general the NameResolver is in the place of invoking this class and passing the returned
+ * {@link ProxiedSocketAddress} back to the channel.  The {@code ProxiedSocketAddress} is then
+ * handled by the transport.  Therefore, in order for proxy to work, the NameResolver needs to
+ * call ProxyDetector, and the transport needs to support the specific type of {@code ProxiedSocketAddress}.
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public interface ProxyDetector {
   /**
-   * Given a target address, returns which proxy address should be used. If no proxy should be
-   * used, then return value will be null. The address of the {@link ProxyParameters} is always
-   * resolved. This throws if the proxy address cannot be resolved.
+   * Given a target address, returns a proxied address if a proxy should be used. If no proxy should
+   * be used, then return value will be {@code null}.
+   *
+   * <p>If the returned {@code ProxiedSocketAddress} contains any address that needs to be resolved
+   * locally, it should be resolved before it's returned, and this method throws if unable to
+   * resolve it.
+   *
+   * @param targetServerAddress the target address, which is generally unresolved, because the proxy
+   *                            will resolve it.
    */
   @Nullable
-  ProxyParameters proxyFor(SocketAddress targetServerAddress) throws IOException;
+  ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) throws IOException;
 }
