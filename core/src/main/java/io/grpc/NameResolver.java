@@ -130,7 +130,7 @@ public abstract class NameResolver {
      */
     @Nullable
     @Deprecated
-    public NameResolver newNameResolver(URI targetUri, final Attributes params) {
+    public NameResolver newNameResolver(URI targetUri, Attributes params) {
       throw new UnsupportedOperationException("This method is going to be deleted");
     }
 

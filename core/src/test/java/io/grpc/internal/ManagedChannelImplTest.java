@@ -89,6 +89,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.ProxyDetector;
+import io.grpc.ProxyParameters;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
@@ -3237,8 +3239,90 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void nameResolverHelperPropagation() {
+    final AtomicReference<NameResolver.Helper> capturedHelper = new AtomicReference<>();
+    final NameResolver noopResolver = new NameResolver() {
+        @Override
+        public String getServiceAuthority() {
+          return "fake-authority";
+        }
+
+        @Override
+        public void start(Listener listener) {
+        }
+
+        @Override
+        public void shutdown() {}
+      };
+    ProxyDetector neverProxy = new ProxyDetector() {
+        @Override
+        public ProxyParameters proxyFor(SocketAddress targetAddress) {
+          return null;
+        }
+      };
+    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
+        @Override
+        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+          capturedHelper.set(helper);
+          return noopResolver;
+        }
+
+        @Override
+        public String getDefaultScheme() {
+          return "fakescheme";
+        }
+      };
+    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
+    createChannel();
+
+    NameResolver.Helper helper = capturedHelper.get();
+    assertThat(helper).isNotNull();
+    assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
+    assertThat(helper.getProxyDetector()).isSameAs(neverProxy);
+  }
+
+  @Test
+  @Deprecated
   public void nameResolverParams_oldApi() {
-    // TODO(zhangkun83)
+    final AtomicReference<Attributes> capturedParams = new AtomicReference<>();
+    final NameResolver noopResolver = new NameResolver() {
+        @Override
+        public String getServiceAuthority() {
+          return "fake-authority";
+        }
+
+        @Override
+        public void start(Listener listener) {
+        }
+
+        @Override
+        public void shutdown() {}
+      };
+    ProxyDetector neverProxy = new ProxyDetector() {
+        @Override
+        public ProxyParameters proxyFor(SocketAddress targetAddress) {
+          return null;
+        }
+      };
+    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
+        @Override
+        public NameResolver newNameResolver(URI targetUri, Attributes params) {
+          capturedParams.set(params);
+          return noopResolver;
+        }
+
+        @Override
+        public String getDefaultScheme() {
+          return "fakescheme";
+        }
+      };
+    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
+    createChannel();
+
+    Attributes attrs = capturedParams.get();
+    assertThat(attrs).isNotNull();
+    assertThat(attrs.get(NameResolver.Factory.PARAMS_DEFAULT_PORT)).isEqualTo(DEFAULT_PORT);
+    assertThat(attrs.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR)).isSameAs(neverProxy);
   }
 
   @Test
