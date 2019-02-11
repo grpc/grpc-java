@@ -490,10 +490,10 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Subclasses can override this method to provide a default port to {@link NameResolver} for use
    * in cases where the target string doesn't include a port.  The default implementation returns
-   * 443.
+   * {@link GrpcUtil.DEFAULT_PORT_SSL}.
    */
   protected int getDefaultPort() {
-    return 443;
+    return GrpcUtil.DEFAULT_PORT_SSL;
   }
 
   /**
