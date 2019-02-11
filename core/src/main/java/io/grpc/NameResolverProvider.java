@@ -107,10 +107,10 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
 
     @Override
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, NameResolver.CreationParams params) {
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
       checkForProviders();
       for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, params);
+        NameResolver resolver = provider.newNameResolver(targetUri, helper);
         if (resolver != null) {
           return resolver;
         }

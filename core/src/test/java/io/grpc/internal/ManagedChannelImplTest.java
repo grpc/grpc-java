@@ -142,11 +142,7 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplTest {
-  private static final Attributes NAME_RESOLVER_PARAMS =
-      Attributes.newBuilder()
-          .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, 447)
-          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
-          .build();
+  private static final int DEFAULT_PORT = 447;
 
   private static final MethodDescriptor<String, Integer> method =
       MethodDescriptor.<String, Integer>newBuilder()
@@ -3175,7 +3171,7 @@ public class ManagedChannelImplTest {
 
       @Nullable
       @Override
-      public NameResolver newNameResolver(URI targetUri, Attributes params) {
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
         return (resolver = new FakeNameResolver());
       }
 
@@ -3241,6 +3237,11 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void nameResolverParams_oldApi() {
+    // TODO(zhangkun83)
+  }
+
+  @Test
   public void getAuthorityAfterShutdown() throws Exception {
     createChannel();
     assertEquals(SERVICE_NAME, channel.authority());
@@ -3259,8 +3260,8 @@ public class ManagedChannelImplTest {
       throw new UnsupportedOperationException();
     }
 
-    @Override protected Attributes getNameResolverParams() {
-      return NAME_RESOLVER_PARAMS;
+    @Override protected int getDefaultPort() {
+      return DEFAULT_PORT;
     }
   }
 
@@ -3300,11 +3301,11 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public NameResolver newNameResolver(final URI targetUri, Attributes params) {
+    public NameResolver newNameResolver(final URI targetUri, NameResolver.Helper helper) {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
-      assertSame(NAME_RESOLVER_PARAMS, params);
+      assertEquals(DEFAULT_PORT, helper.getDefaultPort());
       FakeNameResolver resolver = new FakeNameResolver(error);
       resolvers.add(resolver);
       return resolver;
