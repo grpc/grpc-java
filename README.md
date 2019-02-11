@@ -42,37 +42,37 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-netty-shaded</artifactId>
-  <version>1.17.1</version>
+  <version>1.18.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-protobuf</artifactId>
-  <version>1.17.1</version>
+  <version>1.18.0</version>
 </dependency>
 <dependency>
   <groupId>io.grpc</groupId>
   <artifactId>grpc-stub</artifactId>
-  <version>1.17.1</version>
+  <version>1.18.0</version>
 </dependency>
 ```
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty-shaded:1.17.1'
-compile 'io.grpc:grpc-protobuf:1.17.1'
-compile 'io.grpc:grpc-stub:1.17.1'
+compile 'io.grpc:grpc-netty-shaded:1.18.0'
+compile 'io.grpc:grpc-protobuf:1.18.0'
+compile 'io.grpc:grpc-stub:1.18.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.17.1'
-compile 'io.grpc:grpc-protobuf-lite:1.17.1'
-compile 'io.grpc:grpc-stub:1.17.1'
+compile 'io.grpc:grpc-okhttp:1.18.0'
+compile 'io.grpc:grpc-protobuf-lite:1.18.0'
+compile 'io.grpc:grpc-stub:1.18.0'
 ```
 
 [the JARs]:
-https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.17.1
+https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.18.0
 
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
@@ -100,11 +100,11 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <plugin>
       <groupId>org.xolstice.maven.plugins</groupId>
       <artifactId>protobuf-maven-plugin</artifactId>
-      <version>0.5.1</version>
+      <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.5.1-1:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.6.1:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
-        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.17.1:exe:${os.detected.classifier}</pluginArtifact>
+        <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.18.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
       <executions>
         <execution>
@@ -127,29 +127,37 @@ For protobuf-based codegen integrated with the Gradle build system, you can use
 <summary>Groovy DSL</summary>
 
 ```groovy
-apply plugin: 'com.google.protobuf'
+plugins {
+  id "com.google.protobuf" version "0.8.8"
+  java
+}
 
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.7'
-  }
+task.plugins {
+  // Add grpc output without any option.  grpc must have been defined in the
+  // protobuf.plugins block.
+  grpc { }
 }
 
 protobuf {
   protoc {
+    // The artifact spec for the Protobuf Compiler
     artifact = "com.google.protobuf:protoc:3.6.1"
   }
   plugins {
+    // an artifact spec for a protoc plugin, with "grpc" as
+    // the identifier, which can be referred to in the "plugins"
+    // container of the "generateProtoTasks" closure.
     grpc {
-      artifact = 'io.grpc:protoc-gen-grpc-java:1.17.1'
+      artifact = 'io.grpc:protoc-gen-grpc-java:1.18.0'
     }
   }
   generateProtoTasks {
     all()*.plugins {
-      grpc {}
+      // Apply the "grpc" plugin whose spec is defined above, without
+      // options.  Note the braces cannot be omitted, otherwise the
+      // plugin will not be added. This is because of the implicit way
+      // NamedDomainObjectContainer binds the methods.
+      grpc { }
     }
   }
 }
@@ -166,15 +174,16 @@ import com.google.protobuf.gradle.*
 import org.gradle.kotlin.dsl.provider.gradleKotlinDslOf
 
 buildscript {
-    extra.set("grpcVersion", "1.17.1")
+    extra.set("grpcVersion", "1.18.0")
     extra.set("protocVersion", "3.6.1")
-    extra.set("kotlinVersion", "1.3.10")
+    extra.set("kotlinVersion", "1.3.20")
+    extra.set("protoGradleVersion", "0.8.8")
 }
 
 plugins {
-    kotlin("jvm") version "1.3.10"
+    kotlin("jvm") version "1.3.20"
     java
-    id("com.google.protobuf") version "0.8.7"
+    id("com.google.protobuf") version "0.8.8"
 }
 
 repositories {
@@ -184,6 +193,13 @@ repositories {
 
 sourceSets {
     main {
+        // Optional: customize where .proto are found for src/main/
+        proto {
+            // In addition to the default 'src/main/proto'
+            srcDir 'src/main/protobuf'
+            srcDir 'src/main/protocolbuffers'
+        }
+        // Optional: compile the generated Java code
         java {
             srcDirs(
                 "build/generated/source/proto/main/java",
@@ -191,10 +207,17 @@ sourceSets {
             )
         }
     }
+    test {
+        // Optional: customize where .proto are found for src/test/
+        proto {
+            In addition to the default 'src/test/proto'
+            srcDir 'src/test/protocolbuffers'
+        }
+    }
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_1_10
+    sourceCompatibility = JavaVersion.VERSION_1_11
 }
 
 protobuf {
@@ -204,25 +227,18 @@ protobuf {
         artifact = "com.google.protobuf:protoc:$protocVersion"
     }
 
-    // this nasty stuff will go away soon, the gradle plugin team for protobuf is aware it doesn't work well with kotlin-dsl
-    plugins(delegateClosureOf<NamedDomainObjectContainer<ExecutableLocator>> {
-        this {
-            id("grpc") {
-                val grpcVersion : String by rootProject.extra
-                artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
-            }
-        }
-    })
+    grpc {
+        val grpcVersion : String by rootProject.extra
+        artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
+    }
     
-    generateProtoTasks(delegateClosureOf<ProtobufConfigurator.GenerateProtoTaskCollection> {
-        all().forEach {
-            it.plugins(delegateClosureOf<NamedDomainObjectContainer<GenerateProtoTask.PluginOptions>> {
-                this {
-                    id("grpc")
-                }
-            })
+    generateProtoTasks {
+        // all() returns the collection of all protoc tasks
+        all().forEach { 
+            // Add grpc output without any option.
+            grpc { }
         }
-    })
+    }
 }
 
 dependencies {
@@ -232,11 +248,12 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
     implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
     
-    // Workaround for @javax.annotation.Generated
+    // for Java 9+. Workaround for @javax.annotation.Generated
     // see: https://github.com/grpc/grpc-java/issues/3633
     implementation("javax.annotation:javax.annotation-api:1.3.1")
     
-    implementation("com.google.protobuf:protobuf-gradle-plugin:0.8.3")
+    val protoGradleVersion : String by rootProject.extra
+    implementation("com.google.protobuf:protobuf-gradle-plugin:$protoGradleVersion")
     
     val protocVersion : String by rootProject.extra
     implementation("com.google.protobuf:protobuf-java:$protocVersion")
