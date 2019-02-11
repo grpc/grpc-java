@@ -30,7 +30,7 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public final class HttpConnectProxiedSocketAddress extends ProxiedSocketAddress {
-  private static final long serialVersionUID = 6815392291648496951L;
+  private static final long serialVersionUID = 0L;
 
   private final SocketAddress proxyAddress;
   private final InetSocketAddress targetAddress;

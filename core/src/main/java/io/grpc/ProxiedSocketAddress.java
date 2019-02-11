@@ -24,5 +24,5 @@ import java.net.SocketAddress;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5279")
 public abstract class ProxiedSocketAddress extends SocketAddress {
-  private static final long serialVersionUID = -1490556475546718926L;
+  private static final long serialVersionUID = 0L;
 }
