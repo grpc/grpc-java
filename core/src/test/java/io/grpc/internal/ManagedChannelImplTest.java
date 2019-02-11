@@ -89,8 +89,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
-import io.grpc.ProxyParameters;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
@@ -3256,7 +3256,7 @@ public class ManagedChannelImplTest {
       };
     ProxyDetector neverProxy = new ProxyDetector() {
         @Override
-        public ProxyParameters proxyFor(SocketAddress targetAddress) {
+        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
           return null;
         }
       };
@@ -3300,7 +3300,7 @@ public class ManagedChannelImplTest {
       };
     ProxyDetector neverProxy = new ProxyDetector() {
         @Override
-        public ProxyParameters proxyFor(SocketAddress targetAddress) {
+        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
           return null;
         }
       };
