@@ -25,36 +25,26 @@ FILES=(
 validate/validate.proto
 )
 
-# clone the protoc-gen-validate github repo in /tmp directory
-pushd /tmp
-rm -rf $GIT_BASE_DIR
+# clone the protoc-gen-validate github repo in a tmp directory
+tmpdir="$(mktemp -d)"
+pushd "${tmpdir}" || exit 1
+rm -rf "$GIT_BASE_DIR"
 git clone -b $BRANCH $GIT_REPO
-cd $GIT_BASE_DIR
+cd "$GIT_BASE_DIR" || exit 1
 git checkout $GIT_ORIGIN_REV_ID
-popd
+popd || exit 1
 
-cp -p /tmp/${GIT_BASE_DIR}/LICENSE LICENSE
+cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
 
-mkdir -p ${TARGET_PROTO_BASE_DIR}
-pushd ${TARGET_PROTO_BASE_DIR}
+mkdir -p "${TARGET_PROTO_BASE_DIR}"
+pushd "${TARGET_PROTO_BASE_DIR}" || exit 1
 
 # copy proto files to project directory
 for file in "${FILES[@]}"
 do
-  mkdir -p $(dirname ${file})
-  cp -p /tmp/${SOURCE_PROTO_BASE_DIR}/${file} ${file}
+  mkdir -p "$(dirname "${file}")"
+  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
+popd || exit 1
 
-for file in "${FILES[@]}"
-do
-  # remove old "option java_multiple_files" if any
-  sed -i -e '/^option\sjava_multiple_files\s=/d' $file
-  # add new "option java_multiple_files"
-  sed -i -e "/^package\s/a option java_multiple_files = true;" $file
-  # remove old "option java_package" if any
-  sed -i -e '/^option\sjava_package\s=/d' $file
-  cmd='grep -Po "^package \K.*(?=;$)" '"${file}"
-  # add new "option java_package"
-  sed -i -e "/^package\s/a option java_package = \"io.grpc.xds.shaded.$(eval $cmd)\";" $file
-done
-popd
+rm -rf "$tmpdir"
