@@ -16,7 +16,7 @@
 # in this directory run the following commands
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=553c21b796f9dd7b3d1ae01cdfc4bebdd3b28338
+VERSION=cdcdfa6914f88b537122ed039fd0de5f78c0f209
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
