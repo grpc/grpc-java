@@ -19,11 +19,13 @@ package io.grpc.xds;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -40,42 +42,60 @@ import javax.annotation.Nullable;
  *       do not request for endpoints.</li>
  * </ul>
  */
-abstract class XdsLbState {
+class XdsLbState {
 
+  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
+      Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
   final String balancerName;
 
   @Nullable
   final Map<String, Object> childPolicy;
 
-  @Nullable
-  final Map<String, Object> fallbackPolicy;
+  private final SubchannelStore subchannelStore;
+  private final Helper helper;
 
   @Nullable
   private XdsComms xdsComms;
 
+
   XdsLbState(
       String balancerName,
       @Nullable Map<String, Object> childPolicy,
-      @Nullable Map<String, Object> fallbackPolicy,
-      @Nullable XdsComms xdsComms) {
+      @Nullable XdsComms xdsComms,
+      Helper helper,
+      SubchannelStore subchannelStore) {
     this.balancerName = balancerName;
     this.childPolicy = childPolicy;
-    this.fallbackPolicy = fallbackPolicy;
     this.xdsComms = xdsComms;
+    this.helper = helper;
+    this.subchannelStore = subchannelStore;
   }
 
-  abstract void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes);
+  final void handleResolvedAddressGroups(
+      List<EquivalentAddressGroup> servers, Attributes attributes) {
+    // TODO: maybeStartXdsComms();
+    // TODO: maybe update picker
+  }
 
-  abstract void propagateError(Status error);
 
-  abstract void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+  final void handleNameResolutionError(Status error) {
+    if (!subchannelStore.hasNonDropBackends()) {
+      // TODO: maybe update picker with transient failure
+    }
+  }
+
+  final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+    // TODO: maybe update picker
+  }
 
   /**
-   * Shuts down subchannels and child loadbalancers, cancels fallback timeer, and cancels retry
-   * timer.
+   * Shuts down subchannels and child loadbalancers, and cancels retry timer.
    */
-  abstract void shutdown();
+  void shutdown() {
+    // TODO: cancel retry timer
+    // TODO: shutdown child balancers
+    subchannelStore.shutdown();
+  }
 
   @Nullable
   final XdsComms shutdownAndReleaseXdsComms() {
@@ -83,6 +103,35 @@ abstract class XdsLbState {
     XdsComms xdsComms = this.xdsComms;
     this.xdsComms = null;
     return xdsComms;
+  }
+
+  /**
+   * Manages EAG and locality info for a collection of subchannels, not including subchannels
+   * created by the fallback balancer.
+   */
+  static final class SubchannelStore {
+
+    SubchannelStore() {}
+
+    boolean hasReadyBackends() {
+      // TODO: impl
+      return false;
+    }
+
+    boolean hasNonDropBackends() {
+      // TODO: impl
+      return false;
+    }
+
+
+    boolean hasSubchannel(Subchannel subchannel) {
+      // TODO: impl
+      return false;
+    }
+
+    void shutdown() {
+      // TODO: impl
+    }
   }
 
   static final class XdsComms {

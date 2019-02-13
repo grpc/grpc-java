@@ -17,8 +17,12 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.SHUTDOWN;
+import static io.grpc.internal.ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -26,11 +30,12 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.xds.XdsLbState.SubchannelStore;
 import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import javax.annotation.CheckReturnValue;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -38,13 +43,24 @@ import javax.annotation.Nullable;
  */
 final class XdsLoadBalancer extends LoadBalancer {
 
-  final Helper helper;
+  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
+      Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
+
+  private static final ImmutableMap<String, Object> DEFAULT_FALLBACK_POLICY =
+      ImmutableMap.of("round_robin", (Object) ImmutableMap.<String, Object>of());
+
+  private final SubchannelStore subchannelStore = new SubchannelStore();
+  private final Helper helper;
+  private final FallbackManager fallbackManager;
 
   @Nullable
   private XdsLbState xdsLbState;
 
+  private Map<String, Object> fallbackPolicy;
+
   XdsLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
+    fallbackManager = new FallbackManager(helper, subchannelStore);
   }
 
   @Override
@@ -52,6 +68,9 @@ final class XdsLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> servers, Attributes attributes) {
     Map<String, Object> newLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
+    fallbackPolicy = selectFallbackPolicy(newLbConfig);
+    fallbackManager.updateFallbackServers(servers, attributes, fallbackPolicy);
+    fallbackManager.maybeStartFallbackTimer();
     handleNewConfig(newLbConfig);
     xdsLbState.handleResolvedAddressGroups(servers, attributes);
   }
@@ -59,7 +78,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   private void handleNewConfig(Map<String, Object> newLbConfig) {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
     Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
-    Map<String, Object> fallbackPolicy = selectFallbackPolicy(newLbConfig);
     XdsComms xdsComms = null;
     if (xdsLbState != null) { // may release and re-use/shutdown xdsComms from current xdsLbState
       if (!newBalancerName.equals(xdsLbState.balancerName)) {
@@ -68,9 +86,9 @@ final class XdsLoadBalancer extends LoadBalancer {
           xdsComms.shutdownChannel();
           xdsComms = null;
         }
-      } else if (!Objects.equals(childPolicy, xdsLbState.childPolicy)
-          // There might be optimization when only fallbackPolicy is changed.
-          || !Objects.equals(fallbackPolicy, xdsLbState.fallbackPolicy)) {
+      } else if (!Objects.equals(
+          getPolicyNameOrNull(childPolicy),
+          getPolicyNameOrNull(xdsLbState.childPolicy))) {
         String cancelMessage = "Changing loadbalancing mode";
         xdsComms = xdsLbState.shutdownAndReleaseXdsComms();
         // close the stream but reuse the channel
@@ -81,32 +99,15 @@ final class XdsLoadBalancer extends LoadBalancer {
         return;
       }
     }
-    xdsLbState = newXdsLbState(
-        newBalancerName, childPolicy, fallbackPolicy, xdsComms);
+    xdsLbState = new XdsLbState(newBalancerName, childPolicy, xdsComms, helper, subchannelStore);
   }
 
-  @CheckReturnValue
-  private XdsLbState newXdsLbState(
-      String balancerName,
-      @Nullable final Map<String, Object> childPolicy,
-      @Nullable Map<String, Object> fallbackPolicy,
-      @Nullable final XdsComms xdsComms) {
-
-    // TODO: impl
-    return new XdsLbState(balancerName, childPolicy, fallbackPolicy, xdsComms) {
-      @Override
-      void handleResolvedAddressGroups(
-          List<EquivalentAddressGroup> servers, Attributes attributes) {}
-
-      @Override
-      void propagateError(Status error) {}
-
-      @Override
-      void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {}
-
-      @Override
-      void shutdown() {}
-    };
+  @Nullable
+  private static String getPolicyNameOrNull(@Nullable Map<String, Object> config) {
+    if (config == null) {
+      return null;
+    }
+    return getBalancerPolicyNameFromLoadBalancingConfig(config);
   }
 
   @Nullable
@@ -117,15 +118,12 @@ final class XdsLoadBalancer extends LoadBalancer {
     return selectSupportedLbPolicy(childConfigs);
   }
 
-  @Nullable
   @VisibleForTesting
   static Map<String, Object> selectFallbackPolicy(Map<String, Object> lbConfig) {
-    if (lbConfig == null) {
-      return null;
-    }
     List<Map<String, Object>> fallbackConfigs =
         ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
-    return selectSupportedLbPolicy(fallbackConfigs);
+    Map<String, Object> fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs);
+    return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
   }
 
   @Nullable
@@ -137,7 +135,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     for (Object lbConfig : lbConfigs) {
       @SuppressWarnings("unchecked")
       Map<String, Object> candidate = (Map<String, Object>) lbConfig;
-      String lbPolicy = candidate.entrySet().iterator().next().getKey();
+      String lbPolicy = ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(candidate);
       if (loadBalancerRegistry.getProvider(lbPolicy) != null) {
         return candidate;
       }
@@ -148,7 +146,11 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     if (xdsLbState != null) {
-      xdsLbState.propagateError(error);
+      if (fallbackManager.fallbackBalancer() != null) {
+        fallbackManager.fallbackBalancer().handleNameResolutionError(error);
+      } else {
+        xdsLbState.handleNameResolutionError(error);
+      }
     }
     // TODO: impl
     // else {
@@ -160,7 +162,21 @@ final class XdsLoadBalancer extends LoadBalancer {
   public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // xdsLbState should never be null here since handleSubchannelState cannot be called while the
     // lb is shutdown.
-    xdsLbState.handleSubchannelState(subchannel, newState);
+    if (newState.getState() == SHUTDOWN) {
+      return;
+    }
+
+    if (fallbackManager.fallbackBalancer() != null) {
+      fallbackManager.fallbackBalancer().handleSubchannelState(subchannel, newState);
+    }
+    if (subchannelStore.hasSubchannel(subchannel)) {
+      if (newState.getState() == IDLE) {
+        subchannel.requestConnection();
+      }
+      subchannel.getAttributes().get(STATE_INFO).set(newState);
+      xdsLbState.handleSubchannelState(subchannel, newState);
+      fallbackManager.maybeUseFallbackPolicy();
+    }
   }
 
   @Override
@@ -172,6 +188,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
       xdsLbState = null;
     }
+    fallbackManager.cancelFallback();
   }
 
   @Override
