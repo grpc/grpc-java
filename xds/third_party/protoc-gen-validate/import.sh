@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# in this directory run the following commands
+# Update GIT_ORIGIN_REV_ID then in this directory run ./import.sh
+
+set -e
 BRANCH=master
 # import GIT_ORIGIN_REV_ID from one of the google internal CLs
 GIT_ORIGIN_REV_ID=8e6aaf55f4954f1ef9d3ee2e8f5a50e79cc04f8f

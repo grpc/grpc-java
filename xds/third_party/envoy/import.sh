@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# in this directory run the following commands
+# Update VERSION then in this directory run ./import.sh
+
+set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
 VERSION=cdcdfa6914f88b537122ed039fd0de5f78c0f209
