@@ -29,17 +29,17 @@ validate/validate.proto
 
 # clone the protoc-gen-validate github repo in a tmp directory
 tmpdir="$(mktemp -d)"
-pushd "${tmpdir}" || exit 1
+pushd "${tmpdir}"
 rm -rf "$GIT_BASE_DIR"
 git clone -b $BRANCH $GIT_REPO
-cd "$GIT_BASE_DIR" || exit 1
+cd "$GIT_BASE_DIR"
 git checkout $GIT_ORIGIN_REV_ID
-popd || exit 1
+popd
 
 cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
 
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
-pushd "${TARGET_PROTO_BASE_DIR}" || exit 1
+pushd "${TARGET_PROTO_BASE_DIR}"
 
 # copy proto files to project directory
 for file in "${FILES[@]}"
@@ -47,6 +47,6 @@ do
   mkdir -p "$(dirname "${file}")"
   cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
-popd || exit 1
+popd
 
 rm -rf "$tmpdir"

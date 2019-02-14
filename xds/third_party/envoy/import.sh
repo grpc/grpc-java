@@ -45,18 +45,18 @@ envoy/type/percent.proto
 
 # clone the envoy github repo in a tmp directory
 tmpdir="$(mktemp -d)"
-pushd "${tmpdir}" || exit 1
+pushd "${tmpdir}"
 rm -rf $GIT_BASE_DIR
 git clone -b $BRANCH $GIT_REPO
-cd "$GIT_BASE_DIR" || exit 1
+cd "$GIT_BASE_DIR"
 git checkout $VERSION
-popd || exit 1
+popd
 
 cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
 cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
 
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
-pushd "${TARGET_PROTO_BASE_DIR}" || exit 1
+pushd "${TARGET_PROTO_BASE_DIR}"
 
 # copy proto files to project directory
 for file in "${FILES[@]}"
@@ -89,6 +89,6 @@ do
   # since it is multi-line and rewrites the output of the above patterns.
   sed -i -e '$!N; s#\(.*\),\([[:space:]]*\];\)#\1\2#; t; P; D;' "$f"
 done
-popd || exit 1
+popd
 
 rm -rf "$tmpdir"
