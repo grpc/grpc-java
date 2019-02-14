@@ -56,6 +56,7 @@ public class TestCasesTest {
       "jwt_token_creds",
       "oauth2_auth_token",
       "per_rpc_creds",
+      "google_default_credentials",
       "custom_metadata",
       "status_code_and_message",
       "special_status_message",
@@ -75,7 +76,7 @@ public class TestCasesTest {
 
     assertEquals(testCases.length + additionalTestCases.length, TestCases.values().length);
 
-    Set<TestCases> testCaseSet = new HashSet<TestCases>(testCases.length);
+    Set<TestCases> testCaseSet = new HashSet<>(testCases.length);
     for (String testCase : testCases) {
       testCaseSet.add(TestCases.fromString(testCase));
     }

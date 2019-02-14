@@ -37,9 +37,9 @@ import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.ProxyDetector;
-import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.internal.DnsNameResolver.AddressResolver;
@@ -95,11 +95,17 @@ public class DnsNameResolverTest {
   private final Map<String, Object> serviceConfig = new LinkedHashMap<>();
 
   private static final int DEFAULT_PORT = 887;
-  private static final Attributes NAME_RESOLVER_PARAMS =
-      Attributes.newBuilder()
-          .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, DEFAULT_PORT)
-          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
-          .build();
+  private static final NameResolver.Helper HELPER = new NameResolver.Helper() {
+      @Override
+      public int getDefaultPort() {
+        return DEFAULT_PORT;
+      }
+
+      @Override
+      public ProxyDetector getProxyDetector() {
+        return GrpcUtil.getDefaultProxyDetector();
+      }
+    };
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
@@ -146,16 +152,25 @@ public class DnsNameResolverTest {
 
   private DnsNameResolver newResolver(
       String name,
-      int port,
-      ProxyDetector proxyDetector,
+      final int port,
+      final ProxyDetector proxyDetector,
       Stopwatch stopwatch,
       boolean isAndroid) {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
-        Attributes.newBuilder().set(NameResolver.Factory.PARAMS_DEFAULT_PORT, port).build(),
+        new NameResolver.Helper() {
+          @Override
+          public int getDefaultPort() {
+            return port;
+          }
+
+          @Override
+          public ProxyDetector getProxyDetector() {
+            return proxyDetector;
+          }
+        },
         fakeExecutorResource,
-        proxyDetector,
         stopwatch,
         isAndroid);
     // By default, using the mocked ResourceResolver to avoid I/O
@@ -279,9 +294,7 @@ public class DnsNameResolverTest {
   public void resolveAll_failsOnEmptyResult() throws Exception {
     String hostname = "dns:///addr.fake:1234";
     DnsNameResolver nrf =
-        new DnsNameResolverProvider().newNameResolver(new URI(hostname),  Attributes.newBuilder()
-            .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, GrpcUtil.getDefaultProxyDetector())
-            .build());
+        new DnsNameResolverProvider().newNameResolver(new URI(hostname),  HELPER);
     nrf.setAddressResolver(new AddressResolver() {
       @Override
       public List<InetAddress> resolveAddress(String host) throws Exception {
@@ -584,14 +597,18 @@ public class DnsNameResolverTest {
   public void doNotResolveWhenProxyDetected() throws Exception {
     final String name = "foo.googleapis.com";
     final int port = 81;
-    ProxyDetector alwaysDetectProxy = mock(ProxyDetector.class);
-    ProxyParameters proxyParameters = ProxyParameters
-        .forAddress(
-          new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000))
-        .username("username")
-        .password("password").build();
-    when(alwaysDetectProxy.proxyFor(any(SocketAddress.class)))
-        .thenReturn(proxyParameters);
+    final InetSocketAddress proxyAddress =
+        new InetSocketAddress(InetAddress.getByName("10.0.0.1"), 1000);
+    ProxyDetector alwaysDetectProxy = new ProxyDetector() {
+        @Override
+        public HttpConnectProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
+          return HttpConnectProxiedSocketAddress.newBuilder()
+              .setTargetAddress((InetSocketAddress) targetAddress)
+              .setProxyAddress(proxyAddress)
+              .setUsername("username")
+              .setPassword("password").build();
+        }
+      };
     DnsNameResolver resolver =
         newResolver(name, port, alwaysDetectProxy, Stopwatch.createUnstarted());
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
@@ -606,14 +623,17 @@ public class DnsNameResolverTest {
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
 
-    ProxySocketAddress socketAddress = (ProxySocketAddress) eag.getAddresses().get(0);
-    assertSame(proxyParameters, socketAddress.getProxyParameters());
-    assertTrue(((InetSocketAddress) socketAddress.getAddress()).isUnresolved());
+    HttpConnectProxiedSocketAddress socketAddress =
+        (HttpConnectProxiedSocketAddress) eag.getAddresses().get(0);
+    assertSame(proxyAddress, socketAddress.getProxyAddress());
+    assertEquals("username", socketAddress.getUsername());
+    assertEquals("password", socketAddress.getPassword());
+    assertTrue(socketAddress.getTargetAddress().isUnresolved());
   }
 
   @Test
   public void maybeChooseServiceConfig_failsOnMisspelling() {
-    Map<String, Object> bad = new LinkedHashMap<String, Object>();
+    Map<String, Object> bad = new LinkedHashMap<>();
     bad.put("parcentage", 1.0);
     thrown.expectMessage("Bad key");
 
@@ -622,7 +642,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("java");
     choice.put("clientLanguage", langs);
@@ -633,7 +653,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("go");
     choice.put("clientLanguage", langs);
@@ -644,7 +664,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("JAVA");
     choice.put("clientLanguage", langs);
@@ -655,7 +675,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     choice.put("clientLanguage", langs);
     choice.put("serviceConfig", serviceConfig);
@@ -665,7 +685,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageMatchesMulti() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("go");
     langs.add("java");
@@ -677,7 +697,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageZeroAlwaysFails() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 0D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -686,7 +706,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 100D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -695,7 +715,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAboveMatches50() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 50D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -711,7 +731,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAtFails50() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 50D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -727,7 +747,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAboveMatches99() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 99D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -743,7 +763,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAtFails99() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 99D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -759,7 +779,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAboveMatches1() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 1D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -775,7 +795,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_percentageAtFails1() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 1D);
     choice.put("serviceConfig", serviceConfig);
 
@@ -791,7 +811,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_hostnameMatches() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhost");
     choice.put("clientHostname", hosts);
@@ -802,7 +822,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_hostnameDoesntMatch() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhorse");
     choice.put("clientHostname", hosts);
@@ -813,7 +833,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_clientLanguageCaseSensitive() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("LOCALHOST");
     choice.put("clientHostname", hosts);
@@ -824,7 +844,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_hostnameMatchesEmtpy() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     choice.put("clientHostname", hosts);
     choice.put("serviceConfig", serviceConfig);
@@ -834,7 +854,7 @@ public class DnsNameResolverTest {
 
   @Test
   public void maybeChooseServiceConfig_hostnameMatchesMulti() {
-    Map<String, Object> choice = new LinkedHashMap<String, Object>();
+    Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhorse");
     hosts.add("localhost");
@@ -986,7 +1006,7 @@ public class DnsNameResolverTest {
 
   private void testInvalidUri(URI uri) {
     try {
-      provider.newNameResolver(uri, NAME_RESOLVER_PARAMS);
+      provider.newNameResolver(uri, HELPER);
       fail("Should have failed");
     } catch (IllegalArgumentException e) {
       // expected
@@ -994,7 +1014,7 @@ public class DnsNameResolverTest {
   }
 
   private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = provider.newNameResolver(uri, NAME_RESOLVER_PARAMS);
+    DnsNameResolver resolver = provider.newNameResolver(uri, HELPER);
     assertNotNull(resolver);
     assertEquals(expectedPort, resolver.getPort());
     assertEquals(exportedAuthority, resolver.getServiceAuthority());

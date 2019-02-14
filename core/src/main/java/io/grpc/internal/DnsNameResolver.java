@@ -27,8 +27,8 @@ import com.google.common.base.Verify;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
-import io.grpc.ProxyParameters;
 import io.grpc.Status;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
@@ -149,9 +149,8 @@ final class DnsNameResolver extends NameResolver {
 
   private final Runnable resolveRunnable;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Attributes params,
-      Resource<Executor> executorResource, ProxyDetector proxyDetector,
-      Stopwatch stopwatch, boolean isAndroid) {
+  DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
+      Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -163,17 +162,11 @@ final class DnsNameResolver extends NameResolver {
         "nameUri (%s) doesn't have an authority", nameUri);
     host = nameUri.getHost();
     if (nameUri.getPort() == -1) {
-      Integer defaultPort = params.get(NameResolver.Factory.PARAMS_DEFAULT_PORT);
-      if (defaultPort != null) {
-        port = defaultPort;
-      } else {
-        throw new IllegalArgumentException(
-            "name '" + name + "' doesn't contain a port, and default port is not set in params");
-      }
+      port = helper.getDefaultPort();
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = proxyDetector;
+    this.proxyDetector = Preconditions.checkNotNull(helper.getProxyDetector(), "proxyDetector");
     this.resolveRunnable = new Resolve(this, stopwatch, getNetworkAddressCacheTtlNanos(isAndroid));
   }
 
@@ -242,22 +235,20 @@ final class DnsNameResolver extends NameResolver {
     void resolveInternal(Listener savedListener) {
       InetSocketAddress destination =
           InetSocketAddress.createUnresolved(resolver.host, resolver.port);
-      ProxyParameters proxy;
+      ProxiedSocketAddress proxiedAddr;
       try {
-        proxy = resolver.proxyDetector.proxyFor(destination);
+        proxiedAddr = resolver.proxyDetector.proxyFor(destination);
       } catch (IOException e) {
         savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + resolver.host)
                 .withCause(e));
         return;
       }
-      if (proxy != null) {
+      if (proxiedAddr != null) {
         if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Using proxy " + proxy.getProxyAddress() + " for " + resolver.host);
+          logger.finer("Using proxy address " + proxiedAddr);
         }
-        EquivalentAddressGroup server =
-            new EquivalentAddressGroup(
-                new ProxySocketAddress(destination, proxy));
+        EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
         savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
         return;
       }
@@ -417,7 +408,7 @@ final class DnsNameResolver extends NameResolver {
   @SuppressWarnings("unchecked")
   @VisibleForTesting
   static List<Map<String, Object>> parseTxtResults(List<String> txtRecords) {
-    List<Map<String, Object>> serviceConfigs = new ArrayList<Map<String, Object>>();
+    List<Map<String, Object>> serviceConfigs = new ArrayList<>();
     for (String txtRecord : txtRecords) {
       if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
         List<Map<String, Object>> choices;

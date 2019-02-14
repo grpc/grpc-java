@@ -126,7 +126,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final InternalLogId logId;
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
-  private final Attributes nameResolverParams;
+  private final NameResolver.Helper nameResolverHelper;
   private final LoadBalancer.Factory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorForBalancer scheduledExecutorForBalancer;
@@ -136,7 +136,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ExecutorHolder balancerRpcExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
-  private final ProxyDetector proxyDetector;
 
   @VisibleForTesting
   final SynchronizationContext syncContext = new SynchronizationContext(
@@ -195,10 +194,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated from syncContext
   // If any monitoring hook to be added later needs to get a snapshot of this Set, we could
   // switch to a ConcurrentHashMap.
-  private final Set<InternalSubchannel> subchannels = new HashSet<InternalSubchannel>(16, .75f);
+  private final Set<InternalSubchannel> subchannels = new HashSet<>(16, .75f);
 
   // Must be mutated from syncContext
-  private final Set<OobChannel> oobChannels = new HashSet<OobChannel>(1, .75f);
+  private final Set<OobChannel> oobChannels = new HashSet<>(1, .75f);
 
   // reprocess() must be run from syncContext
   private final DelayedClientTransport delayedTransport;
@@ -320,7 +319,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolver.shutdown();
       nameResolverStarted = false;
       if (channelIsActive) {
-        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
       } else {
         nameResolver = null;
       }
@@ -545,11 +544,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.nameResolverFactory = builder.getNameResolverFactory();
-    this.proxyDetector =
+    final ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
-    this.nameResolverParams = addProxyToAttributes(this.proxyDetector,
-        checkNotNull(builder.getNameResolverParams(), "nameResolverParams"));
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverParams);
+    final int defaultPort = builder.getDefaultPort();
+    this.nameResolverHelper = new NameResolver.Helper() {
+        @Override
+        public int getDefaultPort() {
+          return defaultPort;
+        }
+
+        @Override
+        public ProxyDetector getProxyDetector() {
+          return proxyDetector;
+        }
+      };
+    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
     channelTracer = new ChannelTracer(
@@ -617,19 +626,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelz.addRootChannel(this);
   }
 
-  private static Attributes addProxyToAttributes(ProxyDetector proxyDetector,
-      Attributes attributes) {
-    if (attributes.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR) == null) {
-      return attributes.toBuilder()
-          .set(NameResolver.Factory.PARAMS_PROXY_DETECTOR, proxyDetector).build();
-    } else {
-      return attributes;
-    }
-  }
-
   @VisibleForTesting
   static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      Attributes nameResolverParams) {
+      NameResolver.Helper nameResolverHelper) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -644,7 +643,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverHelper);
       if (resolver != null) {
         return resolver;
       }
@@ -662,7 +661,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverParams);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverHelper);
       if (resolver != null) {
         return resolver;
       }
@@ -815,14 +814,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
-      return new ClientCallImpl<ReqT, RespT>(
-              method,
-              getCallExecutor(callOptions),
-              callOptions,
-              transportProvider,
-              terminated ? null : transportFactory.getScheduledExecutorService(),
-              channelCallTracer,
-              retryEnabled)
+      return new ClientCallImpl<>(
+          method,
+          getCallExecutor(callOptions),
+          callOptions,
+          transportProvider,
+          terminated ? null : transportFactory.getScheduledExecutorService(),
+          channelCallTracer,
+          retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)
           .setCompressorRegistry(compressorRegistry);

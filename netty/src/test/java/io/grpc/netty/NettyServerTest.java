@@ -16,7 +16,6 @@
 
 package io.grpc.netty;
 
-import static com.google.common.collect.Iterables.getOnlyElement;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.InternalChannelz.id;
 import static org.junit.Assert.assertEquals;
@@ -63,7 +62,7 @@ public class NettyServerTest {
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group
-        new ProtocolNegotiators.PlaintextNegotiator(),
+        ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -86,7 +85,7 @@ public class NettyServerTest {
     });
 
     // Check that we got an actual port.
-    assertThat(ns.getPort()).isGreaterThan(0);
+    assertThat(((InetSocketAddress) ns.getListenSocketAddress()).getPort()).isGreaterThan(0);
 
     // Cleanup
     ns.shutdown();
@@ -101,7 +100,7 @@ public class NettyServerTest {
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group
-        new ProtocolNegotiators.PlaintextNegotiator(),
+        ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -114,7 +113,7 @@ public class NettyServerTest {
         true, 0, // ignore
         channelz);
 
-    assertThat(ns.getPort()).isEqualTo(-1);
+    assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
   }
 
   @Test(timeout = 60000)
@@ -122,7 +121,7 @@ public class NettyServerTest {
     final int originalLowWaterMark = 2097169;
     final int originalHighWaterMark = 2097211;
 
-    Map<ChannelOption<?>, Object> channelOptions = new HashMap<ChannelOption<?>, Object>();
+    Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
 
     channelOptions.put(ChannelOption.WRITE_BUFFER_WATER_MARK,
         new WriteBufferWaterMark(originalLowWaterMark, originalHighWaterMark));
@@ -139,7 +138,7 @@ public class NettyServerTest {
         channelOptions,
         null, // no boss group
         null, // no event group
-        new ProtocolNegotiators.PlaintextNegotiator(),
+        ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -170,7 +169,7 @@ public class NettyServerTest {
     });
 
     Socket socket = new Socket();
-    socket.connect(new InetSocketAddress("localhost", ns.getPort()), /* timeout= */ 8000);
+    socket.connect(ns.getListenSocketAddress(), /* timeout= */ 8000);
     countDownLatch.await();
     socket.close();
 
@@ -189,7 +188,7 @@ public class NettyServerTest {
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group
-        new ProtocolNegotiators.PlaintextNegotiator(),
+        ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         1, // ignore
@@ -213,14 +212,14 @@ public class NettyServerTest {
         shutdownCompleted.set(null);
       }
     });
-    assertThat(ns.getPort()).isGreaterThan(0);
+    assertThat(((InetSocketAddress) ns.getListenSocketAddress()).getPort()).isGreaterThan(0);
 
-    InternalInstrumented<SocketStats> listenSocket = getOnlyElement(ns.getListenSockets());
+    InternalInstrumented<SocketStats> listenSocket = ns.getListenSocketStats();
     assertSame(listenSocket, channelz.getSocket(id(listenSocket)));
 
     // very basic sanity check of the contents
     SocketStats socketStats = listenSocket.getStats().get();
-    assertEquals(ns.getPort(), ((InetSocketAddress) socketStats.local).getPort());
+    assertEquals(ns.getListenSocketAddress(), socketStats.local);
     assertNull(socketStats.remote);
 
     // TODO(zpencer): uncomment when sock options are exposed

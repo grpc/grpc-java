@@ -335,7 +335,7 @@ final class GrpclbState {
     logger.log(
         ChannelLogLevel.INFO, "Using RR list={0}, drop={1}", newBackendAddrList, newDropList);
     HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
-        new HashMap<EquivalentAddressGroup, Subchannel>();
+        new HashMap<>();
     List<BackendEntry> newBackendList = new ArrayList<>();
 
     for (BackendAddressGroup backendAddr : newBackendAddrList) {
@@ -346,7 +346,7 @@ final class GrpclbState {
         if (subchannel == null) {
           Attributes subchannelAttrs = Attributes.newBuilder()
               .set(STATE_INFO,
-                  new AtomicReference<ConnectivityStateInfo>(
+                  new AtomicReference<>(
                       ConnectivityStateInfo.forNonError(IDLE)))
               .build();
           subchannel = subchannelPool.takeOrCreateSubchannel(eag, subchannelAttrs);
@@ -589,14 +589,10 @@ final class GrpclbState {
       }
       closed = true;
       cleanUp();
-      try {
-        if (error == null) {
-          lbRequestWriter.onCompleted();
-        } else {
-          lbRequestWriter.onError(error);
-        }
-      } catch (Exception e) {
-        // Don't care
+      if (error == null) {
+        lbRequestWriter.onCompleted();
+      } else {
+        lbRequestWriter.onError(error);
       }
     }
 

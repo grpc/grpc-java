@@ -83,6 +83,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.Collections;
@@ -504,8 +505,8 @@ public class ServerImplTest {
     final Metadata.Key<String> metadataKey
         = Metadata.Key.of("inception", Metadata.ASCII_STRING_MARSHALLER);
     final AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
-    final AtomicReference<Context> callContextReference = new AtomicReference<Context>();
+        = new AtomicReference<>();
+    final AtomicReference<Context> callContextReference = new AtomicReference<>();
     mutableFallbackRegistry.addService(ServerServiceDefinition.builder(
         new ServiceDescriptor("Waiter", method))
         .addMethod(
@@ -545,7 +546,7 @@ public class ServerImplTest {
     ServerCall<String, Integer> call = callReference.get();
     assertNotNull(call);
     assertEquals(
-        new ServerCallInfoImpl<String, Integer>(
+        new ServerCallInfoImpl<>(
             call.getMethodDescriptor(),
             call.getAttributes(),
             call.getAuthority()),
@@ -606,9 +607,9 @@ public class ServerImplTest {
     final Attributes.Key<String> key2 = Attributes.Key.create("test-key2");
     final Attributes.Key<String> key3 = Attributes.Key.create("test-key3");
     final AtomicReference<Attributes> filter1TerminationCallbackArgument =
-        new AtomicReference<Attributes>();
+        new AtomicReference<>();
     final AtomicReference<Attributes> filter2TerminationCallbackArgument =
-        new AtomicReference<Attributes>();
+        new AtomicReference<>();
     final AtomicInteger readyCallbackCalled = new AtomicInteger(0);
     final AtomicInteger terminationCallbackCalled = new AtomicInteger(0);
     builder.addTransportFilter(new ServerTransportFilter() {
@@ -677,11 +678,11 @@ public class ServerImplTest {
 
   @Test
   public void interceptors() throws Exception {
-    final LinkedList<Context> capturedContexts = new LinkedList<Context>();
+    final LinkedList<Context> capturedContexts = new LinkedList<>();
     final Context.Key<String> key1 = Context.key("key1");
     final Context.Key<String> key2 = Context.key("key2");
     final Context.Key<String> key3 = Context.key("key3");
-    ServerInterceptor intercepter1 = new ServerInterceptor() {
+    ServerInterceptor interceptor1 = new ServerInterceptor() {
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -697,7 +698,7 @@ public class ServerImplTest {
           }
         }
       };
-    ServerInterceptor intercepter2 = new ServerInterceptor() {
+    ServerInterceptor interceptor2 = new ServerInterceptor() {
         @Override
         public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
             ServerCall<ReqT, RespT> call,
@@ -726,8 +727,8 @@ public class ServerImplTest {
     mutableFallbackRegistry.addService(
         ServerServiceDefinition.builder(new ServiceDescriptor("Waiter", METHOD))
             .addMethod(METHOD, callHandler).build());
-    builder.intercept(intercepter2);
-    builder.intercept(intercepter1);
+    builder.intercept(interceptor2);
+    builder.intercept(interceptor1);
     createServer();
     server.start();
 
@@ -1024,9 +1025,9 @@ public class ServerImplTest {
   @Test
   public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
+        = new AtomicReference<>();
 
     ServerStreamListener streamListener = testClientClose_setup(callReference,
         context, contextCancelled);
@@ -1047,9 +1048,9 @@ public class ServerImplTest {
   @Test
   public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
-    AtomicReference<Context> context = new AtomicReference<Context>();
+    AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<ServerCall<String, Integer>>();
+        = new AtomicReference<>();
 
     ServerStreamListener streamListener = testClientClose_setup(callReference,
         context, contextCancelled);
@@ -1070,15 +1071,16 @@ public class ServerImplTest {
 
   @Test
   public void getPort() throws Exception {
+    final InetSocketAddress addr = new InetSocketAddress(65535);
     transportServer = new SimpleServer() {
       @Override
-      public int getPort() {
-        return 65535;
+      public SocketAddress getListenSocketAddress() {
+        return addr;
       }
     };
     createAndStartServer();
 
-    assertThat(server.getPort()).isEqualTo(65535);
+    assertThat(server.getPort()).isEqualTo(addr.getPort());
   }
 
   @Test
@@ -1397,13 +1399,13 @@ public class ServerImplTest {
     }
 
     @Override
-    public int getPort() {
-      return -1;
+    public SocketAddress getListenSocketAddress() {
+      return new InetSocketAddress(12345);
     }
 
     @Override
-    public List<InternalInstrumented<SocketStats>> getListenSockets() {
-      return Collections.emptyList();
+    public InternalInstrumented<SocketStats> getListenSocketStats() {
+      return null;
     }
 
     @Override
