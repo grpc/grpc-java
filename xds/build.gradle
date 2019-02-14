@@ -53,7 +53,6 @@ configureProtoCompilation()
 jar {
     classifier = 'original'
 }
-configurations.archives.artifacts.removeAll { it.classifier == "original" }
 
 shadowJar {
     classifier = null
@@ -69,6 +68,7 @@ publishing {
     publications {
         maven(MavenPublication) {
             artifact shadowJar
+            artifacts.removeAll { it.classifier == 'original' }
         }
     }
 }
