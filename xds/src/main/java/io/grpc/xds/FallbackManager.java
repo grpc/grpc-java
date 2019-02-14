@@ -37,7 +37,6 @@ final class FallbackManager {
 
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
-  private final FallbackTask fallbackTask = new FallbackTask();
   private final Helper helper;
   private final SubchannelStore subchannelStore;
 
@@ -120,19 +119,16 @@ final class FallbackManager {
 
   void maybeStartFallbackTimer() {
     if (fallbackTimer == null) {
+      class FallbackTask implements Runnable {
+        @Override
+        public void run() {
+          maybeUseFallbackPolicy();
+        }
+      }
+
       fallbackTimer = helper.getSynchronizationContext().schedule(
-          fallbackTask, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
+          new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
           helper.getScheduledExecutorService());
-    }
-  }
-
-  private final class FallbackTask implements Runnable {
-
-    FallbackTask() {}
-
-    @Override
-    public void run() {
-      maybeUseFallbackPolicy();
     }
   }
 }
