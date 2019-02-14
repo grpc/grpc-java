@@ -33,7 +33,6 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import java.util.Collections;
 import java.util.Map;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,6 +50,7 @@ public class XdsLoadBalancerTest {
   private XdsLoadBalancer lb;
 
   private final FakeClock fakeClock = new FakeClock();
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
 
   private final LoadBalancerProvider lbProvider1 = new LoadBalancerProvider() {
     @Override
@@ -99,19 +99,13 @@ public class XdsLoadBalancerTest {
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
-    LoadBalancerRegistry.getDefaultRegistry().register(lbProvider1);
-    LoadBalancerRegistry.getDefaultRegistry().register(lbProvider2);
-    lb = new XdsLoadBalancer(helper);
+    lbRegistry.register(lbProvider1);
+    lbRegistry.register(lbProvider2);
+    lb = new XdsLoadBalancer(helper, lbRegistry);
     doReturn(new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler()))
         .when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService())
         .when(helper).getScheduledExecutorService();
-  }
-
-  @After
-  public void tearDown() {
-    LoadBalancerRegistry.getDefaultRegistry().deregister(lbProvider1);
-    LoadBalancerRegistry.getDefaultRegistry().deregister(lbProvider2);
   }
 
   @Test
@@ -128,7 +122,7 @@ public class XdsLoadBalancerTest {
 
     @SuppressWarnings("unchecked")
     Map<String, Object> childPolicy = XdsLoadBalancer
-        .selectChildPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw));
+        .selectChildPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw), lbRegistry);
 
     assertEquals(expectedChildPolicy, childPolicy);
   }
@@ -147,7 +141,7 @@ public class XdsLoadBalancerTest {
 
     @SuppressWarnings("unchecked")
     Map<String, Object> fallbackPolicy = XdsLoadBalancer
-        .selectFallbackPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw));
+        .selectFallbackPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw), lbRegistry);
 
     assertEquals(expectedFallbackPolicy, fallbackPolicy);
   }

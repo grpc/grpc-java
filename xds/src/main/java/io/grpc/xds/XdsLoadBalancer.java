@@ -51,6 +51,7 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private final SubchannelStore subchannelStore = new SubchannelStore();
   private final Helper helper;
+  private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
 
   @Nullable
@@ -58,9 +59,10 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private Map<String, Object> fallbackPolicy;
 
-  XdsLoadBalancer(Helper helper) {
+  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
     this.helper = checkNotNull(helper, "helper");
-    fallbackManager = new FallbackManager(helper, subchannelStore);
+    this.lbRegistry = lbRegistry;
+    fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
   }
 
   @Override
@@ -68,7 +70,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> servers, Attributes attributes) {
     Map<String, Object> newLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
-    fallbackPolicy = selectFallbackPolicy(newLbConfig);
+    fallbackPolicy = selectFallbackPolicy(newLbConfig, lbRegistry);
     fallbackManager.updateFallbackServers(servers, attributes, fallbackPolicy);
     fallbackManager.maybeStartFallbackTimer();
     handleNewConfig(newLbConfig);
@@ -77,7 +79,7 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private void handleNewConfig(Map<String, Object> newLbConfig) {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
-    Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
+    Map<String, Object> childPolicy = selectChildPolicy(newLbConfig, lbRegistry);
     XdsComms xdsComms = null;
     if (xdsLbState != null) { // may release and re-use/shutdown xdsComms from current xdsLbState
       if (!newBalancerName.equals(xdsLbState.balancerName)) {
@@ -112,31 +114,33 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Nullable
   @VisibleForTesting
-  static Map<String, Object> selectChildPolicy(Map<String, Object> lbConfig) {
+  static Map<String, Object> selectChildPolicy(
+      Map<String, Object> lbConfig, LoadBalancerRegistry lbRegistry) {
     List<Map<String, Object>> childConfigs =
         ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
-    return selectSupportedLbPolicy(childConfigs);
+    return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 
   @VisibleForTesting
-  static Map<String, Object> selectFallbackPolicy(Map<String, Object> lbConfig) {
+  static Map<String, Object> selectFallbackPolicy(
+      Map<String, Object> lbConfig, LoadBalancerRegistry lbRegistry) {
     List<Map<String, Object>> fallbackConfigs =
         ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
-    Map<String, Object> fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs);
+    Map<String, Object> fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
   }
 
   @Nullable
-  private static Map<String, Object> selectSupportedLbPolicy(List<Map<String, Object>> lbConfigs) {
+  private static Map<String, Object> selectSupportedLbPolicy(
+      List<Map<String, Object>> lbConfigs, LoadBalancerRegistry lbRegistry) {
     if (lbConfigs == null) {
       return null;
     }
-    LoadBalancerRegistry loadBalancerRegistry = LoadBalancerRegistry.getDefaultRegistry();
     for (Object lbConfig : lbConfigs) {
       @SuppressWarnings("unchecked")
       Map<String, Object> candidate = (Map<String, Object>) lbConfig;
       String lbPolicy = ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(candidate);
-      if (loadBalancerRegistry.getProvider(lbPolicy) != null) {
+      if (lbRegistry.getProvider(lbPolicy) != null) {
         return candidate;
       }
     }

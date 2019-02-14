@@ -56,6 +56,8 @@ public class FallbackManagerTest {
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   private final FakeClock fakeClock = new FakeClock();
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+
   private final LoadBalancerProvider fakeLbProvider = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
@@ -77,6 +79,7 @@ public class FallbackManagerTest {
       return fakeLb;
     }
   };
+
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
         @Override
@@ -101,15 +104,14 @@ public class FallbackManagerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(channelLogger).when(helper).getChannelLogger();
-    fallbackManager = new FallbackManager(helper, new SubchannelStore());
+    fallbackManager = new FallbackManager(helper, new SubchannelStore(), lbRegistry);
     fallbackPolicy = new HashMap<>();
     fallbackPolicy.put("test_policy", new HashMap<>());
-    LoadBalancerRegistry.getDefaultRegistry().register(fakeLbProvider);
+    lbRegistry.register(fakeLbProvider);
   }
 
   @After
   public void tearDown() {
-    LoadBalancerRegistry.getDefaultRegistry().deregister(fakeLbProvider);
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 

@@ -39,6 +39,7 @@ final class FallbackManager {
 
   private final Helper helper;
   private final SubchannelStore subchannelStore;
+  private final LoadBalancerRegistry lbRegistry;
 
   private Map<String, Object> fallbackPolicy;
   private LoadBalancer fallbackBalancer;
@@ -55,9 +56,10 @@ final class FallbackManager {
   private boolean balancerWorking;
 
   FallbackManager(
-      Helper helper, SubchannelStore subchannelStore) {
+      Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
     this.helper = helper;
     this.subchannelStore = subchannelStore;
+    this.lbRegistry = lbRegistry;
   }
 
   LoadBalancer fallbackBalancer() {
@@ -86,7 +88,7 @@ final class FallbackManager {
         ChannelLogLevel.INFO, "Using fallback policy");
     String fallbackPolicyName = ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(
         fallbackPolicy);
-    fallbackBalancer = LoadBalancerRegistry.getDefaultRegistry().getProvider(fallbackPolicyName)
+    fallbackBalancer = lbRegistry.getProvider(fallbackPolicyName)
         .newLoadBalancer(helper);
     fallbackBalancer.handleResolvedAddressGroups(fallbackServers, fallbackAttributes);
     // TODO: maybe update picker
