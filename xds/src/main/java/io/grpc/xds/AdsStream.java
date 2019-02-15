@@ -27,6 +27,8 @@ import io.grpc.stub.StreamObserver;
 /**
  * ADS client implementation.
  */
+// TODO(zdapeng): create a `StreamObserver` inside the class so that those `StreamObserver` methods
+// don't show up on the `AdsStream` interface.
 final class AdsStream implements StreamObserver<DiscoveryResponse> {
   private final AggregatedDiscoveryServiceStub stub;
 
