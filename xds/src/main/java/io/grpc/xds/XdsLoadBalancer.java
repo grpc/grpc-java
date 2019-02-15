@@ -63,11 +63,13 @@ final class XdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onWorking() {
+      fallbackManager.balancerWorking = true;
       fallbackManager.cancelFallback();
     }
 
     @Override
     public void onClosed() {
+      fallbackManager.balancerWorking = false;
       fallbackManager.maybeUseFallbackPolicy();
     }
   };
@@ -243,9 +245,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     private List<EquivalentAddressGroup> fallbackServers = ImmutableList.of();
     private Attributes fallbackAttributes;
 
-    // True if there is one active AdsStream which has received the first response.
-    // TODO: notify balancer working
-    private boolean balancerWorking;
+    boolean balancerWorking;
 
     FallbackManager(
         Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
