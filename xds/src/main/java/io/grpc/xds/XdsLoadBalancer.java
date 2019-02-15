@@ -22,19 +22,23 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.internal.ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
@@ -53,6 +57,20 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
+
+  @SuppressWarnings("unused") // TODO: pass it to discovery response handling logic
+  private final AdsStreamCallbacks adsStreamCallbacks = new AdsStreamCallbacks() {
+
+    @Override
+    public void onWorking() {
+      fallbackManager.cancelFallback();
+    }
+
+    @Override
+    public void onClosed() {
+      fallbackManager.maybeUseFallbackPolicy();
+    }
+  };
 
   @Nullable
   private XdsLbState xdsLbState;
@@ -204,5 +222,121 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Nullable
   XdsLbState getXdsLbState() {
     return xdsLbState;
+  }
+
+  @VisibleForTesting
+  static final class FallbackManager {
+
+    private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
+
+    private final Helper helper;
+    private final SubchannelStore subchannelStore;
+    private final LoadBalancerRegistry lbRegistry;
+
+    private Map<String, Object> fallbackPolicy;
+    private LoadBalancer fallbackBalancer;
+
+    // Scheduled only once.  Never reset.
+    @Nullable
+    private ScheduledHandle fallbackTimer;
+
+    private List<EquivalentAddressGroup> fallbackServers = ImmutableList.of();
+    private Attributes fallbackAttributes;
+
+    // True if there is one active AdsStream which has received the first response.
+    // TODO: notify balancer working
+    private boolean balancerWorking;
+
+    FallbackManager(
+        Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
+      this.helper = helper;
+      this.subchannelStore = subchannelStore;
+      this.lbRegistry = lbRegistry;
+    }
+
+    LoadBalancer fallbackBalancer() {
+      return fallbackBalancer;
+    }
+
+    void cancelFallback() {
+      if (fallbackTimer != null) {
+        fallbackTimer.cancel();
+      }
+      if (fallbackBalancer != null) {
+        fallbackBalancer.shutdown();
+        fallbackBalancer = null;
+      }
+    }
+
+    void maybeUseFallbackPolicy() {
+      if (fallbackBalancer != null) {
+        return;
+      }
+      if (balancerWorking || subchannelStore.hasReadyBackends()) {
+        return;
+      }
+
+      helper.getChannelLogger().log(
+          ChannelLogLevel.INFO, "Using fallback policy");
+      String fallbackPolicyName = ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(
+          fallbackPolicy);
+      fallbackBalancer = lbRegistry.getProvider(fallbackPolicyName)
+          .newLoadBalancer(helper);
+      fallbackBalancer.handleResolvedAddressGroups(fallbackServers, fallbackAttributes);
+      // TODO: maybe update picker
+    }
+
+    void updateFallbackServers(
+        List<EquivalentAddressGroup> servers, Attributes attributes,
+        Map<String, Object> fallbackPolicy) {
+      this.fallbackServers = servers;
+      this.fallbackAttributes = Attributes.newBuilder()
+          .setAll(attributes)
+          .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy)
+          .build();
+      Map<String, Object> currentFallbackPolicy = this.fallbackPolicy;
+      this.fallbackPolicy = fallbackPolicy;
+      if (fallbackBalancer != null) {
+        String currentPolicyName =
+            ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(currentFallbackPolicy);
+        String newPolicyName =
+            ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(fallbackPolicy);
+        if (newPolicyName.equals(currentPolicyName)) {
+          fallbackBalancer.handleResolvedAddressGroups(fallbackServers, fallbackAttributes);
+        } else {
+          fallbackBalancer.shutdown();
+          fallbackBalancer = null;
+          maybeUseFallbackPolicy();
+        }
+      }
+    }
+
+    void maybeStartFallbackTimer() {
+      if (fallbackTimer == null) {
+        class FallbackTask implements Runnable {
+          @Override
+          public void run() {
+            maybeUseFallbackPolicy();
+          }
+        }
+
+        fallbackTimer = helper.getSynchronizationContext().schedule(
+            new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
+            helper.getScheduledExecutorService());
+      }
+    }
+  }
+
+  interface AdsStreamCallbacks {
+
+    /**
+     * Once an associated subchannel is ready.
+     */
+    void onWorking();
+
+    /**
+     * Once the ADS stream is closed.
+     */
+    void onClosed();
   }
 }
