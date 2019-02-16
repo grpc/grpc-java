@@ -37,7 +37,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * {@link Listener} is responsible for eventually (after an appropriate backoff period) invoking
  * {@link #refresh()}.
  *
- * <p>Implementations <string>don't need to be thread-safe</strong>.  All methods are guaranteed to
+ * <p>Implementations <strong>don't need to be thread-safe</strong>.  All methods are guaranteed to
  * be called sequentially.  Additionally, all methods that have side-effects, i.e., {@link #start},
  * {@link #shutdown} and {@link #refresh} are called from the same {@link SynchronizationContext} as
  * returned by {@link Helper#getSynchronizationContext}.
@@ -213,6 +213,8 @@ public abstract class NameResolver {
 
   /**
    * A utility object passed to {@link Factory#newNameResolver(URI, NameResolver.Helper)}.
+   *
+   * @since 1.19.0
    */
   public abstract static class Helper {
     /**

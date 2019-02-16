@@ -139,14 +139,19 @@ final class DnsNameResolver extends NameResolver {
   private final int port;
   private final Resource<Executor> executorResource;
   private final long cacheTtlNanos;
-  private final Stopwatch stopwatch;
   private final SynchronizationContext syncContext;
 
-  // Following fields must be accessed from synContext
-  private ResolutionResults cachedResolutionResults = null;
+  // Must only be called from syncContext
+  private final Stopwatch stopwatch;
+
+  // Following fields must be accessed from syncContext
+  private ResolutionResults cachedResolutionResults;
   private boolean shutdown;
   private Executor executor;
   private boolean resolving;
+
+  // The field must be accessed from syncContext, although the methods on a Listener can be called
+  // from any thread.
   private Listener listener;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
@@ -174,12 +179,12 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final String getServiceAuthority() {
+  public String getServiceAuthority() {
     return authority;
   }
 
   @Override
-  public final void start(Listener listener) {
+  public void start(Listener listener) {
     Preconditions.checkState(this.listener == null, "already started");
     executor = SharedResourceHolder.get(executorResource);
     this.listener = Preconditions.checkNotNull(listener, "listener");
@@ -187,7 +192,7 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final void refresh() {
+  public void refresh() {
     Preconditions.checkState(listener != null, "not started");
     resolve();
   }
@@ -254,11 +259,11 @@ final class DnsNameResolver extends NameResolver {
             @Override
             public void run() {
               cachedResolutionResults = results;
+              if (cacheTtlNanos > 0) {
+                stopwatch.reset().start();
+              }
             }
           });
-        if (cacheTtlNanos > 0) {
-          stopwatch.reset().start();
-        }
         if (logger.isLoggable(Level.FINER)) {
           logger.finer("Found DNS results " + resolutionResults + " for " + host);
         }
@@ -323,7 +328,7 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public final void shutdown() {
+  public void shutdown() {
     if (shutdown) {
       return;
     }
