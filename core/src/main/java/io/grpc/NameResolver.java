@@ -209,17 +209,23 @@ public abstract class NameResolver {
 
   /**
    * A utility object passed to {@link Factory#newNameResolver(URI, NameResolver.Helper)}.
+   *
+   * @since 1.19.0
    */
   public abstract static class Helper {
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
      * port number.
+     *
+     * @since 1.19.0
      */
     public abstract int getDefaultPort();
 
     /**
      * If the NameResolver wants to support proxy, it should inquire this {@link ProxyDetector}.
      * See documentation on {@link ProxyDetector} about how proxies work in gRPC.
+     *
+     * @since 1.19.0
      */
     public abstract ProxyDetector getProxyDetector();
   }
