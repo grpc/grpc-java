@@ -218,3 +218,9 @@ gRPC comes with three Transport implementations:
    and is for client only.
 3. The in-process transport is for when a server is in the same process as the
    client. It is useful for testing, while also being safe for production use.
+
+Third-Party Integration
+-----------------------
+
+* [grpc-spring-boot-starter](https://github.com/yidongnan/grpc-spring-boot-starter)
+  (unofficial) fully integrates gRPC with [Spring](https://spring.io/)
