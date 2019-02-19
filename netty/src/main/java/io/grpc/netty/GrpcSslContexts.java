@@ -95,6 +95,7 @@ public class GrpcSslContexts {
       NEXT_PROTOCOL_VERSIONS);
 
   private static final String SUN_PROVIDER_NAME = "SunJSSE";
+  private static final String IBM_PROVIDER_NAME = "IBMJSSE2";
   private static final Method IS_CONSCRYPT_PROVIDER;
 
   static {
@@ -225,6 +226,18 @@ public class GrpcSslContexts {
         throw new IllegalArgumentException(
             SUN_PROVIDER_NAME + " selected, but Jetty NPN/ALPN unavailable");
       }
+    } else if (IBM_PROVIDER_NAME.equals(jdkProvider.getName())) {
+      // Jetty ALPN/NPN only supports one of NPN or ALPN
+      if (JettyTlsUtil.isJettyAlpnConfigured()) {
+        apc = ALPN;
+      } else if (JettyTlsUtil.isJettyNpnConfigured()) {
+        apc = NPN;
+      } else if (JettyTlsUtil.isJava9AlpnAvailable()) {
+        apc = ALPN;
+      } else {
+        throw new IllegalArgumentException(
+          IBM_PROVIDER_NAME + " selected, but Jetty NPN/ALPN unavailable");
+      }
     } else if (isConscrypt(jdkProvider)) {
       apc = ALPN;
     } else {
@@ -268,6 +281,12 @@ public class GrpcSslContexts {
             || JettyTlsUtil.isJava9AlpnAvailable()) {
           return provider;
         }
+      } else if (IBM_PROVIDER_NAME.equals(provider.getName())) {
+        if (JettyTlsUtil.isJettyAlpnConfigured()
+            || JettyTlsUtil.isJettyNpnConfigured()
+            || JettyTlsUtil.isJava9AlpnAvailable()) {
+          return provider;
+        }
       } else if (isConscrypt(provider)) {
         return provider;
       }
@@ -305,3 +324,4 @@ public class GrpcSslContexts {
         alpnNegotiator.protocols());
   }
 }
+
