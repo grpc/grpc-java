@@ -30,12 +30,14 @@ import static org.mockito.Mockito.times;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.SecurityLevel;
+import io.grpc.Server;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
+
+import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
+import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
-import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
@@ -68,9 +70,11 @@ import io.netty.handler.codec.http2.Http2ConnectionEncoder;
 import io.netty.handler.codec.http2.Http2Settings;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 import java.io.File;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -380,20 +384,16 @@ public class ProtocolNegotiatorsTest {
   }
 
   @Test
-  public void tls_hostAndPort() throws SSLException {
-    SslContext ctx = GrpcSslContexts.forClient().build();
-    TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx);
-    HostPort hostPort = negotiator.parseAuthority("authority:1234");
+  public void tls_hostAndPort() {
+    HostPort hostPort = ProtocolNegotiators.parseAuthority("authority:1234");
 
     assertEquals("authority", hostPort.host);
     assertEquals(1234, hostPort.port);
   }
 
   @Test
-  public void tls_host() throws SSLException {
-    SslContext ctx = GrpcSslContexts.forClient().build();
-    TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx);
-    HostPort hostPort = negotiator.parseAuthority("[::1]");
+  public void tls_host() {
+    HostPort hostPort = ProtocolNegotiators.parseAuthority("[::1]");
 
     assertEquals("[::1]", hostPort.host);
     assertEquals(-1, hostPort.port);
@@ -401,9 +401,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tls_invalidHost() throws SSLException {
-    SslContext ctx = GrpcSslContexts.forClient().build();
-    TlsNegotiator negotiator = (TlsNegotiator) ProtocolNegotiators.tls(ctx);
-    HostPort hostPort = negotiator.parseAuthority("bad_host:1234");
+    HostPort hostPort = ProtocolNegotiators.parseAuthority("bad_host:1234");
 
     // Even though it looks like a port, we treat it as part of the authority, since the host is
     // invalid.
@@ -585,6 +583,7 @@ public class ProtocolNegotiatorsTest {
     elg.shutdownGracefully();
   }
 
+
   @Test(expected = Test.None.class /* no exception expected */)
   @SuppressWarnings("TestExceptionChecker")
   public void bufferingHandler_shouldNotThrowForEmptyHandler() throws Exception {
@@ -596,11 +595,61 @@ public class ProtocolNegotiatorsTest {
         .register().sync();
     ChannelFuture sf = new ServerBootstrap()
         .channel(LocalServerChannel.class)
-        .childHandler(new ChannelHandlerAdapter() {})
+        .childHandler(new ChannelHandlerAdapter() {
+        })
         .group(group)
         .bind(addr);
     // sync will trigger client's NoHandlerBufferingHandler which should not throw
     sf.sync();
+  }
+
+  @Test
+  public void clientTlsHandler_firesNegotiation() throws Exception {
+    SelfSignedCertificate cert = new SelfSignedCertificate();
+    sslContext = SslContextBuilder.forClient().trustManager(cert.cert()).build();
+    new ClientTlsHandler();
+    SelfSignedCertificate cert = new SelfSignedCertificate();
+    sslContext = SslContextBuilder.forClient().trustManager(cert.cert()).build();
+    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(sslContext);
+    ChannelHandler ch = pn.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    WriteBufferingAndExceptionHandler wbaeh = new WriteBufferingAndExceptionHandler(ch);
+
+    EventLoopGroup elg = new DefaultEventLoopGroup(1);
+    SocketAddress addr = new LocalAddress("addr");
+    final AtomicReference<Object> event = new AtomicReference<>();
+    ChannelHandler next = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        event.set(evt);
+        ctx.close();
+      }
+    };
+    SslContext serverSslContext = SslContextBuilder.forServer(cert.key(), cert.cert()).build();
+    ChannelHandler sh =
+        ProtocolNegotiators.serverTls(serverSslContext)
+            .newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    Channel s = new ServerBootstrap()
+        .childHandler(sh)
+        .group(elg)
+        .channel(LocalServerChannel.class)
+        .bind(addr)
+        .sync()
+        .channel();
+    Channel c = new Bootstrap()
+        .handler(wbaeh)
+        .channel(LocalChannel.class).group(group)
+        .connect(addr)
+        .sync()
+        .channel();
+    SocketAddress localAddr = c.localAddress();
+
+    c.closeFuture().sync();
+    assertThat(event.get()).isInstanceOf(ProtocolNegotiationEvent.class);
+    ProtocolNegotiationEvent actual = (ProtocolNegotiationEvent) event.get();
+    //assertThat(actual).isEqualTo(expectedEvent);
+
+    s.close();
+    elg.shutdownGracefully();
   }
 
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
@@ -642,6 +691,11 @@ public class ProtocolNegotiatorsTest {
       } else {
         super.handlerAdded(ctx);
       }
+    }
+
+    @Override
+    public String getAuthority() {
+      return "authority";
     }
   }
 
