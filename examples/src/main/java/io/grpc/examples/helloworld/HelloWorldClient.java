@@ -19,6 +19,10 @@ package io.grpc.examples.helloworld;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
+import io.grpc.examples.helloworld.codegen.GreeterGrpc;
+import io.grpc.examples.helloworld.codegen.HelloReply;
+import io.grpc.examples.helloworld.codegen.HelloRequest;
+
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;

@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.manualflowcontrol;
+package io.grpc.examples.manualflowcontrol.run;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.Status;
+import io.grpc.examples.manualflowcontrol.HelloReply;
+import io.grpc.examples.manualflowcontrol.HelloRequest;
+import io.grpc.examples.manualflowcontrol.StreamingGreeterGrpc;
 import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 

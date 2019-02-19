@@ -19,6 +19,9 @@ package io.grpc.examples.helloworld;
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.examples.helloworld.HelloWorldServer.GreeterImpl;
+import io.grpc.examples.helloworld.codegen.GreeterGrpc;
+import io.grpc.examples.helloworld.codegen.HelloReply;
+import io.grpc.examples.helloworld.codegen.HelloRequest;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;

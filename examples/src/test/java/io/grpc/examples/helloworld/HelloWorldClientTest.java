@@ -22,6 +22,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.ManagedChannel;
+import io.grpc.examples.helloworld.codegen.GreeterGrpc;
+import io.grpc.examples.helloworld.codegen.HelloReply;
+import io.grpc.examples.helloworld.codegen.HelloRequest;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;

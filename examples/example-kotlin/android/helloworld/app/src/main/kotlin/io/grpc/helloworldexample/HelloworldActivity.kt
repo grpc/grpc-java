@@ -29,8 +29,8 @@ import android.widget.Button
 import android.widget.TextView
 import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
-import io.grpc.examples.helloworld.GreeterGrpc
-import io.grpc.examples.helloworld.HelloRequest
+import io.grpc.examples.helloworld.codegen.GreeterGrpc
+import HelloRequest
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.ref.WeakReference

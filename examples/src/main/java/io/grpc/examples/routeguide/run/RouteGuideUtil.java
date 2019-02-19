@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.routeguide;
+package io.grpc.examples.routeguide.run;
 
 import com.google.protobuf.util.JsonFormat;
 import java.io.IOException;
@@ -24,6 +24,8 @@ import java.io.Reader;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.List;
+
+import io.grpc.examples.routeguide.*;
 
 /**
  * Common utilities for the RouteGuide demo.

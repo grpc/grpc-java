@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.routeguide;
+package io.grpc.examples.routeguide.run;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Message;

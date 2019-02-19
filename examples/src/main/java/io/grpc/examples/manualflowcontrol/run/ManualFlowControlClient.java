@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.manualflowcontrol;
+package io.grpc.examples.manualflowcontrol.run;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.examples.manualflowcontrol.HelloReply;
+import io.grpc.examples.manualflowcontrol.HelloRequest;
 import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.ClientResponseObserver;
 

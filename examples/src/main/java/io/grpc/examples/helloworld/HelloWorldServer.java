@@ -18,6 +18,9 @@ package io.grpc.examples.helloworld;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.examples.helloworld.codegen.GreeterGrpc;
+import io.grpc.examples.helloworld.codegen.HelloReply;
+import io.grpc.examples.helloworld.codegen.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.logging.Logger;

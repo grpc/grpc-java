@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.routeguide;
+package io.grpc.examples.routeguide.run;
 
 import static java.lang.Math.atan2;
 import static java.lang.Math.cos;
