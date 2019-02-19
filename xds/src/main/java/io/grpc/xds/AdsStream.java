@@ -65,4 +65,17 @@ final class AdsStream implements StreamObserver<DiscoveryResponse> {
     cancelled = true;
     xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
   }
+
+  interface AdsStreamCallback {
+
+    /**
+     * Once the response observer receives the first response.
+     */
+    void onWorking();
+
+    /**
+     * Once the ADS stream is closed.
+     */
+    void onClosed();
+  }
 }

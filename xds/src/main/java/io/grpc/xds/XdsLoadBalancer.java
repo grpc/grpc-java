@@ -33,6 +33,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.xds.AdsStream.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
@@ -59,7 +60,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final FallbackManager fallbackManager;
 
   @SuppressWarnings("unused") // TODO: pass it to discovery response handling logic
-  private final AdsStreamCallbacks adsStreamCallbacks = new AdsStreamCallbacks() {
+  private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
     @Override
     public void onWorking() {
@@ -170,8 +171,8 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     if (xdsLbState != null) {
-      if (fallbackManager.fallbackBalancer() != null) {
-        fallbackManager.fallbackBalancer().handleNameResolutionError(error);
+      if (fallbackManager.fallbackBalancer != null) {
+        fallbackManager.fallbackBalancer.handleNameResolutionError(error);
       } else {
         xdsLbState.handleNameResolutionError(error);
       }
@@ -190,8 +191,8 @@ final class XdsLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (fallbackManager.fallbackBalancer() != null) {
-      fallbackManager.fallbackBalancer().handleSubchannelState(subchannel, newState);
+    if (fallbackManager.fallbackBalancer != null) {
+      fallbackManager.fallbackBalancer.handleSubchannelState(subchannel, newState);
     }
     if (subchannelStore.hasSubchannel(subchannel)) {
       if (newState.getState() == IDLE) {
@@ -236,6 +237,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     private final LoadBalancerRegistry lbRegistry;
 
     private Map<String, Object> fallbackPolicy;
+
+    // read-only for outer class
     private LoadBalancer fallbackBalancer;
 
     // Scheduled only once.  Never reset.
@@ -245,17 +248,14 @@ final class XdsLoadBalancer extends LoadBalancer {
     private List<EquivalentAddressGroup> fallbackServers = ImmutableList.of();
     private Attributes fallbackAttributes;
 
-    boolean balancerWorking;
+    // allow value write by outer class
+    private boolean balancerWorking;
 
     FallbackManager(
         Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
       this.helper = helper;
       this.subchannelStore = subchannelStore;
       this.lbRegistry = lbRegistry;
-    }
-
-    LoadBalancer fallbackBalancer() {
-      return fallbackBalancer;
     }
 
     void cancelFallback() {
@@ -325,18 +325,5 @@ final class XdsLoadBalancer extends LoadBalancer {
             helper.getScheduledExecutorService());
       }
     }
-  }
-
-  interface AdsStreamCallbacks {
-
-    /**
-     * Once an associated subchannel is ready.
-     */
-    void onWorking();
-
-    /**
-     * Once the ADS stream is closed.
-     */
-    void onClosed();
   }
 }

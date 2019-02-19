@@ -96,16 +96,22 @@ public class XdsLoadBalancerTest {
     }
   };
 
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     lbRegistry.register(lbProvider1);
     lbRegistry.register(lbProvider2);
     lb = new XdsLoadBalancer(helper, lbRegistry);
-    doReturn(new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler()))
-        .when(helper).getSynchronizationContext();
-    doReturn(fakeClock.getScheduledExecutorService())
-        .when(helper).getScheduledExecutorService();
+    doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
   }
 
   @Test
