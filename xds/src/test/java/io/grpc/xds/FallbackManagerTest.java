@@ -32,7 +32,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.xds.XdsLbState.SubchannelStore;
+import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,7 +105,7 @@ public class FallbackManagerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(channelLogger).when(helper).getChannelLogger();
-    fallbackManager = new FallbackManager(helper, new SubchannelStore(), lbRegistry);
+    fallbackManager = new FallbackManager(helper, new SubchannelStoreImpl(), lbRegistry);
     fallbackPolicy = new HashMap<>();
     fallbackPolicy.put("test_policy", new HashMap<>());
     lbRegistry.register(fakeLbProvider);

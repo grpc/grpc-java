@@ -47,13 +47,14 @@ import javax.annotation.Nullable;
  */
 final class XdsLoadBalancer extends LoadBalancer {
 
-  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
+  @VisibleForTesting
+  static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
 
   private static final ImmutableMap<String, Object> DEFAULT_FALLBACK_POLICY =
       ImmutableMap.of("round_robin", (Object) ImmutableMap.<String, Object>of());
 
-  private final SubchannelStore subchannelStore = new SubchannelStore();
+  private final SubchannelStore subchannelStore;
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
@@ -78,9 +79,10 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private Map<String, Object> fallbackPolicy;
 
-  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry, SubchannelStore subchannelStore) {
     this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = lbRegistry;
+    this.subchannelStore = subchannelStore;
     fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
   }
 

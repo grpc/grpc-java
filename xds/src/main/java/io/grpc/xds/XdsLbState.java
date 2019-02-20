@@ -132,28 +132,46 @@ class XdsLbState {
    * Manages EAG and locality info for a collection of subchannels, not including subchannels
    * created by the fallback balancer.
    */
-  static final class SubchannelStore {
+  static final class SubchannelStoreImpl implements SubchannelStore {
 
-    SubchannelStore() {}
+    SubchannelStoreImpl() {}
 
-    boolean hasReadyBackends() {
+    @Override
+    public boolean hasReadyBackends() {
       // TODO: impl
       return false;
     }
 
-    boolean hasNonDropBackends() {
+    @Override
+    public boolean hasNonDropBackends() {
       // TODO: impl
       return false;
     }
 
 
-    boolean hasSubchannel(Subchannel subchannel) {
+    @Override
+    public boolean hasSubchannel(Subchannel subchannel) {
       // TODO: impl
       return false;
     }
 
-    void shutdown() {
+    @Override
+    public void shutdown() {
       // TODO: impl
     }
+  }
+
+  /**
+   * The interface of {@link XdsLbState.SubchannelStoreImpl} that is convenient for testing.
+   */
+  public interface SubchannelStore {
+
+    boolean hasReadyBackends();
+
+    boolean hasNonDropBackends();
+
+    boolean hasSubchannel(Subchannel subchannel);
+
+    void shutdown();
   }
 }

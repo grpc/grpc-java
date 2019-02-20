@@ -21,6 +21,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
 
 /**
  * The provider for the "xds" balancing policy.  This class should not be directly referenced in
@@ -47,6 +48,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer(helper, LoadBalancerRegistry.getDefaultRegistry());
+    return new XdsLoadBalancer(
+        helper, LoadBalancerRegistry.getDefaultRegistry(), new SubchannelStoreImpl());
   }
 }
