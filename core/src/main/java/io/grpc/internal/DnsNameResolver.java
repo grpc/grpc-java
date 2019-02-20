@@ -156,6 +156,7 @@ final class DnsNameResolver extends NameResolver {
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
       Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
+    Preconditions.checkNotNull(helper, "helper");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
