@@ -184,7 +184,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbState().childPolicy).isNull();
 
-    // TODO(zdapeng): test adsStream is unchanged.
+    // TODO(zdapeng): test xdsComms is unchanged.
   }
 
   @Test
@@ -213,7 +213,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
-    // TODO(zdapeng): test adsStream is reset, channel is unchanged.
+    // TODO(zdapeng): test xdsComms is reset, channel is unchanged.
   }
 
   @Test
@@ -244,7 +244,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbState().childPolicy).isNull();
 
-    // TODO(zdapeng): test adsStream is unchanged.
+    // TODO(zdapeng): test xdsComms is unchanged.
   }
 
   @Test
@@ -275,7 +275,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbState().childPolicy).isNotNull();
 
-    // TODO(zdapeng): test adsStream is reset, channel is unchanged.
+    // TODO(zdapeng): test xdsComms is reset, channel is unchanged.
   }
 
   // TODO(zdapeng): test balancer name change

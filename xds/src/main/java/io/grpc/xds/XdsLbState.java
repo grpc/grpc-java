@@ -16,6 +16,9 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -23,6 +26,8 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,6 +58,7 @@ class XdsLbState {
 
   private final SubchannelStore subchannelStore;
   private final Helper helper;
+  private final AdsStreamCallback adsStreamCallback;
 
   @Nullable
   private XdsComms xdsComms;
@@ -63,17 +69,19 @@ class XdsLbState {
       @Nullable Map<String, Object> childPolicy,
       @Nullable XdsComms xdsComms,
       Helper helper,
-      SubchannelStore subchannelStore) {
-    this.balancerName = balancerName;
+      SubchannelStore subchannelStore,
+      AdsStreamCallback adsStreamCallback) {
+    this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.xdsComms = xdsComms;
-    this.helper = helper;
-    this.subchannelStore = subchannelStore;
+    this.helper = checkNotNull(helper, "helper");
+    this.subchannelStore = checkNotNull(subchannelStore, "subchannelStore");
+    this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
   }
 
   final void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes) {
-    // TODO: maybeStartXdsComms();
+    maybeStartXdsComms();
     // TODO: maybe update picker
   }
 
@@ -105,6 +113,21 @@ class XdsLbState {
     return xdsComms;
   }
 
+  private void maybeStartXdsComms() {
+    if (xdsComms != null) {
+      xdsComms = xdsComms.maybeRestart();
+      return;
+    }
+
+    // ** This is wrong **
+    // TODO: use name resolve to resolve addresses for balancerName, and create xdsComms in
+    // name resolver listener callback
+    ManagedChannel oobChannel = helper.createOobChannel(
+        new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new SocketAddress() {})),
+        balancerName);
+    xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback);
+  }
+
   /**
    * Manages EAG and locality info for a collection of subchannels, not including subchannels
    * created by the fallback balancer.
@@ -131,29 +154,6 @@ class XdsLbState {
 
     void shutdown() {
       // TODO: impl
-    }
-  }
-
-  static final class XdsComms {
-    private final ManagedChannel channel;
-    private final AdsStream adsStream;
-
-    XdsComms(ManagedChannel channel, AdsStream adsStream) {
-      this.channel = channel;
-      this.adsStream = adsStream;
-    }
-
-    void shutdownChannel() {
-      if (channel != null) {
-        channel.shutdown();
-      }
-      shutdownLbRpc("Loadbalancer client shutdown");
-    }
-
-    void shutdownLbRpc(String message) {
-      if (adsStream != null) {
-        adsStream.cancel(message);
-      }
     }
   }
 }

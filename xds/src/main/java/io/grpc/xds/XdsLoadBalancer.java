@@ -33,9 +33,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.xds.AdsStream.AdsStreamCallback;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
-import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -59,7 +58,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
 
-  @SuppressWarnings("unused") // TODO: pass it to discovery response handling logic
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
     @Override
@@ -107,6 +105,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         xdsComms = xdsLbState.shutdownAndReleaseXdsComms();
         if (xdsComms != null) {
           xdsComms.shutdownChannel();
+          fallbackManager.balancerWorking = false;
           xdsComms = null;
         }
       } else if (!Objects.equals(
@@ -117,12 +116,15 @@ final class XdsLoadBalancer extends LoadBalancer {
         // close the stream but reuse the channel
         if (xdsComms != null) {
           xdsComms.shutdownLbRpc(cancelMessage);
+          fallbackManager.balancerWorking = false;
+          xdsComms = xdsComms.maybeRestart();
         }
       } else { // effectively no change in policy, keep xdsLbState unchanged
         return;
       }
     }
-    xdsLbState = new XdsLbState(newBalancerName, childPolicy, xdsComms, helper, subchannelStore);
+    xdsLbState = new XdsLbState(
+        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback);
   }
 
   @Nullable
@@ -221,9 +223,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     return true;
   }
 
-  @VisibleForTesting
   @Nullable
-  XdsLbState getXdsLbState() {
+  XdsLbState getXdsLbStateForTest() {
     return xdsLbState;
   }
 
