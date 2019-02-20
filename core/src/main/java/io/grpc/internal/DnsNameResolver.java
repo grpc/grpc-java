@@ -141,10 +141,8 @@ final class DnsNameResolver extends NameResolver {
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
 
-  // Must only be called from syncContext
-  private final Stopwatch stopwatch;
-
   // Following fields must be accessed from syncContext
+  private final Stopwatch stopwatch;
   private ResolutionResults cachedResolutionResults;
   private boolean shutdown;
   private Executor executor;
