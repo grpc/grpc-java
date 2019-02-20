@@ -86,6 +86,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
+import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSession;
 import javax.net.ssl.SSLSocket;
@@ -175,6 +176,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private boolean stopped;
   @GuardedBy("lock")
   private boolean hasStream;
+  private SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
   private HostnameVerifier hostnameVerifier;
   private Socket socket;
@@ -219,12 +221,21 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   Runnable connectingCallback;
   SettableFuture<Void> connectedFuture;
 
-  OkHttpClientTransport(InetSocketAddress address, String authority, @Nullable String userAgent,
-      Executor executor, @Nullable SSLSocketFactory sslSocketFactory,
-      @Nullable HostnameVerifier hostnameVerifier, ConnectionSpec connectionSpec,
-      int maxMessageSize, int initialWindowSize,
+  OkHttpClientTransport(
+      InetSocketAddress address,
+      String authority,
+      @Nullable String userAgent,
+      Executor executor,
+      @Nullable SocketFactory socketFactory,
+      @Nullable SSLSocketFactory sslSocketFactory,
+      @Nullable HostnameVerifier hostnameVerifier,
+      ConnectionSpec connectionSpec,
+      int maxMessageSize,
+      int initialWindowSize,
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
-      Runnable tooManyPingsRunnable, int maxInboundMetadataSize, TransportTracer transportTracer) {
+      Runnable tooManyPingsRunnable,
+      int maxInboundMetadataSize,
+      TransportTracer transportTracer) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
@@ -234,6 +245,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
+    this.socketFactory = socketFactory;
     this.sslSocketFactory = sslSocketFactory;
     this.hostnameVerifier = hostnameVerifier;
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
@@ -506,7 +518,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         SSLSession sslSession = null;
         try {
           if (proxiedAddr == null) {
-            sock = new Socket(address.getAddress(), address.getPort());
+            sock = socketFactoryToUse().createSocket(address.getAddress(), address.getPort());
           } else {
             if (proxiedAddr.getProxyAddress() instanceof InetSocketAddress) {
               sock = createHttpProxySocket(
@@ -584,9 +596,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       Socket sock;
       // The proxy address may not be resolved
       if (proxyAddress.getAddress() != null) {
-        sock = new Socket(proxyAddress.getAddress(), proxyAddress.getPort());
+        sock = socketFactoryToUse().createSocket(proxyAddress.getAddress(), proxyAddress.getPort());
       } else {
-        sock = new Socket(proxyAddress.getHostName(), proxyAddress.getPort());
+        sock =
+            socketFactoryToUse().createSocket(proxyAddress.getHostName(), proxyAddress.getPort());
       }
       sock.setTcpNoDelay(true);
 
@@ -637,6 +650,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     } catch (IOException e) {
       throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
           .asException();
+    }
+  }
+
+  private SocketFactory socketFactoryToUse() {
+    if (socketFactory != null) {
+      return socketFactory;
+    } else {
+      return SocketFactory.getDefault();
     }
   }
 
@@ -769,6 +790,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   @VisibleForTesting
   ClientFrameHandler getHandler() {
     return clientFrameHandler;
+  }
+
+  @VisibleForTesting
+  SocketFactory getSocketFactory() {
+    return socketFactory;
   }
 
   @VisibleForTesting
