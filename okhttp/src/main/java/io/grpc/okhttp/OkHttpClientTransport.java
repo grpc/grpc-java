@@ -176,7 +176,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private boolean stopped;
   @GuardedBy("lock")
   private boolean hasStream;
-  private SocketFactory socketFactory;
+  private final SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
   private HostnameVerifier hostnameVerifier;
   private Socket socket;
@@ -245,7 +245,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     // Client initiated streams are odd, server initiated ones are even. Server should not need to
     // use it. We start clients at 3 to avoid conflicting with HTTP negotiation.
     nextStreamId = 3;
-    this.socketFactory = socketFactory;
+    this.socketFactory = socketFactory == null ? SocketFactory.getDefault() : socketFactory;
     this.sslSocketFactory = sslSocketFactory;
     this.hostnameVerifier = hostnameVerifier;
     this.connectionSpec = Preconditions.checkNotNull(connectionSpec, "connectionSpec");
@@ -285,6 +285,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.userAgent = GrpcUtil.getGrpcUserAgent("okhttp", userAgent);
     this.executor = Preconditions.checkNotNull(executor, "executor");
     serializingExecutor = new SerializingExecutor(executor);
+    this.socketFactory = SocketFactory.getDefault();
     this.testFrameReader = Preconditions.checkNotNull(frameReader, "frameReader");
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
     this.socket = Preconditions.checkNotNull(socket, "socket");
@@ -518,7 +519,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         SSLSession sslSession = null;
         try {
           if (proxiedAddr == null) {
-            sock = socketFactoryToUse().createSocket(address.getAddress(), address.getPort());
+            sock = socketFactory.createSocket(address.getAddress(), address.getPort());
           } else {
             if (proxiedAddr.getProxyAddress() instanceof InetSocketAddress) {
               sock = createHttpProxySocket(
@@ -596,10 +597,10 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       Socket sock;
       // The proxy address may not be resolved
       if (proxyAddress.getAddress() != null) {
-        sock = socketFactoryToUse().createSocket(proxyAddress.getAddress(), proxyAddress.getPort());
+        sock = socketFactory.createSocket(proxyAddress.getAddress(), proxyAddress.getPort());
       } else {
         sock =
-            socketFactoryToUse().createSocket(proxyAddress.getHostName(), proxyAddress.getPort());
+            socketFactory.createSocket(proxyAddress.getHostName(), proxyAddress.getPort());
       }
       sock.setTcpNoDelay(true);
 
@@ -650,14 +651,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     } catch (IOException e) {
       throw Status.UNAVAILABLE.withDescription("Failed trying to connect with proxy").withCause(e)
           .asException();
-    }
-  }
-
-  private SocketFactory socketFactoryToUse() {
-    if (socketFactory != null) {
-      return socketFactory;
-    } else {
-      return SocketFactory.getDefault();
     }
   }
 

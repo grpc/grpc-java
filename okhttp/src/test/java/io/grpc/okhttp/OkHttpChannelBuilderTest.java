@@ -172,7 +172,7 @@ public class OkHttpChannelBuilderTest {
             transportFactory.newClientTransport(
                 new InetSocketAddress(5678), new ClientTransportFactory.ClientTransportOptions());
 
-    assertNull("socketFactory should be null", transport.getSocketFactory());
+    assertSame(SocketFactory.getDefault(), transport.getSocketFactory());
 
     transportFactory.close();
   }
