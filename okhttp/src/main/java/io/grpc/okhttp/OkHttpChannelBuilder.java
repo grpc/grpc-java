@@ -159,7 +159,8 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
-   * Override the default {@link SocketFactory} used to create sockets.
+   * Override the default {@link SocketFactory} used to create sockets. If the socket factory is not
+   * set, the value of {@link SocketFactory#getDefault} will be used.
    *
    * @since 1.20.0
    */
