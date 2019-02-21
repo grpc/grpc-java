@@ -160,6 +160,8 @@ public class OkHttpChannelBuilder extends
 
   /**
    * Override the default {@link SocketFactory} used to create sockets.
+   *
+   * @since 1.20.0
    */
   public final OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
     this.socketFactory = socketFactory;
