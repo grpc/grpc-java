@@ -487,7 +487,7 @@ public class OkHttpChannelBuilder extends
     private final boolean usingSharedExecutor;
     private final boolean usingSharedScheduler;
     private final TransportTracer.Factory transportTracerFactory;
-    @Nullable private final SocketFactory socketFactory;
+    private final SocketFactory socketFactory;
     @Nullable private final SSLSocketFactory sslSocketFactory;
     @Nullable
     private final HostnameVerifier hostnameVerifier;
