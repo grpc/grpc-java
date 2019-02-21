@@ -67,12 +67,13 @@ public abstract class ClientStreamTracer extends StreamTracer {
     }
 
     /**
-     * Creates a {@link ClientStreamTracer} for a new client stream.
+     * Creates a {@link ClientStreamTracer} for a new client stream.  This is called inside the
+     * transport when it's creating the stream.
      *
      * @param info information about the stream
      * @param headers the mutable headers of the stream. It can be safely mutated within this
-     *        method.  It should not be saved because it is not safe for read or write after the
-     *        method returns.
+     *        method.  Changes made to it will be sent by the stream.  It should not be saved
+     *        because it is not safe for read or write after the method returns.
      *
      * @since 1.20.0
      */
