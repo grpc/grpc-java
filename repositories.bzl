@@ -268,6 +268,7 @@ def com_squareup_okio():
     )
 
 def io_grpc_grpc_proto():
+    # DO NOT SUBMIT: Need PR to go in first so this can be updated -- https://github.com/grpc/grpc-proto/pull/44
     http_archive(
         name = "io_grpc_grpc_proto",
         sha256 = "64a2cf675e38d4e8ef340432a5b701b079c769fb7f8b59a58c26df04fb53aa6a",
