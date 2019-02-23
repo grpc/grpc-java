@@ -32,6 +32,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -249,15 +251,14 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       }
       if (lbConfigs != null && !lbConfigs.isEmpty()) {
         LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
-        for (Map<String, Object> lbConfig : lbConfigs) {
-          if (lbConfig.size() != 1) {
-            throw new PolicyException(
-                "There are " + lbConfig.size()
-                + " load-balancing configs in a list item. Exactly one is expected. Config="
-                + lbConfig);
+        for (Map<String, Object> rawLbConfig : lbConfigs) {
+          LbConfig lbConfig;
+          try {
+            lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(rawLbConfig);
+          } catch (MalformedConfigException e) {
+            throw new PolicyException(e);
           }
-          Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
-          String policy = entry.getKey();
+          String policy = lbConfig.getPolicyName();
           LoadBalancerProvider provider = null;
           if (preselected == null) {
             provider = registry.getProvider(policy);
@@ -270,7 +271,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
                   ChannelLogLevel.DEBUG,
                   "{0} specified by Service Config are not available", policiesTried);
             }
-            return new PolicySelection(provider, servers, (Map) entry.getValue());
+            return new PolicySelection(provider, servers, lbConfig.getConfig());
           }
           if (preselected == null) {
             policiesTried.add(policy);
@@ -306,6 +307,10 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
 
     private PolicyException(String msg) {
       super(msg);
+    }
+
+    private PolicyException(Exception cause) {
+      super(cause);
     }
   }
 

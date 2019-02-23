@@ -345,6 +345,23 @@ public final class ServiceConfigUtil {
   }
 
   /**
+   * Unwrap a LoadBalancingConfig JSON object into a {@link LbConfig}.  The input is a JSON object
+   * (map) with exactly one entry, where the key is the policy name and the value is a config object
+   * for that policy.
+   */
+  @SuppressWarnings("unchecked")
+  public static LbConfig unwrapLoadBalancingConfig(Map<String, Object> lbConfig)
+      throws MalformedConfigException {
+    if (lbConfig.size() != 1) {
+      throw new MalformedConfigException(
+          "There are " + lbConfig.size() + " fields in a LoadBalancingConfig object. Exactly one"
+          + " is expected. Config=" + lbConfig);
+    }
+    Map.Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
+    return new LbConfig(entry.getKey(), (Map<String, Object>) entry.getValue());
+  }
+
+  /**
    * Extracts the loadbalancing policy name from loadbalancer config.
    */
   public static String getBalancerPolicyNameFromLoadBalancingConfig(Map<String, Object> lbConfig) {
@@ -641,5 +658,32 @@ public final class ServiceConfigUtil {
     }
     // we did over/under flow, if the sign is negative we should return MAX otherwise MIN
     return Long.MAX_VALUE + ((naiveSum >>> (Long.SIZE - 1)) ^ 1);
+  }
+
+  public static final class LbConfig {
+    private final String policyName;
+    private final Map<String, Object> config;
+
+    @VisibleForTesting
+    public LbConfig(String policyName, Map<String, Object> config) {
+      this.policyName = checkNotNull(policyName, "policyName");
+      this.config = checkNotNull(config, "config");
+    }
+
+    public String getPolicyName() {
+      return policyName;
+    }
+
+    public Map<String, Object> getConfig() {
+      return config;
+    }
+  }
+
+  public static final class MalformedConfigException extends Exception {
+    private static final long serialVersionUID = 1L;
+
+    private MalformedConfigException(String msg) {
+      super(msg);
+    }
   }
 }

@@ -20,16 +20,23 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
+import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -40,6 +47,7 @@ import javax.annotation.Nullable;
  */
 class GrpclbLoadBalancer extends LoadBalancer {
 
+  private final Helper helper;
   private final SubchannelPool subchannelPool;
 
   // All mutable states in this class are mutated ONLY from Channel Executor
@@ -51,7 +59,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
       SubchannelPool subchannelPool,
       TimeProvider time,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    checkNotNull(helper, "helper");
+    this.helper = checkNotNull(helper, "helper");
     checkNotNull(time, "time provider");
     checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
@@ -84,7 +92,42 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
     newLbAddressGroups = Collections.unmodifiableList(newLbAddressGroups);
     newBackendServers = Collections.unmodifiableList(newBackendServers);
-    grpclbState.handleAddresses(newLbAddressGroups, newBackendServers);
+    try {
+      grpclbState.handleAddresses(
+          newLbAddressGroups, newBackendServers,
+          retrieveModeFromLbConfig(
+              attributes.get(ATTR_LOAD_BALANCING_CONFIG), helper.getChannelLogger()));
+    } catch (MalformedConfigException e) {
+      grpclbState.propagateError(Status.UNAVAILABLE.withCause(e));
+    }
+  }
+
+  @VisibleForTesting
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  static Mode retrieveModeFromLbConfig(@Nullable Map<String, Object> lbConfig, ChannelLogger logger)
+      throws MalformedConfigException {
+    Mode mode = Mode.ROUND_ROBIN;
+    if (lbConfig != null) {
+      List childPolicies = (List) lbConfig.get("childPolicy");
+      if (childPolicies != null) {
+        for (Map<String, Object> rawChildPolicy : (List<Map<String, Object>>) childPolicies) {
+          LbConfig childPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(rawChildPolicy);
+          String childPolicyName = childPolicy.getPolicyName();
+          switch (childPolicyName) {
+            case "round_robin":
+              return Mode.ROUND_ROBIN;
+            case "pick_first":
+              return Mode.PICK_FIRST;
+            default:
+              logger.log(
+                  ChannelLogLevel.DEBUG, "grpclb ignoring unsupported child policy '{0}'",
+                  childPolicyName);
+          }
+        }
+      }
+    }
+    // The default
+    return Mode.ROUND_ROBIN;
   }
 
   private void resetStates() {

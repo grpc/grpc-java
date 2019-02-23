@@ -139,7 +139,7 @@ final class GrpclbState {
   @Nullable
   private LbStream lbStream;
   private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
-  private Mode mode = Mode.ROUND_ROBIN;
+  private Mode mode;
 
   // Has the same size as the round-robin list from the balancer.
   // A drop entry from the round-robin list becomes a DropEntry here.
@@ -182,7 +182,8 @@ final class GrpclbState {
    * not yet connected.
    */
   void handleAddresses(
-      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
+      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers,
+      Mode mode) {
     if (newLbAddressGroups.isEmpty()) {
       propagateError(Status.UNAVAILABLE.withDescription(
               "NameResolver returned no LB address while asking for GRPCLB"));

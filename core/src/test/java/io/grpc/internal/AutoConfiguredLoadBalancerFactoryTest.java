@@ -450,7 +450,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         parseConfig(
             "{\"loadBalancingConfig\": ["
             + "{\"test_lb\": {} },"
-            + "{\"grpclb\": {\"child_policy\": {\"pick_first\": {} } } }"
+            + "{\"grpclb\": {\"child_policy\": [ {\"pick_first\": {} } ] } }"
             + "] }");
     List<EquivalentAddressGroup> servers =
         Collections.singletonList(
@@ -462,7 +462,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     assertThat(selection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
     assertThat(selection.serverList).isEqualTo(servers);
     assertThat(selection.config).isEqualTo(
-        parseConfig("{\"child_policy\": {\"pick_first\": {} } }"));
+        parseConfig("{\"child_policy\": [ {\"pick_first\": {} } ] }"));
     verifyZeroInteractions(channelLogger);
   }
 
