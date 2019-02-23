@@ -18,7 +18,10 @@ package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -118,5 +121,72 @@ public class ServiceConfigUtilTest {
         (Map<String, Object>) JsonParser.parse(lbConfig));
 
     assertThat(fallbackPolicies).isNull();
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig() throws Exception {
+    String lbConfig = "{\"xds_experimental\" : { "
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
+        + "}}";
+
+    LbConfig config = ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+    assertThat(config.getPolicyName()).isEqualTo("xds_experimental");
+    assertThat(config.getRawConfigValue()).isEqualTo(JsonParser.parse(
+            "{\"balancerName\" : \"dns:///balancer.example.com:8080\","
+            + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
+            + "}"));
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig_tooManyFields() throws Exception {
+    // A LoadBalancingConfig should not have more than one fields.
+    String lbConfig = "{\"xds_experimental\" : { "
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
+        + "},"
+        + "\"grpclb\" : {} }";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("There are 2 fields");
+    }
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig_emptyObject() throws Exception {
+    // A LoadBalancingConfig should not exactly one field.
+    String lbConfig = "{}";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("There are 0 fields");
+    }
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig_list() throws Exception {
+    // A LoadBalancingConfig must be a JSON dictionary (map)
+    String lbConfig = "[ { \"xds\" : {} } ]";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("Invalid type");
+    }
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig_string() throws Exception {
+    // A LoadBalancingConfig must be a JSON dictionary (map)
+    String lbConfig = "\"xds\"";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("Invalid type");
+    }
   }
 }

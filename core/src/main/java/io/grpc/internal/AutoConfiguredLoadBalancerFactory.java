@@ -271,7 +271,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
                   ChannelLogLevel.DEBUG,
                   "{0} specified by Service Config are not available", policiesTried);
             }
-            return new PolicySelection(provider, servers, lbConfig.getConfig());
+            return new PolicySelection(provider, servers, lbConfig.getRawConfigValue());
           }
           if (preselected == null) {
             policiesTried.add(policy);
@@ -318,12 +318,12 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
   static final class PolicySelection {
     final LoadBalancerProvider provider;
     final List<EquivalentAddressGroup> serverList;
-    @Nullable final Map<String, Object> config;
+    @Nullable final Object config;
 
     @SuppressWarnings("unchecked")
     PolicySelection(
         LoadBalancerProvider provider, List<EquivalentAddressGroup> serverList,
-        @Nullable Map<?, ?> config) {
+        @Nullable Object config) {
       this.provider = checkNotNull(provider, "provider");
       this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
       this.config = (Map<String, Object>) config;

@@ -134,11 +134,9 @@ final class XdsLoadBalancer extends LoadBalancer {
       return null;
     }
     LoadBalancerRegistry loadBalancerRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    for (Object lbConfig : lbConfigs) {
-      @SuppressWarnings("unchecked")
-      Map<String, Object> candidate = (Map<String, Object>) lbConfig;
-      String lbPolicy = candidate.entrySet().iterator().next().getKey();
-      if (loadBalancerRegistry.getProvider(lbPolicy) != null) {
+    for (Object rawLbConfig : lbConfigs) {
+      LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(rawLbConfig);
+      if (loadBalancerRegistry.getProvider(lbConfig.getPolicyName()) != null) {
         return candidate;
       }
     }

@@ -104,11 +104,11 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   @SuppressWarnings({"rawtypes", "unchecked"})
-  static Mode retrieveModeFromLbConfig(@Nullable Map<String, Object> lbConfig, ChannelLogger logger)
+  static Mode retrieveModeFromLbConfig(@Nullable Object lbConfig, ChannelLogger logger)
       throws MalformedConfigException {
     Mode mode = Mode.ROUND_ROBIN;
     if (lbConfig != null) {
-      List childPolicies = (List) lbConfig.get("childPolicy");
+      List childPolicies = ((Map<String, List>) lbConfig).get("childPolicy");
       if (childPolicies != null) {
         for (Map<String, Object> rawChildPolicy : (List<Map<String, Object>>) childPolicies) {
           LbConfig childPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(rawChildPolicy);

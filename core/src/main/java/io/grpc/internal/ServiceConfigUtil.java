@@ -350,15 +350,21 @@ public final class ServiceConfigUtil {
    * for that policy.
    */
   @SuppressWarnings("unchecked")
-  public static LbConfig unwrapLoadBalancingConfig(Map<String, Object> lbConfig)
+  public static LbConfig unwrapLoadBalancingConfig(Object lbConfig)
       throws MalformedConfigException {
-    if (lbConfig.size() != 1) {
+    Map<String, Object> map;
+    try {
+      map = (Map<String, Object>) lbConfig;
+    } catch (ClassCastException e) {
+      throw new MalformedConfigException("Invalid type. Config=" + lbConfig, e);
+    }
+    if (map.size() != 1) {
       throw new MalformedConfigException(
-          "There are " + lbConfig.size() + " fields in a LoadBalancingConfig object. Exactly one"
+          "There are " + map.size() + " fields in a LoadBalancingConfig object. Exactly one"
           + " is expected. Config=" + lbConfig);
     }
-    Map.Entry<String, Object> entry = lbConfig.entrySet().iterator().next();
-    return new LbConfig(entry.getKey(), (Map<String, Object>) entry.getValue());
+    Map.Entry<String, Object> entry = map.entrySet().iterator().next();
+    return new LbConfig(entry.getKey(), entry.getValue());
   }
 
   /**
@@ -662,20 +668,20 @@ public final class ServiceConfigUtil {
 
   public static final class LbConfig {
     private final String policyName;
-    private final Map<String, Object> config;
+    private final Object rawConfigValue;
 
     @VisibleForTesting
-    public LbConfig(String policyName, Map<String, Object> config) {
+    public LbConfig(String policyName, Object rawConfigValue) {
       this.policyName = checkNotNull(policyName, "policyName");
-      this.config = checkNotNull(config, "config");
+      this.rawConfigValue = checkNotNull(rawConfigValue, "rawConfigValue");
     }
 
     public String getPolicyName() {
       return policyName;
     }
 
-    public Map<String, Object> getConfig() {
-      return config;
+    public Object getRawConfigValue() {
+      return rawConfigValue;
     }
   }
 
@@ -684,6 +690,10 @@ public final class ServiceConfigUtil {
 
     private MalformedConfigException(String msg) {
       super(msg);
+    }
+
+    private MalformedConfigException(String msg, Throwable cause) {
+      super(msg, cause);
     }
   }
 }
