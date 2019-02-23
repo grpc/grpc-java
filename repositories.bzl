@@ -21,6 +21,7 @@ def grpc_java_repositories(
         omit_com_google_truth_truth = False,
         omit_com_squareup_okhttp = False,
         omit_com_squareup_okio = False,
+        omit_io_grpc_grpc_proto = False,
         omit_io_netty_buffer = False,
         omit_io_netty_common = False,
         omit_io_netty_transport = False,
@@ -73,6 +74,8 @@ def grpc_java_repositories(
         com_squareup_okhttp()
     if not omit_com_squareup_okio:
         com_squareup_okio()
+    if not omit_io_grpc_grpc_proto:
+        io_grpc_grpc_proto()
     if not omit_io_netty_buffer:
         io_netty_buffer()
     if not omit_io_netty_common:
@@ -262,6 +265,14 @@ def com_squareup_okio():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "734269c3ebc5090e3b23566db558f421f0b4027277c79ad5d176b8ec168bb850",
         licenses = ["notice"],  # Apache 2.0
+    )
+
+def io_grpc_grpc_proto():
+    http_archive(
+        name = "io_grpc_grpc_proto",
+        sha256 = "64a2cf675e38d4e8ef340432a5b701b079c769fb7f8b59a58c26df04fb53aa6a",
+        strip_prefix = "grpc-proto-f9af5e19f738a84b9fd9d78e380a9a352ab5ad34",
+        urls = ["https://github.com/grpc/grpc-proto/archive/f9af5e19f738a84b9fd9d78e380a9a352ab5ad34.zip"],
     )
 
 def io_netty_buffer():
