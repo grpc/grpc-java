@@ -120,7 +120,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
               return Mode.PICK_FIRST;
             default:
               logger.log(
-                  ChannelLogLevel.DEBUG, "grpclb ignoring unsupported child policy '{0}'",
+                  ChannelLogLevel.DEBUG, "grpclb ignoring unsupported child policy \"{0}\"",
                   childPolicyName);
           }
         }
