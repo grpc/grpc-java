@@ -15,7 +15,6 @@ public class CompressionServerInterceptor implements ServerInterceptor {
         ServerCallHandler<ReqT, RespT> next) {
 
         if (isGzipAcceptable(headers)) {
-            call.setMessageCompression(true);
             call.setCompression(GZIP);
         }
         return next.startCall(call, headers);
@@ -28,8 +27,7 @@ public class CompressionServerInterceptor implements ServerInterceptor {
      * @return
      */
     private boolean isGzipAcceptable(Metadata headers) {
-        return GZIP.equalsIgnoreCase(getASCIIHeader(headers, "grpc-encoding"))
-            && GZIP.equalsIgnoreCase(getASCIIHeader(headers, "grpc-accept-encoding"))
+        return GZIP.equalsIgnoreCase(getASCIIHeader(headers, "grpc-accept-encoding"))
             && GZIP.equalsIgnoreCase(getASCIIHeader(headers, "accept-encoding"));
     }
 
