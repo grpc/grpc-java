@@ -196,4 +196,43 @@ public class ServiceConfigUtilTest {
       assertThat(e.getMessage()).contains("Invalid value type");
     }
   }
+
+  @Test
+  public void unwrapLoadBalancingConfigList() throws Exception {
+    String lbConfig = "[ "
+        + "{\"xds_experimental\" : {\"balancerName\" : \"dns:///balancer.example.com:8080\"} },"
+        + "{\"grpclb\" : {} } ]";
+    List<LbConfig> configs =
+        ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(lbConfig));
+    assertThat(configs).containsExactly(
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(
+                "{\"xds_experimental\" : "
+                + "{\"balancerName\" : \"dns:///balancer.example.com:8080\"} }")),
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(
+                "{\"grpclb\" : {} }"))).inOrder();
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfigList_not_a_list() throws Exception {
+    String notAList = "{}";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(notAList));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("List expected");
+    }
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfigList_malformed_config() throws Exception {
+    String lbConfig = "[ "
+        + "{\"xds_experimental\" : \"I thought I was a config\" },"
+        + "{\"grpclb\" : {} } ]";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("Invalid value type");
+    }
+  }
 }
