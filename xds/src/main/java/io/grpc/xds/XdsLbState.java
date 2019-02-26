@@ -24,7 +24,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.List;
-import java.util.Map;
 import javax.annotation.Nullable;
 
 /**

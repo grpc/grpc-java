@@ -21,6 +21,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -108,7 +109,7 @@ public abstract class LoadBalancer {
    * <p>{@link NameResolver}s should not produce this attribute.
    */
   @NameResolver.ResolutionResultAttr
-  public static final Attributes.Key<Object> ATTR_LOAD_BALANCING_CONFIG =
+  public static final Attributes.Key<Map<String, Object>> ATTR_LOAD_BALANCING_CONFIG =
       Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
 
   /**

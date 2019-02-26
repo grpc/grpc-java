@@ -30,7 +30,6 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
@@ -118,7 +117,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Nullable
   @VisibleForTesting
   static LbConfig selectChildPolicy(LbConfig lbConfig) throws MalformedConfigException {
-    List<Map<String, Object>> childConfigs =
+    List<LbConfig> childConfigs =
         ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
     return selectSupportedLbPolicy(childConfigs);
   }
@@ -130,20 +129,19 @@ final class XdsLoadBalancer extends LoadBalancer {
     if (lbConfig == null) {
       return null;
     }
-    List<Map<String, Object>> fallbackConfigs =
+    List<LbConfig> fallbackConfigs =
         ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
     return selectSupportedLbPolicy(fallbackConfigs);
   }
 
   @Nullable
-  private static LbConfig selectSupportedLbPolicy(List<Map<String, Object>> lbConfigs)
+  private static LbConfig selectSupportedLbPolicy(@Nullable List<LbConfig> lbConfigs)
       throws MalformedConfigException {
     if (lbConfigs == null) {
       return null;
     }
     LoadBalancerRegistry loadBalancerRegistry = LoadBalancerRegistry.getDefaultRegistry();
-    for (Object rawLbConfig : lbConfigs) {
-      LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(rawLbConfig);
+    for (LbConfig lbConfig : lbConfigs) {
       if (loadBalancerRegistry.getProvider(lbConfig.getPolicyName()) != null) {
         return lbConfig;
       }

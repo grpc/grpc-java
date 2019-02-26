@@ -56,7 +56,6 @@ public class ServiceConfigUtilTest {
             ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig))));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void getChildPolicyFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
@@ -64,18 +63,17 @@ public class ServiceConfigUtilTest {
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
         + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
         + "}}";
-    Map<String, Object> expectedChildPolicy1 = (Map<String, Object>) JsonParser.parse(
-        "{\"round_robin\" : {}}");
-    Map<String, Object> expectedChildPolicy2 = (Map<String, Object>) JsonParser.parse(
-        "{\"lbPolicy2\" : {\"key\" : \"val\"}}");
+    LbConfig expectedChildPolicy1 = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        JsonParser.parse("{\"round_robin\" : {}}"));
+    LbConfig expectedChildPolicy2 = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        JsonParser.parse("{\"lbPolicy2\" : {\"key\" : \"val\"}}"));
 
-    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
+    List<LbConfig> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
         ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).containsExactly(expectedChildPolicy1, expectedChildPolicy2);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void getChildPolicyFromXdsConfig_null() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
@@ -83,13 +81,12 @@ public class ServiceConfigUtilTest {
         + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
         + "}}";
 
-    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
+    List<LbConfig> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
         ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).isNull();
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void getFallbackPolicyFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
@@ -97,18 +94,17 @@ public class ServiceConfigUtilTest {
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
         + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
         + "}}";
-    Map<String, Object> expectedFallbackPolicy1 = (Map<String, Object>) JsonParser.parse(
-        "{\"lbPolicy3\" : {\"key\" : \"val\"}}");
-    Map<String, Object> expectedFallbackPolicy2 = (Map<String, Object>) JsonParser.parse(
-        "{\"lbPolicy4\" : {}}");
+    LbConfig expectedFallbackPolicy1 = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        JsonParser.parse("{\"lbPolicy3\" : {\"key\" : \"val\"}}"));
+    LbConfig expectedFallbackPolicy2 = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        JsonParser.parse("{\"lbPolicy4\" : {}}"));
 
-    List<Map<String, Object>> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
+    List<LbConfig> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
         ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).containsExactly(expectedFallbackPolicy1, expectedFallbackPolicy2);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void getFallbackPolicyFromXdsConfig_null() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
@@ -116,7 +112,7 @@ public class ServiceConfigUtilTest {
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
         + "}}";
 
-    List<Map<String, Object>> fallbackPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
+    List<LbConfig> fallbackPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
         ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(fallbackPolicies).isNull();
@@ -166,7 +162,7 @@ public class ServiceConfigUtilTest {
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_list() throws Exception {
+  public void unwrapLoadBalancingConfig_config_is_list() throws Exception {
     // A LoadBalancingConfig must be a JSON dictionary (map)
     String lbConfig = "[ { \"xds\" : {} } ]";
     try {
@@ -178,7 +174,7 @@ public class ServiceConfigUtilTest {
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_string() throws Exception {
+  public void unwrapLoadBalancingConfig_config_is_string() throws Exception {
     // A LoadBalancingConfig must be a JSON dictionary (map)
     String lbConfig = "\"xds\"";
     try {
@@ -186,6 +182,18 @@ public class ServiceConfigUtilTest {
       fail("Should throw");
     } catch (MalformedConfigException e) {
       assertThat(e.getMessage()).contains("Invalid type");
+    }
+  }
+
+  @Test
+  public void unwrapLoadBalancingConfig_config_value_is_string() throws Exception {
+    // The value of the config should be a JSON dictionary (map)
+    String lbConfig = "{ \"xds\" : \"I thought I was a config.\" }";
+    try {
+      ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
+      fail("Should throw");
+    } catch (MalformedConfigException e) {
+      assertThat(e.getMessage()).contains("Invalid value type");
     }
   }
 }

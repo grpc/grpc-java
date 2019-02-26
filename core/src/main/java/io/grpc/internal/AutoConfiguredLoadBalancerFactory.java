@@ -321,15 +321,15 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
   static final class PolicySelection {
     final LoadBalancerProvider provider;
     final List<EquivalentAddressGroup> serverList;
-    @Nullable final Object config;
+    @Nullable final Map<String, Object> config;
 
     @SuppressWarnings("unchecked")
     PolicySelection(
         LoadBalancerProvider provider, List<EquivalentAddressGroup> serverList,
-        @Nullable Object config) {
+        @Nullable Map<String, Object> config) {
       this.provider = checkNotNull(provider, "provider");
       this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
-      this.config = (Map<String, Object>) config;
+      this.config = config;
     }
   }
 

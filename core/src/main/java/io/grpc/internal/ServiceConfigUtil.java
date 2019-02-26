@@ -383,7 +383,32 @@ public final class ServiceConfigUtil {
           + " is expected. Config=" + lbConfig);
     }
     Map.Entry<String, Object> entry = map.entrySet().iterator().next();
-    return new LbConfig(entry.getKey(), entry.getValue());
+    Map<String, Object> configValue;
+    try {
+      configValue = (Map<String, Object>) entry.getValue();
+    } catch (ClassCastException e) {
+      throw new MalformedConfigException("Invalid value type.  value=" + entry.getValue());
+    }
+    return new LbConfig(entry.getKey(), configValue);
+  }
+
+  /**
+   * Given a JSON list of LoadBalancingConfigs, and convert it into a list of LbConfig.
+   */
+  @SuppressWarnings("rawtypes")
+  public static List<LbConfig> unwrapLoadBalancingConfigList(Object listObject)
+      throws MalformedConfigException {
+    List list;
+    try {
+      list = (List) listObject;
+    } catch (ClassCastException e) {
+      throw new MalformedConfigException("List expected, but is " + listObject);
+    }
+    ArrayList<LbConfig> result = new ArrayList<>();
+    for (Object rawChildPolicy : list) {
+      result.add(unwrapLoadBalancingConfig(rawChildPolicy));
+    }
+    return Collections.unmodifiableList(result);
   }
 
   /**
@@ -396,23 +421,22 @@ public final class ServiceConfigUtil {
   /**
    * Extracts the loadbalancer name from xds loadbalancer config.
    */
-  @SuppressWarnings("unchecked")
   public static String getBalancerNameFromXdsConfig(LbConfig xdsConfig)
       throws MalformedConfigException {
-    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
+    Map<String, Object> map = xdsConfig.getRawConfigValue();
     return getString(map, XDS_CONFIG_BALANCER_NAME_KEY);
   }
 
   /**
    * Extracts list of child policies from xds loadbalancer config.
    */
-  @SuppressWarnings("unchecked")
   @Nullable
-  public static List<Map<String, Object>> getChildPolicyFromXdsConfig(LbConfig xdsConfig)
+  public static List<LbConfig> getChildPolicyFromXdsConfig(LbConfig xdsConfig)
       throws MalformedConfigException {
-    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
-    if (map.containsKey(XDS_CONFIG_CHILD_POLICY_KEY)) {
-      return (List<Map<String, Object>>) (List<?>) getList(map, XDS_CONFIG_CHILD_POLICY_KEY);
+    Map<String, Object> map = xdsConfig.getRawConfigValue();
+    Object rawChildPolicies = map.get(XDS_CONFIG_CHILD_POLICY_KEY);
+    if (rawChildPolicies != null) {
+      return unwrapLoadBalancingConfigList(rawChildPolicies);
     }
     return null;
   }
@@ -420,13 +444,13 @@ public final class ServiceConfigUtil {
   /**
    * Extracts list of fallback policies from xds loadbalancer config.
    */
-  @SuppressWarnings("unchecked")
   @Nullable
-  public static List<Map<String, Object>> getFallbackPolicyFromXdsConfig(LbConfig xdsConfig)
+  public static List<LbConfig> getFallbackPolicyFromXdsConfig(LbConfig xdsConfig)
       throws MalformedConfigException {
-    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
-    if (map.containsKey(XDS_CONFIG_FALLBACK_POLICY_KEY)) {
-      return (List<Map<String, Object>>) (List<?>) getList(map, XDS_CONFIG_FALLBACK_POLICY_KEY);
+    Map<String, Object> map = xdsConfig.getRawConfigValue();
+    Object rawFallbackPolicies = map.get(XDS_CONFIG_FALLBACK_POLICY_KEY);
+    if (rawFallbackPolicies != null) {
+      return unwrapLoadBalancingConfigList(rawFallbackPolicies);
     }
     return null;
   }
@@ -687,10 +711,10 @@ public final class ServiceConfigUtil {
    */
   public static final class LbConfig {
     private final String policyName;
-    private final Object rawConfigValue;
+    private final Map<String, Object> rawConfigValue;
 
     @VisibleForTesting
-    public LbConfig(String policyName, Object rawConfigValue) {
+    public LbConfig(String policyName, Map<String, Object> rawConfigValue) {
       this.policyName = checkNotNull(policyName, "policyName");
       this.rawConfigValue = checkNotNull(rawConfigValue, "rawConfigValue");
     }
@@ -699,19 +723,8 @@ public final class ServiceConfigUtil {
       return policyName;
     }
 
-    public Object getRawConfigValue() {
+    public Map<String, Object> getRawConfigValue() {
       return rawConfigValue;
-    }
-
-    /**
-     * Tries to cast the raw config value to a map.
-     */
-    public Map<String, Object> getRawConfigValueAsMap() throws MalformedConfigException {
-      if (rawConfigValue instanceof Map) {
-        return (Map<String, Object>) rawConfigValue;
-      }
-      throw new MalformedConfigException(
-          rawConfigValue + " is not a map (policy=" + policyName + ")");
     }
 
     @Override

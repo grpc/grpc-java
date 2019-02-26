@@ -94,6 +94,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -1594,7 +1595,7 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_pickFirst() throws Exception {
     String lbConfig = "{\"childPolicy\" : [{\"pick_first\" : {}}, {\"round_robin\" : {}}]}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
     assertThat(mode).isEqualTo(Mode.PICK_FIRST);
   }
@@ -1603,7 +1604,7 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_roundRobin() throws Exception {
     String lbConfig = "{\"childPolicy\" : [{\"round_robin\" : {}}, {\"pick_first\" : {}}]}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
     assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
   }
@@ -1612,7 +1613,7 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_null_default_roundRobin() throws Exception {
     String lbConfig = "{}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
     assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
   }
@@ -1621,7 +1622,7 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_empty_default_roundRobin() throws Exception {
     String lbConfig = "{\"childPolicy\" : []}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).isEmpty();
     assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
   }
@@ -1631,7 +1632,7 @@ public class GrpclbLoadBalancerTest {
       throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nonono\" : {}} ]}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy \"nonono\"");
     assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
   }
@@ -1640,7 +1641,7 @@ public class GrpclbLoadBalancerTest {
   public void retrieveModeFromLbConfig_skip_unavailable_childPolicy() throws Exception {
     String lbConfig = "{\"childPolicy\" : [ {\"nono\" : {}}, {\"pick_first\" : {} } ]}";
 
-    Mode mode = retrieveModeFromLbConfig(JsonParser.parse(lbConfig), channelLogger);
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
     assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy \"nono\"");
     assertThat(mode).isEqualTo(Mode.PICK_FIRST);
   }
@@ -1733,6 +1734,11 @@ public class GrpclbLoadBalancerTest {
     return LoadBalanceResponse.newBuilder()
         .setServerList(serverListBuilder.build())
         .build();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> parseJsonObject(String json) throws Exception {
+    return (Map<String, Object>) JsonParser.parse(json);
   }
 
   private static class ServerEntry {

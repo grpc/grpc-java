@@ -345,7 +345,8 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
     verify(testLbBalancer2).handleResolvedAddressGroups(
         eq(Collections.<EquivalentAddressGroup>emptyList()), attrsCaptor.capture());
-    Object lbConfig = attrsCaptor.getValue().get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
+    Map<String, Object> lbConfig =
+        attrsCaptor.getValue().get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
     assertThat(lbConfig).isEqualTo(Collections.<String, Object>singletonMap("setting1", "high"));
     assertThat(attrsCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isSameAs(serviceConfig);

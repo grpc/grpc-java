@@ -48,6 +48,7 @@ import io.grpc.health.v1.HealthGrpc;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.internal.TimeProvider;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -171,8 +172,13 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       Map<String, Object> serviceConfig =
           attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
-      helper.setHealthCheckedService(serviceName);
+      try {
+        String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
+        helper.setHealthCheckedService(serviceName);
+      } catch (MalformedConfigException e) {
+        logger.log(Level.WARNING, "Malformed config for health-check", e);
+        helper.getChannelLogger().log(ChannelLogLevel.WARNING, "Malformed config for health-check");
+      }
       super.handleResolvedAddressGroups(servers, attributes);
     }
 

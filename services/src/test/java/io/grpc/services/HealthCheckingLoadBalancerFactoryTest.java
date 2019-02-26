@@ -929,18 +929,18 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void getHealthCheckedServiceName_nullServiceConfig() {
+  public void getHealthCheckedServiceName_nullServiceConfig() throws Exception {
     assertThat(ServiceConfigUtil.getHealthCheckedServiceName(null)).isNull();
   }
 
   @Test
-  public void getHealthCheckedServiceName_noHealthCheckConfig() {
+  public void getHealthCheckedServiceName_noHealthCheckConfig() throws Exception {
     assertThat(ServiceConfigUtil.getHealthCheckedServiceName(new HashMap<String, Object>()))
         .isNull();
   }
 
   @Test
-  public void getHealthCheckedServiceName_healthCheckConfigMissingServiceName() {
+  public void getHealthCheckedServiceName_healthCheckConfigMissingServiceName() throws Exception {
     HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();
     serviceConfig.put("healthCheckConfig", hcConfig);
@@ -948,7 +948,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   @Test
-  public void getHealthCheckedServiceName_healthCheckConfigHasServiceName() {
+  public void getHealthCheckedServiceName_healthCheckConfigHasServiceName() throws Exception {
     HashMap<String, Object> serviceConfig = new HashMap<>();
     HashMap<String, Object> hcConfig = new HashMap<>();
     hcConfig.put("serviceName", "FooService");
