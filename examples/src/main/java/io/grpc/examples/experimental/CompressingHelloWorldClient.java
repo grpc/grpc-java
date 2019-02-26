@@ -45,9 +45,9 @@ public class CompressingHelloWorldClient {
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public CompressingHelloWorldClient(String host, int port) {
     channel = ManagedChannelBuilder.forAddress(host, port)
-    	.compressorRegistry(CompressorRegistry.getDefaultInstance())
-		.decompressorRegistry(DecompressorRegistry.getDefaultInstance())
-		.enableFullStreamDecompression()
+        .compressorRegistry(CompressorRegistry.getDefaultInstance())
+        .decompressorRegistry(DecompressorRegistry.getDefaultInstance())
+        .enableFullStreamDecompression()
         .usePlaintext()
         .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);

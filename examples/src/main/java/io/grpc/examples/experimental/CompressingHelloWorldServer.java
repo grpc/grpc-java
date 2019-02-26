@@ -39,8 +39,10 @@ public class CompressingHelloWorldServer {
   private void start() throws IOException {
     /* The port on which the server should run */
     int port = 50051;
-    server = ServerBuilder.forPort(port).compressorRegistry(CompressorRegistry.getDefaultInstance())
-			.decompressorRegistry(DecompressorRegistry.getDefaultInstance()).intercept(new CompressionServerInterceptor())
+    server = ServerBuilder.forPort(port)
+        .compressorRegistry(CompressorRegistry.getDefaultInstance())
+        .decompressorRegistry(DecompressorRegistry.getDefaultInstance())
+        .intercept(new CompressionServerInterceptor())
         .addService(new GreeterImpl())
         .build()
         .start();
