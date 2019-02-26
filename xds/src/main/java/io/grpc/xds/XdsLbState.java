@@ -81,7 +81,23 @@ class XdsLbState {
 
   final void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes) {
-    maybeStartXdsComms();
+
+    // start XdsComms if not already alive
+    if (xdsComms != null) {
+      xdsComms = xdsComms.getLiveStream();
+    } else {
+      // ** This is wrong **
+      // FIXME: use name resolver to resolve addresses for balancerName, and create xdsComms in
+      // name resolver listener callback.
+      // TODO: consider pass a fake EAG as a static final field visible to tests and verify
+      // createOobChannel() with this EAG in tests.
+      ManagedChannel oobChannel = helper.createOobChannel(
+          new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new SocketAddress() {
+          })),
+          balancerName);
+      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback);
+    }
+
     // TODO: maybe update picker
   }
 
@@ -111,21 +127,6 @@ class XdsLbState {
     XdsComms xdsComms = this.xdsComms;
     this.xdsComms = null;
     return xdsComms;
-  }
-
-  private void maybeStartXdsComms() {
-    if (xdsComms != null) {
-      xdsComms = xdsComms.maybeRestart();
-      return;
-    }
-
-    // ** This is wrong **
-    // TODO: use name resolve to resolve addresses for balancerName, and create xdsComms in
-    // name resolver listener callback
-    ManagedChannel oobChannel = helper.createOobChannel(
-        new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new SocketAddress() {})),
-        balancerName);
-    xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback);
   }
 
   /**

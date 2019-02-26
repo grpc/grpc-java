@@ -63,11 +63,11 @@ final class XdsComms {
               new Runnable() {
                 @Override
                 public void run() {
+                  closed = true;
                   if (cancelled) {
                     return;
                   }
-                  closed = true;
-                  adsStreamCallback.onClosed();
+                  adsStreamCallback.onError();
                 }
               });
           // TODO: more impl
@@ -100,7 +100,7 @@ final class XdsComms {
   }
 
   @CheckReturnValue
-  XdsComms maybeRestart() {
+  XdsComms getLiveStream() {
     if (closed || cancelled) {
       return new XdsComms(channel, helper, adsStreamCallback);
     }
@@ -115,6 +115,10 @@ final class XdsComms {
     xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
   }
 
+  /**
+   * Callback on ADS stream events. The callback methods should be called in a proper {@link
+   * io.grpc.SynchronizationContext}.
+   */
   interface AdsStreamCallback {
 
     /**
@@ -123,8 +127,8 @@ final class XdsComms {
     void onWorking();
 
     /**
-     * Once the ADS stream is closed.
+     * Once an error occurs in ADS stream.
      */
-    void onClosed();
+    void onError();
   }
 }

@@ -501,7 +501,8 @@ public class XdsLoadBalancerTest {
     lb.handleResolvedAddressGroups(
         Collections.<EquivalentAddressGroup>emptyList(), standardModeWithFallback1Attributes());
 
-    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     ArgumentCaptor<Attributes> captor = ArgumentCaptor.forClass(Attributes.class);
     verify(fakeBalancer1).handleResolvedAddressGroups(
@@ -511,7 +512,7 @@ public class XdsLoadBalancerTest {
   }
 
   @Test
-  public void fallback_AdsWorkingTimerExpired() throws Exception {
+  public void fallback_AdsWorkingTimerCancelled() throws Exception {
     lb.handleResolvedAddressGroups(
         Collections.<EquivalentAddressGroup>emptyList(), standardModeWithFallback1Attributes());
 
@@ -535,7 +536,8 @@ public class XdsLoadBalancerTest {
     assertThat(captor.getValue().get(ATTR_LOAD_BALANCING_CONFIG))
         .containsExactly("supported_1", new HashMap<String, Object>());
 
-    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     // verify handleResolvedAddressGroups() is not called again
     verify(fakeBalancer1).handleResolvedAddressGroups(

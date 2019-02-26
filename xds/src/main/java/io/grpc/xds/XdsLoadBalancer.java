@@ -68,7 +68,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onClosed() {
+    public void onError() {
       fallbackManager.balancerWorking = false;
       fallbackManager.maybeUseFallbackPolicy();
     }
@@ -119,7 +119,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         if (xdsComms != null) {
           xdsComms.shutdownLbRpc(cancelMessage);
           fallbackManager.balancerWorking = false;
-          xdsComms = xdsComms.maybeRestart();
+          xdsComms = xdsComms.getLiveStream();
         }
       } else { // effectively no change in policy, keep xdsLbState unchanged
         return;
