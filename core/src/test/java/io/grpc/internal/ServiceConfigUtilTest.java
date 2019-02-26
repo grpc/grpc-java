@@ -43,7 +43,6 @@ public class ServiceConfigUtilTest {
             (Map<String, Object>) JsonParser.parse(lbConfig)));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void getBalancerNameFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
@@ -54,7 +53,7 @@ public class ServiceConfigUtilTest {
     assertEquals(
         "dns:///balancer.example.com:8080",
         ServiceConfigUtil.getBalancerNameFromXdsConfig(
-            (Map<String, Object>) JsonParser.parse(lbConfig)));
+            ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig))));
   }
 
   @SuppressWarnings("unchecked")
@@ -71,7 +70,7 @@ public class ServiceConfigUtilTest {
         "{\"lbPolicy2\" : {\"key\" : \"val\"}}");
 
     List<Map<String, Object>> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
-        (Map<String, Object>) JsonParser.parse(lbConfig));
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).containsExactly(expectedChildPolicy1, expectedChildPolicy2);
   }
@@ -85,7 +84,7 @@ public class ServiceConfigUtilTest {
         + "}}";
 
     List<Map<String, Object>> childPolicies = ServiceConfigUtil.getChildPolicyFromXdsConfig(
-        (Map<String, Object>) JsonParser.parse(lbConfig));
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).isNull();
   }
@@ -104,7 +103,7 @@ public class ServiceConfigUtilTest {
         "{\"lbPolicy4\" : {}}");
 
     List<Map<String, Object>> childPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
-        (Map<String, Object>) JsonParser.parse(lbConfig));
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(childPolicies).containsExactly(expectedFallbackPolicy1, expectedFallbackPolicy2);
   }
@@ -118,7 +117,7 @@ public class ServiceConfigUtilTest {
         + "}}";
 
     List<Map<String, Object>> fallbackPolicies = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(
-        (Map<String, Object>) JsonParser.parse(lbConfig));
+        ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig)));
 
     assertThat(fallbackPolicies).isNull();
   }

@@ -646,7 +646,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_failsOnMisspelling() {
+  public void maybeChooseServiceConfig_failsOnMisspelling() throws Exception {
     Map<String, Object> bad = new LinkedHashMap<>();
     bad.put("parcentage", 1.0);
     thrown.expectMessage("Bad key");
@@ -655,7 +655,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesJava() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesJava() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("java");
@@ -666,7 +666,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() {
+  public void maybeChooseServiceConfig_clientLanguageDoesntMatchGo() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("go");
@@ -677,7 +677,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() {
+  public void maybeChooseServiceConfig_clientLanguageCaseInsensitive() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("JAVA");
@@ -688,7 +688,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesEmtpy() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     choice.put("clientLanguage", langs);
@@ -698,7 +698,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageMatchesMulti() {
+  public void maybeChooseServiceConfig_clientLanguageMatchesMulti() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> langs = new ArrayList<>();
     langs.add("go");
@@ -710,7 +710,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageZeroAlwaysFails() {
+  public void maybeChooseServiceConfig_percentageZeroAlwaysFails() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 0D);
     choice.put("serviceConfig", serviceConfig);
@@ -719,7 +719,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() {
+  public void maybeChooseServiceConfig_percentageHundredAlwaysSucceeds() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 100D);
     choice.put("serviceConfig", serviceConfig);
@@ -728,7 +728,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAboveMatches50() {
+  public void maybeChooseServiceConfig_percentageAboveMatches50() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 50D);
     choice.put("serviceConfig", serviceConfig);
@@ -744,7 +744,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAtFails50() {
+  public void maybeChooseServiceConfig_percentageAtFails50() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 50D);
     choice.put("serviceConfig", serviceConfig);
@@ -760,7 +760,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAboveMatches99() {
+  public void maybeChooseServiceConfig_percentageAboveMatches99() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 99D);
     choice.put("serviceConfig", serviceConfig);
@@ -776,7 +776,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAtFails99() {
+  public void maybeChooseServiceConfig_percentageAtFails99() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 99D);
     choice.put("serviceConfig", serviceConfig);
@@ -792,7 +792,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAboveMatches1() {
+  public void maybeChooseServiceConfig_percentageAboveMatches1() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 1D);
     choice.put("serviceConfig", serviceConfig);
@@ -808,7 +808,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_percentageAtFails1() {
+  public void maybeChooseServiceConfig_percentageAtFails1() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("percentage", 1D);
     choice.put("serviceConfig", serviceConfig);
@@ -824,7 +824,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatches() {
+  public void maybeChooseServiceConfig_hostnameMatches() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhost");
@@ -835,7 +835,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameDoesntMatch() {
+  public void maybeChooseServiceConfig_hostnameDoesntMatch() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhorse");
@@ -846,7 +846,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_clientLanguageCaseSensitive() {
+  public void maybeChooseServiceConfig_clientLanguageCaseSensitive() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("LOCALHOST");
@@ -857,7 +857,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() {
+  public void maybeChooseServiceConfig_hostnameMatchesEmtpy() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     choice.put("clientHostname", hosts);
@@ -867,7 +867,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void maybeChooseServiceConfig_hostnameMatchesMulti() {
+  public void maybeChooseServiceConfig_hostnameMatchesMulti() throws Exception {
     Map<String, Object> choice = new LinkedHashMap<>();
     List<Object> hosts = new ArrayList<>();
     hosts.add("localhorse");

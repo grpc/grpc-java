@@ -28,6 +28,8 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.Collections;
 import java.util.Map;
 import org.junit.After;
@@ -108,7 +110,6 @@ public class XdsLoadBalancerTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void selectChildPolicy() throws Exception {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -116,17 +117,18 @@ public class XdsLoadBalancerTest {
         + "{\"supported_2\" : {\"key\" : \"val\"}}],"
         + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
         + "}}";
-    Map<String, Object> expectedChildPolicy = (Map<String, Object>) JsonParser.parse(
-        "{\"supported_1\" : {\"key\" : \"val\"}}");
+    LbConfig expectedChildPolicy =
+        ServiceConfigUtil.unwrapLoadBalancingConfig(
+            JsonParser.parse("{\"supported_1\" : {\"key\" : \"val\"}}"));
 
-    Map<String, Object> childPolicy = XdsLoadBalancer
-        .selectChildPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw));
+    LbConfig childPolicy = XdsLoadBalancer
+        .selectChildPolicy(
+            ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfigRaw)));
 
     assertEquals(expectedChildPolicy, childPolicy);
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void selectFallBackPolicy() throws Exception {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -134,11 +136,11 @@ public class XdsLoadBalancerTest {
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}},"
         + "{\"supported_2\" : {\"key\" : \"val\"}}]"
         + "}}";
-    Map<String, Object> expectedFallbackPolicy = (Map<String, Object>) JsonParser.parse(
-        "{\"supported_1\" : {\"key\" : \"val\"}}");
+    LbConfig expectedFallbackPolicy = ServiceConfigUtil.unwrapLoadBalancingConfig(
+        JsonParser.parse("{\"supported_1\" : {\"key\" : \"val\"}}"));
 
-    Map<String, Object> fallbackPolicy = XdsLoadBalancer
-        .selectFallbackPolicy((Map<String, Object>) JsonParser.parse(lbConfigRaw));
+    LbConfig fallbackPolicy = XdsLoadBalancer.selectFallbackPolicy(
+            ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfigRaw)));
 
     assertEquals(expectedFallbackPolicy, fallbackPolicy);
   }

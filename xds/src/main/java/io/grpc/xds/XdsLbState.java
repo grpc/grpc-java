@@ -22,6 +22,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -45,18 +46,18 @@ abstract class XdsLbState {
   final String balancerName;
 
   @Nullable
-  final Map<String, Object> childPolicy;
+  final LbConfig childPolicy;
 
   @Nullable
-  final Map<String, Object> fallbackPolicy;
+  final LbConfig fallbackPolicy;
 
   @Nullable
   private XdsComms xdsComms;
 
   XdsLbState(
       String balancerName,
-      @Nullable Map<String, Object> childPolicy,
-      @Nullable Map<String, Object> fallbackPolicy,
+      @Nullable LbConfig childPolicy,
+      @Nullable LbConfig fallbackPolicy,
       @Nullable XdsComms xdsComms) {
     this.balancerName = balancerName;
     this.childPolicy = childPolicy;

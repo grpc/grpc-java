@@ -43,6 +43,7 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -56,6 +57,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -64,6 +67,8 @@ import javax.annotation.Nullable;
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 final class RoundRobinLoadBalancer extends LoadBalancer {
+  private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
+
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -97,18 +102,24 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     Map<String, Object> serviceConfig =
         attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     if (serviceConfig != null) {
-      String stickinessMetadataKey =
-          ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
-      if (stickinessMetadataKey != null) {
-        if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-          helper.getChannelLogger().log(
-              ChannelLogLevel.WARNING,
-              "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
-              stickinessMetadataKey);
-        } else if (stickinessState == null
-            || !stickinessState.key.name().equals(stickinessMetadataKey)) {
-          stickinessState = new StickinessState(stickinessMetadataKey);
+      try {
+        String stickinessMetadataKey =
+            ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
+        if (stickinessMetadataKey != null) {
+          if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+            helper.getChannelLogger().log(
+                ChannelLogLevel.WARNING,
+                "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
+                stickinessMetadataKey);
+          } else if (stickinessState == null
+              || !stickinessState.key.name().equals(stickinessMetadataKey)) {
+            stickinessState = new StickinessState(stickinessMetadataKey);
+          }
         }
+      } catch (MalformedConfigException e) {
+        String msg = "Ignoring malformed stickiness config from " + serviceConfig;
+        helper.getChannelLogger().log(ChannelLogLevel.WARNING, msg);
+        logger.log(Level.WARNING, msg, e);
       }
     }
 

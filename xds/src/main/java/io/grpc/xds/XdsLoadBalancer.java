@@ -26,6 +26,8 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.xds.XdsLbState.XdsComms;
 import java.util.List;
 import java.util.Map;
@@ -50,16 +52,20 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes) {
-    Map<String, Object> newLbConfig = checkNotNull(
+    Object newLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
-    handleNewConfig(newLbConfig);
+    try {
+      handleNewConfig(ServiceConfigUtil.unwrapLoadBalancingConfig(newLbConfig));
+    } catch (MalformedConfigException e) {
+      // TODO: handle it
+    }
     xdsLbState.handleResolvedAddressGroups(servers, attributes);
   }
 
-  private void handleNewConfig(Map<String, Object> newLbConfig) {
+  private void handleNewConfig(LbConfig newLbConfig) throws MalformedConfigException {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
-    Map<String, Object> childPolicy = selectChildPolicy(newLbConfig);
-    Map<String, Object> fallbackPolicy = selectFallbackPolicy(newLbConfig);
+    LbConfig childPolicy = selectChildPolicy(newLbConfig);
+    LbConfig fallbackPolicy = selectFallbackPolicy(newLbConfig);
     XdsComms xdsComms = null;
     if (xdsLbState != null) { // may release and re-use/shutdown xdsComms from current xdsLbState
       if (!newBalancerName.equals(xdsLbState.balancerName)) {
@@ -88,8 +94,8 @@ final class XdsLoadBalancer extends LoadBalancer {
   @CheckReturnValue
   private XdsLbState newXdsLbState(
       String balancerName,
-      @Nullable final Map<String, Object> childPolicy,
-      @Nullable Map<String, Object> fallbackPolicy,
+      @Nullable final LbConfig childPolicy,
+      @Nullable LbConfig fallbackPolicy,
       @Nullable final XdsComms xdsComms) {
 
     // TODO: impl
@@ -111,7 +117,7 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Nullable
   @VisibleForTesting
-  static Map<String, Object> selectChildPolicy(Map<String, Object> lbConfig) {
+  static LbConfig selectChildPolicy(LbConfig lbConfig) throws MalformedConfigException {
     List<Map<String, Object>> childConfigs =
         ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
     return selectSupportedLbPolicy(childConfigs);
@@ -119,7 +125,8 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Nullable
   @VisibleForTesting
-  static Map<String, Object> selectFallbackPolicy(Map<String, Object> lbConfig) {
+  static LbConfig selectFallbackPolicy(@Nullable LbConfig lbConfig)
+      throws MalformedConfigException {
     if (lbConfig == null) {
       return null;
     }
@@ -129,7 +136,8 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   @Nullable
-  private static Map<String, Object> selectSupportedLbPolicy(List<Map<String, Object>> lbConfigs) {
+  private static LbConfig selectSupportedLbPolicy(List<Map<String, Object>> lbConfigs)
+      throws MalformedConfigException {
     if (lbConfigs == null) {
       return null;
     }
@@ -137,7 +145,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     for (Object rawLbConfig : lbConfigs) {
       LbConfig lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(rawLbConfig);
       if (loadBalancerRegistry.getProvider(lbConfig.getPolicyName()) != null) {
-        return candidate;
+        return lbConfig;
       }
     }
     return null;

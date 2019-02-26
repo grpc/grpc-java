@@ -39,7 +39,6 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
@@ -247,7 +246,11 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
 
       List<Map<String, Object>> lbConfigs = null;
       if (config != null) {
-        lbConfigs = ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+        try {
+          lbConfigs = ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+        } catch (MalformedConfigException e) {
+          throw new PolicyException(e);
+        }
       }
       if (lbConfigs != null && !lbConfigs.isEmpty()) {
         LinkedHashSet<String> policiesTried = new LinkedHashSet<>();

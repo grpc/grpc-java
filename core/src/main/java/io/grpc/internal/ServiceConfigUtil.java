@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.math.LongMath.checkedAdd;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -72,7 +74,8 @@ public final class ServiceConfigUtil {
    * Fetch the health-checked service name from service config. {@code null} if can't find one.
    */
   @Nullable
-  public static String getHealthCheckedServiceName(@Nullable Map<String, Object> serviceConfig) {
+  public static String getHealthCheckedServiceName(@Nullable Map<String, Object> serviceConfig)
+      throws MalformedConfigException {
     String healthCheckKey = "healthCheckConfig";
     String serviceNameKey = "serviceName";
     if (serviceConfig == null || !serviceConfig.containsKey(healthCheckKey)) {
@@ -95,7 +98,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Throttle getThrottlePolicy(@Nullable Map<String, Object> serviceConfig) {
+  static Throttle getThrottlePolicy(@Nullable Map<String, Object> serviceConfig)
+      throws MalformedConfigException {
     String retryThrottlingKey = "retryThrottling";
     if (serviceConfig == null || !serviceConfig.containsKey(retryThrottlingKey)) {
       return null;
@@ -130,7 +134,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxAttemptsFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Integer getMaxAttemptsFromRetryPolicy(Map<String, Object> retryPolicy)
+      throws MalformedConfigException {
     if (!retryPolicy.containsKey(RETRY_POLICY_MAX_ATTEMPTS_KEY)) {
       return null;
     }
@@ -138,7 +143,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Long getInitialBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Long getInitialBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy)
+      throws MalformedConfigException {
     if (!retryPolicy.containsKey(RETRY_POLICY_INITIAL_BACKOFF_KEY)) {
       return null;
     }
@@ -151,7 +157,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Long getMaxBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Long getMaxBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy)
+      throws MalformedConfigException {
     if (!retryPolicy.containsKey(RETRY_POLICY_MAX_BACKOFF_KEY)) {
       return null;
     }
@@ -164,7 +171,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Double getBackoffMultiplierFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Double getBackoffMultiplierFromRetryPolicy(Map<String, Object> retryPolicy)
+      throws MalformedConfigException {
     if (!retryPolicy.containsKey(RETRY_POLICY_BACKOFF_MULTIPLIER_KEY)) {
       return null;
     }
@@ -172,7 +180,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, Object> retryPolicy)
+      throws MalformedConfigException {
     if (!retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY)) {
       return null;
     }
@@ -180,7 +189,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxAttemptsFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static Integer getMaxAttemptsFromHedgingPolicy(Map<String, Object> hedgingPolicy)
+      throws MalformedConfigException {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_MAX_ATTEMPTS_KEY)) {
       return null;
     }
@@ -188,7 +198,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Long getHedgingDelayNanosFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static Long getHedgingDelayNanosFromHedgingPolicy(Map<String, Object> hedgingPolicy)
+      throws MalformedConfigException {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_HEDGING_DELAY_KEY)) {
       return null;
     }
@@ -201,7 +212,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<String> getNonFatalStatusCodesFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static List<String> getNonFatalStatusCodesFromHedgingPolicy(Map<String, Object> hedgingPolicy)
+      throws MalformedConfigException {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY)) {
       return null;
     }
@@ -209,7 +221,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static String getServiceFromName(Map<String, Object> name) {
+  static String getServiceFromName(Map<String, Object> name) throws MalformedConfigException {
     if (!name.containsKey(NAME_SERVICE_KEY)) {
       return null;
     }
@@ -217,7 +229,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static String getMethodFromName(Map<String, Object> name) {
+  static String getMethodFromName(Map<String, Object> name) throws MalformedConfigException {
     if (!name.containsKey(NAME_METHOD_KEY)) {
       return null;
     }
@@ -225,7 +237,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Map<String, Object> getRetryPolicyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Map<String, Object> getRetryPolicyFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_RETRY_POLICY_KEY)) {
       return null;
     }
@@ -233,7 +246,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Map<String, Object> getHedgingPolicyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Map<String, Object> getHedgingPolicyFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_HEDGING_POLICY_KEY)) {
       return null;
     }
@@ -241,7 +255,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<Map<String, Object>> getNameListFromMethodConfig(Map<String, Object> methodConfig) {
+  static List<Map<String, Object>> getNameListFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
       return null;
     }
@@ -254,7 +269,8 @@ public final class ServiceConfigUtil {
    * @return duration nanoseconds, or {@code null} if it isn't present.
    */
   @Nullable
-  static Long getTimeoutFromMethodConfig(Map<String, Object> methodConfig) {
+  static Long getTimeoutFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_TIMEOUT_KEY)) {
       return null;
     }
@@ -267,7 +283,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Boolean getWaitForReadyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Boolean getWaitForReadyFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_WAIT_FOR_READY_KEY)) {
       return null;
     }
@@ -275,7 +292,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxRequestMessageBytesFromMethodConfig(Map<String, Object> methodConfig) {
+  static Integer getMaxRequestMessageBytesFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY)) {
       return null;
     }
@@ -283,7 +301,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxResponseMessageBytesFromMethodConfig(Map<String, Object> methodConfig) {
+  static Integer getMaxResponseMessageBytesFromMethodConfig(Map<String, Object> methodConfig)
+      throws MalformedConfigException {
     if (!methodConfig.containsKey(METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY)) {
       return null;
     }
@@ -292,7 +311,7 @@ public final class ServiceConfigUtil {
 
   @Nullable
   static List<Map<String, Object>> getMethodConfigFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+      Map<String, Object> serviceConfig) throws MalformedConfigException {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_METHOD_CONFIG_KEY)) {
       return null;
     }
@@ -305,7 +324,7 @@ public final class ServiceConfigUtil {
   @SuppressWarnings("unchecked")
   @VisibleForTesting
   public static List<Map<String, Object>> getLoadBalancingConfigsFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+      Map<String, Object> serviceConfig) throws MalformedConfigException {
     /* schema as follows
     {
       "loadBalancingConfig": {
@@ -378,10 +397,10 @@ public final class ServiceConfigUtil {
    * Extracts the loadbalancer name from xds loadbalancer config.
    */
   @SuppressWarnings("unchecked")
-  public static String getBalancerNameFromXdsConfig(
-      Map<String, Object> xdsConfig) {
-    Object entry = xdsConfig.entrySet().iterator().next().getValue();
-    return getString((Map<String, Object>) entry, XDS_CONFIG_BALANCER_NAME_KEY);
+  public static String getBalancerNameFromXdsConfig(LbConfig xdsConfig)
+      throws MalformedConfigException {
+    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
+    return getString(map, XDS_CONFIG_BALANCER_NAME_KEY);
   }
 
   /**
@@ -389,14 +408,11 @@ public final class ServiceConfigUtil {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public static List<Map<String, Object>> getChildPolicyFromXdsConfig(
-      Map<String, Object> xdsConfig) {
-    Object rawEntry = xdsConfig.entrySet().iterator().next().getValue();
-    if (rawEntry instanceof Map) {
-      Map<String, Object> entry = (Map<String, Object>) rawEntry;
-      if (entry.containsKey(XDS_CONFIG_CHILD_POLICY_KEY)) {
-        return (List<Map<String, Object>>) (List<?>) getList(entry, XDS_CONFIG_CHILD_POLICY_KEY);
-      }
+  public static List<Map<String, Object>> getChildPolicyFromXdsConfig(LbConfig xdsConfig)
+      throws MalformedConfigException {
+    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
+    if (map.containsKey(XDS_CONFIG_CHILD_POLICY_KEY)) {
+      return (List<Map<String, Object>>) (List<?>) getList(map, XDS_CONFIG_CHILD_POLICY_KEY);
     }
     return null;
   }
@@ -406,14 +422,11 @@ public final class ServiceConfigUtil {
    */
   @SuppressWarnings("unchecked")
   @Nullable
-  public static List<Map<String, Object>> getFallbackPolicyFromXdsConfig(
-      Map<String, Object> lbConfig) {
-    Object rawEntry = lbConfig.entrySet().iterator().next().getValue();
-    if (rawEntry instanceof Map) {
-      Map<String, Object> entry = (Map<String, Object>) rawEntry;
-      if (entry.containsKey(XDS_CONFIG_FALLBACK_POLICY_KEY)) {
-        return (List<Map<String, Object>>) (List<?>) getList(entry, XDS_CONFIG_FALLBACK_POLICY_KEY);
-      }
+  public static List<Map<String, Object>> getFallbackPolicyFromXdsConfig(LbConfig xdsConfig)
+      throws MalformedConfigException {
+    Map<String, Object> map = xdsConfig.getRawConfigValueAsMap();
+    if (map.containsKey(XDS_CONFIG_FALLBACK_POLICY_KEY)) {
+      return (List<Map<String, Object>>) (List<?>) getList(map, XDS_CONFIG_FALLBACK_POLICY_KEY);
     }
     return null;
   }
@@ -423,7 +436,7 @@ public final class ServiceConfigUtil {
    */
   @Nullable
   public static String getStickinessMetadataKeyFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+      Map<String, Object> serviceConfig) throws MalformedConfigException {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_STICKINESS_METADATA_KEY)) {
       return null;
     }
@@ -434,13 +447,13 @@ public final class ServiceConfigUtil {
    * Gets a list from an object for the given key.
    */
   @SuppressWarnings("unchecked")
-  static List<Object> getList(Map<String, Object> obj, String key) {
+  static List<Object> getList(Map<String, Object> obj, String key) throws MalformedConfigException {
     assert obj.containsKey(key);
     Object value = checkNotNull(obj.get(key), "no such key %s", key);
     if (value instanceof List) {
       return (List<Object>) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for key %s in %s is not List", value, key, obj));
   }
 
@@ -448,13 +461,14 @@ public final class ServiceConfigUtil {
    * Gets an object from an object for the given key.
    */
   @SuppressWarnings("unchecked")
-  static Map<String, Object> getObject(Map<String, Object> obj, String key) {
+  static Map<String, Object> getObject(Map<String, Object> obj, String key)
+      throws MalformedConfigException {
     assert obj.containsKey(key);
     Object value = checkNotNull(obj.get(key), "no such key %s", key);
     if (value instanceof Map) {
       return (Map<String, Object>) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for key %s in %s is not object", value, key, obj));
   }
 
@@ -462,13 +476,13 @@ public final class ServiceConfigUtil {
    * Gets a double from an object for the given key.
    */
   @SuppressWarnings("unchecked")
-  static Double getDouble(Map<String, Object> obj, String key) {
+  static Double getDouble(Map<String, Object> obj, String key) throws MalformedConfigException {
     assert obj.containsKey(key);
     Object value = checkNotNull(obj.get(key), "no such key %s", key);
     if (value instanceof Double) {
       return (Double) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for key %s in %s is not Double", value, key, obj));
   }
 
@@ -476,13 +490,13 @@ public final class ServiceConfigUtil {
    * Gets a string from an object for the given key.
    */
   @SuppressWarnings("unchecked")
-  static String getString(Map<String, Object> obj, String key) {
+  static String getString(Map<String, Object> obj, String key) throws MalformedConfigException {
     assert obj.containsKey(key);
     Object value = checkNotNull(obj.get(key), "no such key %s", key);
     if (value instanceof String) {
       return (String) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for key %s in %s is not String", value, key, obj));
   }
 
@@ -490,34 +504,35 @@ public final class ServiceConfigUtil {
    * Gets a string from an object for the given index.
    */
   @SuppressWarnings("unchecked")
-  static String getString(List<Object> list, int i) {
+  static String getString(List<Object> list, int i) throws MalformedConfigException {
     assert i >= 0 && i < list.size();
     Object value = checkNotNull(list.get(i), "idx %s in %s is null", i, list);
     if (value instanceof String) {
       return (String) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for idx %d in %s is not String", value, i, list));
   }
 
   /**
    * Gets a boolean from an object for the given key.
    */
-  static Boolean getBoolean(Map<String, Object> obj, String key) {
+  static Boolean getBoolean(Map<String, Object> obj, String key) throws MalformedConfigException {
     assert obj.containsKey(key);
     Object value = checkNotNull(obj.get(key), "no such key %s", key);
     if (value instanceof Boolean) {
       return (Boolean) value;
     }
-    throw new ClassCastException(
+    throw new MalformedConfigException(
         String.format("value %s for key %s in %s is not Boolean", value, key, obj));
   }
 
   @SuppressWarnings("unchecked")
-  private static List<Map<String, Object>> checkObjectList(List<Object> rawList) {
+  private static List<Map<String, Object>> checkObjectList(List<Object> rawList)
+      throws MalformedConfigException {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
+        throw new MalformedConfigException(
             String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
@@ -525,10 +540,10 @@ public final class ServiceConfigUtil {
   }
 
   @SuppressWarnings("unchecked")
-  static List<String> checkStringList(List<Object> rawList) {
+  static List<String> checkStringList(List<Object> rawList) throws MalformedConfigException {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof String)) {
-        throw new ClassCastException(
+        throw new MalformedConfigException(
             String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
       }
     }
@@ -666,6 +681,10 @@ public final class ServiceConfigUtil {
     return Long.MAX_VALUE + ((naiveSum >>> (Long.SIZE - 1)) ^ 1);
   }
 
+  /**
+   * A LoadBalancingConfig that includes the policy name (the key) and its raw config value (parsed
+   * JSON).
+   */
   public static final class LbConfig {
     private final String policyName;
     private final Object rawConfigValue;
@@ -683,8 +702,45 @@ public final class ServiceConfigUtil {
     public Object getRawConfigValue() {
       return rawConfigValue;
     }
+
+    /**
+     * Tries to cast the raw config value to a map.
+     */
+    public Map<String, Object> getRawConfigValueAsMap() throws MalformedConfigException {
+      if (rawConfigValue instanceof Map) {
+        return (Map<String, Object>) rawConfigValue;
+      }
+      throw new MalformedConfigException(
+          rawConfigValue + " is not a map (policy=" + policyName + ")");
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof LbConfig) {
+        LbConfig other = (LbConfig) o;
+        return policyName.equals(other.policyName)
+            && rawConfigValue.equals(other.rawConfigValue);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(policyName, rawConfigValue);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("policyName", policyName)
+          .add("rawConfigValue", rawConfigValue)
+          .toString();
+    }
   }
 
+  /**
+   * Thrown when the config is a valid JSON, but doesn't conform to the config scheme.
+   */
   public static final class MalformedConfigException extends Exception {
     private static final long serialVersionUID = 1L;
 
