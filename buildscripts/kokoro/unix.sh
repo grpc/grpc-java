@@ -35,6 +35,7 @@ GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
 GRADLE_FLAGS+=" -Dorg.gradle.parallel=true"
+GRADLE_FLAGS+=" -PskipIncubatingArtifacts=true"
 export GRADLE_OPTS="-Xmx512m"
 
 # Make protobuf discoverable by :grpc-compiler

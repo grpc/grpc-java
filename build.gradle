@@ -428,8 +428,11 @@ subprojects {
         sign publishing.publications.maven
     }
 
-    publishMavenPublicationToMavenRepository.onlyIf {
-        !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
+    // skip publishing incubatingArtifacts when -PskipIncubatingArtifacts=true
+    if (rootProject.properties.get('skipIncubatingArtifacts', false).toBoolean()) {
+        publishMavenPublicationToMavenLocal.onlyIf {
+            !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
+        }
     }
 
     // At a test failure, log the stack trace to the console so that we don't
