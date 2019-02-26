@@ -428,14 +428,7 @@ subprojects {
         sign publishing.publications.maven
     }
 
-    // skip publishing incubatingArtifacts when -PskipIncubatingArtifactsToMavenLocal=true
-    if (rootProject.properties.get('skipIncubatingArtifactsToMavenLocal', false).toBoolean()) {
-        publishMavenPublicationToMavenLocal.onlyIf {
-            !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
-        }
-    }
-    // for publish, incubating artifacts are excluded
-    publishMavenPublicationToMavenRepository.onlyIf {
+    [publishMavenPublicationToMavenRepository, publishMavenPublicationToMavenLocal]*.onlyIf {
         !name.contains("grpc-gae-interop-testing") && !name.contains("grpc-xds")
     }
 

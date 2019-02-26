@@ -28,7 +28,7 @@ SET TARGET_ARCH=x86_32
 SET FAIL_ON_WARNINGS=true
 SET VC_PROTOBUF_LIBS=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\cmake\\build\\Release
 SET VC_PROTOBUF_INCLUDE=%ESCWORKSPACE%\\grpc-java-helper32\\protobuf-%PROTOBUF_VER%\\cmake\\build\\include
-SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE% -PskipIncubatingArtifactsToMavenLocal=true
+SET GRADLE_FLAGS=-PtargetArch=%TARGET_ARCH% -PfailOnWarnings=%FAIL_ON_WARNINGS% -PvcProtobufLibs=%VC_PROTOBUF_LIBS% -PvcProtobufInclude=%VC_PROTOBUF_INCLUDE%
 
 cmd.exe /C "%WORKSPACE%\gradlew.bat %GRADLE_FLAGS% build"
 set GRADLEEXIT=%ERRORLEVEL%
