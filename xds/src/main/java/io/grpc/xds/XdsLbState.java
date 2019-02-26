@@ -84,7 +84,7 @@ class XdsLbState {
 
     // start XdsComms if not already alive
     if (xdsComms != null) {
-      xdsComms = xdsComms.getLiveStream();
+      xdsComms.refreshAdsStream();
     } else {
       // ** This is wrong **
       // FIXME: use name resolver to resolve addresses for balancerName, and create xdsComms in

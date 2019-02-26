@@ -119,7 +119,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         if (xdsComms != null) {
           xdsComms.shutdownLbRpc(cancelMessage);
           fallbackManager.balancerWorking = false;
-          xdsComms = xdsComms.getLiveStream();
+          xdsComms.refreshAdsStream();
         }
       } else { // effectively no change in policy, keep xdsLbState unchanged
         return;

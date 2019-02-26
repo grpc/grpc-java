@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -25,7 +26,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
-import javax.annotation.CheckReturnValue;
 
 /**
  * ADS client implementation.
@@ -33,54 +33,67 @@ import javax.annotation.CheckReturnValue;
 final class XdsComms {
   private final ManagedChannel channel;
   private final Helper helper;
-  private final AdsStreamCallback adsStreamCallback;
 
-  private final StreamObserver<DiscoveryRequest> xdsRequestWriter;
+  // never null
+  private AdsStream adsStream;
 
-  private final StreamObserver<DiscoveryResponse> xdsResponseReader =
-      new StreamObserver<DiscoveryResponse>() {
+  private final class AdsStream {
 
-        boolean firstResponseReceived;
+    final AdsStreamCallback adsStreamCallback;
 
-        @Override
-        public void onNext(DiscoveryResponse value) {
-          if (!firstResponseReceived) {
-            firstResponseReceived = true;
+    final StreamObserver<DiscoveryRequest> xdsRequestWriter;
+
+    final StreamObserver<DiscoveryResponse> xdsResponseReader =
+        new StreamObserver<DiscoveryResponse>() {
+
+          boolean firstResponseReceived;
+
+          @Override
+          public void onNext(DiscoveryResponse value) {
+            if (!firstResponseReceived) {
+              firstResponseReceived = true;
+              helper.getSynchronizationContext().execute(
+                  new Runnable() {
+                    @Override
+                    public void run() {
+                      adsStreamCallback.onWorking();
+                    }
+                  });
+            }
+            // TODO: more impl
+          }
+
+          @Override
+          public void onError(Throwable t) {
             helper.getSynchronizationContext().execute(
                 new Runnable() {
                   @Override
                   public void run() {
-                    adsStreamCallback.onWorking();
+                    closed = true;
+                    if (cancelled) {
+                      return;
+                    }
+                    adsStreamCallback.onError();
                   }
                 });
+            // TODO: more impl
           }
-          // TODO: more impl
-        }
 
-        @Override
-        public void onError(Throwable t) {
-          helper.getSynchronizationContext().execute(
-              new Runnable() {
-                @Override
-                public void run() {
-                  closed = true;
-                  if (cancelled) {
-                    return;
-                  }
-                  adsStreamCallback.onError();
-                }
-              });
-          // TODO: more impl
-        }
+          @Override
+          public void onCompleted() {
+            // TODO: impl
+          }
+        };
 
-        @Override
-        public void onCompleted() {
-          // TODO: impl
-        }
-      };
+    boolean cancelled;
+    boolean closed;
 
-  private boolean cancelled;
-  private boolean closed;
+    AdsStream(AdsStreamCallback adsStreamCallback) {
+      this.adsStreamCallback = adsStreamCallback;
+      this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
+          .streamAggregatedResources(xdsResponseReader);
+    }
+  }
 
   /**
    * Starts a new ADS streaming RPC.
@@ -89,9 +102,7 @@ final class XdsComms {
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
-    this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
-    xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
-        .streamAggregatedResources(xdsResponseReader);
+    this.adsStream = new AdsStream(checkNotNull(adsStreamCallback, "adsStreamCallback"));
   }
 
   void shutdownChannel() {
@@ -99,20 +110,21 @@ final class XdsComms {
     shutdownLbRpc("Loadbalancer client shutdown");
   }
 
-  @CheckReturnValue
-  XdsComms getLiveStream() {
-    if (closed || cancelled) {
-      return new XdsComms(channel, helper, adsStreamCallback);
+  void refreshAdsStream() {
+    checkState(!channel.isShutdown(), "channel is alreday shutdown");
+
+    if (adsStream.closed || adsStream.cancelled) {
+      adsStream = new AdsStream(adsStream.adsStreamCallback);
     }
-    return this;
   }
 
   void shutdownLbRpc(String message) {
-    if (cancelled) {
+    if (adsStream.cancelled) {
       return;
     }
-    cancelled = true;
-    xdsRequestWriter.onError(Status.CANCELLED.withDescription(message).asRuntimeException());
+    adsStream.cancelled = true;
+    adsStream.xdsRequestWriter.onError(
+        Status.CANCELLED.withDescription(message).asRuntimeException());
   }
 
   /**
