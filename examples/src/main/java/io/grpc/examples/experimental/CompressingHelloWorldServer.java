@@ -19,8 +19,6 @@ package io.grpc.examples.experimental;
 import java.io.IOException;
 import java.util.logging.Logger;
 
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
@@ -40,8 +38,6 @@ public class CompressingHelloWorldServer {
     /* The port on which the server should run */
     int port = 50051;
     server = ServerBuilder.forPort(port)
-        .compressorRegistry(CompressorRegistry.getDefaultInstance())
-        .decompressorRegistry(DecompressorRegistry.getDefaultInstance())
         .intercept(new CompressionServerInterceptor())
         .addService(new GreeterImpl())
         .build()

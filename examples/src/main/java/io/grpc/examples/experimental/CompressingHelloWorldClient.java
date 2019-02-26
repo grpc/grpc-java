@@ -16,8 +16,6 @@
 
 package io.grpc.examples.experimental;
 
-import io.grpc.CompressorRegistry;
-import io.grpc.DecompressorRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
@@ -45,9 +43,6 @@ public class CompressingHelloWorldClient {
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public CompressingHelloWorldClient(String host, int port) {
     channel = ManagedChannelBuilder.forAddress(host, port)
-        .compressorRegistry(CompressorRegistry.getDefaultInstance())
-        .decompressorRegistry(DecompressorRegistry.getDefaultInstance())
-        .enableFullStreamDecompression()
         .usePlaintext()
         .build();
     blockingStub = GreeterGrpc.newBlockingStub(channel);
