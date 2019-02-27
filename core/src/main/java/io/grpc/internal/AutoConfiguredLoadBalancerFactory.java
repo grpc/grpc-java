@@ -303,7 +303,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     final List<EquivalentAddressGroup> serverList;
     @Nullable final Map<String, Object> config;
 
-    @SuppressWarnings("unchecked")
     PolicySelection(
         LoadBalancerProvider provider, List<EquivalentAddressGroup> serverList,
         @Nullable Map<String, Object> config) {
