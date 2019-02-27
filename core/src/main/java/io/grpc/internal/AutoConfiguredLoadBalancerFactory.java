@@ -241,23 +241,19 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       }
       roundRobinDueToGrpclbDepMissing = false;
 
-      List<Map<String, Object>> lbConfigs = null;
+      List<LbConfig> lbConfigs = null;
       if (config != null) {
         try {
-          lbConfigs = ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+          List<Map<String, Object>> rawLbConfigs =
+              ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+          lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
         } catch (MalformedConfigException e) {
           throw new PolicyException(e);
         }
       }
       if (lbConfigs != null && !lbConfigs.isEmpty()) {
         LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
-        for (Map<String, Object> rawLbConfig : lbConfigs) {
-          LbConfig lbConfig;
-          try {
-            lbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(rawLbConfig);
-          } catch (MalformedConfigException e) {
-            throw new PolicyException(e);
-          }
+        for (LbConfig lbConfig : lbConfigs) {
           String policy = lbConfig.getPolicyName();
           LoadBalancerProvider provider = registry.getProvider(policy);
           if (provider != null) {

@@ -37,6 +37,7 @@ import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -89,7 +90,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes) {
-    Object newRawLbConfig = checkNotNull(
+    Map<String, Object> newRawLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
     try {
       LbConfig newLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(newRawLbConfig);
