@@ -23,7 +23,6 @@ import static org.junit.Assert.fail;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.List;
-import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,16 +32,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ServiceConfigUtilTest {
-  @SuppressWarnings("unchecked")
-  @Test
-  public void getBalancerPolicyNameFromLoadBalancingConfig() throws Exception {
-    String lbConfig = "{\"lbPolicy1\" : { \"key\" : \"val\" }}";
-    assertEquals(
-        "lbPolicy1",
-        ServiceConfigUtil.getBalancerPolicyNameFromLoadBalancingConfig(
-            (Map<String, Object>) JsonParser.parse(lbConfig)));
-  }
-
   @Test
   public void getBalancerNameFromXdsConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "

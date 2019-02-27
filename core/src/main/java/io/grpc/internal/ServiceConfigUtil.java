@@ -412,13 +412,6 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Extracts the loadbalancing policy name from loadbalancer config.
-   */
-  public static String getBalancerPolicyNameFromLoadBalancingConfig(Map<String, Object> lbConfig) {
-    return lbConfig.entrySet().iterator().next().getKey();
-  }
-
-  /**
    * Extracts the loadbalancer name from xds loadbalancer config.
    */
   public static String getBalancerNameFromXdsConfig(LbConfig xdsConfig)
@@ -713,7 +706,6 @@ public final class ServiceConfigUtil {
     private final String policyName;
     private final Map<String, Object> rawConfigValue;
 
-    @VisibleForTesting
     public LbConfig(String policyName, Map<String, Object> rawConfigValue) {
       this.policyName = checkNotNull(policyName, "policyName");
       this.rawConfigValue = checkNotNull(rawConfigValue, "rawConfigValue");
