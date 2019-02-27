@@ -29,8 +29,8 @@ import io.grpc.stub.StreamObserver;
 /**
  * Server that manages startup/shutdown of a {@code Greeter} server.
  */
-public class CompressingHelloWorldServer {
-  private static final Logger logger = Logger.getLogger(CompressingHelloWorldServer.class.getName());
+public class CompressingHelloWorldServerAllMethods {
+  private static final Logger logger = Logger.getLogger(CompressingHelloWorldServerAllMethods.class.getName());
 
   private Server server;
 
@@ -48,7 +48,7 @@ public class CompressingHelloWorldServer {
       public void run() {
         // Use stderr here since the logger may have been reset by its JVM shutdown hook.
         System.err.println("*** shutting down gRPC server since JVM is shutting down");
-        CompressingHelloWorldServer.this.stop();
+        CompressingHelloWorldServerAllMethods.this.stop();
         System.err.println("*** server shut down");
       }
     });
@@ -73,7 +73,7 @@ public class CompressingHelloWorldServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    final CompressingHelloWorldServer server = new CompressingHelloWorldServer();
+    final CompressingHelloWorldServerAllMethods server = new CompressingHelloWorldServerAllMethods();
     server.start();
     server.blockUntilShutdown();
   }
