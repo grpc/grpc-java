@@ -404,7 +404,7 @@ subprojects {
         repositories {
             maven {
 	        if (rootProject.hasProperty('repositoryDir')) {
-                    repository(url: new File(rootProject.repositoryDir).toURI())
+                    url = new File(rootProject.repositoryDir).toURI()
                 } else {
                     String stagingUrl
                     if (rootProject.hasProperty('repositoryId')) {
