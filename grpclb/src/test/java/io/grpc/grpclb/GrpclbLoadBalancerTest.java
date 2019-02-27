@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static io.grpc.grpclb.GrpclbLoadBalancer.retrieveModeFromLbConfig;
 import static io.grpc.grpclb.GrpclbState.BUFFER_ENTRY;
 import static io.grpc.grpclb.GrpclbState.DROP_PICK_RESULT;
 import static org.junit.Assert.assertEquals;
@@ -68,14 +67,12 @@ import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.GrpclbState.BackendEntry;
 import io.grpc.grpclb.GrpclbState.DropEntry;
 import io.grpc.grpclb.GrpclbState.ErrorEntry;
-import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.JsonParser;
 import io.grpc.lb.v1.ClientStats;
 import io.grpc.lb.v1.ClientStatsPerToken;
 import io.grpc.lb.v1.InitialLoadBalanceRequest;
@@ -94,7 +91,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.After;
@@ -1591,61 +1587,6 @@ public class GrpclbLoadBalancerTest {
     verify(helper, times(4)).refreshNameResolution();
   }
 
-  @Test
-  public void retrieveModeFromLbConfig_pickFirst() throws Exception {
-    String lbConfig = "{\"childPolicy\" : [{\"pick_first\" : {}}, {\"round_robin\" : {}}]}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.PICK_FIRST);
-  }
-
-  @Test
-  public void retrieveModeFromLbConfig_roundRobin() throws Exception {
-    String lbConfig = "{\"childPolicy\" : [{\"round_robin\" : {}}, {\"pick_first\" : {}}]}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
-  }
-
-  @Test
-  public void retrieveModeFromLbConfig_null_default_roundRobin() throws Exception {
-    String lbConfig = "{}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
-  }
-
-  @Test
-  public void retrieveModeFromLbConfig_empty_default_roundRobin() throws Exception {
-    String lbConfig = "{\"childPolicy\" : []}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).isEmpty();
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
-  }
-
-  @Test
-  public void retrieveModeFromLbConfig_no_available_childPolicy_default_roundRobin()
-      throws Exception {
-    String lbConfig = "{\"childPolicy\" : [ {\"nonono\" : {}} ]}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy \"nonono\"");
-    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
-  }
-
-  @Test
-  public void retrieveModeFromLbConfig_skip_unavailable_childPolicy() throws Exception {
-    String lbConfig = "{\"childPolicy\" : [ {\"nono\" : {}}, {\"pick_first\" : {} } ]}";
-
-    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
-    assertThat(logs).containsExactly("DEBUG: grpclb ignoring unsupported child policy \"nono\"");
-    assertThat(mode).isEqualTo(Mode.PICK_FIRST);
-  }
-
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {
@@ -1734,11 +1675,6 @@ public class GrpclbLoadBalancerTest {
     return LoadBalanceResponse.newBuilder()
         .setServerList(serverListBuilder.build())
         .build();
-  }
-
-  @SuppressWarnings("unchecked")
-  private static Map<String, Object> parseJsonObject(String json) throws Exception {
-    return (Map<String, Object>) JsonParser.parse(json);
   }
 
   private static class ServerEntry {

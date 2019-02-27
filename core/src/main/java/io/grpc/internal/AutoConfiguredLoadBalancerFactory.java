@@ -215,7 +215,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
         }
       }
 
-      PolicySelection preselected = null;
       if (haveBalancerAddress) {
         // This is a special case where the existence of balancer address in the resolved address
         // selects "grpclb" policy regardless of the service config.
@@ -239,7 +238,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
         } else {
           // We don't return it immediately, as there may be lb config for "grpclb" that would be
           // discovered in a later loop.
-          preselected = new PolicySelection(grpclbProvider, servers, null);
+          return new PolicySelection(grpclbProvider, servers, null);
         }
       }
       roundRobinDueToGrpclbDepMissing = false;
@@ -262,12 +261,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
             throw new PolicyException(e);
           }
           String policy = lbConfig.getPolicyName();
-          LoadBalancerProvider provider = null;
-          if (preselected == null) {
-            provider = registry.getProvider(policy);
-          } else if (preselected.provider.getPolicyName().equals(policy)) {
-            provider = preselected.provider;
-          }
+          LoadBalancerProvider provider = registry.getProvider(policy);
           if (provider != null) {
             if (!policiesTried.isEmpty()) {
               helper.getChannelLogger().log(
@@ -276,18 +270,10 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
             }
             return new PolicySelection(provider, servers, lbConfig.getRawConfigValue());
           }
-          if (preselected == null) {
-            policiesTried.add(policy);
-          }
+          policiesTried.add(policy);
         }
-        if (preselected == null) {
-          throw new PolicyException(
-              "None of " + policiesTried + " specified by Service Config are available.");
-        }
-      }
-      // Didn't find a matching lb config for the preselected.  Return it as-is.
-      if (preselected != null) {
-        return preselected;
+        throw new PolicyException(
+            "None of " + policiesTried + " specified by Service Config are available.");
       }
       return new PolicySelection(
           getProviderOrThrow(defaultPolicy, "using default policy"), servers, null);
