@@ -329,7 +329,10 @@ If you aren't using gRPC on Android devices, you are most likely using `grpc-net
 
 If you are developing for Android and have a dependency on `grpc-netty`, you should remove it as `grpc-netty` is unsupported on Android. Use `grpc-okhttp` instead.
 
-If you are on a 32-bit operating system, or not on a [Transport Security supported platform](#transport-security-tls), you should use Jetty ALPN (and beware of potential issues), or you'll need to build your own 32-bit version of `netty-tcnative`.
+If you are on a 32-bit operating system, using Java 11+ may be the easiest
+solution, as ALPN was added to Java in Java 9. If on 32-bit Windows, Conscrypt
+may be an option. Otherwise you need to build your own 32-bit version of
+`netty-tcnative`.
 
 If you are using `musl` libc (e.g., with Alpine Linux), then
 `netty-tcnative-boringssl-static` won't work. There are several alternatives:
