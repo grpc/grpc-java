@@ -97,9 +97,12 @@ public final class ServiceConfigUtil {
     return getString(healthCheck, "serviceName");
   }
 
+  // TODO(zhangkun83): ideally this method should throw only MalformedConfigException when the
+  // config is malformed, so that if there is a bug in the code, a RuntimException would be thrown
+  // and make the channel panic as expected.
   @Nullable
   static Throttle getThrottlePolicy(@Nullable Map<String, Object> serviceConfig)
-      throws MalformedConfigException {
+      throws Exception {
     String retryThrottlingKey = "retryThrottling";
     if (serviceConfig == null || !serviceConfig.containsKey(retryThrottlingKey)) {
       return null;
@@ -387,7 +390,7 @@ public final class ServiceConfigUtil {
     try {
       configValue = (Map<String, Object>) entry.getValue();
     } catch (ClassCastException e) {
-      throw new MalformedConfigException("Invalid value type.  value=" + entry.getValue());
+      throw new MalformedConfigException("Invalid value type.  value=" + entry.getValue(), e);
     }
     return new LbConfig(entry.getKey(), configValue);
   }
@@ -402,7 +405,7 @@ public final class ServiceConfigUtil {
     try {
       list = (List) listObject;
     } catch (ClassCastException e) {
-      throw new MalformedConfigException("List expected, but is " + listObject);
+      throw new MalformedConfigException("List expected, but is " + listObject, e);
     }
     ArrayList<LbConfig> result = new ArrayList<>();
     for (Object rawChildPolicy : list) {
@@ -744,7 +747,7 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Thrown when the config is a valid JSON, but doesn't conform to the config scheme.
+   * Thrown when the config is a valid JSON, but doesn't conform to the config schema.
    */
   public static final class MalformedConfigException extends Exception {
     private static final long serialVersionUID = 1L;

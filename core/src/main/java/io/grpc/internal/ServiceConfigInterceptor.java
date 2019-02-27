@@ -74,7 +74,10 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
   }
 
-  void handleUpdate(@Nonnull Map<String, Object> serviceConfig) throws MalformedConfigException {
+  // TODO(zhangkun83): ideally this method should throw only MalformedConfigException when the
+  // config is malformed, so that if there is a bug in the code, a RuntimException would be thrown
+  // and make the channel panic as expected.
+  void handleUpdate(@Nonnull Map<String, Object> serviceConfig) throws Exception {
     Map<String, MethodInfo> newServiceMethodConfigs = new HashMap<>();
     Map<String, MethodInfo> newServiceConfigs = new HashMap<>();
 

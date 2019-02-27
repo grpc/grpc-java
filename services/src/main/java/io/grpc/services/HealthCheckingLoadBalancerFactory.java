@@ -175,7 +175,10 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       try {
         String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
         helper.setHealthCheckedService(serviceName);
-      } catch (MalformedConfigException e) {
+      } catch (Exception e) {
+        // TODO(zhangkun83): ideally we should make sure the enclosed code only throws
+        // MalformedConfigException when the config is malformed, and RuntimeException in other
+        // cases which are considered bugs in the code.
         logger.log(Level.WARNING, "Malformed config for health-check", e);
         helper.getChannelLogger().log(ChannelLogLevel.WARNING, "Malformed config for health-check");
       }
