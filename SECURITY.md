@@ -331,8 +331,9 @@ If you are developing for Android and have a dependency on `grpc-netty`, you sho
 
 If you are on a 32-bit operating system, using Java 11+ may be the easiest
 solution, as ALPN was added to Java in Java 9. If on 32-bit Windows, [Conscrypt
-is an option](#tls-with-conscrypt). Otherwise you need to build your own 32-bit
-version of `netty-tcnative`.
+is an option](#tls-with-conscrypt). Otherwise you need to [build your own 32-bit
+version of
+`netty-tcnative`](https://netty.io/wiki/forked-tomcat-native.html#wiki-h2-6).
 
 If you are using `musl` libc (e.g., with Alpine Linux), then
 `netty-tcnative-boringssl-static` won't work. There are several alternatives:
