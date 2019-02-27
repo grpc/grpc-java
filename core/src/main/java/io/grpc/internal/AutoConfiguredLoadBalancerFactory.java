@@ -236,8 +236,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
                   "round_robin", "received balancer addresses but grpclb runtime is missing"),
               backendAddrs, null);
         } else {
-          // We don't return it immediately, as there may be lb config for "grpclb" that would be
-          // discovered in a later loop.
           return new PolicySelection(grpclbProvider, servers, null);
         }
       }
