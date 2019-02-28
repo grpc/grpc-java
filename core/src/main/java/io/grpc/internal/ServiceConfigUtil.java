@@ -390,11 +390,11 @@ public final class ServiceConfigUtil {
   /**
    * Given a JSON list of LoadBalancingConfigs, and convert it into a list of LbConfig.
    */
-  @SuppressWarnings("rawtypes")
+  @SuppressWarnings("unchecked")
   public static List<LbConfig> unwrapLoadBalancingConfigList(Object listObject) throws Exception {
-    List list;
+    List<?> list;
     try {
-      list = (List) listObject;
+      list = (List<?>) listObject;
     } catch (ClassCastException e) {
       throw new Exception("List expected, but is " + listObject);
     }
