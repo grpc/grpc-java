@@ -81,9 +81,11 @@ public class CompressingHelloWorldServerPerMethod {
   static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
 
     @Override
-    public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
+    public void sayHello(HelloRequest req, StreamObserver<HelloReply> plainResponseObserver) {
+      ServerCallStreamObserver<HelloReply> responseObserver =
+          (ServerCallStreamObserver<HelloReply>) plainResponseObserver;
+      responseObserver.setCompression("gzip");
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
-      ((ServerCallStreamObserver<HelloReply>) responseObserver).setCompression("gzip");
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
     }
