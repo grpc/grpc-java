@@ -19,8 +19,13 @@ package io.grpc.examples.experimental;
 import java.io.IOException;
 import java.util.logging.Logger;
 
+import io.grpc.Metadata;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -38,7 +43,14 @@ public class CompressingHelloWorldServerAllMethods {
     /* The port on which the server should run */
     int port = 50051;
     server = ServerBuilder.forPort(port)
-        .intercept(new CompressionServerInterceptor())
+        .intercept(new ServerInterceptor() {
+          @Override
+          public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers,
+              ServerCallHandler<ReqT, RespT> next) {
+            call.setCompression("gzip");
+            return next.startCall(call, headers);
+          }
+        })
         .addService(new GreeterImpl())
         .build()
         .start();
