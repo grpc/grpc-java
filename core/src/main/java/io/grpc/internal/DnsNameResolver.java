@@ -31,7 +31,6 @@ import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -293,7 +292,7 @@ final class DnsNameResolver extends NameResolver {
             try {
               serviceConfig =
                   maybeChooseServiceConfig(possibleConfig, random, getLocalHostname());
-            } catch (MalformedConfigException e) {
+            } catch (Exception e) {
               logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
             }
             if (serviceConfig != null) {
@@ -438,7 +437,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final Double getPercentageFromChoice(
-      Map<String, Object> serviceConfigChoice) throws MalformedConfigException {
+      Map<String, Object> serviceConfigChoice) throws Exception {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY)) {
       return null;
     }
@@ -447,7 +446,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final List<String> getClientLanguagesFromChoice(
-      Map<String, Object> serviceConfigChoice) throws MalformedConfigException {
+      Map<String, Object> serviceConfigChoice) throws Exception {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY)) {
       return null;
     }
@@ -457,7 +456,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final List<String> getHostnamesFromChoice(
-      Map<String, Object> serviceConfigChoice) throws MalformedConfigException {
+      Map<String, Object> serviceConfigChoice) throws Exception {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY)) {
       return null;
     }
@@ -501,7 +500,7 @@ final class DnsNameResolver extends NameResolver {
   @Nullable
   @VisibleForTesting
   static Map<String, Object> maybeChooseServiceConfig(
-      Map<String, Object> choice, Random random, String hostname) throws MalformedConfigException {
+      Map<String, Object> choice, Random random, String hostname) throws Exception {
     for (Entry<String, ?> entry : choice.entrySet()) {
       Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
     }

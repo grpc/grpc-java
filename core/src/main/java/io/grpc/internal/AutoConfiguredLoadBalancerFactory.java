@@ -33,7 +33,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -247,7 +246,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
           List<Map<String, Object>> rawLbConfigs =
               ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
           lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
-        } catch (MalformedConfigException e) {
+        } catch (Exception e) {
           throw new PolicyException(e);
         }
       }

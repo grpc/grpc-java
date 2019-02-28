@@ -31,7 +31,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.Deadline;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status.Code;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -74,7 +73,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
   }
 
-  void handleUpdate(@Nonnull Map<String, Object> serviceConfig) throws MalformedConfigException {
+  void handleUpdate(@Nonnull Map<String, Object> serviceConfig) throws Exception {
     Map<String, MethodInfo> newServiceMethodConfigs = new HashMap<>();
     Map<String, MethodInfo> newServiceConfigs = new HashMap<>();
 
@@ -143,7 +142,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
      */
     MethodInfo(
         Map<String, Object> methodConfig, boolean retryEnabled, int maxRetryAttemptsLimit,
-        int maxHedgedAttemptsLimit) throws MalformedConfigException {
+        int maxHedgedAttemptsLimit) throws Exception {
       timeoutNanos = ServiceConfigUtil.getTimeoutFromMethodConfig(methodConfig);
       waitForReady = ServiceConfigUtil.getWaitForReadyFromMethodConfig(methodConfig);
       maxInboundMessageSize =
@@ -203,7 +202,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     }
 
     private static RetryPolicy retryPolicy(Map<String, Object> retryPolicy, int maxAttemptsLimit)
-        throws MalformedConfigException {
+        throws Exception {
       int maxAttempts = checkNotNull(
           ServiceConfigUtil.getMaxAttemptsFromRetryPolicy(retryPolicy),
           "maxAttempts cannot be empty");
@@ -251,7 +250,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
   }
 
   private static HedgingPolicy hedgingPolicy(
-      Map<String, Object> hedgingPolicy, int maxAttemptsLimit) throws MalformedConfigException {
+      Map<String, Object> hedgingPolicy, int maxAttemptsLimit) throws Exception {
     int maxAttempts = checkNotNull(
         ServiceConfigUtil.getMaxAttemptsFromHedgingPolicy(hedgingPolicy),
         "maxAttempts cannot be empty");

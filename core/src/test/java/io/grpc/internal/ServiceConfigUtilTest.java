@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -133,7 +132,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("There are 2 fields");
     }
   }
@@ -145,7 +144,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("There are 0 fields");
     }
   }
@@ -157,7 +156,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("Invalid type");
     }
   }
@@ -169,7 +168,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("Invalid type");
     }
   }
@@ -181,7 +180,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("Invalid value type");
     }
   }
@@ -207,7 +206,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(notAList));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("List expected");
     }
   }
@@ -220,7 +219,7 @@ public class ServiceConfigUtilTest {
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(lbConfig));
       fail("Should throw");
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       assertThat(e.getMessage()).contains("Invalid value type");
     }
   }

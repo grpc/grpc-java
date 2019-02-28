@@ -33,7 +33,6 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.List;
@@ -99,12 +98,12 @@ final class XdsLoadBalancer extends LoadBalancer {
       fallbackManager.maybeStartFallbackTimer();
       handleNewConfig(newLbConfig);
       xdsLbState.handleResolvedAddressGroups(servers, attributes);
-    } catch (MalformedConfigException e) {
+    } catch (Exception e) {
       // TODO: handle it
     }
   }
 
-  private void handleNewConfig(LbConfig newLbConfig) throws MalformedConfigException {
+  private void handleNewConfig(LbConfig newLbConfig) throws Exception {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
     LbConfig childPolicy = selectChildPolicy(newLbConfig, lbRegistry);
     XdsComms xdsComms = null;
@@ -146,14 +145,14 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Nullable
   @VisibleForTesting
   static LbConfig selectChildPolicy(
-      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws MalformedConfigException {
+      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws Exception {
     List<LbConfig> childConfigs = ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
     return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 
   @VisibleForTesting
   static LbConfig selectFallbackPolicy(
-      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws MalformedConfigException {
+      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws Exception {
     List<LbConfig> fallbackConfigs = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
     LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;

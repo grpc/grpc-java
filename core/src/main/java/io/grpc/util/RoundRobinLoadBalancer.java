@@ -43,7 +43,6 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -116,7 +115,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
             stickinessState = new StickinessState(stickinessMetadataKey);
           }
         }
-      } catch (MalformedConfigException e) {
+      } catch (Exception e) {
         String msg = "Ignoring malformed stickiness config from " + serviceConfig;
         helper.getChannelLogger().log(ChannelLogLevel.WARNING, msg);
         logger.log(Level.WARNING, msg, e);

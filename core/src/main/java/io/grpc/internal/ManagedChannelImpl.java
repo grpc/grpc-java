@@ -67,7 +67,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
-import io.grpc.internal.ServiceConfigUtil.MalformedConfigException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -1319,11 +1318,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
               if (retryEnabled) {
                 throttle = getThrottle(config);
               }
-            } catch (MalformedConfigException re) {
+            } catch (Exception e) {
               logger.log(
                   Level.WARNING,
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
-                  re);
+                  e);
             }
           }
 
@@ -1382,7 +1381,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @Nullable
-  private static Throttle getThrottle(Attributes config) throws MalformedConfigException {
+  private static Throttle getThrottle(Attributes config) throws Exception {
     return ServiceConfigUtil.getThrottlePolicy(
         config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
   }
