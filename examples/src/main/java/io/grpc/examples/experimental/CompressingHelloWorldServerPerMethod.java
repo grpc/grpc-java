@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,8 @@ import io.grpc.stub.ServerCallStreamObserver;
 import io.grpc.stub.StreamObserver;
 
 /**
- * Server that manages startup/shutdown of a {@code Greeter} server.
+ * Server that manages startup/shutdown of a {@code Greeter} server
+ * that enables compressed responses for only particular methods
  */
 public class CompressingHelloWorldServerPerMethod {
   private static final Logger logger = Logger.getLogger(CompressingHelloWorldServerPerMethod.class.getName());
@@ -84,6 +85,7 @@ public class CompressingHelloWorldServerPerMethod {
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> plainResponseObserver) {
       ServerCallStreamObserver<HelloReply> responseObserver =
           (ServerCallStreamObserver<HelloReply>) plainResponseObserver;
+      /* This line by itself enables compression for the response */
       responseObserver.setCompression("gzip");
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
       responseObserver.onNext(reply);

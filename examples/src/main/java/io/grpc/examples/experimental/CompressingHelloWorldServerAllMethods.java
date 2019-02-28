@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,8 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 
 /**
- * Server that manages startup/shutdown of a {@code Greeter} server.
+ * Server that manages startup/shutdown of a {@code Greeter} server
+ * with an interceptor to enable compression for all responses. 
  */
 public class CompressingHelloWorldServerAllMethods {
   private static final Logger logger = Logger.getLogger(CompressingHelloWorldServerAllMethods.class.getName());
@@ -43,6 +44,7 @@ public class CompressingHelloWorldServerAllMethods {
     /* The port on which the server should run */
     int port = 50051;
     server = ServerBuilder.forPort(port)
+        /* This method call adds the Interceptor to enable compressed server responses for all RPCs */
         .intercept(new ServerInterceptor() {
           @Override
           public <ReqT, RespT> Listener<ReqT> interceptCall(ServerCall<ReqT, RespT> call, Metadata headers,
