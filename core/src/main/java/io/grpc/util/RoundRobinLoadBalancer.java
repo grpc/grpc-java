@@ -56,8 +56,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -66,8 +64,6 @@ import javax.annotation.Nullable;
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
 final class RoundRobinLoadBalancer extends LoadBalancer {
-  private static final Logger logger = Logger.getLogger(RoundRobinLoadBalancer.class.getName());
-
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -116,9 +112,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
           }
         }
       } catch (Exception e) {
-        String msg = "Ignoring malformed stickiness config from " + serviceConfig;
-        helper.getChannelLogger().log(ChannelLogLevel.WARNING, msg);
-        logger.log(Level.WARNING, msg, e);
+        throw new RuntimeException("Ignoring malformed stickiness config from " + serviceConfig, e);
       }
     }
 
