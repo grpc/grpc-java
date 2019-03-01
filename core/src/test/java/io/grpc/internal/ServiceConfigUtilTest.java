@@ -122,8 +122,8 @@ public class ServiceConfigUtilTest {
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_tooManyFields() throws Exception {
-    // A LoadBalancingConfig should not have more than one fields.
+  public void unwrapLoadBalancingConfig_failOnTooManyFields() throws Exception {
+    // A LoadBalancingConfig should not have more than one field.
     String lbConfig = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}]"
@@ -133,55 +133,55 @@ public class ServiceConfigUtilTest {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("There are 2 fields");
+      assertThat(e).hasMessageThat().contains("There are 2 fields");
     }
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_emptyObject() throws Exception {
+  public void unwrapLoadBalancingConfig_failOnEmptyObject() throws Exception {
     // A LoadBalancingConfig should not exactly one field.
     String lbConfig = "{}";
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("There are 0 fields");
+      assertThat(e).hasMessageThat().contains("There are 0 fields");
     }
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_config_is_list() throws Exception {
+  public void unwrapLoadBalancingConfig_failOnList() throws Exception {
     // A LoadBalancingConfig must be a JSON dictionary (map)
     String lbConfig = "[ { \"xds\" : {} } ]";
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("Invalid type");
+      assertThat(e).hasMessageThat().contains("Invalid type");
     }
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_config_is_string() throws Exception {
+  public void unwrapLoadBalancingConfig_failOnString() throws Exception {
     // A LoadBalancingConfig must be a JSON dictionary (map)
     String lbConfig = "\"xds\"";
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("Invalid type");
+      assertThat(e).hasMessageThat().contains("Invalid type");
     }
   }
 
   @Test
-  public void unwrapLoadBalancingConfig_config_value_is_string() throws Exception {
+  public void unwrapLoadBalancingConfig_failWhenConfigIsString() throws Exception {
     // The value of the config should be a JSON dictionary (map)
     String lbConfig = "{ \"xds\" : \"I thought I was a config.\" }";
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfig(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("Invalid value type");
+      assertThat(e).hasMessageThat().contains("Invalid value type");
     }
   }
 
@@ -201,18 +201,18 @@ public class ServiceConfigUtilTest {
   }
 
   @Test
-  public void unwrapLoadBalancingConfigList_not_a_list() throws Exception {
+  public void unwrapLoadBalancingConfigList_failOnObject() throws Exception {
     String notAList = "{}";
     try {
       ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(notAList));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("List expected");
+      assertThat(e).hasMessageThat().contains("List expected");
     }
   }
 
   @Test
-  public void unwrapLoadBalancingConfigList_malformed_config() throws Exception {
+  public void unwrapLoadBalancingConfigList_failOnMalformedConfig() throws Exception {
     String lbConfig = "[ "
         + "{\"xds_experimental\" : \"I thought I was a config\" },"
         + "{\"grpclb\" : {} } ]";
@@ -220,7 +220,7 @@ public class ServiceConfigUtilTest {
       ServiceConfigUtil.unwrapLoadBalancingConfigList(JsonParser.parse(lbConfig));
       fail("Should throw");
     } catch (Exception e) {
-      assertThat(e.getMessage()).contains("Invalid value type");
+      assertThat(e).hasMessageThat().contains("Invalid value type");
     }
   }
 }
