@@ -99,7 +99,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       handleNewConfig(newLbConfig);
       xdsLbState.handleResolvedAddressGroups(servers, attributes);
     } catch (Exception e) {
-      // TODO: handle it
+      throw new RuntimeException(e);
     }
   }
 
