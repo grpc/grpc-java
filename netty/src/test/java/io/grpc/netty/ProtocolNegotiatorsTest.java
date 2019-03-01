@@ -582,7 +582,6 @@ public class ProtocolNegotiatorsTest {
     elg.shutdownGracefully();
   }
 
-
   @Test(expected = Test.None.class /* no exception expected */)
   @SuppressWarnings("TestExceptionChecker")
   public void bufferingHandler_shouldNotThrowForEmptyHandler() throws Exception {
@@ -594,8 +593,7 @@ public class ProtocolNegotiatorsTest {
         .register().sync();
     ChannelFuture sf = new ServerBootstrap()
         .channel(LocalServerChannel.class)
-        .childHandler(new ChannelHandlerAdapter() {
-        })
+        .childHandler(new ChannelHandlerAdapter() {})
         .group(group)
         .bind(addr);
     // sync will trigger client's NoHandlerBufferingHandler which should not throw
@@ -652,6 +650,9 @@ public class ProtocolNegotiatorsTest {
     assertThat(gh.attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL))
         .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
     assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_SSL_SESSION)).isInstanceOf(SSLSession.class);
+    // This is not part of the ClientTls negotiation, but shows that the negotiation event happens
+    // in the right order.
+    assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)).isEqualTo(addr);
   }
 
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
