@@ -461,7 +461,7 @@ public final class ServiceConfigUtil {
     if (value instanceof List) {
       return (List<Object>) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for key %s in %s is not List", value, key, obj));
   }
 
@@ -475,7 +475,7 @@ public final class ServiceConfigUtil {
     if (value instanceof Map) {
       return (Map<String, Object>) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for key %s in %s is not object", value, key, obj));
   }
 
@@ -489,7 +489,7 @@ public final class ServiceConfigUtil {
     if (value instanceof Double) {
       return (Double) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for key %s in %s is not Double", value, key, obj));
   }
 
@@ -503,7 +503,7 @@ public final class ServiceConfigUtil {
     if (value instanceof String) {
       return (String) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for key %s in %s is not String", value, key, obj));
   }
 
@@ -517,7 +517,7 @@ public final class ServiceConfigUtil {
     if (value instanceof String) {
       return (String) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for idx %d in %s is not String", value, i, list));
   }
 
@@ -530,7 +530,7 @@ public final class ServiceConfigUtil {
     if (value instanceof Boolean) {
       return (Boolean) value;
     }
-    throw new Exception(
+    throw new ClassCastException(
         String.format("value %s for key %s in %s is not Boolean", value, key, obj));
   }
 
@@ -538,7 +538,7 @@ public final class ServiceConfigUtil {
   private static List<Map<String, Object>> checkObjectList(List<Object> rawList) throws Exception {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof Map)) {
-        throw new Exception(
+        throw new ClassCastException(
             String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
@@ -549,7 +549,7 @@ public final class ServiceConfigUtil {
   static List<String> checkStringList(List<Object> rawList) throws Exception {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof String)) {
-        throw new Exception(
+        throw new ClassCastException(
             String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
       }
     }
