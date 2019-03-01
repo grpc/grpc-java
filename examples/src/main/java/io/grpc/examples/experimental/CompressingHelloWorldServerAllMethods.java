@@ -87,7 +87,7 @@ public class CompressingHelloWorldServerAllMethods {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    final CompressingHelloWorldServerAllMethods server = new CompressingHelloWorldServerAllMethods();
+    CompressingHelloWorldServerAllMethods server = new CompressingHelloWorldServerAllMethods();
     server.start();
     server.blockUntilShutdown();
   }
