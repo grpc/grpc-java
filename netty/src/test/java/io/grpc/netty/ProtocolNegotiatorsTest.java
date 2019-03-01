@@ -29,12 +29,11 @@ import static org.mockito.Mockito.times;
 
 import io.grpc.Attributes;
 import io.grpc.Grpc;
+import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
-import io.grpc.Server;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
-
-import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
+import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -54,7 +53,6 @@ import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
 import io.netty.channel.DefaultEventLoopGroup;
-import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
@@ -88,6 +86,7 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -111,7 +110,7 @@ public class ProtocolNegotiatorsTest {
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
-  private final EventLoop group = new DefaultEventLoop();
+  private final EventLoopGroup group = new DefaultEventLoop();
   private Channel chan;
   private Channel server;
 
@@ -605,64 +604,67 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void clientTlsHandler_firesNegotiation() throws Exception {
-    SelfSignedCertificate cert = new SelfSignedCertificate();
-    sslContext = SslContextBuilder.forClient().trustManager(cert.cert()).build();
-    new ClientTlsHandler();
-    SelfSignedCertificate cert = new SelfSignedCertificate();
-    sslContext = SslContextBuilder.forClient().trustManager(cert.cert()).build();
-    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(sslContext);
-    ChannelHandler ch = pn.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
-    WriteBufferingAndExceptionHandler wbaeh = new WriteBufferingAndExceptionHandler(ch);
+    SelfSignedCertificate cert = new SelfSignedCertificate("authority");
+    SslContext clientSslContext =
+        GrpcSslContexts.configure(SslContextBuilder.forClient().trustManager(cert.cert())).build();
+    SslContext serverSslContext =
+        GrpcSslContexts.configure(SslContextBuilder.forServer(cert.key(), cert.cert())).build();
+    FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
 
-    EventLoopGroup elg = new DefaultEventLoopGroup(1);
+    ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext);
+    WriteBufferingAndExceptionHandler wbaeh =
+        new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
+
     SocketAddress addr = new LocalAddress("addr");
-    final AtomicReference<Object> event = new AtomicReference<>();
-    ChannelHandler next = new ChannelInboundHandlerAdapter() {
-      @Override
-      public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
-        event.set(evt);
-        ctx.close();
-      }
-    };
-    SslContext serverSslContext = SslContextBuilder.forServer(cert.key(), cert.cert()).build();
+
     ChannelHandler sh =
         ProtocolNegotiators.serverTls(serverSslContext)
             .newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
     Channel s = new ServerBootstrap()
         .childHandler(sh)
-        .group(elg)
+        .group(group)
         .channel(LocalServerChannel.class)
         .bind(addr)
         .sync()
         .channel();
     Channel c = new Bootstrap()
         .handler(wbaeh)
-        .channel(LocalChannel.class).group(group)
-        .connect(addr)
+        .channel(LocalChannel.class)
+        .group(group)
+        .register()
         .sync()
         .channel();
-    SocketAddress localAddr = c.localAddress();
+    ChannelFuture write = c.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
+    c.connect(addr);
 
-    c.closeFuture().sync();
-    assertThat(event.get()).isInstanceOf(ProtocolNegotiationEvent.class);
-    ProtocolNegotiationEvent actual = (ProtocolNegotiationEvent) event.get();
-    //assertThat(actual).isEqualTo(expectedEvent);
-
+    boolean completed = gh.negotiated.await(5, TimeUnit.SECONDS);
+    if (!completed) {
+      assertTrue("failed to negotiated", write.await(5, TimeUnit.SECONDS));
+      // sync should fail if we are in this block.
+      write.sync();
+      throw new AssertionError("neither wrote nor negotiated");
+    }
+    c.close();
     s.close();
-    elg.shutdownGracefully();
+
+    assertThat(gh.securityInfo).isNotNull();
+    assertThat(gh.securityInfo.tls).isNotNull();
+    assertThat(gh.attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL))
+        .isEqualTo(SecurityLevel.PRIVACY_AND_INTEGRITY);
+    assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_SSL_SESSION)).isInstanceOf(SSLSession.class);
   }
 
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
-    static GrpcHttp2ConnectionHandler noopHandler() {
+    static FakeGrpcHttp2ConnectionHandler noopHandler() {
       return newHandler(true);
     }
 
-    static GrpcHttp2ConnectionHandler newHandler() {
+    static FakeGrpcHttp2ConnectionHandler newHandler() {
       return newHandler(false);
     }
 
-    private static GrpcHttp2ConnectionHandler newHandler(boolean noop) {
+    private static FakeGrpcHttp2ConnectionHandler newHandler(boolean noop) {
       DefaultHttp2Connection conn = new DefaultHttp2Connection(/*server=*/ false);
       DefaultHttp2ConnectionEncoder encoder =
           new DefaultHttp2ConnectionEncoder(conn, new DefaultHttp2FrameWriter());
@@ -674,6 +676,9 @@ public class ProtocolNegotiatorsTest {
     }
 
     private final boolean noop;
+    private Attributes attrs;
+    private Security securityInfo;
+    private final CountDownLatch negotiated = new CountDownLatch(1);
 
     FakeGrpcHttp2ConnectionHandler(ChannelPromise channelUnused,
         Http2ConnectionDecoder decoder,
@@ -682,6 +687,14 @@ public class ProtocolNegotiatorsTest {
         boolean noop) {
       super(channelUnused, decoder, encoder, initialSettings);
       this.noop = noop;
+    }
+
+    @Override
+    public void handleProtocolNegotiationCompleted(Attributes attrs, Security securityInfo) {
+      super.handleProtocolNegotiationCompleted(attrs, securityInfo);
+      this.attrs = attrs;
+      this.securityInfo = securityInfo;
+      negotiated.countDown();
     }
 
     @Override
