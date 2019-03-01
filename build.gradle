@@ -234,7 +234,7 @@ subprojects {
 
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:1.9.5',
+            mockito: 'org.mockito:mockito-core:1.10.19',
             truth: 'com.google.truth:truth:0.42',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
 
@@ -403,22 +403,26 @@ subprojects {
         }
         repositories {
             maven {
-                String stagingUrl
-                if (rootProject.hasProperty('repositoryId')) {
-                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                            rootProject.repositoryId
+	        if (rootProject.hasProperty('repositoryDir')) {
+                    url = new File(rootProject.repositoryDir).toURI()
                 } else {
-                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
-                }
-                credentials {
-                    if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
-                        username = rootProject.ossrhUsername
-                        password = rootProject.ossrhPassword
+                    String stagingUrl
+                    if (rootProject.hasProperty('repositoryId')) {
+                        stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
+                                rootProject.repositoryId
+                    } else {
+                        stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
                     }
-                }
-                def releaseUrl = stagingUrl
-                def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
-                url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
+                    credentials {
+                        if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
+                            username = rootProject.ossrhUsername
+                            password = rootProject.ossrhPassword
+                        }
+                    }
+                    def releaseUrl = stagingUrl
+                    def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
+                    url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
+		}
             }
         }
     }

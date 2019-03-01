@@ -53,8 +53,8 @@ support or have 2% the performance of OpenSSL.
 
 We recommend most users use grpc-netty-shaded, which includes netty-tcnative on
 BoringSSL. It includes pre-built libraries for 64 bit Windows, OS X, and 64 bit
-Linux. For 32 bit Windows, Conscrypt may be an option. For all other platforms,
-Java 9+ is required.
+Linux. For 32 bit Windows, Conscrypt is an option. For all other platforms, Java
+9+ is required.
 
 For users of grpc-netty we recommend [netty-tcnative with
 BoringSSL](#tls-with-netty-tcnative-on-boringssl), although using the built-in
@@ -62,7 +62,7 @@ JDK support in Java 9+, [Conscrypt](#tls-with-conscrypt), and [netty-tcnative
 with OpenSSL](#tls-with-netty-tcnative-on-openssl) are other valid options.
 
 [Netty TCNative](https://github.com/netty/netty-tcnative) is a fork of
-[Apache Tomcat's tcnative](http://tomcat.apache.org/native-doc/) and is a JNI
+[Apache Tomcat's tcnative](https://tomcat.apache.org/native-doc/) and is a JNI
 wrapper around OpenSSL/BoringSSL/LibreSSL.
 
 We recommend BoringSSL for its simplicitly and low occurrence of security
@@ -252,7 +252,7 @@ of the other options due to a slow AES GCM implementation in Java.
 
 #### Configuring Jetty ALPN in Web Containers
 
-Some web containers, such as [Jetty](http://www.eclipse.org/jetty/documentation/current/jetty-classloading.html) restrict access to server classes for web applications. A gRPC client running within such a container must be properly configured to allow access to the ALPN classes. In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing the following:
+Some web containers, such as [Jetty](https://www.eclipse.org/jetty/documentation/current/jetty-classloading.html) restrict access to server classes for web applications. A gRPC client running within such a container must be properly configured to allow access to the ALPN classes. In Jetty, this is done by including a `WEB-INF/jetty-env.xml` file containing the following:
 
 ```xml
 <?xml version="1.0"  encoding="ISO-8859-1"?>
@@ -322,19 +322,28 @@ If you received an error message "ALPN is not configured properly" or "Jetty ALP
  - ALPN related dependencies are either not present in the classpath
  - or that there is a classpath conflict
  - or that a wrong version is used due to dependency management
- - or you are on an unsupported platform (e.g., 32-bit OS, Alpine with `musl` libc). See [Transport Security](#transport-security-tls) for supported platforms.
+ - or you are on an unsupported platform (e.g., 32-bit OS). See [Transport
+   Security](#transport-security-tls) for supported platforms.
 
 ### Netty
 If you aren't using gRPC on Android devices, you are most likely using `grpc-netty` transport.
 
 If you are developing for Android and have a dependency on `grpc-netty`, you should remove it as `grpc-netty` is unsupported on Android. Use `grpc-okhttp` instead.
 
-If you are on a 32-bit operating system, or not on a [Transport Security supported platform](#transport-security-tls), you should use Jetty ALPN (and beware of potential issues), or you'll need to build your own 32-bit version of `netty-tcnative`.
+If you are on a 32-bit operating system, using Java 11+ may be the easiest
+solution, as ALPN was added to Java in Java 9. If on 32-bit Windows, [Conscrypt
+is an option](#tls-with-conscrypt). Otherwise you need to [build your own 32-bit
+version of
+`netty-tcnative`](https://netty.io/wiki/forked-tomcat-native.html#wiki-h2-6).
 
-If you are using `musl` libc (e.g., with Alpine Linux), then
-`netty-tcnative-boringssl-static` won't work. There are several alternatives:
- - Use [netty-tcnative-alpine](https://github.com/pires/netty-tcnative-alpine)
- - Use a distribution with `glibc`
+If on Alpine Linux and you see "Error loading shared library libcrypt.so.1: No
+such file or directory". Run `apk update && apk add libc6-compat` to install the
+necessary dependency.
+
+If on Alpine Linux, try to use `grpc-netty-shaded` instead of `grpc-netty` or
+(if you need `grpc-netty`) `netty-tcnative-boringssl-static` instead of
+`netty-tcnative`. If those are not an option, you may consider using
+[netty-tcnative-alpine](https://github.com/pires/netty-tcnative-alpine).
 
 If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot),
 then some versions of `netty-tcnative-boringssl-static` will have conflicts and
