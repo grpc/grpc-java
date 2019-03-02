@@ -76,6 +76,7 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
     delegate().runSerialized(task);
   }
 
+  @Deprecated
   @Override
   public NameResolver.Factory getNameResolverFactory() {
     return delegate().getNameResolverFactory();
