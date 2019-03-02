@@ -443,6 +443,30 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   @Test
+  public void decideLoadBalancerProvider_grpclbConfigPropagated() throws Exception {
+    AutoConfiguredLoadBalancer lb =
+        (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(new TestHelper());
+    Map<String, Object> serviceConfig =
+        parseConfig(
+            "{\"loadBalancingConfig\": ["
+            + "{\"test_lb\": {} },"
+            + "{\"grpclb\": {\"childPolicy\": [ {\"pick_first\": {} } ] } }"
+            + "] }");
+    List<EquivalentAddressGroup> servers =
+        Collections.singletonList(
+            new EquivalentAddressGroup(
+                new SocketAddress(){},
+                Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
+    PolicySelection selection = lb.decideLoadBalancerProvider(servers, serviceConfig);
+
+    assertThat(selection.provider).isInstanceOf(GrpclbLoadBalancerProvider.class);
+    assertThat(selection.serverList).isEqualTo(servers);
+    assertThat(selection.config).isEqualTo(
+        parseConfig("{\"childPolicy\": [ {\"pick_first\": {} } ] }"));
+    verifyZeroInteractions(channelLogger);
+  }
+
+  @Test
   public void decideLoadBalancerProvider_grpclbProviderNotFound_fallbackToRoundRobin()
       throws Exception {
     LoadBalancerRegistry registry = new LoadBalancerRegistry();
