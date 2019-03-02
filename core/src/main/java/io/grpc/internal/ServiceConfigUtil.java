@@ -357,7 +357,9 @@ public final class ServiceConfigUtil {
     try {
       map = (Map<String, Object>) lbConfig;
     } catch (ClassCastException e) {
-      throw new ClassCastException("Invalid type. Config=" + lbConfig);
+      ClassCastException ex = new ClassCastException("Invalid type. Config=" + lbConfig);
+      ex.initCause(e);
+      throw ex;
     }
     if (map.size() != 1) {
       throw new RuntimeException(
@@ -369,7 +371,10 @@ public final class ServiceConfigUtil {
     try {
       configValue = (Map<String, Object>) entry.getValue();
     } catch (ClassCastException e) {
-      throw new ClassCastException("Invalid value type.  value=" + entry.getValue());
+      ClassCastException ex =
+          new ClassCastException("Invalid value type.  value=" + entry.getValue());
+      ex.initCause(e);
+      throw ex;
     }
     return new LbConfig(entry.getKey(), configValue);
   }
@@ -383,7 +388,9 @@ public final class ServiceConfigUtil {
     try {
       list = (List<?>) listObject;
     } catch (ClassCastException e) {
-      throw new ClassCastException("List expected, but is " + listObject);
+      ClassCastException ex = new ClassCastException("List expected, but is " + listObject);
+      ex.initCause(e);
+      throw ex;
     }
     ArrayList<LbConfig> result = new ArrayList<>();
     for (Object rawChildPolicy : list) {
