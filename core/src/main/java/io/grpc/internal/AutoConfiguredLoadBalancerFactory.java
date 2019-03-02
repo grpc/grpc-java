@@ -286,10 +286,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     private PolicyException(String msg) {
       super(msg);
     }
-
-    private PolicyException(Exception cause) {
-      super(cause);
-    }
   }
 
   @VisibleForTesting
