@@ -97,22 +97,18 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     Map<String, Object> serviceConfig =
         attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     if (serviceConfig != null) {
-      try {
-        String stickinessMetadataKey =
-            ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
-        if (stickinessMetadataKey != null) {
-          if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
-            helper.getChannelLogger().log(
-                ChannelLogLevel.WARNING,
-                "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
-                stickinessMetadataKey);
-          } else if (stickinessState == null
-              || !stickinessState.key.name().equals(stickinessMetadataKey)) {
-            stickinessState = new StickinessState(stickinessMetadataKey);
-          }
+      String stickinessMetadataKey =
+          ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
+      if (stickinessMetadataKey != null) {
+        if (stickinessMetadataKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+          helper.getChannelLogger().log(
+              ChannelLogLevel.WARNING,
+              "Binary stickiness header is not supported. The header \"{0}\" will be ignored",
+              stickinessMetadataKey);
+        } else if (stickinessState == null
+            || !stickinessState.key.name().equals(stickinessMetadataKey)) {
+          stickinessState = new StickinessState(stickinessMetadataKey);
         }
-      } catch (Exception e) {
-        throw new RuntimeException("Ignoring malformed stickiness config from " + serviceConfig, e);
       }
     }
 

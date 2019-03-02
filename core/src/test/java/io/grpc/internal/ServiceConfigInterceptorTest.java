@@ -88,7 +88,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withWaitForReady() throws Exception {
+  public void withWaitForReady() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -114,7 +114,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxRequestSize() throws Exception {
+  public void withMaxRequestSize() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -128,7 +128,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxRequestSize_pickSmallerExisting() throws Exception {
+  public void withMaxRequestSize_pickSmallerExisting() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -143,7 +143,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxRequestSize_pickSmallerNew() throws Exception {
+  public void withMaxRequestSize_pickSmallerNew() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -158,7 +158,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxResponseSize() throws Exception {
+  public void withMaxResponseSize() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 1d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -172,7 +172,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxResponseSize_pickSmallerExisting() throws Exception {
+  public void withMaxResponseSize_pickSmallerExisting() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 5d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -187,7 +187,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withMaxResponseSize_pickSmallerNew() throws Exception {
+  public void withMaxResponseSize_pickSmallerNew() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", 10d);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -202,7 +202,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void withoutWaitForReady() throws Exception {
+  public void withoutWaitForReady() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", false);
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -216,7 +216,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void fullMethodMatched() throws Exception {
+  public void fullMethodMatched() {
     // Put in service that matches, but has no deadline.  It should be lower priority
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
@@ -235,7 +235,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void nearerDeadlineKept_existing() throws Exception {
+  public void nearerDeadlineKept_existing() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "100000s");
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -251,7 +251,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void nearerDeadlineKept_new() throws Exception {
+  public void nearerDeadlineKept_new() {
     // TODO(carl-mastrangelo): the deadlines are very large because they change over time.
     // This should be fixed, and is tracked in https://github.com/grpc/grpc-java/issues/2531
     JsonObj name = new JsonObj("service", "service");
@@ -270,7 +270,7 @@ public class ServiceConfigInterceptorTest {
 
 
   @Test
-  public void handleUpdate_failsOnMissingServiceName() throws Exception {
+  public void handleUpdate_failsOnMissingServiceName() {
     JsonObj name = new JsonObj("method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name));
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
@@ -283,7 +283,7 @@ public class ServiceConfigInterceptorTest {
 
 
   @Test
-  public void handleUpdate_failsOnDuplicateMethod() throws Exception {
+  public void handleUpdate_failsOnDuplicateMethod() {
     JsonObj name1 = new JsonObj("service", "service", "method", "method");
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
@@ -296,7 +296,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnEmptyName() throws Exception {
+  public void handleUpdate_failsOnEmptyName() {
     JsonObj methodConfig = new JsonObj();
     JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
 
@@ -307,7 +307,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateService() throws Exception {
+  public void handleUpdate_failsOnDuplicateService() {
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj name2 = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
@@ -320,7 +320,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_failsOnDuplicateServiceMultipleConfig() throws Exception {
+  public void handleUpdate_failsOnDuplicateServiceMultipleConfig() {
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj name2 = new JsonObj("service", "service");
     JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
@@ -334,7 +334,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_replaceExistingConfig() throws Exception {
+  public void handleUpdate_replaceExistingConfig() {
     JsonObj name1 = new JsonObj("service", "service");
     JsonObj methodConfig1 = new JsonObj("name", new JsonList(name1));
     JsonObj serviceConfig1 = new JsonObj("methodConfig", new JsonList(methodConfig1));
@@ -355,7 +355,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void handleUpdate_matchNames() throws Exception {
+  public void handleUpdate_matchNames() {
     JsonObj name1 = new JsonObj("service", "service2");
     JsonObj name2 = new JsonObj("service", "service", "method", "method");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name1, name2));
@@ -373,7 +373,7 @@ public class ServiceConfigInterceptorTest {
 
 
   @Test
-  public void methodInfo_validateDeadline() throws Exception {
+  public void methodInfo_validateDeadline() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "10000000000000000s");
 
@@ -383,7 +383,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void methodInfo_saturateDeadline() throws Exception {
+  public void methodInfo_saturateDeadline() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "timeout", "315576000000s");
 
@@ -394,7 +394,7 @@ public class ServiceConfigInterceptorTest {
 
 
   @Test
-  public void methodInfo_badMaxRequestSize() throws Exception {
+  public void methodInfo_badMaxRequestSize() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxRequestMessageBytes", -1d);
 
@@ -405,7 +405,7 @@ public class ServiceConfigInterceptorTest {
   }
 
   @Test
-  public void methodInfo_badMaxResponseSize() throws Exception {
+  public void methodInfo_badMaxResponseSize() {
     JsonObj name = new JsonObj("service", "service");
     JsonObj methodConfig = new JsonObj("name", new JsonList(name), "maxResponseMessageBytes", -1d);
 

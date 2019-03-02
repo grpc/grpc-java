@@ -292,7 +292,7 @@ final class DnsNameResolver extends NameResolver {
             try {
               serviceConfig =
                   maybeChooseServiceConfig(possibleConfig, random, getLocalHostname());
-            } catch (Exception e) {
+            } catch (RuntimeException e) {
               logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
             }
             if (serviceConfig != null) {
@@ -437,7 +437,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final Double getPercentageFromChoice(
-      Map<String, Object> serviceConfigChoice) throws Exception {
+      Map<String, Object> serviceConfigChoice) {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY)) {
       return null;
     }
@@ -446,7 +446,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final List<String> getClientLanguagesFromChoice(
-      Map<String, Object> serviceConfigChoice) throws Exception {
+      Map<String, Object> serviceConfigChoice) {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY)) {
       return null;
     }
@@ -456,7 +456,7 @@ final class DnsNameResolver extends NameResolver {
 
   @Nullable
   private static final List<String> getHostnamesFromChoice(
-      Map<String, Object> serviceConfigChoice) throws Exception {
+      Map<String, Object> serviceConfigChoice) {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY)) {
       return null;
     }
@@ -500,7 +500,7 @@ final class DnsNameResolver extends NameResolver {
   @Nullable
   @VisibleForTesting
   static Map<String, Object> maybeChooseServiceConfig(
-      Map<String, Object> choice, Random random, String hostname) throws Exception {
+      Map<String, Object> choice, Random random, String hostname) {
     for (Entry<String, ?> entry : choice.entrySet()) {
       Verify.verify(SERVICE_CONFIG_CHOICE_KEYS.contains(entry.getKey()), "Bad key: %s", entry);
     }

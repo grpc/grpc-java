@@ -242,13 +242,9 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
 
       List<LbConfig> lbConfigs = null;
       if (config != null) {
-        try {
-          List<Map<String, Object>> rawLbConfigs =
-              ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
-          lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
-        } catch (Exception e) {
-          throw new PolicyException(e);
-        }
+        List<Map<String, Object>> rawLbConfigs =
+            ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+        lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
       }
       if (lbConfigs != null && !lbConfigs.isEmpty()) {
         LinkedHashSet<String> policiesTried = new LinkedHashSet<>();

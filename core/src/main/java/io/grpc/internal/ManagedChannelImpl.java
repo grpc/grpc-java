@@ -1318,11 +1318,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
               if (retryEnabled) {
                 throttle = ServiceConfigUtil.getThrottlePolicy(serviceConfig);
               }
-            } catch (Exception e) {
+            } catch (RuntimeException re) {
               logger.log(
                   Level.WARNING,
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
-                  e);
+                  re);
             }
           }
 

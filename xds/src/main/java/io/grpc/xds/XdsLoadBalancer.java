@@ -91,19 +91,15 @@ final class XdsLoadBalancer extends LoadBalancer {
       List<EquivalentAddressGroup> servers, Attributes attributes) {
     Map<String, Object> newRawLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
-    try {
-      LbConfig newLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(newRawLbConfig);
-      fallbackPolicy = selectFallbackPolicy(newLbConfig, lbRegistry);
-      fallbackManager.updateFallbackServers(servers, attributes, fallbackPolicy);
-      fallbackManager.maybeStartFallbackTimer();
-      handleNewConfig(newLbConfig);
-      xdsLbState.handleResolvedAddressGroups(servers, attributes);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
+    LbConfig newLbConfig = ServiceConfigUtil.unwrapLoadBalancingConfig(newRawLbConfig);
+    fallbackPolicy = selectFallbackPolicy(newLbConfig, lbRegistry);
+    fallbackManager.updateFallbackServers(servers, attributes, fallbackPolicy);
+    fallbackManager.maybeStartFallbackTimer();
+    handleNewConfig(newLbConfig);
+    xdsLbState.handleResolvedAddressGroups(servers, attributes);
   }
 
-  private void handleNewConfig(LbConfig newLbConfig) throws Exception {
+  private void handleNewConfig(LbConfig newLbConfig) {
     String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
     LbConfig childPolicy = selectChildPolicy(newLbConfig, lbRegistry);
     XdsComms xdsComms = null;
@@ -144,15 +140,13 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Nullable
   @VisibleForTesting
-  static LbConfig selectChildPolicy(
-      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws Exception {
+  static LbConfig selectChildPolicy(LbConfig lbConfig, LoadBalancerRegistry lbRegistry) {
     List<LbConfig> childConfigs = ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
     return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 
   @VisibleForTesting
-  static LbConfig selectFallbackPolicy(
-      LbConfig lbConfig, LoadBalancerRegistry lbRegistry) throws Exception {
+  static LbConfig selectFallbackPolicy(LbConfig lbConfig, LoadBalancerRegistry lbRegistry) {
     List<LbConfig> fallbackConfigs = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
     LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
