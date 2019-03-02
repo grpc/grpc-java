@@ -49,6 +49,7 @@ import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
@@ -642,7 +643,7 @@ public class ProtocolNegotiatorsTest {
 
     boolean completed = gh.negotiated.await(5, TimeUnit.SECONDS);
     if (!completed) {
-      assertTrue("failed to negotiated", write.await(5, TimeUnit.SECONDS));
+      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
       // sync should fail if we are in this block.
       write.sync();
       throw new AssertionError("neither wrote nor negotiated");
@@ -662,7 +663,6 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void plaintextUpgradeNegotiator() throws Exception {
-    DefaultEventLoopGroup elg = new DefaultEventLoopGroup(1);
     LocalAddress addr = new LocalAddress("plaintextUpgradeNegotiator");
     UpgradeCodecFactory ucf = new UpgradeCodecFactory() {
 
@@ -671,28 +671,53 @@ public class ProtocolNegotiatorsTest {
         return new Http2ServerUpgradeCodec(FakeGrpcHttp2ConnectionHandler.newHandler());
       }
     };
-    HttpServerCodec serverCodec = new HttpServerCodec();
-    HttpServerUpgradeHandler serverUpgradeHandler =
+    final HttpServerCodec serverCodec = new HttpServerCodec();
+    final HttpServerUpgradeHandler serverUpgradeHandler =
         new HttpServerUpgradeHandler(serverCodec, ucf);
-    Channel serverChannel = new ServerBootstrap().group(elg).channel(LocalServerChannel.class)
-        .childHandler(serverUpgradeHandler)
-        .bind(addr).sync().channel();
+    Channel serverChannel = new ServerBootstrap()
+        .group(group)
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelInitializer<Channel>() {
 
+          @Override
+          protected void initChannel(Channel ch) throws Exception {
+            ch.pipeline().addLast(serverCodec, serverUpgradeHandler);
+          }
+        })
+        .bind(addr)
+        .sync()
+        .channel();
+
+    FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
     ProtocolNegotiator nego = ProtocolNegotiators.plaintextUpgrade();
-    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
-    Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
-        .register().sync().channel();
-    pipeline = channel.pipeline();
-    // Wait for initialization to complete
-    channel.eventLoop().submit(NOOP_RUNNABLE).sync();
-    channel.connect(addr).sync();
-    serverChannel.close();
-    channel.writeAndFlush("hi").sync();
+    ChannelHandler ch = nego.newHandler(gh);
+    WriteBufferingAndExceptionHandler wbaeh = new WriteBufferingAndExceptionHandler(ch);
 
-    // TODO(carl-mastrangelo): this doesn't actually test anything, fix the server to actually do
-    // upgrade.
+    Channel channel = new Bootstrap()
+        .group(group)
+        .channel(LocalChannel.class)
+        .handler(wbaeh)
+        .register()
+        .sync()
+        .channel();
+
+    ChannelFuture write = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
+    channel.connect(serverChannel.localAddress());
+
+    boolean completed = gh.negotiated.await(5, TimeUnit.SECONDS);
+    if (!completed) {
+      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
+      // sync should fail if we are in this block.
+      write.sync();
+      throw new AssertionError("neither wrote nor negotiated");
+    }
+
     channel.close().sync();
-    elg.shutdownGracefully();
+    serverChannel.close();
+
+    assertThat(gh.securityInfo).isNull();
+    assertThat(gh.attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL)).isEqualTo(SecurityLevel.NONE);
+    assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)).isEqualTo(addr);
   }
 
   private static class FakeGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {

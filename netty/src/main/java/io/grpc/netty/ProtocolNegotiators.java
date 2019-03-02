@@ -448,8 +448,10 @@ final class ProtocolNegotiators {
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(next);
       HttpClientCodec httpClientCodec = new HttpClientCodec();
+      ctx.pipeline().addBefore(ctx.name(), null, httpClientCodec);
+
+      Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(next);
       HttpClientUpgradeHandler upgrader =
           new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, /*maxContentLength=*/ 1000);
       ctx.pipeline().addBefore(ctx.name(), null, upgrader);
@@ -459,8 +461,8 @@ final class ProtocolNegotiators {
       DefaultHttpRequest upgradeTrigger =
           new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
       upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
-      ctx.writeAndFlush(upgradeTrigger);
-      super.channelActive(ctx);
+      ctx.writeAndFlush(upgradeTrigger).addListener(FireExceptionListener.INSTANCE);
+      super.handlerAdded(ctx);
     }
 
     @Override
@@ -739,54 +741,6 @@ final class ProtocolNegotiators {
   }
 
   /**
-   * Buffers all writes until the HTTP to HTTP/2 upgrade is complete.
-   */
-  private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler {
-
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-
-    private final String authority;
-
-    BufferingHttp2UpgradeHandler(ChannelHandler handler, ChannelHandler upgradeHandler,
-        GrpcHttp2ConnectionHandler grpcHandler, String authority) {
-      super(handler, upgradeHandler);
-      this.grpcHandler = grpcHandler;
-      this.authority = authority;
-    }
-
-    @Override
-    @SuppressWarnings("FutureReturnValueIgnored")
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-      // Trigger the HTTP/1.1 plaintext upgrade protocol by issuing an HTTP request
-      // which causes the upgrade headers to be added
-      DefaultHttpRequest upgradeTrigger =
-          new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
-      upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
-      ctx.writeAndFlush(upgradeTrigger);
-      super.channelActive(ctx);
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
-        writeBufferedAndRemove(ctx);
-        grpcHandler.handleProtocolNegotiationCompleted(
-            Attributes
-                .newBuilder()
-                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
-                .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
-                .build(),
-            /*securityInfo=*/ null);
-      } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
-        fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
-      }
-      super.userEventTriggered(ctx, evt);
-    }
-  }
-
-
-  /**
    * Adapts a {@link ProtocolNegotiationEvent} to the {@link GrpcHttp2ConnectionHandler}.
    */
   static final class GrpcNegotiationHandler extends ChannelInboundHandlerAdapter {
@@ -910,6 +864,24 @@ final class ProtocolNegotiators {
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
           .build();
       ctx.fireUserEventTriggered(protocolNegotiationEvent.withAttributes(attrs));
+    }
+  }
+
+  /**
+   * {@link FireExceptionListener} converts outbound failures (which happen on promises) into
+   * inbound failures (which are propagated up the handlers).
+   */
+  static final class FireExceptionListener implements ChannelFutureListener {
+
+    static final FireExceptionListener INSTANCE = new FireExceptionListener();
+
+    private FireExceptionListener() {}
+
+    @Override
+    public void operationComplete(ChannelFuture future) throws Exception {
+      if (!future.isSuccess()) {
+        future.channel().pipeline().fireExceptionCaught(future.cause());
+      }
     }
   }
 }
