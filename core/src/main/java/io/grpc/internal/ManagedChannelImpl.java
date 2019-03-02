@@ -1316,7 +1316,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             try {
               serviceConfigInterceptor.handleUpdate(serviceConfig);
               if (retryEnabled) {
-                throttle = ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+                throttle = getThrottle(config);
               }
             } catch (RuntimeException re) {
               logger.log(
@@ -1378,6 +1378,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
       syncContext.execute(new NameResolverErrorHandler());
     }
+  }
+
+  @Nullable
+  private static Throttle getThrottle(Attributes config) {
+    return ServiceConfigUtil.getThrottlePolicy(
+        config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {

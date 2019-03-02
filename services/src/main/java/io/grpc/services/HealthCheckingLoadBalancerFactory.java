@@ -171,13 +171,8 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       Map<String, Object> serviceConfig =
           attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      try {
-        String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
-        helper.setHealthCheckedService(serviceName);
-      } catch (Exception e) {
-        logger.log(Level.WARNING, "Malformed config for health-check", e);
-        helper.getChannelLogger().log(ChannelLogLevel.WARNING, "Malformed config for health-check");
-      }
+      String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
+      helper.setHealthCheckedService(serviceName);
       super.handleResolvedAddressGroups(servers, attributes);
     }
 
