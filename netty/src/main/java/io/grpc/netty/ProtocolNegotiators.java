@@ -91,9 +91,9 @@ final class ProtocolNegotiators {
           public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
             // Set sttributes before replace to be sure we pass it before accepting any requests.
             handler.handleProtocolNegotiationCompleted(Attributes.newBuilder()
-                    .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                    .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
-                    .build(),
+                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
+                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
+                .build(),
                 /*securityInfo=*/ null);
             // Just replace this handler with the gRPC handler.
             ctx.pipeline().replace(this, null, handler);
