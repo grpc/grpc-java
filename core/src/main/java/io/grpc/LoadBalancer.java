@@ -570,13 +570,15 @@ public abstract class LoadBalancer {
      * {@link ManagedChannelBuilder#forTarget} for the format of a target string.
      *
      * <p>The target string will be resolved by a {@link NameResolver} created according to the
-     * target string.  The out-of-band channel doesn't have load-balancing. If multiple addresses
-     * are resolved for the target, the "pick_first" policy will be applied.
+     * target string.  The out-of-band channel doesn't have load-balancing.  If multiple addresses
+     * are resolved for the target, the first working address will be used.
      *
      * <p>The LoadBalancer is responsible for closing unused OOB channels, and closing all OOB
      * channels within {@link #shutdown}.
      *
      * <P>NOT IMPLEMENTED: this method is currently a stub and not yet implemented by gRPC.
+     *
+     * @since 1.20.0
      */
     public ManagedChannel createResolvingOobChannel(String target) {
       throw new UnsupportedOperationException("Not implemented");
