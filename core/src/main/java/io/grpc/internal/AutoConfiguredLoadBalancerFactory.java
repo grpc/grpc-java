@@ -257,9 +257,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
             LoadBalancerProvider provider = registry.getProvider(policy);
             if (provider == null) {
               policiesTried.add(policy);
-            }
-
-            if (provider != null) {
+            } else {
               if (!policiesTried.isEmpty()) {
                 // Before returning, log all previously tried policies
                 helper.getChannelLogger().log(
