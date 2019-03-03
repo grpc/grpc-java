@@ -138,7 +138,7 @@ final class GrpclbState {
 
   @Nullable
   private LbStream lbStream;
-  private Map<EquivalentAddressGroup, Subchannel> subchannels = Collections.emptyMap();
+  private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Collections.emptyMap();
   private Mode mode;
 
   // Has the same size as the round-robin list from the balancer.
@@ -341,34 +341,56 @@ final class GrpclbState {
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
     logger.log(
         ChannelLogLevel.INFO, "Using RR list={0}, drop={1}", newBackendAddrList, newDropList);
-    HashMap<EquivalentAddressGroup, Subchannel> newSubchannelMap =
+    HashMap<List<EquivalentAddressGroup>, Subchannel> newSubchannelMap =
         new HashMap<>();
     List<BackendEntry> newBackendList = new ArrayList<>();
 
-    for (BackendAddressGroup backendAddr : newBackendAddrList) {
-      EquivalentAddressGroup eag = backendAddr.getAddresses();
-      Subchannel subchannel = newSubchannelMap.get(eag);
-      if (subchannel == null) {
-        subchannel = subchannels.get(eag);
-        if (subchannel == null) {
-          Attributes subchannelAttrs = Attributes.newBuilder()
-              .set(STATE_INFO,
-                  new AtomicReference<>(
-                      ConnectivityStateInfo.forNonError(IDLE)))
-              .build();
-          subchannel = subchannelPool.takeOrCreateSubchannel(eag, subchannelAttrs);
-          subchannel.requestConnection();
+    switch (mode) {
+      case ROUND_ROBIN:
+        for (BackendAddressGroup backendAddr : newBackendAddrList) {
+          EquivalentAddressGroup eag = backendAddr.getAddresses();
+          List<EquivalentAddressGroup> eagAsList = Collections.singletonList(eag);
+          Subchannel subchannel = newSubchannelMap.get(eagAsList);
+          if (subchannel == null) {
+            subchannel = subchannels.get(eagAsList);
+            if (subchannel == null) {
+              Attributes subchannelAttrs = Attributes.newBuilder()
+                  .set(STATE_INFO,
+                      new AtomicReference<>(
+                          ConnectivityStateInfo.forNonError(IDLE)))
+                  .build();
+              subchannel = subchannelPool.takeOrCreateSubchannel(eag, subchannelAttrs);
+              subchannel.requestConnection();
+            }
+            newSubchannelMap.put(eagAsList, subchannel);
+          }
+          BackendEntry entry;
+          // Only picks with tokens are reported to LoadRecorder
+          if (backendAddr.getToken() == null) {
+            entry = new BackendEntry(subchannel);
+          } else {
+            entry = new BackendEntry(subchannel, loadRecorder, backendAddr.getToken());
+          }
+          newBackendList.add(entry);
         }
-        newSubchannelMap.put(eag, subchannel);
-      }
-      BackendEntry entry;
-      // Only picks with tokens are reported to LoadRecorder
-      if (backendAddr.getToken() == null) {
-        entry = new BackendEntry(subchannel);
-      } else {
-        entry = new BackendEntry(subchannel, loadRecorder, backendAddr.getToken());
-      }
-      newBackendList.add(entry);
+        break;
+      case PICK_FIRST:
+        ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
+        for (BackendAddressGroup bag : newBackendAddrList) {
+          eagList.add(bag.getAddresses());
+        }
+        // Keep only one Subchannel that has all the addresses
+        if (subchannels.size().isEmpty()) {
+        } else {
+          // Re-use an existing Subchannel if there is any.  If just transitioned from ROUND_ROBIN,
+          // there may be more than one Subchannels, and we will keep one in order to re-use
+          // an existing connection.
+          Map.Entry<EquivalentAddressGroup, Subchannel> firstEntry =
+              subchannels.entrySet().iterator().next();
+          Subchannel subchannel = firstEntry.getValue();
+          helper.updateSubchannelAddresses(subchannel, eagList);
+          newSubchannelMap.put(firstEntry.getKey(), firstEntry.getValue());
+        }
     }
 
     // Close Subchannels whose addresses have been delisted
@@ -378,7 +400,6 @@ final class GrpclbState {
         subchannelPool.returnSubchannel(entry.getValue());
       }
     }
-
     subchannels = Collections.unmodifiableMap(newSubchannelMap);
     dropList = Collections.unmodifiableList(newDropList);
     backendList = Collections.unmodifiableList(newBackendList);
