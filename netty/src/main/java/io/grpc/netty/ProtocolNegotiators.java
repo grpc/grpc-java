@@ -461,7 +461,8 @@ final class ProtocolNegotiators {
       DefaultHttpRequest upgradeTrigger =
           new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
       upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
-      ctx.writeAndFlush(upgradeTrigger).addListener(FireExceptionListener.INSTANCE);
+      ctx.writeAndFlush(upgradeTrigger).addListener(
+          ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
       super.handlerAdded(ctx);
     }
 
@@ -864,24 +865,6 @@ final class ProtocolNegotiators {
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
           .build();
       ctx.fireUserEventTriggered(protocolNegotiationEvent.withAttributes(attrs));
-    }
-  }
-
-  /**
-   * {@link FireExceptionListener} converts outbound failures (which happen on promises) into
-   * inbound failures (which are propagated up the handlers).
-   */
-  static final class FireExceptionListener implements ChannelFutureListener {
-
-    static final FireExceptionListener INSTANCE = new FireExceptionListener();
-
-    private FireExceptionListener() {}
-
-    @Override
-    public void operationComplete(ChannelFuture future) throws Exception {
-      if (!future.isSuccess()) {
-        future.channel().pipeline().fireExceptionCaught(future.cause());
-      }
     }
   }
 }
