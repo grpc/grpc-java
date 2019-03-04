@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
@@ -24,9 +25,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.InternalChannelz.Tls;
+import io.grpc.ProxiedSocketAddress;
+import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
@@ -865,4 +869,93 @@ final class ProtocolNegotiators {
       ctx.fireUserEventTriggered(protocolNegotiationEvent.withAttributes(attrs));
     }
   }
+
+  static final class ClientHttpProxyHandler extends ChannelDuplexHandler {
+
+    private final ProxyDetector detector;
+    private final ChannelHandler next;
+
+    ClientHttpProxyHandler(ProxyDetector detector, ChannelHandler next) {
+      this.detector = checkNotNull(detector);
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress,
+        SocketAddress localAddress, ChannelPromise promise) throws Exception {
+      ProxiedSocketAddress proxyAddr = detector.proxyFor(remoteAddress);
+      if (proxyAddr instanceof HttpConnectProxiedSocketAddress) {
+        HttpConnectProxiedSocketAddress proxyDetails = (HttpConnectProxiedSocketAddress) proxyAddr;
+        String username = proxyDetails.getUsername();
+        String password = proxyDetails.getPassword();
+        checkArgument((username == null) == (password == null), "Missing username / password");
+        SocketAddress newSockAddr = proxyDetails.getProxyAddress();
+        ChannelHandler proxyHandler;
+        if (username != null) {
+          proxyHandler = new HttpProxyHandler(newSockAddr, username, password);
+        } else {
+          proxyHandler = new HttpProxyHandler(newSockAddr);
+        }
+        ctx.pipeline().addBefore(ctx.name(), null, proxyHandler);
+      } else {
+        checkArgument(proxyAddr == null, "Unsupported proxy type %s", proxyAddr);
+      }
+      super.connect(ctx, remoteAddress, localAddress, promise);
+    }
+  }
+
+  static final class HttpProxyProtocolNegotiator implements ProtocolNegotiator {
+
+    @Override
+    public AsciiString scheme() {
+      return null;
+    }
+
+    @Override
+    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      return null;
+    }
+
+    @Override
+    public void close() {
+
+    }
+  }
+
+/*
+  public static ProtocolNegotiator httpProxy(final SocketAddress proxyAddress,
+      final @Nullable String proxyUsername, final @Nullable String proxyPassword,
+      final ProtocolNegotiator negotiator) {
+    final AsciiString scheme = negotiator.scheme();
+    Preconditions.checkNotNull(proxyAddress, "proxyAddress");
+    Preconditions.checkNotNull(negotiator, "negotiator");
+    class ProxyNegotiator implements ProtocolNegotiator {
+      @Override
+      public ChannelHandler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
+        HttpProxyHandler proxyHandler;
+        if (proxyUsername == null || proxyPassword == null) {
+          proxyHandler = new HttpProxyHandler(proxyAddress);
+        } else {
+          proxyHandler = new HttpProxyHandler(proxyAddress, proxyUsername, proxyPassword);
+        }
+        return new BufferUntilProxyTunnelledHandler(
+            proxyHandler, negotiator.newHandler(http2Handler));
+      }
+
+      @Override
+      public AsciiString scheme() {
+        return scheme;
+      }
+
+      // This method is not normally called, because we use httpProxy on a per-connection basis in
+      // NettyChannelBuilder. Instead, we expect `negotiator' to be closed by NettyTransportFactory.
+      @Override
+      public void close() {
+        negotiator.close();
+      }
+    }
+
+    return new ProxyNegotiator();
+  }
+*/
 }
