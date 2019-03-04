@@ -26,7 +26,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -91,7 +90,7 @@ public final class CronetClientTransportTest {
     Attributes attrs = transport.getAttributes();
     assertEquals(
         SecurityLevel.PRIVACY_AND_INTEGRITY, attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL));
-    assertEquals(EAG_ATTRS, attrs.get(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS));
+    assertEquals(EAG_ATTRS, attrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS));
   }
 
   @Test

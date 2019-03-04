@@ -259,7 +259,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.attributes = Attributes.newBuilder()
-        .set(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
     initTransportTracer();
   }
 

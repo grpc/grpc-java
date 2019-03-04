@@ -24,13 +24,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import io.grpc.Attributes;
-import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
@@ -249,7 +249,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.eagAttributes = eagAttributes;
     this.authority = authority;
     this.attributes = Attributes.newBuilder()
-        .set(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS, eagAttributes).build();
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttributes).build();
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());

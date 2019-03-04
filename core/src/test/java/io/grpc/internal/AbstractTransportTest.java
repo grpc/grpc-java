@@ -739,7 +739,7 @@ public abstract class AbstractTransportTest {
 
     // This attribute is available right after transport is started
     assertThat(((ConnectionClientTransport) client).getAttributes()
-        .get(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
 
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -786,7 +786,7 @@ public abstract class AbstractTransportTest {
 
     // This attribute is still available when the transport is connected
     assertThat(((ConnectionClientTransport) client).getAttributes()
-        .get(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
 
     serverStream.request(1);
     assertTrue(clientStreamListener.awaitOnReadyAndDrain(TIMEOUT_MS, TimeUnit.MILLISECONDS));
