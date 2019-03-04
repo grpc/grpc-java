@@ -22,15 +22,16 @@ import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.TimeProvider;
 
 /**
- * A {@link GrpclbClientLoadRecorder} that also retrieve tokens from transport attributes and attach
- * them to headers.  This is only used in the PICK_FIRST mode.
+ * Wraps a {@link ClientStreamTracer.Factory}, retrieves tokens from transport attributes and
+ * attaches them to headers.  This is only used in the PICK_FIRST mode.
  */
-final class TokenAttachingLoadRecorder extends GrpclbClientLoadRecorder {
-  TokenAttachingLoadRecorder(TimeProvider time) {
-    super(time);
+final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
+  private final ClientStreamTracer.Factory delegate;
+
+  TokenAttachingTracerFactory(ClientStreamTracer.Factory delegate) {
+    this.delegate = checkNotNull(delegate, "delegate");
   }
 
   @Override
@@ -44,6 +45,6 @@ final class TokenAttachingLoadRecorder extends GrpclbClientLoadRecorder {
       headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
       headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
     }
-    return super.newClientStreamTracer(info, headers);
+    return delegate.newClientStreamTracer(info, headers);
   }
 }

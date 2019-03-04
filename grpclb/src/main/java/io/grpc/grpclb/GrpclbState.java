@@ -31,6 +31,7 @@ import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -399,7 +400,7 @@ final class GrpclbState {
       case PICK_FIRST:
         List<EquivalentAddressGroup> eagList = new ArrayList<>();
         // Because for PICK_FIRST, we create a single Subchannel for all addresses, we have to
-        // attach the tokens to the EAG attributes and use PickFirstTokenAttacher to put them on
+        // attach the tokens to the EAG attributes and use TokenAttachingLoadRecorder to put them on
         // headers.
         //
         // The PICK_FIRST code path doesn't cache Subchannels.
@@ -421,7 +422,8 @@ final class GrpclbState {
           helper.updateSubchannelAddresses(subchannel, eagList);
         }
         subchannels = Collections.singletonMap(eagList, subchannel);
-        newBackendList.add(new BackendEntry(subchannel, new TokenAttachingLoadRecorder(time)));
+        newBackendList.add(
+            new BackendEntry(subchannel, new TokenAttachingTracerFactory(loadRecorder)));
         break;
       default:
         throw new UnsupportedOperationException("Unsupported mode: " + mode);
@@ -804,16 +806,14 @@ final class GrpclbState {
     @VisibleForTesting
     final PickResult result;
     @Nullable
-    private final GrpclbClientLoadRecorder loadRecorder;
-    @Nullable
     private final String token;
 
     /**
      * For ROUND_ROBIN: creates a BackendEntry whose usage will be reported to load recorder.
      */
-    BackendEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
-      this.result = PickResult.withSubchannel(subchannel, loadRecorder);
-      this.loadRecorder = checkNotNull(loadRecorder, "loadRecorder");
+    BackendEntry(Subchannel subchannel, ClientStreamTracer.Factory tracerFactory, String token) {
+      this.result =
+          PickResult.withSubchannel(subchannel, checkNotNull(tracerFactory, "tracerFactory"));
       this.token = checkNotNull(token, "token");
     }
 
@@ -822,16 +822,15 @@ final class GrpclbState {
      */
     BackendEntry(Subchannel subchannel) {
       this.result = PickResult.withSubchannel(subchannel);
-      this.loadRecorder = null;
       this.token = null;
     }
 
     /**
      * For PICK_FIRST: creates a BackendEntry that includes all addresses.
      */
-    BackendEntry(Subchannel subchannel, TokenAttachingLoadRecorder loadRecorder) {
-      this.result = PickResult.withSubchannel(subchannel, loadRecorder);
-      this.loadRecorder = loadRecorder;
+    BackendEntry(Subchannel subchannel, ClientStreamTracer.Factory tracerFactory) {
+      this.result =
+          PickResult.withSubchannel(subchannel, checkNotNull(tracerFactory, "tracerFactory"));
       this.token = null;
     }
 
@@ -852,7 +851,7 @@ final class GrpclbState {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(loadRecorder, result, token);
+      return Objects.hashCode(result, token);
     }
 
     @Override
@@ -861,8 +860,7 @@ final class GrpclbState {
         return false;
       }
       BackendEntry that = (BackendEntry) other;
-      return Objects.equal(result, that.result) && Objects.equal(token, that.token)
-          && Objects.equal(loadRecorder, that.loadRecorder);
+      return Objects.equal(result, that.result) && Objects.equal(token, that.token);
     }
   }
 
