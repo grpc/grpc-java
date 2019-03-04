@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
@@ -82,6 +83,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
+      Attributes eagAttrs,
       Executor executor,
       int maxMessageSize,
       boolean alwaysUsePut,
@@ -97,6 +99,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.attrs = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+        .set(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS, eagAttrs)
         .build();
   }
 

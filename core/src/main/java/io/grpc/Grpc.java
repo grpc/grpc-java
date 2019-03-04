@@ -55,6 +55,18 @@ public final class Grpc {
       Attributes.Key.create("ssl-session");
 
   /**
+   * Attribute key for the attributes of the {@link EquivalentAddressGroup} ({@link
+   * EquivalentAddressGroup#getAttributes}) that the transport's server address is from.  This is a
+   * client-side-only transport attribute, and available right after the transport is started.
+   *
+   * @since 1.20.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1710")
+  @TransportAttr
+  public static final Attributes.Key<Attributes> TRANSPORT_ATTR_CLIENT_EAG_ATTRS =
+      Attributes.Key.create("client-eag-attrs");
+
+  /**
    * Annotation for transport attributes. It follows the annotation semantics defined
    * by {@link Attributes}.
    */
