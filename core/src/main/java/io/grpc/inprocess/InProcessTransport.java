@@ -120,7 +120,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     checkNotNull(eagAttrs, "eagAttrs");
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
-        .set(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS, eagAttrs)
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
         .build();
     logId = InternalLogId.allocate(getClass(), name);
   }
