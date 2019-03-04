@@ -20,8 +20,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
-import io.grpc.Grpc;
 import io.grpc.Metadata;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.TimeProvider;
 
 /**
@@ -38,7 +38,7 @@ final class TokenAttachingLoadRecorder extends GrpclbClientLoadRecorder {
       ClientStreamTracer.StreamInfo info, Metadata headers) {
     Attributes transportAttrs = checkNotNull(info.getTransportAttrs(), "transportAttrs");
     Attributes eagAttrs =
-        checkNotNull(transportAttrs.get(Grpc.TRANSPORT_ATTR_CLIENT_EAG_ATTRS), "eagAttrs");
+        checkNotNull(transportAttrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS), "eagAttrs");
     String token = eagAttrs.get(GrpclbConstants.TOKEN_ATTRIBUTE_KEY);
     if (token != null) {
       headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
