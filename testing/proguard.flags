@@ -1,0 +1,4 @@
+# Sorry if this file messes you up.  Proguard makes it really difficult to find out where the 
+# classes if complains about come from, leading to seemingly impossible warnings to arise.
+-dontwarn org.hamcrest.**
+-dontwarn android.test.**
