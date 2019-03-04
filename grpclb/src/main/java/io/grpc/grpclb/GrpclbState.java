@@ -139,7 +139,7 @@ final class GrpclbState {
   @Nullable
   private LbStream lbStream;
   private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Collections.emptyMap();
-  private Mode mode;
+  private Mode mode = Mode.ROUND_ROBIN;
 
   // Has the same size as the round-robin list from the balancer.
   // A drop entry from the round-robin list becomes a DropEntry here.
@@ -169,6 +169,7 @@ final class GrpclbState {
     if (newState.getState() == SHUTDOWN || !subchannels.values().contains(subchannel)) {
       return;
     }
+    // TODO(zhangkun83): should PICK_FIRST mode eagerly connect?
     if (newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
@@ -183,11 +184,16 @@ final class GrpclbState {
    */
   void handleAddresses(
       List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers,
-      Mode mode) {
+      Mode newMode) {
     if (newLbAddressGroups.isEmpty()) {
       propagateError(Status.UNAVAILABLE.withDescription(
               "NameResolver returned no LB address while asking for GRPCLB"));
       return;
+    }
+    if (!mode.equals(newMode)) {
+      shutdownSubchannels();
+      mode = newMode;
+      logger.log(ChannelLogLevel.INFO, "Mode: " + newMode);
     }
     LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
     startLbComm(newLbAddressGroup);
@@ -305,15 +311,29 @@ final class GrpclbState {
 
   void shutdown() {
     shutdownLbComm();
-    // We close the subchannels through subchannelPool instead of helper just for convenience of
-    // testing.
-    for (Subchannel subchannel : subchannels.values()) {
-      subchannelPool.returnSubchannel(subchannel);
-    }
-    subchannels = Collections.emptyMap();
+    shutdownSubchannels();
     subchannelPool.clear();
     cancelFallbackTimer();
     cancelLbRpcRetryTimer();
+  }
+
+  private void shutdownSubchannels() {
+    // We close the subchannels through subchannelPool instead of helper just for convenience of
+    // testing.
+    switch (mode) {
+      case ROUND_ROBIN:
+        for (Subchannel subchannel : subchannels.values()) {
+          subchannelPool.returnSubchannel(subchannel);
+        }
+        break;
+      case PICK_FIRST:
+        checkState(subchannels.size() == 1, "Excessive Subchannels: %s", subchannels);
+        subchannels.values().iterator().next().shutdown();
+        break;
+      default:
+        throw new UnsupportedOperationException("Unsupported mode: " + mode);
+    }
+    subchannels = Collections.emptyMap();
   }
 
   void propagateError(Status status) {
@@ -354,12 +374,7 @@ final class GrpclbState {
           if (subchannel == null) {
             subchannel = subchannels.get(eagAsList);
             if (subchannel == null) {
-              Attributes subchannelAttrs = Attributes.newBuilder()
-                  .set(STATE_INFO,
-                      new AtomicReference<>(
-                          ConnectivityStateInfo.forNonError(IDLE)))
-                  .build();
-              subchannel = subchannelPool.takeOrCreateSubchannel(eag, subchannelAttrs);
+              subchannel = subchannelPool.takeOrCreateSubchannel(eag, createSubchannelAttrs());
               subchannel.requestConnection();
             }
             newSubchannelMap.put(eagAsList, subchannel);
@@ -373,34 +388,46 @@ final class GrpclbState {
           }
           newBackendList.add(entry);
         }
+        // Close Subchannels whose addresses have been delisted
+        for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
+          List<EquivalentAddressGroup> eagList = entry.getKey();
+          if (!newSubchannelMap.containsKey(eagList)) {
+            subchannelPool.returnSubchannel(entry.getValue());
+          }
+        }
+        subchannels = Collections.unmodifiableMap(newSubchannelMap);
         break;
       case PICK_FIRST:
-        ArrayList<EquivalentAddressGroup> eagList = new ArrayList<>();
+        List<EquivalentAddressGroup> eagList = new ArrayList<>();
+        // Because for PICK_FIRST, we create a single Subchannel for all addresses, we have to
+        // attach the tokens to the EAG attributes and use PickFirstTokenAttacher to put them on
+        // headers.
+        //
+        // The PICK_FIRST code path doesn't cache Subchannels.
         for (BackendAddressGroup bag : newBackendAddrList) {
-          eagList.add(bag.getAddresses());
+          EquivalentAddressGroup origEag = bag.getAddresses();
+          eagList.add(
+              new EquivalentAddressGroup(
+                  origEag.getAddresses(),
+                  origEag.getAttributes().toBuilder()
+                      .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, bag.getToken())
+                      .build()));
         }
-        // Keep only one Subchannel that has all the addresses
-        if (subchannels.size().isEmpty()) {
+        Subchannel subchannel;
+        if (subchannels.isEmpty()) {
+          subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
         } else {
-          // Re-use an existing Subchannel if there is any.  If just transitioned from ROUND_ROBIN,
-          // there may be more than one Subchannels, and we will keep one in order to re-use
-          // an existing connection.
-          Map.Entry<EquivalentAddressGroup, Subchannel> firstEntry =
-              subchannels.entrySet().iterator().next();
-          Subchannel subchannel = firstEntry.getValue();
+          checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
+          subchannel = subchannels.values().iterator().next();
           helper.updateSubchannelAddresses(subchannel, eagList);
-          newSubchannelMap.put(firstEntry.getKey(), firstEntry.getValue());
         }
+        subchannels = Collections.singletonMap(eagList, subchannel);
+        newBackendList.add(new BackendEntry(subchannel, new TokenAttachingLoadRecorder(time)));
+        break;
+      default:
+        throw new UnsupportedOperationException("Unsupported mode: " + mode);
     }
 
-    // Close Subchannels whose addresses have been delisted
-    for (Entry<EquivalentAddressGroup, Subchannel> entry : subchannels.entrySet()) {
-      EquivalentAddressGroup eag = entry.getKey();
-      if (!newSubchannelMap.containsKey(eag)) {
-        subchannelPool.returnSubchannel(entry.getValue());
-      }
-    }
-    subchannels = Collections.unmodifiableMap(newSubchannelMap);
     dropList = Collections.unmodifiableList(newDropList);
     backendList = Collections.unmodifiableList(newBackendList);
   }
@@ -725,6 +752,14 @@ final class GrpclbState {
     return new EquivalentAddressGroup(addrs, attrs);
   }
 
+  private static Attributes createSubchannelAttrs() {
+    return Attributes.newBuilder()
+        .set(STATE_INFO,
+            new AtomicReference<>(
+                ConnectivityStateInfo.forNonError(IDLE)))
+        .build();
+  }
+
   @VisibleForTesting
   static final class DropEntry {
     private final GrpclbClientLoadRecorder loadRecorder;
@@ -775,7 +810,7 @@ final class GrpclbState {
     private final String token;
 
     /**
-     * Creates a BackendEntry whose usage will be reported to load recorder.
+     * For ROUND_ROBIN: creates a BackendEntry whose usage will be reported to load recorder.
      */
     BackendEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
       this.result = PickResult.withSubchannel(subchannel, loadRecorder);
@@ -784,11 +819,20 @@ final class GrpclbState {
     }
 
     /**
-     * Creates a BackendEntry whose usage will not be reported.
+     * For ROUND_ROBIN: creates a BackendEntry whose usage will not be reported.
      */
     BackendEntry(Subchannel subchannel) {
       this.result = PickResult.withSubchannel(subchannel);
       this.loadRecorder = null;
+      this.token = null;
+    }
+
+    /**
+     * For PICK_FIRST: creates a BackendEntry that includes all addresses.
+     */
+    BackendEntry(Subchannel subchannel, TokenAttachingLoadRecorder loadRecorder) {
+      this.result = PickResult.withSubchannel(subchannel, loadRecorder);
+      this.loadRecorder = loadRecorder;
       this.token = null;
     }
 

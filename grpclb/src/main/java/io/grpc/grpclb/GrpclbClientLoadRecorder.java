@@ -38,7 +38,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * span of an LB stream with the remote load-balancer.
  */
 @ThreadSafe
-final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
+class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
 
   private static final AtomicLongFieldUpdater<GrpclbClientLoadRecorder> callsStartedUpdater =
       AtomicLongFieldUpdater.newUpdater(GrpclbClientLoadRecorder.class, "callsStarted");
@@ -83,7 +83,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   /**
    * Records that a request has been dropped as instructed by the remote balancer.
    */
-  void recordDroppedRequest(String token) {
+  final void recordDroppedRequest(String token) {
     callsStartedUpdater.getAndIncrement(this);
     callsFinishedUpdater.getAndIncrement(this);
 
@@ -99,7 +99,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   /**
    * Generate the report with the data recorded this LB stream since the last report.
    */
-  ClientStats generateLoadReport() {
+  final ClientStats generateLoadReport() {
     ClientStats.Builder statsBuilder =
         ClientStats.newBuilder()
         .setTimestamp(Timestamps.fromNanos(time.currentTimeNanos()))
