@@ -169,8 +169,7 @@ final class GrpclbState {
     if (newState.getState() == SHUTDOWN || !subchannels.values().contains(subchannel)) {
       return;
     }
-    // TODO(zhangkun83): should PICK_FIRST mode eagerly connect?
-    if (newState.getState() == IDLE) {
+    if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
       subchannel.requestConnection();
     }
     subchannel.getAttributes().get(STATE_INFO).set(newState);
