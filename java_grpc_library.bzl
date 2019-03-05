@@ -91,7 +91,7 @@ _java_rpc_library = rule(
     fragments = ["java"],
     outputs = {
         "jar": "lib%{name}.jar",
-        "srcjar": "lib%{name}-src.jar",
+        "srcjar": "lib%{name}-source.jar",
     },
     provides = [JavaInfo],
     implementation = _java_rpc_library_impl,
