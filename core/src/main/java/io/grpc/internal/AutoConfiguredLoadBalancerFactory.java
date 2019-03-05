@@ -270,11 +270,10 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
               backendAddrs, null);
         }
         return new PolicySelection(grpclbProvider, servers, null);
-      } else {
-        // No balancer address this time.  If balancer address shows up later, we want to make sure
-        // the warning is logged one more time.
-        roundRobinDueToGrpclbDepMissing = false;
       }
+      // No balancer address this time.  If balancer address shows up later, we want to make sure
+      // the warning is logged one more time.
+      roundRobinDueToGrpclbDepMissing = false;
 
       // No config nor balancer address. Use default.
       return new PolicySelection(
