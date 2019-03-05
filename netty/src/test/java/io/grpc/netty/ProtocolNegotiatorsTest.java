@@ -29,11 +29,14 @@ import static org.mockito.Mockito.times;
 
 import io.grpc.Attributes;
 import io.grpc.Grpc;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz.Security;
+import io.grpc.ProxiedSocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
+import io.grpc.netty.ProtocolNegotiators.ClientHttpProxyHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -59,10 +62,14 @@ import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.HttpResponseEncoder;
+import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodec;
 import io.netty.handler.codec.http.HttpServerUpgradeHandler.UpgradeCodecFactory;
+import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionDecoder;
 import io.netty.handler.codec.http2.DefaultHttp2ConnectionEncoder;
@@ -659,6 +666,122 @@ public class ProtocolNegotiatorsTest {
     // This is not part of the ClientTls negotiation, but shows that the negotiation event happens
     // in the right order.
     assertThat(gh.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR)).isEqualTo(addr);
+  }
+
+  @Test
+  public void clientHttpProxyHandler_noProxy() throws Exception {
+    LocalAddress addr = new LocalAddress("clientHttpProxyHandler_noProxy");
+    Channel serverChannel = new ServerBootstrap()
+        .group(group)
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelInitializer<Channel>() {
+
+          @Override
+          protected void initChannel(Channel ch) throws Exception {
+            ch.pipeline().addLast(new HttpResponseEncoder());
+            DefaultFullHttpResponse resp =
+                new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+            ch.writeAndFlush(resp);
+          }
+        })
+        .bind(addr)
+        .sync()
+        .channel();
+    final CountDownLatch latch = new CountDownLatch(1);
+    final AtomicReference<ProtocolNegotiationEvent> evtRef = new AtomicReference<>();
+
+    ClientHttpProxyHandler chph = new ClientHttpProxyHandler(new ChannelInboundHandlerAdapter() {
+      @Override
+      public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        assertNull(evtRef.getAndSet((ProtocolNegotiationEvent) evt));
+        latch.countDown();
+      }
+    });
+    WriteBufferingAndExceptionHandler wbaeh = new WriteBufferingAndExceptionHandler(chph);
+    Channel channel = new Bootstrap()
+        .group(group)
+        .channel(LocalChannel.class)
+        .handler(wbaeh)
+        .register()
+        .sync()
+        .channel();
+    ChannelFuture write = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
+    channel.connect(serverChannel.localAddress());
+
+    boolean completed = latch.await(5, TimeUnit.SECONDS);
+    if (!completed) {
+      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
+      // sync should fail if we are in this block.
+      write.sync();
+      throw new AssertionError("neither wrote nor negotiated");
+    }
+
+    channel.close();
+    serverChannel.close();
+
+    assertThat(evtRef.get()).isNotNull();
+    assertThat(evtRef.get().getAttributes().get(Grpc.TRANSPORT_ATTR_PROXIED_REMOTE_ADDR)).isNull();
+  }
+
+  @Test
+  public void clientHttpProxyHandler_proxy() throws Exception {
+    LocalAddress addr = new LocalAddress("clientHttpProxyHandler_noProxy");
+    Channel serverChannel = new ServerBootstrap()
+        .group(group)
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelInitializer<Channel>() {
+
+          @Override
+          protected void initChannel(Channel ch) throws Exception {
+            ch.pipeline().addLast(new HttpResponseEncoder());
+            DefaultFullHttpResponse resp =
+                new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+            ch.writeAndFlush(resp);
+          }
+        })
+        .bind(addr)
+        .sync()
+        .channel();
+    final CountDownLatch latch = new CountDownLatch(1);
+    final AtomicReference<ProtocolNegotiationEvent> evtRef = new AtomicReference<>();
+
+    ClientHttpProxyHandler chph = new ClientHttpProxyHandler(new ChannelInboundHandlerAdapter() {
+      @Override
+      public void userEventTriggered(ChannelHandlerContext ctx, Object evt) {
+        assertNull(evtRef.getAndSet((ProtocolNegotiationEvent) evt));
+        latch.countDown();
+      }
+    });
+    WriteBufferingAndExceptionHandler wbaeh = new WriteBufferingAndExceptionHandler(chph);
+    Channel channel = new Bootstrap()
+        .group(group)
+        .channel(LocalChannel.class)
+        .handler(wbaeh)
+        .register()
+        .sync()
+        .channel();
+    ChannelFuture write = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
+    InetSocketAddress targetAddr = new InetSocketAddress("localhost", 1234);
+    ProxiedSocketAddress newAddr = HttpConnectProxiedSocketAddress.newBuilder()
+        .setProxyAddress(addr)
+        .setTargetAddress(targetAddr)
+        .build();
+    channel.connect(newAddr);
+
+    boolean completed = latch.await(5, TimeUnit.SECONDS);
+    if (!completed) {
+      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
+      // sync should fail if we are in this block.
+      write.sync();
+      throw new AssertionError("neither wrote nor negotiated");
+    }
+
+    channel.close();
+    serverChannel.close();
+
+    assertThat(evtRef.get()).isNotNull();
+    assertThat(evtRef.get().getAttributes().get(Grpc.TRANSPORT_ATTR_PROXIED_REMOTE_ADDR))
+        .isEqualTo(targetAddr);
   }
 
   @Test
