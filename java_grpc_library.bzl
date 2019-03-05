@@ -14,8 +14,8 @@ def _java_rpc_library_impl(ctx):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
-    srcs = ctx.attr.srcs[0].proto.direct_sources
-    includes = ctx.attr.srcs[0].proto.transitive_imports
+    srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
+    includes = ctx.attr.srcs[0][ProtoInfo].transitive_imports
     flavor = ctx.attr.flavor
     if flavor == "normal":
         flavor = ""
@@ -28,9 +28,10 @@ def _java_rpc_library_impl(ctx):
     args.add_all(includes, map_each = _create_include_path)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
-    ctx.action(
-        inputs = depset([ctx.executable._java_plugin] + srcs, transitive = [includes]),
+    ctx.actions.run(
+        inputs = depset(srcs, transitive = [includes]),
         outputs = [srcjar],
+        tools = [ctx.executable._java_plugin],
         executable = ctx.executable._protoc,
         arguments = [args],
     )
@@ -55,12 +56,12 @@ _java_rpc_library = rule(
     attrs = {
         "srcs": attr.label_list(
             mandatory = True,
-            non_empty = True,
-            providers = ["proto"],
+            allow_empty = False,
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,
-            non_empty = True,
+            allow_empty = False,
             providers = [JavaInfo],
         ),
         "flavor": attr.string(

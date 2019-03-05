@@ -19,6 +19,7 @@ package io.grpc.inprocess;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -197,12 +198,14 @@ public final class InProcessChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, ClientTransportOptions options) {
+        SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
+      // TODO(carl-mastrangelo): Pass channelLogger in.
       return new InProcessTransport(
-          name, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent());
+          name, maxInboundMetadataSize, options.getAuthority(), options.getUserAgent(),
+          options.getEagAttributes());
     }
 
     @Override

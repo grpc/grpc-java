@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.internal.testing;
+package io.grpc.internal;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
@@ -27,6 +27,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyString;
@@ -37,7 +38,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterables;
@@ -46,7 +46,9 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalChannelz.TransportStats;
@@ -55,27 +57,14 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
-import io.grpc.internal.ClientStream;
-import io.grpc.internal.ClientStreamListener;
-import io.grpc.internal.ClientTransport;
-import io.grpc.internal.ConnectionClientTransport;
-import io.grpc.internal.GrpcAttributes;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.InternalServer;
-import io.grpc.internal.IoUtils;
-import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.ServerListener;
-import io.grpc.internal.ServerStream;
-import io.grpc.internal.ServerStreamListener;
-import io.grpc.internal.ServerTransport;
-import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.TimeProvider;
-import io.grpc.internal.TransportTracer;
+import io.grpc.internal.testing.TestClientStreamTracer;
+import io.grpc.internal.testing.TestServerStreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -95,7 +84,6 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Matchers;
-import org.mockito.stubbing.OngoingStubbing;
 
 /** Standard unit tests for {@link ClientTransport}s and {@link ServerTransport}s. */
 @RunWith(JUnit4.class)
@@ -104,6 +92,12 @@ public abstract class AbstractTransportTest {
 
   private static final Attributes.Key<String> ADDITIONAL_TRANSPORT_ATTR_KEY =
       Attributes.Key.create("additional-attr");
+
+  private static final Attributes.Key<String> EAG_ATTR_KEY =
+      Attributes.Key.create("eag-attr");
+
+  private static final Attributes EAG_ATTRS =
+      Attributes.newBuilder().set(EAG_ATTR_KEY, "value").build();
 
   protected final TransportTracer.Factory fakeClockTransportTracer = new TransportTracer.Factory(
       new TimeProvider() {
@@ -143,6 +137,20 @@ public abstract class AbstractTransportTest {
     return true;
   }
 
+  protected final Attributes eagAttrs() {
+    return EAG_ATTRS;
+  }
+
+  protected final ChannelLogger transportLogger() {
+    return new ChannelLogger() {
+      @Override
+      public void log(ChannelLogLevel level, String message) {}
+
+      @Override
+      public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+    };
+  }
+
   /**
    * When non-null, will be shut down during tearDown(). However, it _must_ have been started with
    * {@code serverListener}, otherwise tearDown() can't wait for shutdown which can put following
@@ -164,20 +172,50 @@ public abstract class AbstractTransportTest {
       "ascii-key", Metadata.ASCII_STRING_MARSHALLER);
   private Metadata.Key<String> binaryKey = Metadata.Key.of(
       "key-bin", StringBinaryMarshaller.INSTANCE);
+  private final Metadata.Key<String> tracerHeaderKey = Metadata.Key.of(
+      "tracer-key", Metadata.ASCII_STRING_MARSHALLER);
+  private final String tracerKeyValue = "tracer-key-value";
 
   private ManagedClientTransport.Listener mockClientTransportListener
       = mock(ManagedClientTransport.Listener.class);
   private MockServerListener serverListener = new MockServerListener();
   private ArgumentCaptor<Throwable> throwableCaptor = ArgumentCaptor.forClass(Throwable.class);
-  private final ClientStreamTracer.Factory clientStreamTracerFactory =
-      mock(ClientStreamTracer.Factory.class);
-
   private final TestClientStreamTracer clientStreamTracer1 = new TestClientStreamTracer();
   private final TestClientStreamTracer clientStreamTracer2 = new TestClientStreamTracer();
-  private final ServerStreamTracer.Factory serverStreamTracerFactory =
-      mock(ServerStreamTracer.Factory.class);
+  private final ClientStreamTracer.Factory clientStreamTracerFactory = mock(
+      ClientStreamTracer.Factory.class,
+      delegatesTo(new ClientStreamTracer.Factory() {
+          final ArrayDeque<TestClientStreamTracer> tracers =
+              new ArrayDeque<>(Arrays.asList(clientStreamTracer1, clientStreamTracer2));
+
+          @Override
+          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
+            metadata.put(tracerHeaderKey, tracerKeyValue);
+            TestClientStreamTracer tracer = tracers.poll();
+            if (tracer != null) {
+              return tracer;
+            }
+            return new TestClientStreamTracer();
+          }
+        }));
+
   private final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
   private final TestServerStreamTracer serverStreamTracer2 = new TestServerStreamTracer();
+  private final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
+      ServerStreamTracer.Factory.class,
+      delegatesTo(new ServerStreamTracer.Factory() {
+          final ArrayDeque<TestServerStreamTracer> tracers =
+              new ArrayDeque<>(Arrays.asList(serverStreamTracer1, serverStreamTracer2));
+
+          @Override
+          public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+            TestServerStreamTracer tracer = tracers.poll();
+            if (tracer != null) {
+              return tracer;
+            }
+            return new TestServerStreamTracer();
+          }
+        }));
 
   @Rule
   public ExpectedException thrown = ExpectedException.none();
@@ -185,21 +223,6 @@ public abstract class AbstractTransportTest {
   @Before
   public void setUp() {
     server = Iterables.getOnlyElement(newServer(Arrays.asList(serverStreamTracerFactory)));
-    OngoingStubbing<ClientStreamTracer> clientStubbing =
-        when(clientStreamTracerFactory
-            .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
-                .thenReturn(clientStreamTracer1)
-                .thenReturn(clientStreamTracer2);
-    OngoingStubbing<ServerStreamTracer> serverStubbing =
-        when(serverStreamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
-            .thenReturn(serverStreamTracer1)
-            .thenReturn(serverStreamTracer2);
-    for (int i = 0; i < 5; i++) {
-      // flowControlPushBack() creates quite a few streams.  We need to make sure tracers are not
-      // shared among them, or assertion in TestClientStreamTracer will fail.
-      clientStubbing.thenReturn(new TestClientStreamTracer());
-      serverStubbing.thenReturn(new TestServerStreamTracer());
-    }
     callOptions = CallOptions.DEFAULT.withStreamTracerFactory(clientStreamTracerFactory);
   }
 
@@ -732,13 +755,18 @@ public abstract class AbstractTransportTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation")
   public void basicStream() throws Exception {
     InOrder clientInOrder = inOrder(clientStreamTracerFactory);
     InOrder serverInOrder = inOrder(serverStreamTracerFactory);
     server.start(serverListener);
     client = newClientTransport(server);
+
     startTransport(client, mockClientTransportListener);
+
+    // This attribute is available right after transport is started
+    assertThat(((ConnectionClientTransport) client).getAttributes()
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
+
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     serverTransport = serverTransportListener.transport;
@@ -771,6 +799,7 @@ public abstract class AbstractTransportTest {
         Lists.newArrayList(serverStreamCreation.headers.getAll(asciiKey)));
     assertEquals(Lists.newArrayList(clientHeadersCopy.getAll(binaryKey)),
         Lists.newArrayList(serverStreamCreation.headers.getAll(binaryKey)));
+    assertEquals(tracerKeyValue, serverStreamCreation.headers.get(tracerHeaderKey));
     ServerStream serverStream = serverStreamCreation.stream;
     ServerStreamListenerBase serverStreamListener = serverStreamCreation.listener;
 
@@ -781,6 +810,10 @@ public abstract class AbstractTransportTest {
         serverStream.getAttributes().get(ADDITIONAL_TRANSPORT_ATTR_KEY));
     assertNotNull(serverStream.getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
     assertNotNull(serverStream.getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR));
+
+    // This attribute is still available when the transport is connected
+    assertThat(((ConnectionClientTransport) client).getAttributes()
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
 
     serverStream.request(1);
     assertTrue(clientStreamListener.awaitOnReadyAndDrain(TIMEOUT_MS, TimeUnit.MILLISECONDS));

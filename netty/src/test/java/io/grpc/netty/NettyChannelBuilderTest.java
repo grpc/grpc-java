@@ -22,7 +22,6 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
-import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -151,7 +150,7 @@ public class NettyChannelBuilderTest {
         NegotiationType.PLAINTEXT_UPGRADE,
         noSslContext);
     // just check that the classes are the same, and that negotiator is not null.
-    assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
+    assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeProtocolNegotiator);
   }
 
   @Test
@@ -164,13 +163,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithClientContext() throws SSLException {
-    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
-
-    assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
-    ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
-    ProtocolNegotiators.HostPort hostPort = n.parseAuthority("authority:1234");
+    ProtocolNegotiators.HostPort hostPort = ProtocolNegotiators.parseAuthority("authority:1234");
 
     assertEquals("authority", hostPort.host);
     assertEquals(1234, hostPort.port);
@@ -178,13 +171,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithAuthorityFallback() throws SSLException {
-    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
-
-    assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
-    ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
-    ProtocolNegotiators.HostPort hostPort = n.parseAuthority("bad_authority");
+    ProtocolNegotiators.HostPort hostPort = ProtocolNegotiators.parseAuthority("bad_authority");
 
     assertEquals("bad_authority", hostPort.host);
     assertEquals(-1, hostPort.port);

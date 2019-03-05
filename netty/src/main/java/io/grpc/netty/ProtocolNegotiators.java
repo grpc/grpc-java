@@ -25,6 +25,8 @@ import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.Security;
+import io.grpc.InternalChannelz.Tls;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
@@ -238,11 +240,9 @@ final class ProtocolNegotiators {
    * Buffers all writes until the HTTP CONNECT tunnel is established.
    */
   static final class BufferUntilProxyTunnelledHandler extends AbstractBufferingHandler {
-    private final ChannelHandler originalHandler;
 
     public BufferUntilProxyTunnelledHandler(ProxyHandler proxyHandler, ChannelHandler handler) {
       super(proxyHandler, handler);
-      this.originalHandler = handler;
     }
 
     @Override
@@ -268,62 +268,13 @@ final class ProtocolNegotiators {
     }
   }
 
-  /**
-   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
-   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
-   * may happen immediately, even before the TLS Handshake is complete.
-   */
-  public static ProtocolNegotiator tls(SslContext sslContext) {
-    return new TlsNegotiator(sslContext);
-  }
+  static final class ClientTlsProtocolNegotiator implements ProtocolNegotiator {
 
-  @VisibleForTesting
-  static final class TlsNegotiator implements ProtocolNegotiator {
-    private final SslContext sslContext;
-
-    TlsNegotiator(SslContext sslContext) {
+    public ClientTlsProtocolNegotiator(SslContext sslContext) {
       this.sslContext = checkNotNull(sslContext, "sslContext");
     }
 
-    @VisibleForTesting
-    HostPort parseAuthority(String authority) {
-      URI uri = GrpcUtil.authorityToUri(Preconditions.checkNotNull(authority, "authority"));
-      String host;
-      int port;
-      if (uri.getHost() != null) {
-        host = uri.getHost();
-        port = uri.getPort();
-      } else {
-        /*
-         * Implementation note: We pick -1 as the port here rather than deriving it from the
-         * original socket address.  The SSL engine doesn't use this port number when contacting the
-         * remote server, but rather it is used for other things like SSL Session caching.  When an
-         * invalid authority is provided (like "bad_cert"), picking the original port and passing it
-         * in would mean that the port might used under the assumption that it was correct.   By
-         * using -1 here, it forces the SSL implementation to treat it as invalid.
-         */
-        host = authority;
-        port = -1;
-      }
-      return new HostPort(host, port);
-    }
-
-    @Override
-    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
-      final HostPort hostPort = parseAuthority(handler.getAuthority());
-
-      ChannelHandler sslBootstrap = new ChannelHandlerAdapter() {
-        @Override
-        public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-          SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), hostPort.host, hostPort.port);
-          SSLParameters sslParams = sslEngine.getSSLParameters();
-          sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-          sslEngine.setSSLParameters(sslParams);
-          ctx.pipeline().replace(this, null, new SslHandler(sslEngine, false));
-        }
-      };
-      return new BufferUntilTlsNegotiatedHandler(sslBootstrap, handler);
-    }
+    private final SslContext sslContext;
 
     @Override
     public AsciiString scheme() {
@@ -331,7 +282,111 @@ final class ProtocolNegotiators {
     }
 
     @Override
+    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
+      ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority());
+      WaitUntilActiveHandler wuah = new WaitUntilActiveHandler(cth);
+      return wuah;
+    }
+
+    @Override
     public void close() {}
+  }
+
+  static final class ClientTlsHandler extends ChannelDuplexHandler {
+
+    private final ChannelHandler next;
+    private final SslContext sslContext;
+    private final String host;
+    private final int port;
+
+    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+
+    ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority) {
+      this.next = checkNotNull(next, "next");
+      this.sslContext = checkNotNull(sslContext, "sslContext");
+      HostPort hostPort = parseAuthority(authority);
+      this.host = hostPort.host;
+      this.port = hostPort.port;
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
+      SSLParameters sslParams = sslEngine.getSSLParameters();
+      sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+      sslEngine.setSSLParameters(sslParams);
+      ctx.pipeline().addBefore(ctx.name(), /* name= */ null, new SslHandler(sslEngine, false));
+      super.handlerAdded(ctx);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        pne = (ProtocolNegotiationEvent) evt;
+      } else if (evt instanceof SslHandshakeCompletionEvent) {
+        SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
+        if (handshakeEvent.isSuccess()) {
+          SslHandler handler = ctx.pipeline().get(SslHandler.class);
+          if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
+            // Successfully negotiated the protocol.
+            logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
+            ctx.pipeline().replace(ctx.name(), null, next);
+            fireProtocolNegotiationEvent(ctx, handler.engine().getSession());
+          } else {
+            Exception ex = new Exception(
+                "Failed ALPN negotiation: Unable to find compatible protocol.");
+            logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed.", ex);
+            ctx.fireExceptionCaught(ex);
+          }
+        } else {
+          ctx.fireExceptionCaught(handshakeEvent.cause());
+        }
+      } else {
+        super.userEventTriggered(ctx, evt);
+      }
+    }
+
+    private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx, SSLSession session) {
+      Security security = new Security(new Tls(session));
+      Attributes attrs = pne.getAttributes().toBuilder()
+          .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+          .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
+          .build();
+      ctx.fireUserEventTriggered(pne.withAttributes(attrs).withSecurity(security));
+    }
+  }
+
+  @VisibleForTesting
+  static HostPort parseAuthority(String authority) {
+    URI uri = GrpcUtil.authorityToUri(Preconditions.checkNotNull(authority, "authority"));
+    String host;
+    int port;
+    if (uri.getHost() != null) {
+      host = uri.getHost();
+      port = uri.getPort();
+    } else {
+      /*
+       * Implementation note: We pick -1 as the port here rather than deriving it from the
+       * original socket address.  The SSL engine doesn't use this port number when contacting the
+       * remote server, but rather it is used for other things like SSL Session caching.  When an
+       * invalid authority is provided (like "bad_cert"), picking the original port and passing it
+       * in would mean that the port might used under the assumption that it was correct.   By
+       * using -1 here, it forces the SSL implementation to treat it as invalid.
+       */
+      host = authority;
+      port = -1;
+    }
+    return new HostPort(host, port);
+  }
+
+  /**
+   * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
+   * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
+   * may happen immediately, even before the TLS Handshake is complete.
+   */
+  public static ProtocolNegotiator tls(SslContext sslContext) {
+    return new ClientTlsProtocolNegotiator(sslContext);
   }
 
   /** A tuple of (host, port). */
@@ -350,21 +405,10 @@ final class ProtocolNegotiators {
    * Returns a {@link ProtocolNegotiator} used for upgrading to HTTP/2 from HTTP/1.x.
    */
   public static ProtocolNegotiator plaintextUpgrade() {
-    return new PlaintextUpgradeNegotiator();
+    return new PlaintextUpgradeProtocolNegotiator();
   }
 
-  static final class PlaintextUpgradeNegotiator implements ProtocolNegotiator {
-
-    @Override
-    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
-      // Register the plaintext upgrader
-      Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(handler);
-      HttpClientCodec httpClientCodec = new HttpClientCodec();
-      final HttpClientUpgradeHandler upgrader =
-          new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, 1000);
-      return new BufferingHttp2UpgradeHandler(httpClientCodec, upgrader, handler,
-          handler.getAuthority());
-    }
+  static final class PlaintextUpgradeProtocolNegotiator implements ProtocolNegotiator {
 
     @Override
     public AsciiString scheme() {
@@ -372,7 +416,67 @@ final class ProtocolNegotiators {
     }
 
     @Override
+    public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
+      ChannelHandler upgradeHandler =
+          new Http2UpgradeAndGrpcHandler(grpcHandler.getAuthority(), grpcHandler);
+      ChannelHandler wuah = new WaitUntilActiveHandler(upgradeHandler);
+      return wuah;
+    }
+
+    @Override
     public void close() {}
+  }
+
+  /**
+   * Acts as a combination of Http2Upgrade and {@link GrpcNegotiationHandler}.  Unfortunately,
+   * this negotiator doesn't follow the pattern of "just one handler doing negotiation at a time."
+   * This is due to the tight coupling between the upgrade handler and the HTTP/2 handler.
+   */
+  static final class Http2UpgradeAndGrpcHandler extends ChannelInboundHandlerAdapter {
+
+    private final String authority;
+    private final GrpcHttp2ConnectionHandler next;
+
+    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+
+    Http2UpgradeAndGrpcHandler(String authority, GrpcHttp2ConnectionHandler next) {
+      this.authority = checkNotNull(authority, "authority");
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      HttpClientCodec httpClientCodec = new HttpClientCodec();
+      ctx.pipeline().addBefore(ctx.name(), null, httpClientCodec);
+
+      Http2ClientUpgradeCodec upgradeCodec = new Http2ClientUpgradeCodec(next);
+      HttpClientUpgradeHandler upgrader =
+          new HttpClientUpgradeHandler(httpClientCodec, upgradeCodec, /*maxContentLength=*/ 1000);
+      ctx.pipeline().addBefore(ctx.name(), null, upgrader);
+
+      // Trigger the HTTP/1.1 plaintext upgrade protocol by issuing an HTTP request
+      // which causes the upgrade headers to be added
+      DefaultHttpRequest upgradeTrigger =
+          new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+      upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
+      ctx.writeAndFlush(upgradeTrigger).addListener(
+          ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
+      super.handlerAdded(ctx);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        pne = (ProtocolNegotiationEvent) evt;
+      } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
+        ctx.pipeline().remove(ctx.name());
+        next.handleProtocolNegotiationCompleted(pne.getAttributes(), pne.getSecurity());
+      } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
+        ctx.fireExceptionCaught(unavailableException("HTTP/2 upgrade rejected"));
+      } else {
+        super.userEventTriggered(ctx, evt);
+      }
+    }
   }
 
   /**
@@ -390,7 +494,7 @@ final class ProtocolNegotiators {
 
   @VisibleForTesting
   static void logSslEngineDetails(Level level, ChannelHandlerContext ctx, String msg,
-                                                @Nullable Throwable t) {
+      @Nullable Throwable t) {
     if (!log.isLoggable(level)) {
       return;
     }
@@ -634,107 +738,6 @@ final class ProtocolNegotiators {
       }
     }
   }
-
-  /**
-   * Buffers all writes until the TLS Handshake is complete.
-   */
-  private static class BufferUntilTlsNegotiatedHandler extends AbstractBufferingHandler {
-
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-
-    BufferUntilTlsNegotiatedHandler(
-        ChannelHandler bootstrapHandler, GrpcHttp2ConnectionHandler grpcHandler) {
-      super(bootstrapHandler);
-      this.grpcHandler = grpcHandler;
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt instanceof SslHandshakeCompletionEvent) {
-        SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
-        if (handshakeEvent.isSuccess()) {
-          SslHandler handler = ctx.pipeline().get(SslHandler.class);
-          if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
-            // Successfully negotiated the protocol.
-            logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
-
-            // Wait until negotiation is complete to add gRPC.   If added too early, HTTP/2 writes
-            // will fail before we see the userEvent, and the channel is closed down prematurely.
-            ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
-
-            SSLSession session = handler.engine().getSession();
-            // Successfully negotiated the protocol.
-            // Notify about completion and pass down SSLSession in attributes.
-            grpcHandler.handleProtocolNegotiationCompleted(
-                Attributes.newBuilder()
-                    .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
-                    .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                    .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
-                    .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
-                    .build(),
-                new InternalChannelz.Security(new InternalChannelz.Tls(session)));
-            writeBufferedAndRemove(ctx);
-          } else {
-            Exception ex = new Exception(
-                "Failed ALPN negotiation: Unable to find compatible protocol.");
-            logSslEngineDetails(Level.FINE, ctx, "TLS negotiation failed.", ex);
-            fail(ctx, ex);
-          }
-        } else {
-          fail(ctx, handshakeEvent.cause());
-        }
-      }
-      super.userEventTriggered(ctx, evt);
-    }
-  }
-
-  /**
-   * Buffers all writes until the HTTP to HTTP/2 upgrade is complete.
-   */
-  private static class BufferingHttp2UpgradeHandler extends AbstractBufferingHandler {
-
-    private final GrpcHttp2ConnectionHandler grpcHandler;
-
-    private final String authority;
-
-    BufferingHttp2UpgradeHandler(ChannelHandler handler, ChannelHandler upgradeHandler,
-        GrpcHttp2ConnectionHandler grpcHandler, String authority) {
-      super(handler, upgradeHandler);
-      this.grpcHandler = grpcHandler;
-      this.authority = authority;
-    }
-
-    @Override
-    @SuppressWarnings("FutureReturnValueIgnored")
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-      // Trigger the HTTP/1.1 plaintext upgrade protocol by issuing an HTTP request
-      // which causes the upgrade headers to be added
-      DefaultHttpRequest upgradeTrigger =
-          new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
-      upgradeTrigger.headers().add(HttpHeaderNames.HOST, authority);
-      ctx.writeAndFlush(upgradeTrigger);
-      super.channelActive(ctx);
-    }
-
-    @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
-        writeBufferedAndRemove(ctx);
-        grpcHandler.handleProtocolNegotiationCompleted(
-            Attributes
-                .newBuilder()
-                .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
-                .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
-                .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
-                .build(),
-            /*securityInfo=*/ null);
-      } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
-        fail(ctx, unavailableException("HTTP/2 upgrade rejected"));
-      }
-      super.userEventTriggered(ctx, evt);
-    }
-  }
-
 
   /**
    * Adapts a {@link ProtocolNegotiationEvent} to the {@link GrpcHttp2ConnectionHandler}.

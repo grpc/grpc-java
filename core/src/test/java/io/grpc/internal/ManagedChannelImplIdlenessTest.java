@@ -35,6 +35,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.Lists;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
@@ -68,19 +69,23 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Unit tests for {@link ManagedChannelImpl}'s idle mode.
  */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplIdlenessTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock oobExecutor = new FakeClock();
@@ -138,7 +143,6 @@ public class ManagedChannelImplIdlenessTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
     when(mockNameResolverFactory
@@ -186,7 +190,8 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockLoadBalancerProvider, never()).newLoadBalancer(any(Helper.class));
     verify(mockTransportFactory, never()).newClientTransport(
         any(SocketAddress.class),
-        any(ClientTransportFactory.ClientTransportOptions.class));
+        any(ClientTransportFactory.ClientTransportOptions.class),
+        any(ChannelLogger.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
   }
 
@@ -395,7 +400,8 @@ public class ManagedChannelImplIdlenessTest {
             any(SocketAddress.class),
             eq(new ClientTransportFactory.ClientTransportOptions()
               .setAuthority("oobauthority")
-              .setUserAgent(USER_AGENT)));
+              .setUserAgent(USER_AGENT)),
+            any(ChannelLogger.class));
     ClientCall<String, Integer> oobCall = oob.newCall(method, CallOptions.DEFAULT);
     oobCall.start(mockCallListener2, new Metadata());
     verify(mockTransportFactory)
@@ -403,7 +409,8 @@ public class ManagedChannelImplIdlenessTest {
             any(SocketAddress.class),
             eq(new ClientTransportFactory.ClientTransportOptions()
               .setAuthority("oobauthority")
-              .setUserAgent(USER_AGENT)));
+              .setUserAgent(USER_AGENT)),
+            any(ChannelLogger.class));
     MockClientTransportInfo oobTransportInfo = newTransports.poll();
     assertEquals(0, newTransports.size());
     // The OOB transport reports in-use state
