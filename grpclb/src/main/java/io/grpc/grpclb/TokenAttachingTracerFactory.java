@@ -18,20 +18,25 @@ package io.grpc.grpclb;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.internal.GrpcAttributes;
+import javax.annotation.Nullable;
 
 /**
  * Wraps a {@link ClientStreamTracer.Factory}, retrieves tokens from transport attributes and
  * attaches them to headers.  This is only used in the PICK_FIRST mode.
  */
 final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
+  private static final ClientStreamTracer NOOP_TRACER = new ClientStreamTracer() {};
+
+  @Nullable
   private final ClientStreamTracer.Factory delegate;
 
-  TokenAttachingTracerFactory(ClientStreamTracer.Factory delegate) {
-    this.delegate = checkNotNull(delegate, "delegate");
+  TokenAttachingTracerFactory(@Nullable ClientStreamTracer.Factory delegate) {
+    this.delegate = delegate;
   }
 
   @Override
@@ -45,6 +50,23 @@ final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
       headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
       headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
     }
-    return delegate.newClientStreamTracer(info, headers);
+    if (delegate != null) {
+      return delegate.newClientStreamTracer(info, headers);
+    } else {
+      return NOOP_TRACER;
+    }
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(delegate);
+  }
+
+  @Override
+  public boolean equals(Object other) {
+    if (!(other instanceof TokenAttachingTracerFactory)) {
+      return false;
+    }
+    return Objects.equal(delegate, ((TokenAttachingTracerFactory) other).delegate);
   }
 }

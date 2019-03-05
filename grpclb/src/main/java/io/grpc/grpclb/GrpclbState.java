@@ -31,7 +31,6 @@ import com.google.protobuf.util.Durations;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -140,7 +139,7 @@ final class GrpclbState {
   @Nullable
   private LbStream lbStream;
   private Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Collections.emptyMap();
-  private Mode mode = Mode.ROUND_ROBIN;
+  private final Mode mode;
 
   // Has the same size as the round-robin list from the balancer.
   // A drop entry from the round-robin list becomes a DropEntry here.
@@ -152,10 +151,12 @@ final class GrpclbState {
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
 
   GrpclbState(
+      Mode mode,
       Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
       BackoffPolicy.Provider backoffPolicyProvider) {
+    this.mode = checkNotNull(mode, "mode");
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
@@ -189,11 +190,6 @@ final class GrpclbState {
       propagateError(Status.UNAVAILABLE.withDescription(
               "NameResolver returned no LB address while asking for GRPCLB"));
       return;
-    }
-    if (!mode.equals(newMode)) {
-      shutdownSubchannels();
-      mode = newMode;
-      logger.log(ChannelLogLevel.INFO, "Mode: " + newMode);
     }
     LbAddressGroup newLbAddressGroup = flattenLbAddressGroups(newLbAddressGroups);
     startLbComm(newLbAddressGroup);
@@ -311,17 +307,10 @@ final class GrpclbState {
 
   void shutdown() {
     shutdownLbComm();
-    shutdownSubchannels();
-    subchannelPool.clear();
-    cancelFallbackTimer();
-    cancelLbRpcRetryTimer();
-  }
-
-  private void shutdownSubchannels() {
-    // We close the subchannels through subchannelPool instead of helper just for convenience of
-    // testing.
     switch (mode) {
       case ROUND_ROBIN:
+        // We close the subchannels through subchannelPool instead of helper just for convenience of
+        // testing.
         for (Subchannel subchannel : subchannels.values()) {
           subchannelPool.returnSubchannel(subchannel);
         }
@@ -331,9 +320,12 @@ final class GrpclbState {
         subchannels.values().iterator().next().shutdown();
         break;
       default:
-        throw new UnsupportedOperationException("Unsupported mode: " + mode);
+        throw new AssertionError("Missing case for " + mode);
     }
     subchannels = Collections.emptyMap();
+    subchannelPool.clear();
+    cancelFallbackTimer();
+    cancelLbRpcRetryTimer();
   }
 
   void propagateError(Status status) {
@@ -406,12 +398,12 @@ final class GrpclbState {
         // The PICK_FIRST code path doesn't cache Subchannels.
         for (BackendAddressGroup bag : newBackendAddrList) {
           EquivalentAddressGroup origEag = bag.getAddresses();
-          eagList.add(
-              new EquivalentAddressGroup(
-                  origEag.getAddresses(),
-                  origEag.getAttributes().toBuilder()
-                      .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, bag.getToken())
-                      .build()));
+          Attributes eagAttrs = origEag.getAttributes();
+          if (bag.getToken() != null) {
+            eagAttrs = eagAttrs.toBuilder()
+                .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, bag.getToken()).build();
+          }
+          eagList.add(new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
         }
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
@@ -426,7 +418,7 @@ final class GrpclbState {
             new BackendEntry(subchannel, new TokenAttachingTracerFactory(loadRecorder)));
         break;
       default:
-        throw new UnsupportedOperationException("Unsupported mode: " + mode);
+        throw new AssertionError("Missing case for " + mode);
     }
 
     dropList = Collections.unmodifiableList(newDropList);
@@ -668,32 +660,67 @@ final class GrpclbState {
    * changed since the last picker created.
    */
   private void maybeUpdatePicker() {
-    List<RoundRobinEntry> pickList = new ArrayList<>(backendList.size());
-    Status error = null;
-    boolean hasIdle = false;
-    for (BackendEntry entry : backendList) {
-      Subchannel subchannel = entry.result.getSubchannel();
-      Attributes attrs = subchannel.getAttributes();
-      ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
-      if (stateInfo.getState() == READY) {
-        pickList.add(entry);
-      } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
-        error = stateInfo.getStatus();
-      } else if (stateInfo.getState() == IDLE) {
-        hasIdle = true;
-      }
-    }
+    List<RoundRobinEntry> pickList;
     ConnectivityState state;
-    if (pickList.isEmpty()) {
-      if (error != null && !hasIdle) {
-        pickList.add(new ErrorEntry(error));
-        state = TRANSIENT_FAILURE;
-      } else {
-        pickList.add(BUFFER_ENTRY);
-        state = CONNECTING;
-      }
-    } else {
-      state = READY;
+    switch (mode) {
+      case ROUND_ROBIN:
+        pickList = new ArrayList<>(backendList.size());
+        Status error = null;
+        boolean hasIdle = false;
+        for (BackendEntry entry : backendList) {
+          Subchannel subchannel = entry.subchannel;
+          Attributes attrs = subchannel.getAttributes();
+          ConnectivityStateInfo stateInfo = attrs.get(STATE_INFO).get();
+          if (stateInfo.getState() == READY) {
+            pickList.add(entry);
+          } else if (stateInfo.getState() == TRANSIENT_FAILURE) {
+            error = stateInfo.getStatus();
+          } else if (stateInfo.getState() == IDLE) {
+            hasIdle = true;
+          }
+        }
+        if (pickList.isEmpty()) {
+          if (error != null && !hasIdle) {
+            pickList.add(new ErrorEntry(error));
+            state = TRANSIENT_FAILURE;
+          } else {
+            pickList.add(BUFFER_ENTRY);
+            state = CONNECTING;
+          }
+        } else {
+          state = READY;
+        }
+        break;
+      case PICK_FIRST:
+        if (backendList.isEmpty()) {
+          pickList = Collections.singletonList(BUFFER_ENTRY);
+          // Have not received server addresses
+          state = CONNECTING;
+        } else {
+          checkState(backendList.size() == 1, "Excessive backend entries: %s", backendList);
+          BackendEntry onlyEntry = backendList.get(0);
+          ConnectivityStateInfo stateInfo =
+              onlyEntry.subchannel.getAttributes().get(STATE_INFO).get();
+          state = stateInfo.getState();
+          switch (state) {
+            case READY:
+              pickList = Collections.<RoundRobinEntry>singletonList(onlyEntry);
+              break;
+            case TRANSIENT_FAILURE:
+              pickList =
+                  Collections.<RoundRobinEntry>singletonList(new ErrorEntry(stateInfo.getStatus()));
+              break;
+            case CONNECTING:
+              pickList = Collections.singletonList(BUFFER_ENTRY);
+              break;
+            default:
+              pickList = Collections.<RoundRobinEntry>singletonList(
+                  new IdleSubchannelEntry(onlyEntry.subchannel));
+          }
+        }
+        break;
+      default:
+        throw new AssertionError("Missing case for " + mode);
     }
     maybeUpdatePicker(state, new RoundRobinPicker(dropList, pickList));
   }
@@ -797,12 +824,14 @@ final class GrpclbState {
     }
   }
 
-  private interface RoundRobinEntry {
+  @VisibleForTesting
+  interface RoundRobinEntry {
     PickResult picked(Metadata headers);
   }
 
   @VisibleForTesting
   static final class BackendEntry implements RoundRobinEntry {
+    final Subchannel subchannel;
     @VisibleForTesting
     final PickResult result;
     @Nullable
@@ -811,16 +840,18 @@ final class GrpclbState {
     /**
      * For ROUND_ROBIN: creates a BackendEntry whose usage will be reported to load recorder.
      */
-    BackendEntry(Subchannel subchannel, ClientStreamTracer.Factory tracerFactory, String token) {
+    BackendEntry(Subchannel subchannel, GrpclbClientLoadRecorder loadRecorder, String token) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
       this.result =
-          PickResult.withSubchannel(subchannel, checkNotNull(tracerFactory, "tracerFactory"));
+          PickResult.withSubchannel(subchannel, checkNotNull(loadRecorder, "loadRecorder"));
       this.token = checkNotNull(token, "token");
     }
 
     /**
-     * For ROUND_ROBIN: creates a BackendEntry whose usage will not be reported.
+     * For ROUND_ROBIN/PICK_FIRST: creates a BackendEntry whose usage will not be reported.
      */
     BackendEntry(Subchannel subchannel) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
       this.result = PickResult.withSubchannel(subchannel);
       this.token = null;
     }
@@ -828,7 +859,8 @@ final class GrpclbState {
     /**
      * For PICK_FIRST: creates a BackendEntry that includes all addresses.
      */
-    BackendEntry(Subchannel subchannel, ClientStreamTracer.Factory tracerFactory) {
+    BackendEntry(Subchannel subchannel, TokenAttachingTracerFactory tracerFactory) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
       this.result =
           PickResult.withSubchannel(subchannel, checkNotNull(tracerFactory, "tracerFactory"));
       this.token = null;
@@ -846,7 +878,7 @@ final class GrpclbState {
     @Override
     public String toString() {
       // This is printed in logs.  Only give out useful information.
-      return "[" + result.getSubchannel().getAllAddresses().toString() + "(" + token + ")]";
+      return "[" + subchannel.getAllAddresses().toString() + "(" + token + ")]";
     }
 
     @Override
@@ -861,6 +893,41 @@ final class GrpclbState {
       }
       BackendEntry that = (BackendEntry) other;
       return Objects.equal(result, that.result) && Objects.equal(token, that.token);
+    }
+  }
+
+  @VisibleForTesting
+  static final class IdleSubchannelEntry implements RoundRobinEntry {
+    private final Subchannel subchannel;
+
+    IdleSubchannelEntry(Subchannel subchannel) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+    }
+
+    @Override
+    public PickResult picked(Metadata headers) {
+      subchannel.requestConnection();
+      return PickResult.withNoResult();
+    }
+
+    @Override
+    public String toString() {
+      // This is printed in logs.  Only give out useful information.
+      return "(idle)[" + subchannel.getAllAddresses().toString() + "]";
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(subchannel);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof IdleSubchannelEntry)) {
+        return false;
+      }
+      IdleSubchannelEntry that = (IdleSubchannelEntry) other;
+      return Objects.equal(subchannel, that.subchannel);
     }
   }
 
@@ -922,8 +989,7 @@ final class GrpclbState {
         // First round-robin on dropList. If a drop entry is selected, request will be dropped.  If
         // a non-drop entry is selected, then round-robin on pickList.  This makes sure requests are
         // dropped at the same proportion as the drop entries appear on the round-robin list from
-        // the balancer, while only READY backends (that make up pickList) are selected for the
-        // non-drop cases.
+        // the balancer, while only backends from pickList are selected for the non-drop cases.
         if (!dropList.isEmpty()) {
           DropEntry drop = dropList.get(dropIndex);
           dropIndex++;
@@ -941,6 +1007,15 @@ final class GrpclbState {
           pickIndex = 0;
         }
         return pick.picked(args.getHeaders());
+      }
+    }
+
+    @Override
+    public void requestConnection() {
+      for (RoundRobinEntry entry : pickList) {
+        if (entry instanceof IdleSubchannelEntry) {
+          ((IdleSubchannelEntry) entry).subchannel.requestConnection();
+        }
       }
     }
   }
