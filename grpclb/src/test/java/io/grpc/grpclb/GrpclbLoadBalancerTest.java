@@ -1653,6 +1653,15 @@ public class GrpclbLoadBalancerTest {
     assertThat(mode).isEqualTo(Mode.PICK_FIRST);
   }
 
+  @Test
+  public void retrieveModeFromLbConfig_badConfigDefaultToRoundRobin() throws Exception {
+    String lbConfig = "{\"childPolicy\" : {}}";
+
+    Mode mode = retrieveModeFromLbConfig(parseJsonObject(lbConfig), channelLogger);
+    assertThat(logs).containsExactly("WARNING: Bad grpclb config, using ROUND_ROBIN");
+    assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
+  }
+
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {
