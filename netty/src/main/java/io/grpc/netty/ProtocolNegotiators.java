@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
@@ -24,9 +25,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
+import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
 import io.grpc.InternalChannelz.Tls;
+import io.grpc.ProxiedSocketAddress;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
@@ -74,6 +77,37 @@ import javax.net.ssl.SSLSession;
  * Common {@link ProtocolNegotiator}s used by gRPC.
  */
 final class ProtocolNegotiators {
+
+  /*
+   * The flow for a handler should go like:
+   *
+   * 1.  Be added to the pipeline, typically replacing the previous negotiation handler.
+   * 2.  Begin outbound negotiation, possibly adding dependent handlers before itself.
+   * 3.  Intercept a {@link ProtocolNegotiationEvent} from the previous handler.
+   * 4a. On receiving a successful negotiation, replace this handler with the "next" handler.
+   * 4b. On failure, fire an exception up the pipeline, and return early from this flow.
+   * 5.  Modify the captured {@link ProtocolNegotiationEvent} with the negotiation details and fire
+   *     the new event.
+   *
+   * Patterns for ProtocolNegotiators and their Handlers:
+   *
+   * 1.  {@link ProtocolNegotiator}s expect to create each of the protocol negotiator handlers up
+   *     front.  This makes it clear what stages of negotiation are going to happen.
+   * 2.  Each handler should expect to be the only "negotiating" handler on the pipeline at a time.
+   * 3.  Handlers assume that the channel is active and ready, and should begin as soon as they are
+   *     added to the pipeline.
+   * 4.  Handlers do not handle exceptions of any kind.  Problems are caught by the
+   *     {@link WriteBufferingAndExceptionHandler}  which is removed after the final negotiation,
+   *     typically by the {@link GrpcHttp2ConnectionHandler}.
+   * 5.  User events are either handled, or propagated.  They are never handled and propagated.
+   * 6.  Handlers are composable, and they should not assume they are the first or last handler in
+   *     the pipeline.  A handler should be generally reusable by another
+   *     {@link ProtocolNegotiator}, which may place them in a different order than expected.
+   * 7.  It is not assumed that a negotiation event is always fired from the previous handler.  A
+   *     default event should be forked if not.
+   * 8.  Handlers are not shareable, and are one time use.
+   */
+
   private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
 
   private ProtocolNegotiators() {
@@ -844,7 +878,6 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
-        assert !ctx.channel().isActive();
         checkState(protocolNegotiationEvent == null, "protocolNegotiationEvent already sent");
         protocolNegotiationEvent = (ProtocolNegotiationEvent) evt;
       } else {
@@ -863,6 +896,69 @@ final class ProtocolNegotiators {
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.NONE)
           .build();
       ctx.fireUserEventTriggered(protocolNegotiationEvent.withAttributes(attrs));
+    }
+  }
+
+  static final class ClientHttpProxyHandler extends ChannelDuplexHandler {
+
+    private final ChannelHandler next;
+    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+
+    ClientHttpProxyHandler(ChannelHandler next) {
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void connect(ChannelHandlerContext ctx, SocketAddress remoteAddress,
+        SocketAddress localAddress, ChannelPromise promise) throws Exception {
+      SocketAddress actualRemoteAddress;
+      if (remoteAddress instanceof HttpConnectProxiedSocketAddress) {
+        HttpConnectProxiedSocketAddress proxyDetails =
+            (HttpConnectProxiedSocketAddress) remoteAddress;
+        String username = proxyDetails.getUsername();
+        String password = proxyDetails.getPassword();
+        checkArgument((username == null) == (password == null), "Missing username / password");
+        SocketAddress proxyAddress = proxyDetails.getProxyAddress();
+        ChannelHandler proxyHandler;
+        if (username != null) {
+          proxyHandler = new HttpProxyHandler(proxyAddress, username, password);
+        } else {
+          proxyHandler = new HttpProxyHandler(proxyAddress);
+        }
+        ctx.pipeline().addBefore(ctx.name(), null, proxyHandler);
+        actualRemoteAddress = proxyDetails.getTargetAddress();
+      } else if (remoteAddress instanceof ProxiedSocketAddress) {
+        Status status = Status.UNAVAILABLE.withDescription("Bad proxy address " + remoteAddress);
+        promise.setFailure(status.asRuntimeException());
+        return;
+      } else {
+        actualRemoteAddress = remoteAddress;
+        ctx.pipeline().replace(ctx.name(), null, next);
+        fireProtocolNegotiationEvent(ctx, /*evt=*/ null);
+      }
+      super.connect(ctx, actualRemoteAddress, localAddress, promise);
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof ProtocolNegotiationEvent) {
+        pne = (ProtocolNegotiationEvent) evt;
+      } else if (evt instanceof ProxyConnectionEvent) {
+        ctx.pipeline().replace(ctx.name(), null, next);
+        fireProtocolNegotiationEvent(ctx, (ProxyConnectionEvent) evt);
+      } else {
+        super.userEventTriggered(ctx, evt);
+      }
+    }
+
+    private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx, ProxyConnectionEvent evt) {
+      Attributes attrs = pne.getAttributes();
+      if (evt != null) {
+        attrs = attrs.toBuilder()
+            .set(Grpc.TRANSPORT_ATTR_PROXIED_REMOTE_ADDR, evt.destinationAddress())
+            .build();
+      }
+      ctx.fireUserEventTriggered(pne.withAttributes(attrs));
     }
   }
 }
