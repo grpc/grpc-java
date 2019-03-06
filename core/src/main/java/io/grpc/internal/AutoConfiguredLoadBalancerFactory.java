@@ -44,6 +44,7 @@ import javax.annotation.Nullable;
 public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factory {
   private static final Logger logger =
       Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());
+  private static final String GRPCLB_POLICY_NAME = "grpclb";
 
   private final LoadBalancerRegistry registry;
   private final String defaultPolicy;
@@ -214,17 +215,49 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
         }
       }
 
-      PolicySelection preselected = null;
+      List<LbConfig> lbConfigs = null;
+      if (config != null) {
+        List<Map<String, Object>> rawLbConfigs =
+            ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
+        lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
+      }
+      if (lbConfigs != null && !lbConfigs.isEmpty()) {
+        LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
+        for (LbConfig lbConfig : lbConfigs) {
+          String policy = lbConfig.getPolicyName();
+          LoadBalancerProvider provider = registry.getProvider(policy);
+          if (provider == null) {
+            policiesTried.add(policy);
+          } else {
+            if (!policiesTried.isEmpty()) {
+              // Before returning, log all previously tried policies
+              helper.getChannelLogger().log(
+                  ChannelLogLevel.DEBUG,
+                  "{0} specified by Service Config are not available", policiesTried);
+            }
+            return new PolicySelection(
+                provider,
+                policy.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs,
+                lbConfig.getRawConfigValue());
+          }
+        }
+        if (!haveBalancerAddress) {
+          throw new PolicyException(
+            "None of " + policiesTried + " specified by Service Config are available.");
+        }
+      }
+
       if (haveBalancerAddress) {
         // This is a special case where the existence of balancer address in the resolved address
-        // selects "grpclb" policy regardless of the service config.
-        LoadBalancerProvider grpclbProvider = registry.getProvider("grpclb");
+        // selects "grpclb" policy if the service config couldn't select a policy
+        LoadBalancerProvider grpclbProvider = registry.getProvider(GRPCLB_POLICY_NAME);
         if (grpclbProvider == null) {
           if (backendAddrs.isEmpty()) {
             throw new PolicyException(
                 "Received ONLY balancer addresses but grpclb runtime is missing");
           }
           if (!roundRobinDueToGrpclbDepMissing) {
+            // We don't log the warning every time we have an update.
             roundRobinDueToGrpclbDepMissing = true;
             String errorMsg = "Found balancer addresses but grpclb runtime is missing."
                 + " Will use round_robin. Please include grpc-grpclb in your runtime depedencies.";
@@ -235,56 +268,14 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
               getProviderOrThrow(
                   "round_robin", "received balancer addresses but grpclb runtime is missing"),
               backendAddrs, null);
-        } else {
-          // We don't return it immediately, as we may discover a config for "grpclb" later
-          preselected = new PolicySelection(grpclbProvider, servers, null);
         }
+        return new PolicySelection(grpclbProvider, servers, null);
       }
+      // No balancer address this time.  If balancer address shows up later, we want to make sure
+      // the warning is logged one more time.
       roundRobinDueToGrpclbDepMissing = false;
 
-      List<LbConfig> lbConfigs = null;
-      if (config != null) {
-        List<Map<String, Object>> rawLbConfigs =
-            ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
-        lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
-      }
-      if (lbConfigs != null && !lbConfigs.isEmpty()) {
-        if (preselected == null) {
-          // If there isn't a preselecbted, try to get the provider as configured
-          LinkedHashSet<String> policiesTried = new LinkedHashSet<>();
-          for (LbConfig lbConfig : lbConfigs) {
-            String policy = lbConfig.getPolicyName();
-            LoadBalancerProvider provider = registry.getProvider(policy);
-            if (provider == null) {
-              policiesTried.add(policy);
-            } else {
-              if (!policiesTried.isEmpty()) {
-                // Before returning, log all previously tried policies
-                helper.getChannelLogger().log(
-                    ChannelLogLevel.DEBUG,
-                    "{0} specified by Service Config are not available", policiesTried);
-              }
-              return new PolicySelection(provider, servers, lbConfig.getRawConfigValue());
-            }
-          }
-          throw new PolicyException(
-                "None of " + policiesTried + " specified by Service Config are available.");
-        } else {
-          // If there is a preselected, only look for a matching policy to use its config
-          for (LbConfig lbConfig : lbConfigs) {
-            String policy = lbConfig.getPolicyName();
-            if (preselected.provider.getPolicyName().equals(policy)) {
-              return new PolicySelection(
-                  preselected.provider, servers, lbConfig.getRawConfigValue());
-            }
-          }
-        }
-      }
-      // None selected from service config
-
-      if (preselected != null) {
-        return preselected;
-      }
+      // No config nor balancer address. Use default.
       return new PolicySelection(
           getProviderOrThrow(defaultPolicy, "using default policy"), servers, null);
     }

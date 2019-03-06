@@ -107,40 +107,41 @@ class GrpclbLoadBalancer extends LoadBalancer {
       helper.getChannelLogger().log(ChannelLogLevel.INFO, "Mode: " + newMode);
       recreateStates();
     }
-    grpclbState.handleAddresses(newLbAddressGroups, newBackendServers, newMode);
+    grpclbState.handleAddresses(newLbAddressGroups, newBackendServers);
   }
 
   @VisibleForTesting
   static Mode retrieveModeFromLbConfig(
       @Nullable Map<String, Object> rawLbConfigValue, ChannelLogger channelLogger) {
     try {
-      if (rawLbConfigValue != null) {
-        Object rawChildPolicies = rawLbConfigValue.get("childPolicy");
-        if (rawChildPolicies != null) {
-          List<LbConfig> childPolicies =
-              ServiceConfigUtil.unwrapLoadBalancingConfigList(rawChildPolicies);
-          for (LbConfig childPolicy : childPolicies) {
-            String childPolicyName = childPolicy.getPolicyName();
-            switch (childPolicyName) {
-              case "round_robin":
-                return Mode.ROUND_ROBIN;
-              case "pick_first":
-                return Mode.PICK_FIRST;
-              default:
-                channelLogger.log(
-                    ChannelLogLevel.DEBUG,
-                    "grpclb ignoring unsupported child policy " + childPolicyName);
-            }
-          }
+      if (rawLbConfigValue == null) {
+        return DEFAULT_MODE;
+      }
+      Object rawChildPolicies = rawLbConfigValue.get("childPolicy");
+      if (rawChildPolicies == null) {
+        return DEFAULT_MODE;
+      }
+      List<LbConfig> childPolicies =
+          ServiceConfigUtil.unwrapLoadBalancingConfigList(rawChildPolicies);
+      for (LbConfig childPolicy : childPolicies) {
+        String childPolicyName = childPolicy.getPolicyName();
+        switch (childPolicyName) {
+          case "round_robin":
+            return Mode.ROUND_ROBIN;
+          case "pick_first":
+            return Mode.PICK_FIRST;
+          default:
+            channelLogger.log(
+                ChannelLogLevel.DEBUG,
+                "grpclb ignoring unsupported child policy " + childPolicyName);
         }
       }
-      return DEFAULT_MODE;
     } catch (RuntimeException e) {
       channelLogger.log(ChannelLogLevel.WARNING, "Bad grpclb config, using " + DEFAULT_MODE);
       logger.log(
           Level.WARNING, "Bad grpclb config: " + rawLbConfigValue + ", using " + DEFAULT_MODE, e);
-      return DEFAULT_MODE;
     }
+    return DEFAULT_MODE;
   }
 
   private void resetStates() {

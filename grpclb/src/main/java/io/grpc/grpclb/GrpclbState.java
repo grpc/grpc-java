@@ -184,8 +184,7 @@ final class GrpclbState {
    * not yet connected.
    */
   void handleAddresses(
-      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers,
-      Mode newMode) {
+      List<LbAddressGroup> newLbAddressGroups, List<EquivalentAddressGroup> newBackendServers) {
     if (newLbAddressGroups.isEmpty()) {
       propagateError(Status.UNAVAILABLE.withDescription(
               "NameResolver returned no LB address while asking for GRPCLB"));
