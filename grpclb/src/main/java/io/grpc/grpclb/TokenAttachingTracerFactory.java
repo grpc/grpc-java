@@ -46,8 +46,8 @@ final class TokenAttachingTracerFactory extends ClientStreamTracer.Factory {
     Attributes eagAttrs =
         checkNotNull(transportAttrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS), "eagAttrs");
     String token = eagAttrs.get(GrpclbConstants.TOKEN_ATTRIBUTE_KEY);
+    headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
     if (token != null) {
-      headers.discardAll(GrpclbConstants.TOKEN_METADATA_KEY);
       headers.put(GrpclbConstants.TOKEN_METADATA_KEY, token);
     }
     if (delegate != null) {
