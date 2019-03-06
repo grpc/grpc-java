@@ -125,7 +125,7 @@ final class ChannelTracer {
       LogRecord lr = new LogRecord(logLevel, "[" + logId + "] " + msg);
       // No resource bundle as gRPC is not localized.
       lr.setLoggerName(logger.getName());
-      lr.setSourceClassName(ChannelLogger.class.getName());
+      lr.setSourceClassName(logger.getName());
       // Both logger methods are called log in ChannelLogger.
       lr.setSourceMethodName("log");
       logger.log(lr);
