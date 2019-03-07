@@ -20,7 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
-import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_GRPC;
@@ -138,7 +138,7 @@ public class NettyServerHandlerTest extends NettyHandlerTestBase<NettyServerHand
   private long permitKeepAliveTimeInNanos = 0;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
-  private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
+  private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_DISABLED;
   private long keepAliveTimeInNanos = DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 
