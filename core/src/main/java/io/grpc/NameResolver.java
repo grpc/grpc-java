@@ -16,11 +16,15 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.base.MoreObjects;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -241,6 +245,59 @@ public abstract class NameResolver {
      */
     public SynchronizationContext getSynchronizationContext() {
       throw new UnsupportedOperationException("Not implemented");
+    }
+
+    public <T> ConfigOrStatus<T> parse(Map<String, ?> rawServiceConfig) {
+      return ConfigOrStatus.fromStatus(
+          Status.INTERNAL.withDescription("service config parsing not support"));
+    }
+
+    public static final class ConfigOrStatus<T> {
+
+      public static <T> ConfigOrStatus<T> fromConfig(T config) {
+        return new ConfigOrStatus<>(config);
+      }
+
+      public static <T> ConfigOrStatus<T> fromStatus(Status status) {
+        return new ConfigOrStatus<>(status);
+      }
+
+      private final Status status;
+      private final T config;
+
+      private ConfigOrStatus(T config) {
+        this.config = checkNotNull(config, "config");
+        this.status = null;
+      }
+
+      private ConfigOrStatus(Status status) {
+        this.config = null;
+        this.status = checkNotNull(status, "status");
+      }
+
+      @Nullable
+      public T getConfig() {
+        return config;
+      }
+
+      @Nullable
+      private Status getStatus() {
+        return status;
+      }
+
+      @Override
+      public String toString() {
+        if (config != null) {
+          return MoreObjects.toStringHelper(this)
+              .add("config", config)
+              .toString();
+        } else {
+          assert status != null;
+          return MoreObjects.toStringHelper(this)
+              .add("status", status)
+              .toString();
+        }
+      }
     }
   }
 }
