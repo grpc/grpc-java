@@ -546,25 +546,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.nameResolverFactory = builder.getNameResolverFactory();
-    final ProxyDetector proxyDetector =
+    ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
-    final int defaultPort = builder.getDefaultPort();
-    this.nameResolverHelper = new NameResolver.Helper() {
-        @Override
-        public int getDefaultPort() {
-          return defaultPort;
-        }
-
-        @Override
-        public ProxyDetector getProxyDetector() {
-          return proxyDetector;
-        }
-
-        @Override
-        public SynchronizationContext getSynchronizationContext() {
-          return syncContext;
-        }
-      };
+    this.nameResolverHelper = new NrHelper(builder.getDefaultPort(), proxyDetector, syncContext);
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
@@ -1663,6 +1647,34 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void execute(Runnable command) {
       delegate.execute(command);
+    }
+  }
+
+  private static final class NrHelper extends NameResolver.Helper {
+
+    private final int defaultPort;
+    private final ProxyDetector proxyDetector;
+    private final SynchronizationContext syncCtx;
+
+    NrHelper(int defaultPort, ProxyDetector proxyDetector, SynchronizationContext syncCtx) {
+      this.defaultPort = defaultPort;
+      this.proxyDetector = proxyDetector;
+      this.syncCtx = syncCtx;
+    }
+
+    @Override
+    public int getDefaultPort() {
+      return defaultPort;
+    }
+
+    @Override
+    public ProxyDetector getProxyDetector() {
+      return proxyDetector;
+    }
+
+    @Override
+    public SynchronizationContext getSynchronizationContext() {
+      return syncCtx;
     }
   }
 }
