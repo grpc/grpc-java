@@ -29,7 +29,6 @@ import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Logger;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
@@ -37,8 +36,6 @@ import javax.annotation.Nonnull;
  * Modifies RPCs in conformance with a Service Config.
  */
 final class ServiceConfigInterceptor implements ClientInterceptor {
-
-  private static final Logger logger = Logger.getLogger(ServiceConfigInterceptor.class.getName());
 
   // Map from method name to MethodInfo
   @VisibleForTesting
