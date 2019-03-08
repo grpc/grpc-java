@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
@@ -247,17 +248,44 @@ public abstract class NameResolver {
       throw new UnsupportedOperationException("Not implemented");
     }
 
-    public <T> ConfigOrStatus<T> parse(Map<String, ?> rawServiceConfig) {
+    /**
+     * Parses and validates the service configuration chosen by the name resolver.  This will
+     * return a {@link ConfigOrStatus} which contains either the successfully parsed config, or the
+     * {@link Status} representing the failure to parse.  Implementations are expected to not throw
+     * exceptions, or else the gRPC channel may enter panic mode, and stop working.
+     *
+     * @param rawServiceConfig The {@link Map} representation of the service config
+     * @return a tuple of the fully parsed and validated channel configuration, else the Status.
+     * @since 1.20.0
+     */
+    public ConfigOrStatus<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
       return ConfigOrStatus.fromStatus(
-          Status.INTERNAL.withDescription("service config parsing not support"));
+          Status.INTERNAL.withDescription("service config parsing not supported"));
     }
 
+    /**
+     * Represents either a successfully parsed service config, containing all necessary parts to be
+     * later applied by the channel, or a Status containing the error encountered while parsing.
+     *
+     * @param <T> The message type of the config.
+     * @since 1.20.0
+     */
     public static final class ConfigOrStatus<T> {
 
+      /**
+       * Returns a {@link ConfigOrStatus} for the successfully parsed config.
+       *
+       * @since 1.20.0
+       */
       public static <T> ConfigOrStatus<T> fromConfig(T config) {
         return new ConfigOrStatus<>(config);
       }
 
+      /**
+       * Returns a {@link ConfigOrStatus} for the failure to parse the config.
+       *
+       * @since 1.20.0
+       */
       public static <T> ConfigOrStatus<T> fromStatus(Status status) {
         return new ConfigOrStatus<>(status);
       }
@@ -273,13 +301,20 @@ public abstract class NameResolver {
       private ConfigOrStatus(Status status) {
         this.config = null;
         this.status = checkNotNull(status, "status");
+        checkArgument(!status.isOk(), "cannot use OK status: %s", status);
       }
 
+      /**
+       * @since 1.20.0
+       */
       @Nullable
       public T getConfig() {
         return config;
       }
 
+      /**
+       * @since 1.20.0
+       */
       @Nullable
       private Status getStatus() {
         return status;

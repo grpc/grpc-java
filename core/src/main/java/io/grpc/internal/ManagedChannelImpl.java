@@ -548,7 +548,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.nameResolverFactory = builder.getNameResolverFactory();
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
-    this.nameResolverHelper = new NrHelper(builder.getDefaultPort(), proxyDetector, syncContext);
+    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    this.nameResolverHelper =
+        new NrHelper(
+        builder.getDefaultPort(),
+            proxyDetector,
+            syncContext,
+            retryEnabled,
+            builder.maxRetryAttempts,
+            builder.maxHedgedAttempts);
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
@@ -572,7 +580,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
     this.scheduledExecutorForBalancer =
         new ScheduledExecutorForBalancer(transportFactory.getScheduledExecutorService());
-    this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
     Channel channel = new RealChannel(nameResolver.getServiceAuthority());
@@ -1655,11 +1663,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final int defaultPort;
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncCtx;
+    private final boolean retryEnabled;
+    private final int maxRetryAttemptsLimit;
+    private final int maxHedgedAttemptsLimit;
 
-    NrHelper(int defaultPort, ProxyDetector proxyDetector, SynchronizationContext syncCtx) {
+    NrHelper(
+        int defaultPort,
+        ProxyDetector proxyDetector,
+        SynchronizationContext syncCtx,
+        boolean retryEnabled,
+        int maxRetryAttemptsLimit,
+        int maxHedgedAttemptsLimit) {
       this.defaultPort = defaultPort;
-      this.proxyDetector = proxyDetector;
-      this.syncCtx = syncCtx;
+      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector");
+      this.syncCtx = checkNotNull(syncCtx, "syncCtx");
+      this.retryEnabled = retryEnabled;
+      this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
+      this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
     }
 
     @Override
@@ -1675,6 +1695,25 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public SynchronizationContext getSynchronizationContext() {
       return syncCtx;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public ConfigOrStatus<ManagedChannelServiceConfig> parseServiceConfig(
+        Map<String, ?> rawServiceConfig) {
+      // TODO(carl-mastrangelo): Change the type from Map<String, Object> to Map<String, ?>
+      Map<String, Object> cfg = (Map<String, Object>) rawServiceConfig;
+      try {
+        return ConfigOrStatus.fromConfig(
+            ManagedChannelServiceConfig.fromServiceConfig(
+                cfg,
+                retryEnabled,
+                maxRetryAttemptsLimit,
+                maxHedgedAttemptsLimit));
+      } catch (RuntimeException e) {
+        return ConfigOrStatus.fromStatus(
+            Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
+      }
     }
   }
 }
