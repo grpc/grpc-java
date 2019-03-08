@@ -217,7 +217,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
 
       List<LbConfig> lbConfigs = null;
       if (config != null) {
-        List<? extends Map<String, ?>> rawLbConfigs =
+        List<Map<String, ?>> rawLbConfigs =
             ServiceConfigUtil.getLoadBalancingConfigsFromServiceConfig(config);
         lbConfigs = ServiceConfigUtil.unwrapLoadBalancingConfigList(rawLbConfigs);
       }

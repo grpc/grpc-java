@@ -405,11 +405,11 @@ final class DnsNameResolver extends NameResolver {
 
   @SuppressWarnings("unchecked")
   @VisibleForTesting
-  static List<? extends Map<String, ?>> parseTxtResults(List<String> txtRecords) {
+  static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) {
     List<Map<String, ?>> serviceConfigs = new ArrayList<>();
     for (String txtRecord : txtRecords) {
       if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
-        List<? extends Map<String, ?>> choices;
+        List<Map<String, ?>> choices;
         try {
           Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
           if (!(rawChoices instanceof List)) {
@@ -421,7 +421,7 @@ final class DnsNameResolver extends NameResolver {
               throw new IOException("wrong element type " + rawChoices);
             }
           }
-          choices = (List<? extends Map<String, ?>>) listChoices;
+          choices = (List<Map<String, ?>>) listChoices;
         } catch (IOException e) {
           logger.log(Level.WARNING, "Bad service config: " + txtRecord, e);
           continue;
