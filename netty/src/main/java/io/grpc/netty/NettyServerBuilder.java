@@ -60,7 +60,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
   static final long MAX_CONNECTION_AGE_NANOS_DISABLED = Long.MAX_VALUE;
-  static final long MAX_CONNECTION_AGE_GRACE_NANOS_DISABLED = -1; // netty treats -1 as "no timeout"
+  static final long MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE = Long.MAX_VALUE;
 
   private static final long MIN_KEEPALIVE_TIME_NANO = TimeUnit.MILLISECONDS.toNanos(1L);
   private static final long MIN_KEEPALIVE_TIMEOUT_NANO = TimeUnit.MICROSECONDS.toNanos(499L);
@@ -85,7 +85,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private long keepAliveTimeoutInNanos = DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
   private long maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
   private long maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
-  private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_DISABLED;
+  private long maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
   private boolean permitKeepAliveWithoutCalls;
   private long permitKeepAliveTimeInNanos = TimeUnit.MINUTES.toNanos(5);
 
@@ -410,7 +410,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative");
     maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
     if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
-      maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_DISABLED;
+      maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
     }
     return this;
   }

@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
@@ -96,7 +97,6 @@ import javax.annotation.Nullable;
  * the context of the Netty Channel thread.
  */
 class NettyServerHandler extends AbstractNettyHandler {
-
   private static final Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
   private static final long KEEPALIVE_PING = 0xDEADL;
   @VisibleForTesting
@@ -113,14 +113,10 @@ class NettyServerHandler extends AbstractNettyHandler {
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer transportTracer;
   private final KeepAliveEnforcer keepAliveEnforcer;
-  /**
-   * Incomplete attributes produced by negotiator.
-   */
+  /** Incomplete attributes produced by negotiator. */
   private Attributes negotiationAttributes;
   private InternalChannelz.Security securityInfo;
-  /**
-   * Completed attributes produced by transportReady.
-   */
+  /** Completed attributes produced by transportReady. */
   private Attributes attributes;
   private Throwable connectionError;
   private boolean teWarningLogged;
@@ -347,6 +343,7 @@ class NettyServerHandler extends AbstractNettyHandler {
           keepAliveTimeInNanos, keepAliveTimeoutInNanos, true /* keepAliveDuringTransportIdle */);
       keepAliveManager.onTransportStarted();
     }
+
 
     if (transportTracer != null) {
       assert encoder().connection().equals(decoder().connection());
@@ -717,7 +714,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private class FrameListener extends Http2FrameAdapter {
-
     private boolean firstSettings = true;
 
     @Override
@@ -807,7 +803,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private final class KeepAlivePinger implements KeepAliveManager.KeepAlivePinger {
-
     final ChannelHandlerContext ctx;
 
     KeepAlivePinger(ChannelHandlerContext ctx) {
@@ -851,13 +846,11 @@ class NettyServerHandler extends AbstractNettyHandler {
   }
 
   private final class GracefulShutdown {
-
     String goAwayMessage;
 
     /**
-     * The grace time between starting graceful shutdown and closing the netty channel.
-     *
-     * {@code null} is unspecified, -1 means no timeout.
+     * The grace time between starting graceful shutdown and closing the netty channel,
+     * {@code null} is unspecified.
      */
     @CheckForNull
     Long graceTimeInNanos;
@@ -933,7 +926,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       if (graceTimeInNanos == null) {
         return originalMillis;
       }
-      if (graceTimeInNanos < 0L) {
+      if (graceTimeInNanos == MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE) {
         // netty treats -1 as "no timeout"
         return -1L;
       }
@@ -944,7 +937,6 @@ class NettyServerHandler extends AbstractNettyHandler {
   // Use a frame writer so that we know when frames are through flow control and actually being
   // written.
   private static class WriteMonitoringFrameWriter extends DecoratingHttp2FrameWriter {
-
     private final KeepAliveEnforcer keepAliveEnforcer;
 
     public WriteMonitoringFrameWriter(Http2FrameWriter delegate,
