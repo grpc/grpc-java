@@ -250,16 +250,16 @@ public abstract class NameResolver {
 
     /**
      * Parses and validates the service configuration chosen by the name resolver.  This will
-     * return a {@link ConfigOrStatus} which contains either the successfully parsed config, or the
+     * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
      * {@link Status} representing the failure to parse.  Implementations are expected to not throw
-     * exceptions, or else the gRPC channel may enter panic mode, and stop working.
+     * exceptions but return a Status representing the failure.
      *
      * @param rawServiceConfig The {@link Map} representation of the service config
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.
      * @since 1.20.0
      */
-    public ConfigOrStatus<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      return ConfigOrStatus.fromStatus(
+    public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
+      return ConfigOrError.fromError(
           Status.INTERNAL.withDescription("service config parsing not supported"));
     }
 
@@ -270,35 +270,37 @@ public abstract class NameResolver {
      * @param <T> The message type of the config.
      * @since 1.20.0
      */
-    public static final class ConfigOrStatus<T> {
+    public static final class ConfigOrError<T> {
 
       /**
-       * Returns a {@link ConfigOrStatus} for the successfully parsed config.
+       * Returns a {@link ConfigOrError} for the successfully parsed config.
        *
        * @since 1.20.0
        */
-      public static <T> ConfigOrStatus<T> fromConfig(T config) {
-        return new ConfigOrStatus<>(config);
+      public static <T> ConfigOrError<T> fromConfig(T config) {
+        return new ConfigOrError<>(config);
       }
 
       /**
-       * Returns a {@link ConfigOrStatus} for the failure to parse the config.
+       * Returns a {@link ConfigOrError} for the failure to parse the config.
+       *
+       * @param status a non-OK status
        *
        * @since 1.20.0
        */
-      public static <T> ConfigOrStatus<T> fromStatus(Status status) {
-        return new ConfigOrStatus<>(status);
+      public static <T> ConfigOrError<T> fromError(Status status) {
+        return new ConfigOrError<>(status);
       }
 
       private final Status status;
       private final T config;
 
-      private ConfigOrStatus(T config) {
+      private ConfigOrError(T config) {
         this.config = checkNotNull(config, "config");
         this.status = null;
       }
 
-      private ConfigOrStatus(Status status) {
+      private ConfigOrError(Status status) {
         this.config = null;
         this.status = checkNotNull(status, "status");
         checkArgument(!status.isOk(), "cannot use OK status: %s", status);
@@ -316,7 +318,7 @@ public abstract class NameResolver {
        * @since 1.20.0
        */
       @Nullable
-      private Status getStatus() {
+      public Status getError() {
         return status;
       }
 
@@ -329,7 +331,7 @@ public abstract class NameResolver {
         } else {
           assert status != null;
           return MoreObjects.toStringHelper(this)
-              .add("status", status)
+              .add("error", status)
               .toString();
         }
       }

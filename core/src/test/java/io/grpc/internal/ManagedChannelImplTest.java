@@ -58,6 +58,7 @@ import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
+import com.google.common.util.concurrent.UncaughtExceptionHandlers;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
@@ -91,14 +92,18 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.Helper.ConfigOrError;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
 import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
+import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
+import io.grpc.internal.ManagedChannelImpl.NrHelper;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
@@ -3376,6 +3381,59 @@ public class ManagedChannelImplTest {
     assertEquals(SERVICE_NAME, channel.authority());
   }
 
+  @Test
+  public void nameResolverHelper_emptyConfigSucceeds() {
+    int defaultPort = 1;
+    ProxyDetector proxyDetector =  GrpcUtil.getDefaultProxyDetector();
+    SynchronizationContext syncCtx =
+        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
+    boolean retryEnabled = false;
+    int maxRetryAttemptsLimit = 2;
+    int maxHedgedAttemptsLimit = 3;
+
+    NrHelper nrh = new NrHelper(
+        defaultPort,
+        proxyDetector,
+        syncCtx,
+        retryEnabled,
+        maxRetryAttemptsLimit,
+        maxHedgedAttemptsLimit);
+
+    ConfigOrError<ManagedChannelServiceConfig> coe =
+        nrh.parseServiceConfig(ImmutableMap.<String, Object>of());
+
+    assertThat(coe.getConfig()).isNotNull();
+    assertThat(coe.getConfig().getServiceMap()).isEmpty();
+    assertThat(coe.getConfig().getServiceMethodMap()).isEmpty();
+  }
+
+  @Test
+  public void nameResolverHelper_badConfigFails() {
+    int defaultPort = 1;
+    ProxyDetector proxyDetector =  GrpcUtil.getDefaultProxyDetector();
+    SynchronizationContext syncCtx =
+        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
+    boolean retryEnabled = false;
+    int maxRetryAttemptsLimit = 2;
+    int maxHedgedAttemptsLimit = 3;
+
+    NrHelper nrh = new NrHelper(
+        defaultPort,
+        proxyDetector,
+        syncCtx,
+        retryEnabled,
+        maxRetryAttemptsLimit,
+        maxHedgedAttemptsLimit);
+
+    ConfigOrError<ManagedChannelServiceConfig> coe =
+        nrh.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
+
+    assertThat(coe.getError()).isNotNull();
+    assertThat(coe.getError().getCode()).isEqualTo(Code.UNKNOWN);
+    assertThat(coe.getError().getDescription()).contains("failed to parse service config");
+    assertThat(coe.getError().getCause()).isInstanceOf(ClassCastException.class);
+  }
+  
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 

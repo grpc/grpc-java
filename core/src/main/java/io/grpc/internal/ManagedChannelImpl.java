@@ -551,7 +551,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.nameResolverHelper =
         new NrHelper(
-        builder.getDefaultPort(),
+            builder.getDefaultPort(),
             proxyDetector,
             syncContext,
             retryEnabled,
@@ -1658,7 +1658,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private static final class NrHelper extends NameResolver.Helper {
+  @VisibleForTesting
+  static final class NrHelper extends NameResolver.Helper {
 
     private final int defaultPort;
     private final ProxyDetector proxyDetector;
@@ -1699,19 +1700,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     @SuppressWarnings("unchecked")
-    public ConfigOrStatus<ManagedChannelServiceConfig> parseServiceConfig(
+    public ConfigOrError<ManagedChannelServiceConfig> parseServiceConfig(
         Map<String, ?> rawServiceConfig) {
       // TODO(carl-mastrangelo): Change the type from Map<String, Object> to Map<String, ?>
       Map<String, Object> cfg = (Map<String, Object>) rawServiceConfig;
       try {
-        return ConfigOrStatus.fromConfig(
+        return ConfigOrError.fromConfig(
             ManagedChannelServiceConfig.fromServiceConfig(
                 cfg,
                 retryEnabled,
                 maxRetryAttemptsLimit,
                 maxHedgedAttemptsLimit));
       } catch (RuntimeException e) {
-        return ConfigOrStatus.fromStatus(
+        return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
       }
     }
