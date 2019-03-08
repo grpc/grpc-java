@@ -243,7 +243,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<? extends Map<String, ?>> getNameListFromMethodConfig(
+  static List<Map<String, ?>> getNameListFromMethodConfig(
       Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
       return null;
@@ -294,7 +294,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<? extends Map<String, ?>> getMethodConfigFromServiceConfig(
+  static List<Map<String, ?>> getMethodConfigFromServiceConfig(
       Map<String, ?> serviceConfig) {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_METHOD_CONFIG_KEY)) {
       return null;
@@ -307,7 +307,7 @@ public final class ServiceConfigUtil {
    */
   @SuppressWarnings("unchecked")
   @VisibleForTesting
-  public static List<? extends Map<String, ?>> getLoadBalancingConfigsFromServiceConfig(
+  public static List<Map<String, ?>> getLoadBalancingConfigsFromServiceConfig(
       Map<String, ?> serviceConfig) {
     /* schema as follows
     {
@@ -530,14 +530,14 @@ public final class ServiceConfigUtil {
   }
 
   @SuppressWarnings("unchecked")
-  private static List<? extends Map<String, ?>> checkObjectList(List<?> rawList) {
+  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof Map)) {
         throw new ClassCastException(
             String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
-    return (List<? extends Map<String, ?>>) (List<?>) rawList;
+    return (List<Map<String, ?>>) rawList;
   }
 
   @SuppressWarnings("unchecked")

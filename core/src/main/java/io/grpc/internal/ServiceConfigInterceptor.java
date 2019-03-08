@@ -80,7 +80,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
     // Try and do as much validation here before we swap out the existing configuration.  In case
     // the input is invalid, we don't want to lose the existing configuration.
 
-    List<? extends Map<String, ?>> methodConfigs =
+    List<Map<String, ?>> methodConfigs =
         ServiceConfigUtil.getMethodConfigFromServiceConfig(serviceConfig);
     if (methodConfigs == null) {
       logger.log(Level.FINE, "No method configs found, skipping");
@@ -92,7 +92,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       MethodInfo info = new MethodInfo(
           methodConfig, retryEnabled, maxRetryAttemptsLimit, maxHedgedAttemptsLimit);
 
-      List<? extends Map<String, ?>> nameList =
+      List<Map<String, ?>> nameList =
           ServiceConfigUtil.getNameListFromMethodConfig(methodConfig);
 
       checkArgument(
