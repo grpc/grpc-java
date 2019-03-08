@@ -362,7 +362,7 @@ def io_netty_tcnative_boringssl_static():
         name = "io_netty_netty_tcnative_boringssl_static",
         artifact = "io.netty:netty-tcnative-boringssl-static:2.0.22.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "c0bbfcb116ae9928ebb17cbfbdd80ee51980ad228a4fffb0cb3137ac91b1bc0a",
+        artifact_sha256 = "382fef183d2dbb991e2c4ac8c9749673aa90ca1ce3cebf3301533beb664bf92f",
         licenses = ["notice"],  # Apache 2.0
     )
 
