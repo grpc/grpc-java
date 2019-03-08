@@ -234,8 +234,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
   private final InternalChannelz channelz;
+  // Must be mutated and read from syncContext
   @CheckForNull
   private Boolean haveBackends; // a flag for doing channel tracing when flipped
+  // Must be mutated and read from syncContext
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
 
@@ -1285,22 +1287,22 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
-      channelLogger.log(
-          ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, config);
-
-      if (haveBackends == null || !haveBackends) {
-        channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
-        haveBackends = true;
-      }
-      final Map<String, ?> serviceConfig = config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
-        channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
-        lastServiceConfig = serviceConfig;
-      }
-
       final class NamesResolved implements Runnable {
         @Override
         public void run() {
+          channelLogger.log(
+              ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, config);
+
+          Map<String, ?> serviceConfig = config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
+            channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
+            lastServiceConfig = serviceConfig;
+          }
+
+          if (haveBackends == null || !haveBackends) {
+            channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
+            haveBackends = true;
+          }
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
@@ -1337,15 +1339,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-          new Object[] {getLogId(), error});
-      if (haveBackends == null || haveBackends) {
-        channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
-        haveBackends = false;
-      }
+
       final class NameResolverErrorHandler implements Runnable {
         @Override
         public void run() {
+          logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+              new Object[] {getLogId(), error});
+          if (haveBackends == null || haveBackends) {
+            channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
+            haveBackends = false;
+          }
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
