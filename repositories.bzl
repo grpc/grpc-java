@@ -268,12 +268,11 @@ def com_squareup_okio():
     )
 
 def io_grpc_grpc_proto():
-    # DO NOT SUBMIT: Need PR to go in first so this can be updated -- https://github.com/grpc/grpc-proto/pull/44
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "64a2cf675e38d4e8ef340432a5b701b079c769fb7f8b59a58c26df04fb53aa6a",
-        strip_prefix = "grpc-proto-f9af5e19f738a84b9fd9d78e380a9a352ab5ad34",
-        urls = ["https://github.com/grpc/grpc-proto/archive/f9af5e19f738a84b9fd9d78e380a9a352ab5ad34.zip"],
+        sha256 = "df184b7bef52f5dfdcf7f2f8bc35086285f4e0f36413d09a500f0a8a51e8288b",
+        strip_prefix = "grpc-proto-e9d128ddadb204e89cfa4e73c454510a22394b33",
+        urls = ["https://github.com/grpc/grpc-proto/archive/e9d128ddadb204e89cfa4e73c454510a22394b33.zip"],
     )
 
 def io_netty_buffer():
