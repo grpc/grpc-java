@@ -68,7 +68,6 @@ final class ManagedChannelServiceConfig {
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      logger.fine("no methods configs in service config");
       return new ManagedChannelServiceConfig(serviceMethodMap, serviceMap);
     }
 

@@ -58,7 +58,6 @@ import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
-import com.google.common.util.concurrent.UncaughtExceptionHandlers;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CallCredentials;
@@ -3433,7 +3432,7 @@ public class ManagedChannelImplTest {
     assertThat(coe.getError().getDescription()).contains("failed to parse service config");
     assertThat(coe.getError().getCause()).isInstanceOf(ClassCastException.class);
   }
-  
+
   private static final class ChannelBuilder
       extends AbstractManagedChannelImplBuilder<ChannelBuilder> {
 
