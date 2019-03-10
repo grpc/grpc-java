@@ -25,6 +25,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyListOf;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -32,6 +35,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.net.InetAddresses;
 import com.google.common.testing.FakeTicker;
@@ -142,6 +146,10 @@ public class DnsNameResolverTest {
   private ArgumentCaptor<List<EquivalentAddressGroup>> resultCaptor;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
+  private boolean enableTxt;
+  private Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
+  private Level level = logger.getLevel();
+
   @Mock
   private RecordFetcher recordFetcher;
 
@@ -201,6 +209,7 @@ public class DnsNameResolverTest {
     DnsNameResolver.enableJndi = true;
     networkaddressCacheTtlPropertyValue =
         System.getProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY);
+    enableTxt = DnsNameResolver.enableTxt;
   }
 
   @After
@@ -212,6 +221,12 @@ public class DnsNameResolverTest {
           DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY,
           networkaddressCacheTtlPropertyValue);
     }
+    DnsNameResolver.enableTxt = enableTxt;
+  }
+
+  @After
+  public void restoreLogLevel() {
+    logger.setLevel(level);
   }
 
   @After
@@ -287,7 +302,7 @@ public class DnsNameResolverTest {
 
     DnsNameResolver resolver = newResolver(name, 81, isAndroid);
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
+    when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
@@ -304,7 +319,7 @@ public class DnsNameResolverTest {
 
     resolver.shutdown();
 
-    verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+    verify(mockResolver, times(2)).resolveAddress(anyString());
   }
 
   @Test
@@ -328,6 +343,66 @@ public class DnsNameResolverTest {
   }
 
   @Test
+  public void resolveConfig_jsonSyntaxError() throws Exception {
+    logger.setLevel(Level.SEVERE);
+    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
+    String record = "grpc_config=\"["
+        + "{ ] not a json [ , }]\"";
+    doReturn(ImmutableList.of(record)).when(recordFetcher)
+        .getAllRecords(anyString(), anyString());
+    nr.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return createAddressList(1);
+      }
+    });
+    DnsNameResolver.enableTxt = true;
+
+    nr.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<Attributes> captor = ArgumentCaptor.forClass(Attributes.class);
+    verify(mockListener).onAddresses(anyListOf(EquivalentAddressGroup.class), captor.capture());
+    Map<String, ?> serviceConfig =
+        captor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(serviceConfig).containsKey("service-config-error");
+
+    nr.shutdown();
+  }
+
+  @Test
+  public void resolveConfig_percentageWrong() throws Exception {
+    logger.setLevel(Level.SEVERE);
+    DnsNameResolver nr = newResolver("dns:///addr.fake:1234", 443);
+    String localHostname = InetAddress.getLocalHost().getHostName();
+    String record = "grpc_config=\"["
+        + "{\\\"clientLanguage\\\":[\\\"java\\\"],\\\"percentage\\\":-1,\\\"clientHostname\\\":"
+        + " [\\\"" + localHostname + "\\\"],\\\"serviceConfig\\\":{}}, "
+        + "{\\\"clientLanguage\\\":[\\\"java\\\"],\\\"percentage\\\":37,\\\"clientHostname\\\":"
+        + " [\\\"" + localHostname + "\\\"],\\\"serviceConfig\\\":{}}]\"";
+    doReturn(ImmutableList.of(record)).when(recordFetcher)
+        .getAllRecords(anyString(), anyString());
+    nr.setAddressResolver(new AddressResolver() {
+      @Override
+      public List<InetAddress> resolveAddress(String host) throws Exception {
+        return createAddressList(1);
+      }
+    });
+    DnsNameResolver.enableTxt = true;
+
+    nr.start(mockListener);
+    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
+
+    ArgumentCaptor<Attributes> captor = ArgumentCaptor.forClass(Attributes.class);
+    verify(mockListener).onAddresses(anyListOf(EquivalentAddressGroup.class), captor.capture());
+    Map<String, ?> serviceConfig =
+        captor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    assertThat(serviceConfig).containsKey("service-config-error");
+
+    nr.shutdown();
+  }
+
+  @Test
   public void resolve_cacheForever() throws Exception {
     System.setProperty(DnsNameResolver.NETWORKADDRESS_CACHE_TTL_PROPERTY, "-1");
     final List<InetAddress> answer1 = createAddressList(2);
@@ -337,7 +412,7 @@ public class DnsNameResolverTest {
     DnsNameResolver resolver =
         newResolver(name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString()))
+    when(mockResolver.resolveAddress(anyString()))
         .thenReturn(answer1)
         .thenThrow(new AssertionError("should not called twice"));
     resolver.setAddressResolver(mockResolver);
@@ -356,7 +431,7 @@ public class DnsNameResolverTest {
 
     resolver.shutdown();
 
-    verify(mockResolver).resolveAddress(Matchers.anyString());
+    verify(mockResolver).resolveAddress(anyString());
   }
 
   @Test
@@ -370,7 +445,7 @@ public class DnsNameResolverTest {
     DnsNameResolver resolver =
         newResolver(name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString()))
+    when(mockResolver.resolveAddress(anyString()))
         .thenReturn(answer)
         .thenThrow(new AssertionError("should not reach here."));
     resolver.setAddressResolver(mockResolver);
@@ -390,7 +465,7 @@ public class DnsNameResolverTest {
 
     resolver.shutdown();
 
-    verify(mockResolver).resolveAddress(Matchers.anyString());
+    verify(mockResolver).resolveAddress(anyString());
   }
 
   @Test
@@ -405,7 +480,7 @@ public class DnsNameResolverTest {
     DnsNameResolver resolver =
         newResolver(name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
+    when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
@@ -423,7 +498,7 @@ public class DnsNameResolverTest {
 
     resolver.shutdown();
 
-    verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+    verify(mockResolver, times(2)).resolveAddress(anyString());
   }
 
   @Test
@@ -447,7 +522,7 @@ public class DnsNameResolverTest {
     DnsNameResolver resolver =
         newResolver(name, 81, GrpcUtil.NOOP_PROXY_DETECTOR, Stopwatch.createUnstarted(fakeTicker));
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString())).thenReturn(answer1).thenReturn(answer2);
+    when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
     resolver.start(mockListener);
@@ -471,7 +546,7 @@ public class DnsNameResolverTest {
 
     resolver.shutdown();
 
-    verify(mockResolver, times(2)).resolveAddress(Matchers.anyString());
+    verify(mockResolver, times(2)).resolveAddress(anyString());
   }
 
   @Test
@@ -480,7 +555,7 @@ public class DnsNameResolverTest {
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
 
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString()))
+    when(mockResolver.resolveAddress(anyString()))
         .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
     ResourceResolver resourceResolver = null;
     boolean resovleSrv = true;
@@ -499,7 +574,7 @@ public class DnsNameResolverTest {
     final String hostname = "addr.fake";
 
     AddressResolver mockResolver = mock(AddressResolver.class);
-    when(mockResolver.resolveAddress(Matchers.anyString()))
+    when(mockResolver.resolveAddress(anyString()))
         .thenThrow(new IOException("no addr"));
     ResourceResolver resourceResolver = null;
     boolean resovleSrv = true;
@@ -518,12 +593,12 @@ public class DnsNameResolverTest {
     final EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
 
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+    when(mockAddressResolver.resolveAddress(anyString()))
         .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
-    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+    when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.singletonList("service config"));
-    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), anyString()))
         .thenReturn(Collections.singletonList(balancerAddr));
     boolean resovleSrv = true;
     boolean resolveTxt = true;
@@ -544,12 +619,12 @@ public class DnsNameResolverTest {
     EquivalentAddressGroup balancerAddr = new EquivalentAddressGroup(new SocketAddress() {});
 
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+    when(mockAddressResolver.resolveAddress(anyString()))
         .thenThrow(new UnknownHostException("I really tried"));
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
-    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+    when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.<String>emptyList());
-    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), anyString()))
         .thenReturn(Collections.singletonList(balancerAddr));
     boolean resovleSrv = true;
     boolean resolveTxt = true;
@@ -569,12 +644,12 @@ public class DnsNameResolverTest {
     final String hostname = "addr.fake";
     final Inet4Address backendAddr = InetAddresses.fromInteger(0x7f000001);
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(Matchers.anyString()))
+    when(mockAddressResolver.resolveAddress(anyString()))
         .thenReturn(Collections.<InetAddress>singletonList(backendAddr));
     ResourceResolver mockResourceResolver = mock(ResourceResolver.class);
-    when(mockResourceResolver.resolveTxt(Matchers.anyString()))
+    when(mockResourceResolver.resolveTxt(anyString()))
         .thenReturn(Collections.singletonList("service config"));
-    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), Matchers.anyString()))
+    when(mockResourceResolver.resolveSrv(Matchers.any(AddressResolver.class), anyString()))
         .thenThrow(new Exception("something like javax.naming.NamingException"));
     boolean resovleSrv = true;
     boolean resolveTxt = true;
@@ -625,7 +700,7 @@ public class DnsNameResolverTest {
     DnsNameResolver resolver =
         newResolver(name, port, alwaysDetectProxy, Stopwatch.createUnstarted());
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
-    when(mockAddressResolver.resolveAddress(Matchers.anyString())).thenThrow(new AssertionError());
+    when(mockAddressResolver.resolveAddress(anyString())).thenThrow(new AssertionError());
     resolver.setAddressResolver(mockAddressResolver);
     resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
@@ -878,7 +953,7 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void parseTxtResults_misspelledName() {
+  public void parseTxtResults_misspelledName() throws Exception {
     List<String> txtRecords = new ArrayList<>();
     txtRecords.add("some_record");
     txtRecords.add("_grpc_config=[]");
@@ -889,59 +964,42 @@ public class DnsNameResolverTest {
   }
 
   @Test
-  public void parseTxtResults_badTypeIgnored() {
-    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
-    Level level = logger.getLevel();
+  public void parseTxtResults_badType() throws Exception {
     logger.setLevel(Level.SEVERE);
-    try {
-      List<String> txtRecords = new ArrayList<>();
-      txtRecords.add("some_record");
-      txtRecords.add("grpc_config={}");
+    List<String> txtRecords = new ArrayList<>();
+    txtRecords.add("some_record");
+    txtRecords.add("grpc_config=[{}, {}]");
+    txtRecords.add("grpc_config={}");
+    txtRecords.add("grpc_config=[{}, {}]");
 
-      List<? extends Map<String, ?>> results = DnsNameResolver.parseTxtResults(txtRecords);
-
-      assertThat(results).isEmpty();
-    } finally {
-      logger.setLevel(level);
-    }
+    thrown.expect(IOException.class);
+    DnsNameResolver.parseTxtResults(txtRecords);
   }
 
   @Test
-  public void parseTxtResults_badInnerTypeIgnored() {
-    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
-    Level level = logger.getLevel();
+  public void parseTxtResults_badInnerType() throws Exception {
     logger.setLevel(Level.SEVERE);
-    try {
-      List<String> txtRecords = new ArrayList<>();
-      txtRecords.add("some_record");
-      txtRecords.add("grpc_config=[\"bogus\"]");
+    List<String> txtRecords = new ArrayList<>();
+    txtRecords.add("some_record");
+    txtRecords.add("grpc_config=[{}, {}]");
+    txtRecords.add("grpc_config=[\"bogus\"]");
+    txtRecords.add("grpc_config=[{}, {}]");
 
-      List<? extends Map<String, ?>> results = DnsNameResolver.parseTxtResults(txtRecords);
-
-      assertThat(results).isEmpty();
-    } finally {
-      logger.setLevel(level);
-    }
+    thrown.expect(IOException.class);
+    DnsNameResolver.parseTxtResults(txtRecords);
   }
 
   @Test
-  public void parseTxtResults_combineAll() {
-    Logger logger = Logger.getLogger(DnsNameResolver.class.getName());
-    Level level = logger.getLevel();
-    logger.setLevel(Level.SEVERE);
-    try {
-      List<String> txtRecords = new ArrayList<>();
-      txtRecords.add("some_record");
-      txtRecords.add("grpc_config=[\"bogus\", {}]");
-      txtRecords.add("grpc_config=[{}, {}]"); // 2 records
-      txtRecords.add("grpc_config=[{\"\":{}}]"); // 1 record
+  public void parseTxtResults_combineAll() throws Exception {
+    List<String> txtRecords = new ArrayList<>();
+    txtRecords.add("some_record");
+    txtRecords.add("grpc_config=[]"); // 0 record
+    txtRecords.add("grpc_config=[{}, {}]"); // 2 records
+    txtRecords.add("grpc_config=[{\"\\\"\\\"\":{}}]"); // 1 record
 
-      List<? extends Map<String, ?>> results = DnsNameResolver.parseTxtResults(txtRecords);
+    List<Map<String, ?>> results = DnsNameResolver.parseTxtResults(txtRecords);
 
-      assertThat(results).hasSize(2 + 1);
-    } finally {
-      logger.setLevel(level);
-    }
+    assertThat(results).hasSize(2 + 1);
   }
 
   @Test

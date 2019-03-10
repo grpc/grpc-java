@@ -27,6 +27,7 @@ import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -236,8 +237,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final InternalChannelz channelz;
   @CheckForNull
   private Boolean haveBackends; // a flag for doing channel tracing when flipped
+
+  // Should only be read or mutated in constructor or name resolver listener thread.
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
+  // Should only be read or mutated in constructor or name resolver listener thread.
+  // See service config error handling spec for reference.
+  private boolean selectedServiceConfigOrNoServiceConfig;
+  private final boolean discardNameResolverServiceConfig;
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -579,6 +586,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
+    this.lastServiceConfig = builder.defaultServiceConfig;
+    this.discardNameResolverServiceConfig = builder.discardNameResolverServiceConfig;
+    if (lastServiceConfig != null) {
+      channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
+    }
+    if (lastServiceConfig != null || discardNameResolverServiceConfig) {
+      selectedServiceConfigOrNoServiceConfig = true;
+      serviceConfigInterceptor.handleUpdate(lastServiceConfig);
+      if (retryEnabled) {
+        throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
+      }
+    }
+
     Channel channel = new RealChannel(nameResolver.getServiceAuthority());
     channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);
     if (builder.binlog != null) {
@@ -1276,7 +1296,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
+    public void onAddresses(final List<EquivalentAddressGroup> servers, Attributes config) {
       channelLogger.log(
           ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, config);
 
@@ -1284,11 +1304,44 @@ final class ManagedChannelImpl extends ManagedChannel implements
         channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
         haveBackends = true;
       }
-      final Map<String, ?> serviceConfig = config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-      if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
-        channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
-        lastServiceConfig = serviceConfig;
+      final Attributes effectiveConfig;
+      if (discardNameResolverServiceConfig) {
+        channelLogger.log(ChannelLogLevel.INFO, "Service config discarded by channel settings");
+        effectiveConfig = Attributes.newBuilder()
+            .setAll(config)
+            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, lastServiceConfig)
+            .build();
+      } else {
+        Map<String, ?> effectiveServiceConfig =
+            config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+        if (effectiveServiceConfig != null
+            && effectiveServiceConfig.containsKey(DnsNameResolver.SERVICE_CONFIG_ERROR)) {
+          String errMsg = "Can not parse the service config from the name resolver.";
+          channelLogger.log(ChannelLogLevel.INFO, errMsg);
+          if (selectedServiceConfigOrNoServiceConfig) {
+            channelLogger.log(ChannelLogLevel.INFO, "Service config unchanged");
+            effectiveConfig = Attributes.newBuilder()
+                .setAll(config)
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, lastServiceConfig)
+                .build();
+          } else {
+            onError(Status.UNAVAILABLE.withDescription(errMsg).withCause(
+                (Exception) effectiveServiceConfig.get(DnsNameResolver.SERVICE_CONFIG_ERROR)));
+            return;
+          }
+        } else {
+          if (!Objects.equal(effectiveServiceConfig, lastServiceConfig)) {
+            channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
+
+          }
+          effectiveConfig = config;
+          lastServiceConfig = effectiveServiceConfig;
+          selectedServiceConfigOrNoServiceConfig = true;
+        }
       }
+
+      @Nullable
+      final Map<String, ?> serviceConfig = lastServiceConfig;
 
       final class NamesResolved implements Runnable {
         @Override
@@ -1300,7 +1353,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           nameResolverBackoffPolicy = null;
 
-          if (serviceConfig != null) {
+          if (!discardNameResolverServiceConfig) {
             try {
               serviceConfigInterceptor.handleUpdate(serviceConfig);
               if (retryEnabled) {
@@ -1318,7 +1371,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             onError(Status.UNAVAILABLE.withDescription(
                     "Name resolver " + resolver + " returned an empty list"));
           } else {
-            helper.lb.handleResolvedAddressGroups(servers, config);
+            helper.lb.handleResolvedAddressGroups(servers, effectiveConfig);
           }
         }
       }

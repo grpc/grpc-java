@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.base.MoreObjects;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -239,6 +240,18 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T proxyDetector(ProxyDetector proxyDetector) {
     delegate().proxyDetector(proxyDetector);
+    return thisT();
+  }
+
+  @Override
+  public T defaultServiceConfig(Map<String, Object> serviceConfig) throws BuilderException {
+    delegate().defaultServiceConfig(serviceConfig);
+    return thisT();
+  }
+
+  @Override
+  public T discardServiceConfigFromNameResolver() {
+    delegate().discardServiceConfigFromNameResolver();
     return thisT();
   }
 

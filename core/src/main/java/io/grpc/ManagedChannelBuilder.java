@@ -18,6 +18,7 @@ package io.grpc;
 
 import com.google.common.base.Preconditions;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -535,6 +536,69 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5113")
   public T proxyDetector(ProxyDetector proxyDetector) {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Provides a service config to the channel.
+   *
+   * @param serviceConfig A nested map representing a Json object in the most natural way:
+   *
+   *        <table border="1">
+   *          <tr>
+   *            <td>Json entry</td><td>Java Type</td>
+   *          </tr>
+   *          <tr>
+   *            <td>object</td><td>{@link Map}</td>
+   *          </tr>
+   *          <tr>
+   *            <td>array</td><td>{@link List}</td>
+   *          </tr>
+   *          <tr>
+   *            <td>string</td><td>{@link String}</td>
+   *          </tr>
+   *          <tr>
+   *            <td>number</td><td>{@link Double}</td>
+   *          </tr>
+   *          <tr>
+   *            <td>boolean</td><td>{@link Boolean}</td>
+   *          </tr>
+   *          <tr>
+   *            <td>null</td><td>{@code null}</td>
+   *          </tr>
+   *        </table>
+   *
+   * @throws UnsupportedOperationException If not implemented.
+   * @throws BuilderException When the given serviceConfig is invalid or the current version of grpc
+   *         library can not parse it gracefully. The state of the builder is unchanged if an
+   *         exception is thrown.
+   * @return this
+   * @since 1.20.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
+  public T defaultServiceConfig(Map<String, Object> serviceConfig) throws BuilderException {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Lets the channel ignore any service config from the name resolver.
+   *
+   * @return this
+   * @since 1.20.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
+  public T discardServiceConfigFromNameResolver() {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Checked exception when there is an error in the configuration of the builder.
+   */
+  public static class BuilderException extends Exception {
+    private static final long serialVersionUID = 1347259L;
+
+    public BuilderException(Exception cause) {
+      super(cause);
+    }
   }
 
   /**
