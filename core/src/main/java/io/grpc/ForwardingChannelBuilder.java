@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * A {@link ManagedChannelBuilder} that delegates all its builder method to another builder by
@@ -244,7 +245,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T defaultServiceConfig(Map<String, ?> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) throws BuilderException {
     delegate().defaultServiceConfig(serviceConfig);
     return thisT();
   }

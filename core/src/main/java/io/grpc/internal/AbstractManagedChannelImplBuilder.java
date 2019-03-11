@@ -392,6 +392,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Nullable
   private static Map<String, Object> parseMap(@Nullable Map<?, ?> map) throws BuilderException {
     if (map == null) {
       return null;

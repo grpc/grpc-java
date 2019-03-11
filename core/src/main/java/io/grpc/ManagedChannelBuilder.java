@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * A builder for {@link ManagedChannel} instances.
@@ -567,6 +568,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *          </tr>
    *        </table>
    *
+   *        If null is passed, then there will be no default service config.
+   *
    * @throws UnsupportedOperationException If not implemented.
    * @throws BuilderException When the given serviceConfig is invalid or the current version of grpc
    *         library can not parse it gracefully. The state of the builder is unchanged if an
@@ -575,7 +578,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
-  public T defaultServiceConfig(Map<String, ?> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) throws BuilderException {
     throw new UnsupportedOperationException();
   }
 
