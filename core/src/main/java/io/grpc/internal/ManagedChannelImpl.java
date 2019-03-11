@@ -1323,7 +1323,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
-            onError(Status.UNAVAILABLE.withDescription(
+            handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                     "Name resolver " + resolver + " returned an empty list"));
           } else {
             helper.lb.handleResolvedAddressGroups(servers, config);
@@ -1346,33 +1346,37 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final class NameResolverErrorHandler implements Runnable {
         @Override
         public void run() {
-          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
-            return;
-          }
-          helper.lb.handleNameResolutionError(error);
-          if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
-            // The name resolver may invoke onError multiple times, but we only want to
-            // schedule one backoff attempt
-            // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
-            // want to reset the backoff interval upon repeated onError() calls
-            return;
-          }
-          if (nameResolverBackoffPolicy == null) {
-            nameResolverBackoffPolicy = backoffPolicyProvider.get();
-          }
-          long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
-          channelLogger.log(
-                ChannelLogLevel.DEBUG,
-                "Scheduling DNS resolution backoff for {0} ns", delayNanos);
-          scheduledNameResolverRefresh =
-              syncContext.schedule(
-                  new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
-                  transportFactory .getScheduledExecutorService());
+          handleErrorInSyncContext(error);
         }
       }
 
       syncContext.execute(new NameResolverErrorHandler());
+    }
+
+    private void handleErrorInSyncContext(Status error) {
+      // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+      if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
+        return;
+      }
+      helper.lb.handleNameResolutionError(error);
+      if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
+        // The name resolver may invoke onError multiple times, but we only want to
+        // schedule one backoff attempt
+        // TODO(ericgribkoff) Update contract of NameResolver.Listener or decide if we
+        // want to reset the backoff interval upon repeated onError() calls
+        return;
+      }
+      if (nameResolverBackoffPolicy == null) {
+        nameResolverBackoffPolicy = backoffPolicyProvider.get();
+      }
+      long delayNanos = nameResolverBackoffPolicy.nextBackoffNanos();
+      channelLogger.log(
+          ChannelLogLevel.DEBUG,
+          "Scheduling DNS resolution backoff for {0} ns", delayNanos);
+      scheduledNameResolverRefresh =
+          syncContext.schedule(
+              new DelayedNameResolverRefresh(), delayNanos, TimeUnit.NANOSECONDS,
+              transportFactory .getScheduledExecutorService());
     }
   }
 
