@@ -244,7 +244,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T defaultServiceConfig(Map<String, Object> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(Map<String, ?> serviceConfig) throws BuilderException {
     delegate().defaultServiceConfig(serviceConfig);
     return thisT();
   }

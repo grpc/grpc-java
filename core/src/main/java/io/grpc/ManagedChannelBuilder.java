@@ -575,7 +575,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
-  public T defaultServiceConfig(Map<String, Object> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(Map<String, ?> serviceConfig) throws BuilderException {
     throw new UnsupportedOperationException();
   }
 

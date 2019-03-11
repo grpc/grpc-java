@@ -142,7 +142,7 @@ public abstract class AbstractManagedChannelImplBuilder
   int maxTraceEvents;
 
   @Nullable
-  Map<String, Object> defaultServiceConfig;
+  Map<String, ?> defaultServiceConfig;
   boolean discardNameResolverServiceConfig;
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
@@ -386,7 +386,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T defaultServiceConfig(@Nullable Map<String, Object> serviceConfig)
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig)
       throws BuilderException {
     defaultServiceConfig = parseMap(serviceConfig);
     return thisT();
@@ -424,7 +424,7 @@ public abstract class AbstractManagedChannelImplBuilder
     return Collections.unmodifiableMap(parsedMap);
   }
 
-  private static List<Object> parseList(List<?> list) throws BuilderException {
+  private static List<?> parseList(List<?> list) throws BuilderException {
     List<Object> parsedList = new ArrayList<>();
     for (Object value : list) {
       if (value == null) {
