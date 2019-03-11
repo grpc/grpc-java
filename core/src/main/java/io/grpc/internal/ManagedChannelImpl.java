@@ -1297,7 +1297,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
             haveBackends = true;
           }
-          final Map<String, ?> serviceConfig = config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          final Map<String, ?> serviceConfig =
+              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
           if (serviceConfig != null && !serviceConfig.equals(lastServiceConfig)) {
             channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
             lastServiceConfig = serviceConfig;
