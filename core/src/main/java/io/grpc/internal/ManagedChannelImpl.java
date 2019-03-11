@@ -1339,8 +1339,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void onError(final Status error) {
       checkArgument(!error.isOk(), "the error status must not be OK");
-      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
-          new Object[] {getLogId(), error});
       final class NameResolverErrorHandler implements Runnable {
         @Override
         public void run() {
@@ -1352,6 +1350,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     private void handleErrorInSyncContext(Status error) {
+      logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
+          new Object[] {getLogId(), error});
       if (haveBackends == null || haveBackends) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
         haveBackends = false;
