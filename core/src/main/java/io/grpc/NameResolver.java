@@ -274,8 +274,6 @@ public abstract class NameResolver {
 
       /**
        * Returns a {@link ConfigOrError} for the successfully parsed config.
-       *
-       * @since 1.20.0
        */
       public static <T> ConfigOrError<T> fromConfig(T config) {
         return new ConfigOrError<>(config);
@@ -285,8 +283,6 @@ public abstract class NameResolver {
        * Returns a {@link ConfigOrError} for the failure to parse the config.
        *
        * @param status a non-OK status
-       *
-       * @since 1.20.0
        */
       public static <T> ConfigOrError<T> fromError(Status status) {
         return new ConfigOrError<>(status);
@@ -307,7 +303,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * @since 1.20.0
+       * Returns config if exists, otherwise null.
        */
       @Nullable
       public T getConfig() {
@@ -315,7 +311,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * @since 1.20.0
+       * Returns error status if exists, otherwise null.
        */
       @Nullable
       public Status getError() {
