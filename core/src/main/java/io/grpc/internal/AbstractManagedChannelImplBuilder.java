@@ -386,14 +386,13 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig)
-      throws BuilderException {
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
     defaultServiceConfig = parseMap(serviceConfig);
     return thisT();
   }
 
   @Nullable
-  private static Map<String, ?> parseMap(@Nullable Map<?, ?> map) throws BuilderException {
+  private static Map<String, ?> parseMap(@Nullable Map<?, ?> map) {
     if (map == null) {
       return null;
     }
@@ -401,7 +400,8 @@ public abstract class AbstractManagedChannelImplBuilder
     Map<String, Object> parsedMap = new LinkedHashMap<>();
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       if (!(entry.getKey() instanceof String)) {
-        throw new BuilderException(null); // TODO(zdapeng): cause
+        throw new IllegalArgumentException(
+            "The key of the entry '" + entry + "' is not of String type");
       }
 
       String key = (String) entry.getKey();
@@ -419,13 +419,13 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Boolean) {
         parsedMap.put(key, value);
       } else {
-        throw new BuilderException(null); // TODO(zdapeng): cause
+        throw new IllegalArgumentException();
       }
     }
     return Collections.unmodifiableMap(parsedMap);
   }
 
-  private static List<?> parseList(List<?> list) throws BuilderException {
+  private static List<?> parseList(List<?> list) {
     List<Object> parsedList = new ArrayList<>(list.size());
     for (Object value : list) {
       if (value == null) {
@@ -441,7 +441,7 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Boolean) {
         parsedList.add(value);
       } else {
-        throw new BuilderException(null); // TODO(zdapeng): cause
+        throw new IllegalArgumentException("Wrong type of the entry '" + value + "'");
       }
     }
     return Collections.unmodifiableList(parsedList);

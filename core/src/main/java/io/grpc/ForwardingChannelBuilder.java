@@ -245,7 +245,7 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
     delegate().defaultServiceConfig(serviceConfig);
     return thisT();
   }

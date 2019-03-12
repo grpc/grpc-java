@@ -34,7 +34,6 @@ import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.LoadBalancer;
-import io.grpc.ManagedChannelBuilder.BuilderException;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -435,39 +434,39 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void defaultServiceConfig_nullKey() throws Exception {
+  public void defaultServiceConfig_nullKey() {
     Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     config.put(null, "val");
 
-    thrown.expect(BuilderException.class);
+    thrown.expect(IllegalArgumentException.class);
     builder.defaultServiceConfig(config);
   }
 
   @Test
-  public void defaultServiceConfig_intKey() throws Exception {
+  public void defaultServiceConfig_intKey() {
     Builder builder = new Builder("target");
     Map<Integer, Object> subConfig = new HashMap<>();
     subConfig.put(3, "val");
     Map<String, Object> config = new HashMap<>();
     config.put("key", subConfig);
 
-    thrown.expect(BuilderException.class);
+    thrown.expect(IllegalArgumentException.class);
     builder.defaultServiceConfig(config);
   }
 
   @Test
-  public void defaultServiceConfig_intValue() throws Exception {
+  public void defaultServiceConfig_intValue() {
     Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     config.put("key", 3);
 
-    thrown.expect(BuilderException.class);
+    thrown.expect(IllegalArgumentException.class);
     builder.defaultServiceConfig(config);
   }
 
   @Test
-  public void defaultServiceConfig_nested() throws Exception {
+  public void defaultServiceConfig_nested() {
     Builder builder = new Builder("target");
     Map<String, Object> config = new HashMap<>();
     List<Object> list1 = new ArrayList<>();

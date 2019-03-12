@@ -571,14 +571,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *        If null is passed, then there will be no default service config.
    *
    * @throws UnsupportedOperationException If not implemented.
-   * @throws BuilderException When the given serviceConfig is invalid or the current version of grpc
-   *         library can not parse it gracefully. The state of the builder is unchanged if an
-   *         exception is thrown.
+   * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
+   *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
+   *         an exception is thrown.
    * @return this
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
-  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) throws BuilderException {
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
     throw new UnsupportedOperationException();
   }
 
@@ -591,17 +591,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
   public T lookupServiceConfig(boolean enable) {
     throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Checked exception when there is an error in the configuration of the builder.
-   */
-  public static class BuilderException extends Exception {
-    private static final long serialVersionUID = 1347259L;
-
-    public BuilderException(Exception cause) {
-      super(cause);
-    }
   }
 
   /**
