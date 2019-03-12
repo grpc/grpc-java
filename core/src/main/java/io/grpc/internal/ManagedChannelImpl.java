@@ -27,7 +27,6 @@ import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -1328,15 +1327,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
               channelLogger.log(ChannelLogLevel.INFO, "Service config changed to null");
             }
 
-            if (!Objects.equal(defaultServiceConfig, serviceConfig)) {
-              effectiveConfig = Attributes.newBuilder()
-                  .setAll(config)
+            if (!(defaultServiceConfig == null && serviceConfig == null)) {
+              effectiveConfig = config.toBuilder()
                   .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, defaultServiceConfig)
                   .build();
             }
             lastServiceConfig = defaultServiceConfig;
           } else {
-            if (!serviceConfig.equals(lastServiceConfig)) {
+            if (serviceConfig != lastServiceConfig) {
               channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
             }
             lastServiceConfig = serviceConfig;

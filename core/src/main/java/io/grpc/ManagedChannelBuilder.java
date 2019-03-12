@@ -540,9 +540,10 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Provides a service config to the channel.
-   *
-   * @param serviceConfig A nested map representing a Json object in the most natural way:
+   * Provides a service config to the channel. The channel will use the default service config when
+   * the name resolver provides no service config or if the channel disables lookup service config
+   * from name resolver. The argument {@code serviceConfig} is a nested map representing a Json
+   * object in the most natural way:
    *
    *        <table border="1">
    *          <tr>
@@ -568,9 +569,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    *          </tr>
    *        </table>
    *
-   *        If null is passed, then there will be no default service config.
+   * <p>If null is passed, then there will be no default service config.
    *
-   * @throws UnsupportedOperationException If not implemented.
    * @throws IllegalArgumentException When the given serviceConfig is invalid or the current version
    *         of grpc library can not parse it gracefully. The state of the builder is unchanged if
    *         an exception is thrown.
@@ -583,7 +583,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Lets the channel look up or not look up service config from the name resolver.
+   * Lets the channel look up or not look up service config from the name resolver. The look-up is
+   * enabled by default.
    *
    * @return this
    * @since 1.20.0

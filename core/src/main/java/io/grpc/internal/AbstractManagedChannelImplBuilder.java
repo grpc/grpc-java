@@ -387,12 +387,12 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
-    defaultServiceConfig = parseMap(serviceConfig);
+    defaultServiceConfig = checkMapEntryTypes(serviceConfig);
     return thisT();
   }
 
   @Nullable
-  private static Map<String, ?> parseMap(@Nullable Map<?, ?> map) {
+  private static Map<String, ?> checkMapEntryTypes(@Nullable Map<?, ?> map) {
     if (map == null) {
       return null;
     }
@@ -409,9 +409,9 @@ public abstract class AbstractManagedChannelImplBuilder
       if (value == null) {
         parsedMap.put(key, null);
       } else if (value instanceof Map) {
-        parsedMap.put(key, parseMap((Map<?, ?>) value));
+        parsedMap.put(key, checkMapEntryTypes((Map<?, ?>) value));
       } else if (value instanceof List) {
-        parsedMap.put(key, parseList((List<?>) value));
+        parsedMap.put(key, checkListEnttryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedMap.put(key, value);
       } else if (value instanceof Double) {
@@ -425,15 +425,15 @@ public abstract class AbstractManagedChannelImplBuilder
     return Collections.unmodifiableMap(parsedMap);
   }
 
-  private static List<?> parseList(List<?> list) {
+  private static List<?> checkListEnttryTypes(List<?> list) {
     List<Object> parsedList = new ArrayList<>(list.size());
     for (Object value : list) {
       if (value == null) {
         parsedList.add(null);
       } else if (value instanceof Map) {
-        parsedList.add(parseMap((Map<?, ?>) value));
+        parsedList.add(checkMapEntryTypes((Map<?, ?>) value));
       } else if (value instanceof List) {
-        parsedList.add(parseList((List<?>) value));
+        parsedList.add(checkListEnttryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedList.add(value);
       } else if (value instanceof Double) {
