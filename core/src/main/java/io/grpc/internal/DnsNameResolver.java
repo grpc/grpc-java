@@ -73,7 +73,6 @@ final class DnsNameResolver extends NameResolver {
 
   // From https://github.com/grpc/proposal/blob/master/A2-service-configs-in-dns.md
   static final String SERVICE_CONFIG_PREFIX = "grpc_config=";
-  static final String SERVICE_CONFIG_ERROR = "service-config-error";
   private static final Set<String> SERVICE_CONFIG_CHOICE_KEYS =
       Collections.unmodifiableSet(
           new HashSet<>(
@@ -292,19 +291,15 @@ final class DnsNameResolver extends NameResolver {
             try {
               serviceConfig =
                   maybeChooseServiceConfig(possibleConfig, random, getLocalHostname());
-              if (serviceConfig != null) {
-                break;
-              }
             } catch (RuntimeException e) {
               logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
-              // reject service configs in its entirety
-              serviceConfig = Collections.singletonMap(SERVICE_CONFIG_ERROR, (Object) e);
+            }
+            if (serviceConfig != null) {
               break;
             }
           }
-        } catch (IOException | RuntimeException e) {
+        } catch (RuntimeException e) {
           logger.log(Level.WARNING, "Can't parse service Configs", e);
-          serviceConfig = Collections.singletonMap(SERVICE_CONFIG_ERROR, (Object) e);
         }
         if (serviceConfig != null) {
           attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig);
@@ -410,24 +405,27 @@ final class DnsNameResolver extends NameResolver {
 
   @SuppressWarnings("unchecked")
   @VisibleForTesting
-  static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) throws IOException {
+  static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) {
     List<Map<String, ?>> serviceConfigs = new ArrayList<>();
     for (String txtRecord : txtRecords) {
       if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
         List<Map<String, ?>> choices;
-
-        Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
-        if (!(rawChoices instanceof List)) {
-          throw new IOException("wrong type " + rawChoices);
-        }
-        List<?> listChoices = (List<?>) rawChoices;
-        for (Object obj : listChoices) {
-          if (!(obj instanceof Map)) {
-            throw new IOException("wrong element type " + rawChoices);
+        try {
+          Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
+          if (!(rawChoices instanceof List)) {
+            throw new IOException("wrong type " + rawChoices);
           }
+          List<?> listChoices = (List<?>) rawChoices;
+          for (Object obj : listChoices) {
+            if (!(obj instanceof Map)) {
+              throw new IOException("wrong element type " + rawChoices);
+            }
+          }
+          choices = (List<Map<String, ?>>) listChoices;
+        } catch (IOException e) {
+          logger.log(Level.WARNING, "Bad service config: " + txtRecord, e);
+          continue;
         }
-        choices = (List<Map<String, ?>>) listChoices;
-
         serviceConfigs.addAll(choices);
       } else {
         logger.log(Level.FINE, "Ignoring non service config {0}", new Object[]{txtRecord});

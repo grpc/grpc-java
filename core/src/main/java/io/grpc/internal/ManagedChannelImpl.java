@@ -239,10 +239,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @CheckForNull
   private Boolean haveBackends; // a flag for doing channel tracing when flipped
   // Must be mutated and read from constructor or syncContext
+  // TODO: check this value when error in service config resolution
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
+  @Nullable
+  private Map<String, ?> defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
   // See service config error handling spec for reference.
+  // TODO: check this value when error in service config resolution
   private boolean selectedServiceConfigOrNoServiceConfig;
   private final boolean lookUpServiceConfig;
 
@@ -586,12 +590,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
-    this.lastServiceConfig = builder.defaultServiceConfig;
+    this.defaultServiceConfig = builder.defaultServiceConfig;
+    this.lastServiceConfig = defaultServiceConfig;
     this.lookUpServiceConfig = builder.lookUpServiceConfig;
-    if (lastServiceConfig != null) {
+    if (defaultServiceConfig != null || !lookUpServiceConfig) {
       channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-    }
-    if (lastServiceConfig != null || !lookUpServiceConfig) {
       selectedServiceConfigOrNoServiceConfig = true;
       serviceConfigInterceptor.handleUpdate(lastServiceConfig);
       if (retryEnabled) {
@@ -1307,41 +1310,38 @@ final class ManagedChannelImpl extends ManagedChannel implements
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
             haveBackends = true;
           }
-          final Attributes effectiveConfig;
-          if (!lookUpServiceConfig) {
-            channelLogger.log(ChannelLogLevel.INFO, "Service config discarded by channel settings");
-            effectiveConfig = Attributes.newBuilder()
-                .setAll(config)
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, lastServiceConfig)
-                .build();
-          } else {
-            Map<String, ?> effectiveServiceConfig =
-                config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-            if (effectiveServiceConfig != null
-                && effectiveServiceConfig.containsKey(DnsNameResolver.SERVICE_CONFIG_ERROR)) {
-              String errMsg = "Can not parse the service config from the name resolver.";
-              channelLogger.log(ChannelLogLevel.INFO, errMsg);
-              if (selectedServiceConfigOrNoServiceConfig) {
-                channelLogger.log(ChannelLogLevel.INFO, "Service config unchanged");
-                effectiveConfig = Attributes.newBuilder()
-                    .setAll(config)
-                    .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, lastServiceConfig)
-                    .build();
-              } else {
-                handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(errMsg).withCause(
-                    (Exception) effectiveServiceConfig.get(DnsNameResolver.SERVICE_CONFIG_ERROR)));
-                return;
-              }
-            } else {
-              if (!Objects.equal(effectiveServiceConfig, lastServiceConfig)) {
-                channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
 
-              }
-              effectiveConfig = config;
-              lastServiceConfig = effectiveServiceConfig;
-              selectedServiceConfigOrNoServiceConfig = true;
+          // Assuming no error in config resolution for now.
+          Map<String, ?> serviceConfig =
+              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          Attributes effectiveConfig = config;
+          if (!lookUpServiceConfig || serviceConfig == null) {
+            if (serviceConfig != null) { // lookUpServiceConfig is false
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Service config from name resolver discarded by channel settings");
             }
+            if (defaultServiceConfig != null) {
+              channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
+            } else if (lastServiceConfig != null && serviceConfig == null) {
+              // no default config, no current service config, last config is non-trivial
+              channelLogger.log(ChannelLogLevel.INFO, "Service config changed to null");
+            }
+
+            if (!Objects.equal(defaultServiceConfig, serviceConfig)) {
+              effectiveConfig = Attributes.newBuilder()
+                  .setAll(config)
+                  .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, defaultServiceConfig)
+                  .build();
+            }
+            lastServiceConfig = defaultServiceConfig;
+          } else {
+            if (!serviceConfig.equals(lastServiceConfig)) {
+              channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
+            }
+            lastServiceConfig = serviceConfig;
           }
+          selectedServiceConfigOrNoServiceConfig = true;
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
