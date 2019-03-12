@@ -25,12 +25,14 @@ import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status.Code;
+import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * {@link ManagedChannelServiceConfig} is a fully parsed and validated representation of service
@@ -40,31 +42,47 @@ final class ManagedChannelServiceConfig {
 
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
+  @Nullable
+  private final Throttle retryThrottling;
+  @Nullable
+  private final Object loadBalancingConfig;
 
   ManagedChannelServiceConfig(
       Map<String, MethodInfo> serviceMethodMap,
-      Map<String, MethodInfo> serviceMap) {
+      Map<String, MethodInfo> serviceMap,
+      @Nullable Throttle retryThrottling,
+      @Nullable Object loadBalancingConfig) {
     this.serviceMethodMap = Collections.unmodifiableMap(new HashMap<>(serviceMethodMap));
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
+    this.retryThrottling = retryThrottling;
+    this.loadBalancingConfig = loadBalancingConfig;
   }
 
+  /**
+   * Parses the Channel level config values (e.g. excludes load balancing)
+   */
   static ManagedChannelServiceConfig fromServiceConfig(
       Map<String, ?> serviceConfig,
       boolean retryEnabled,
       int maxRetryAttemptsLimit,
-      int maxHedgedAttemptsLimit) {
+      int maxHedgedAttemptsLimit,
+      @Nullable Object loadBalancingConfig) {
+    Throttle retryThrottling = null;
+    if (retryEnabled) {
+      retryThrottling = ServiceConfigUtil.getThrottlePolicy(serviceConfig);
+    }
     Map<String, MethodInfo> serviceMethodMap = new HashMap<>();
     Map<String, MethodInfo> serviceMap = new HashMap<>();
 
     // Try and do as much validation here before we swap out the existing configuration.  In case
     // the input is invalid, we don't want to lose the existing configuration.
-
     List<Map<String, ?>> methodConfigs =
         ServiceConfigUtil.getMethodConfigFromServiceConfig(serviceConfig);
 
     if (methodConfigs == null) {
       // this is surprising, but possible.
-      return new ManagedChannelServiceConfig(serviceMethodMap, serviceMap);
+      return new ManagedChannelServiceConfig(
+          serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
     }
 
     for (Map<String, ?> methodConfig : methodConfigs) {
@@ -97,7 +115,8 @@ final class ManagedChannelServiceConfig {
       }
     }
 
-    return new ManagedChannelServiceConfig(serviceMethodMap, serviceMap);
+    return new ManagedChannelServiceConfig(
+        serviceMethodMap, serviceMap, retryThrottling, loadBalancingConfig);
   }
 
   /**

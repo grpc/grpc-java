@@ -795,6 +795,7 @@ public abstract class LoadBalancer {
   @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Factory {
+
     /**
      * Creates a {@link LoadBalancer} that will be used inside a channel.
      *
