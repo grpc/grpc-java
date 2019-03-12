@@ -143,7 +143,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Nullable
   Map<String, ?> defaultServiceConfig;
-  boolean discardNameResolverServiceConfig;
+  boolean lookUpServiceConfig = true;
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
@@ -426,7 +426,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   private static List<?> parseList(List<?> list) throws BuilderException {
-    List<Object> parsedList = new ArrayList<>();
+    List<Object> parsedList = new ArrayList<>(list.size());
     for (Object value : list) {
       if (value == null) {
         parsedList.add(null);
@@ -448,8 +448,8 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T discardServiceConfigFromNameResolver() {
-    this.discardNameResolverServiceConfig = true;
+  public T lookupServiceConfig(boolean enable) {
+    this.lookUpServiceConfig = enable;
     return thisT();
   }
 

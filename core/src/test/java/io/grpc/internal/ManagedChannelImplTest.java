@@ -3436,12 +3436,12 @@ public class ManagedChannelImplTest {
 
   @Test
   @Deprecated
-  public void discardNameResolverConfig_noDefaultConfig() throws Exception {
+  public void disableNameResolverConfig_noDefaultConfig() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    channelBuilder.discardServiceConfigFromNameResolver();
+    channelBuilder.lookupServiceConfig(false);
 
     Map<String, Object> serviceConfig =
         parseConfig("{\"methodConfig\":[{"
@@ -3467,12 +3467,12 @@ public class ManagedChannelImplTest {
 
   @Test
   @Deprecated
-  public void discardNameResolverConfig_noDefaultConfig_errorConfigResolution() {
+  public void disableNameResolverConfig_noDefaultConfig_errorConfigResolution() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    channelBuilder.discardServiceConfigFromNameResolver();
+    channelBuilder.lookupServiceConfig(false);
 
     Map<String, Object> serviceConfig =
         ImmutableMap.of("service-config-error", (Object) new Exception());
@@ -3496,12 +3496,12 @@ public class ManagedChannelImplTest {
 
   @Test
   @Deprecated
-  public void discardNameResolverConfig_withDefaultConfig() throws Exception {
+  public void disableNameResolverConfig_withDefaultConfig() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    channelBuilder.discardServiceConfigFromNameResolver();
+    channelBuilder.lookupServiceConfig(false);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
             + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -3529,12 +3529,12 @@ public class ManagedChannelImplTest {
 
   @Test
   @Deprecated
-  public void discardNameResolverConfig_withDefaultConfig_errorConfigResolution() throws Exception {
+  public void disableNameResolverConfig_withDefaultConfig_errorConfigResolution() throws Exception {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)
             .setServers(ImmutableList.of(addressGroup)).build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    channelBuilder.discardServiceConfigFromNameResolver();
+    channelBuilder.lookupServiceConfig(false);
     Map<String, Object> defaultServiceConfig =
         parseConfig("{\"methodConfig\":[{"
             + "\"name\":[{\"service\":\"SimpleService1\"}],"

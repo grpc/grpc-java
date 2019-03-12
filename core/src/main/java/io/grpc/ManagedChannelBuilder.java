@@ -583,13 +583,13 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Lets the channel ignore any service config from the name resolver.
+   * Lets the channel look up or not look up service config from the name resolver.
    *
    * @return this
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
-  public T discardServiceConfigFromNameResolver() {
+  public T lookupServiceConfig(boolean enable) {
     throw new UnsupportedOperationException();
   }
 

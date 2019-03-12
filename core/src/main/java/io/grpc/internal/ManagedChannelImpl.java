@@ -244,7 +244,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated and read from constructor or syncContext
   // See service config error handling spec for reference.
   private boolean selectedServiceConfigOrNoServiceConfig;
-  private final boolean discardNameResolverServiceConfig;
+  private final boolean lookUpServiceConfig;
 
   // One instance per channel.
   private final ChannelBufferMeter channelBufferUsed = new ChannelBufferMeter();
@@ -587,11 +587,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
     this.lastServiceConfig = builder.defaultServiceConfig;
-    this.discardNameResolverServiceConfig = builder.discardNameResolverServiceConfig;
+    this.lookUpServiceConfig = builder.lookUpServiceConfig;
     if (lastServiceConfig != null) {
       channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
     }
-    if (lastServiceConfig != null || discardNameResolverServiceConfig) {
+    if (lastServiceConfig != null || !lookUpServiceConfig) {
       selectedServiceConfigOrNoServiceConfig = true;
       serviceConfigInterceptor.handleUpdate(lastServiceConfig);
       if (retryEnabled) {
@@ -1308,7 +1308,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             haveBackends = true;
           }
           final Attributes effectiveConfig;
-          if (discardNameResolverServiceConfig) {
+          if (!lookUpServiceConfig) {
             channelLogger.log(ChannelLogLevel.INFO, "Service config discarded by channel settings");
             effectiveConfig = Attributes.newBuilder()
                 .setAll(config)
@@ -1350,7 +1350,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           nameResolverBackoffPolicy = null;
 
-          if (!discardNameResolverServiceConfig) {
+          if (lookUpServiceConfig) {
             try {
               serviceConfigInterceptor.handleUpdate(lastServiceConfig);
               if (retryEnabled) {

@@ -251,8 +251,8 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T discardServiceConfigFromNameResolver() {
-    delegate().discardServiceConfigFromNameResolver();
+  public T lookupServiceConfig(boolean enable) {
+    delegate().lookupServiceConfig(enable);
     return thisT();
   }
 

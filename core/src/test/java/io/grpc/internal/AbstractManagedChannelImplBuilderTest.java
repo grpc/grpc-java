@@ -490,12 +490,12 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void discardNameResolverServiceConfig() {
+  public void disableNameResolverServiceConfig() {
     Builder builder = new Builder("target");
-    assertThat(builder.discardNameResolverServiceConfig).isFalse();
+    assertThat(builder.lookUpServiceConfig).isTrue();
 
-    builder.discardServiceConfigFromNameResolver();
-    assertThat(builder.discardNameResolverServiceConfig).isTrue();
+    builder.lookupServiceConfig(false);
+    assertThat(builder.lookUpServiceConfig).isFalse();
   }
 
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {
