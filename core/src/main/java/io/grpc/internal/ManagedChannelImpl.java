@@ -592,15 +592,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.defaultServiceConfig = builder.defaultServiceConfig;
     this.lastServiceConfig = defaultServiceConfig;
     this.lookUpServiceConfig = builder.lookUpServiceConfig;
-    if (defaultServiceConfig != null || !lookUpServiceConfig) {
-      channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-      selectedServiceConfigOrNoServiceConfig = true;
-      serviceConfigInterceptor.handleUpdate(lastServiceConfig);
-      if (retryEnabled) {
-        throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
-      }
-    }
-
     Channel channel = new RealChannel(nameResolver.getServiceAuthority());
     channel = ClientInterceptors.intercept(channel, serviceConfigInterceptor);
     if (builder.binlog != null) {
@@ -641,6 +632,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelCallTracer = callTracerFactory.create();
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
+    if (defaultServiceConfig != null && !lookUpServiceConfig) {
+      channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
+      selectedServiceConfigOrNoServiceConfig = true;
+      serviceConfigInterceptor.handleUpdate(lastServiceConfig);
+      if (retryEnabled) {
+        throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
+      }
+    }
   }
 
   @VisibleForTesting

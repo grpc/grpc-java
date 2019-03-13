@@ -251,8 +251,8 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
-  public T lookupServiceConfig(boolean enable) {
-    delegate().lookupServiceConfig(enable);
+  public T lookUpServiceConfig(boolean enable) {
+    delegate().lookUpServiceConfig(enable);
     return thisT();
   }
 

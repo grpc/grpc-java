@@ -448,7 +448,7 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T lookupServiceConfig(boolean enable) {
+  public T lookUpServiceConfig(boolean enable) {
     this.lookUpServiceConfig = enable;
     return thisT();
   }

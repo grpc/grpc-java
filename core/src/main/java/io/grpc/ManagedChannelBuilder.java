@@ -590,7 +590,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5189")
-  public T lookupServiceConfig(boolean enable) {
+  public T lookUpServiceConfig(boolean enable) {
     throw new UnsupportedOperationException();
   }
 

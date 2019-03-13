@@ -3441,7 +3441,7 @@ public class ManagedChannelImplTest {
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
-      channelBuilder.lookupServiceConfig(false);
+      channelBuilder.lookUpServiceConfig(false);
 
       Map<String, Object> serviceConfig =
           parseConfig("{\"methodConfig\":[{"
@@ -3474,7 +3474,7 @@ public class ManagedChannelImplTest {
           new FakeNameResolverFactory.Builder(expectedUri)
               .setServers(ImmutableList.of(addressGroup)).build();
       channelBuilder.nameResolverFactory(nameResolverFactory);
-      channelBuilder.lookupServiceConfig(false);
+      channelBuilder.lookUpServiceConfig(false);
       Map<String, Object> defaultServiceConfig =
           parseConfig("{\"methodConfig\":[{"
               + "\"name\":[{\"service\":\"SimpleService1\"}],"
@@ -3482,42 +3482,6 @@ public class ManagedChannelImplTest {
       channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
       Map<String, Object> serviceConfig = new HashMap<>();
-      Attributes serviceConfigAttrs =
-          Attributes.newBuilder()
-              .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
-              .build();
-      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
-
-      createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isEqualTo(defaultServiceConfig);
-      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-    } finally {
-      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
-    }
-  }
-
-  @Test
-  public void disableNameResolverConfig_withDefaultConfig_errorConfigResolution() throws Exception {
-    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
-    try {
-      FakeNameResolverFactory nameResolverFactory =
-          new FakeNameResolverFactory.Builder(expectedUri)
-              .setServers(ImmutableList.of(addressGroup)).build();
-      channelBuilder.nameResolverFactory(nameResolverFactory);
-      channelBuilder.lookupServiceConfig(false);
-      Map<String, Object> defaultServiceConfig =
-          parseConfig("{\"methodConfig\":[{"
-              + "\"name\":[{\"service\":\"SimpleService1\"}],"
-              + "\"waitForReady\":true}]}");
-      channelBuilder.defaultServiceConfig(defaultServiceConfig);
-
-      Map<String, Object> serviceConfig =
-          ImmutableMap.of("service-config-error", (Object) new Exception());
       Attributes serviceConfigAttrs =
           Attributes.newBuilder()
               .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
@@ -3624,6 +3588,58 @@ public class ManagedChannelImplTest {
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
     }
+  }
+
+  @Test
+  public void useDefaultImmediatelyIfDisableLookUp() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup)).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.lookUpServiceConfig(false);
+    Map<String, Object> defaultServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"SimpleService1\"}],"
+            + "\"waitForReady\":true}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    requestConnection = false;
+    channelBuilder.maxTraceEvents(10);
+
+    createChannel();
+
+    int size = getStats(channel).channelTrace.events.size();
+    assertThat(getStats(channel).channelTrace.events.get(size - 1))
+        .isEqualTo(new ChannelTrace.Event.Builder()
+            .setDescription("Using default service config")
+            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+            .setTimestampNanos(timer.getTicker().read())
+            .build());
+  }
+
+  @Test
+  public void notUseDefaultImmediatelyIfEnableLookUp() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup)).build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    channelBuilder.lookUpServiceConfig(true);
+    Map<String, Object> defaultServiceConfig =
+        parseConfig("{\"methodConfig\":[{"
+            + "\"name\":[{\"service\":\"SimpleService1\"}],"
+            + "\"waitForReady\":true}]}");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+    requestConnection = false;
+    channelBuilder.maxTraceEvents(10);
+
+    createChannel();
+
+    int size = getStats(channel).channelTrace.events.size();
+    assertThat(getStats(channel).channelTrace.events.get(size - 1))
+        .isNotEqualTo(new ChannelTrace.Event.Builder()
+            .setDescription("Using default service config")
+            .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+            .setTimestampNanos(timer.getTicker().read())
+            .build());
   }
 
   private static final class ChannelBuilder
