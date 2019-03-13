@@ -1349,7 +1349,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           waitingForServiceConfig = false;
-          waitingForServiceConfig = false;
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
