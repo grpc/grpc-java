@@ -3610,7 +3610,7 @@ public class ManagedChannelImplTest {
     int size = getStats(channel).channelTrace.events.size();
     assertThat(getStats(channel).channelTrace.events.get(size - 1))
         .isEqualTo(new ChannelTrace.Event.Builder()
-            .setDescription("Using default service config")
+            .setDescription("Service config look-up disabled, using default service config")
             .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
             .setTimestampNanos(timer.getTicker().read())
             .build());

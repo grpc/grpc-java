@@ -632,13 +632,21 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelCallTracer = callTracerFactory.create();
     this.channelz = checkNotNull(builder.channelz);
     channelz.addRootChannel(this);
-    if (defaultServiceConfig != null && !lookUpServiceConfig) {
-      channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-      waitingForServiceConfig = false;
-      serviceConfigInterceptor.handleUpdate(lastServiceConfig);
-      if (retryEnabled) {
-        throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
+
+    if (!lookUpServiceConfig) {
+      if (defaultServiceConfig != null) {
+        channelLogger.log(
+            ChannelLogLevel.INFO, "Service config look-up disabled, using default service config");
       }
+      waitingForServiceConfig = false;
+      handleServiceConfigUpdate();
+    }
+  }
+
+  private void handleServiceConfigUpdate() {
+    serviceConfigInterceptor.handleUpdate(lastServiceConfig);
+    if (retryEnabled) {
+      throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
     }
   }
 
@@ -1311,45 +1319,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             haveBackends = true;
           }
 
-          // Assuming no error in config resolution for now.
-          final Map<String, ?> serviceConfig =
-              attrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-          Map<String, ?> effectiveServiceConfig = null;
-
-          // Try to use config if returned from name resolver and allowed
-          if (serviceConfig != null) {
-            if (lookUpServiceConfig) {
-              effectiveServiceConfig = serviceConfig;
-            } else {
-              channelLogger.log(
-                  ChannelLogLevel.INFO,
-                  "Service config from name resolver discarded by channel settings");
-            }
-          }
-
-          // Otherwise, try to use the default config if available
-          if (effectiveServiceConfig == null && defaultServiceConfig != null) {
-            channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-            effectiveServiceConfig = defaultServiceConfig;
-          }
-
-          // FIXME: reference equality is not right (although not harmful) right now. Name resolver
-          //        should return the same config if txt record is the same.
-          if (effectiveServiceConfig != lastServiceConfig) {
-            channelLogger.log(ChannelLogLevel.INFO,
-                "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
-            lastServiceConfig = effectiveServiceConfig;
-          }
-
-          Attributes effectiveAttrs = attrs;
-          if (effectiveServiceConfig != serviceConfig) {
-            effectiveAttrs = attrs.toBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
-                .build();
-          }
-
-          waitingForServiceConfig = false;
-
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
             return;
@@ -1357,18 +1326,56 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           nameResolverBackoffPolicy = null;
 
-          if (lookUpServiceConfig) {
-            try {
-              serviceConfigInterceptor.handleUpdate(lastServiceConfig);
-              if (retryEnabled) {
-                throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
+          // Assuming no error in config resolution for now.
+          final Map<String, ?> serviceConfig =
+              attrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          Map<String, ?> effectiveServiceConfig;
+          Attributes effectiveAttrs = attrs;
+          if (!lookUpServiceConfig) {
+            if (serviceConfig != null) {
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Service config from name resolver discarded by channel settings");
+            }
+            effectiveServiceConfig = defaultServiceConfig;
+          } else {
+            // Try to use config if returned from name resolver and allowed
+            // Otherwise, try to use the default config if available
+            if (serviceConfig != null) {
+              effectiveServiceConfig = serviceConfig;
+            } else {
+              effectiveServiceConfig = defaultServiceConfig;
+              if (defaultServiceConfig != null) {
+                channelLogger.log(
+                    ChannelLogLevel.INFO,
+                    "Received no service config, using default service config");
               }
+            }
+
+            // FIXME: reference equality is not right (although not harmful) right now. Name
+            //        resolver should return the same config if txt record is the same.
+            if (effectiveServiceConfig != lastServiceConfig) {
+              channelLogger.log(ChannelLogLevel.INFO,
+                  "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
+              lastServiceConfig = effectiveServiceConfig;
+            }
+
+            waitingForServiceConfig = false;
+
+            try {
+              handleServiceConfigUpdate();
             } catch (RuntimeException re) {
               logger.log(
                   Level.WARNING,
                   "[" + getLogId() + "] Unexpected exception from parsing service config",
                   re);
             }
+          }
+
+          if (effectiveServiceConfig != serviceConfig) {
+            effectiveAttrs = attrs.toBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
+                .build();
           }
 
           if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
