@@ -1297,12 +1297,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes config) {
+    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes attrs) {
       final class NamesResolved implements Runnable {
+
+        @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
           channelLogger.log(
-              ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, config);
+              ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 
           if (haveBackends == null || !haveBackends) {
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
@@ -1310,34 +1312,43 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // Assuming no error in config resolution for now.
-          Map<String, ?> serviceConfig =
-              config.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-          Attributes effectiveConfig = config;
-          if (!lookUpServiceConfig || serviceConfig == null) {
-            if (serviceConfig != null) { // lookUpServiceConfig is false
+          final Map<String, ?> serviceConfig =
+              attrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          Map<String, ?> effectiveServiceConfig = null;
+
+          // Try to use config if returned from name resolver and allowed
+          if (serviceConfig != null) {
+            if (lookUpServiceConfig) {
+              effectiveServiceConfig = serviceConfig;
+            } else {
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Service config from name resolver discarded by channel settings");
             }
-            if (defaultServiceConfig != null) {
-              channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-            } else if (lastServiceConfig != null && serviceConfig == null) {
-              // no default config, no current service config, last config is non-trivial
-              channelLogger.log(ChannelLogLevel.INFO, "Service config changed to null");
-            }
-
-            if (!(defaultServiceConfig == null && serviceConfig == null)) {
-              effectiveConfig = config.toBuilder()
-                  .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, defaultServiceConfig)
-                  .build();
-            }
-            lastServiceConfig = defaultServiceConfig;
-          } else {
-            if (serviceConfig != lastServiceConfig) {
-              channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
-            }
-            lastServiceConfig = serviceConfig;
           }
+
+          // Otherwise, try to use the default config if available
+          if (effectiveServiceConfig == null && defaultServiceConfig != null) {
+            channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
+            effectiveServiceConfig = defaultServiceConfig;
+          }
+
+          // FIXME: reference equality is not right (although not harmful) right now. Name resolver
+          //        should return the same config if txt record is the same.
+          if (effectiveServiceConfig != lastServiceConfig) {
+            channelLogger.log(ChannelLogLevel.INFO,
+                "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
+            lastServiceConfig = effectiveServiceConfig;
+          }
+
+          Attributes effectiveAttrs = attrs;
+          if (effectiveServiceConfig != serviceConfig) {
+            effectiveAttrs = attrs.toBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
+                .build();
+          }
+
+          waitingForServiceConfig = false;
           waitingForServiceConfig = false;
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
@@ -1365,7 +1376,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                 "Name resolver " + resolver + " returned an empty list"));
           } else {
-            helper.lb.handleResolvedAddressGroups(servers, effectiveConfig);
+            helper.lb.handleResolvedAddressGroups(servers, effectiveAttrs);
           }
         }
       }
