@@ -375,7 +375,7 @@ public class TestServiceClient {
         return GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort).build();
       }
       if (customCredentialsType != null
-          && customCredentialsType.equals("compute_engine_credentials")) {
+          && customCredentialsType.equals("compute_engine_channel_creds")) {
         return ComputeEngineChannelBuilder.forAddress(serverHost, serverPort).build();
       }
       if (useAlts) {
