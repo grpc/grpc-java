@@ -542,8 +542,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   /**
    * Provides a service config to the channel. The channel will use the default service config when
    * the name resolver provides no service config or if the channel disables lookup service config
-   * from name resolver. The argument {@code serviceConfig} is a nested map representing a Json
-   * object in the most natural way:
+   * from name resolver (see {@link #lookUpServiceConfig(boolean)}). The argument
+   * {@code serviceConfig} is a nested map representing a Json object in the most natural way:
    *
    *        <table border="1">
    *          <tr>
@@ -583,8 +583,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   }
 
   /**
-   * Lets the channel look up or not look up service config from the name resolver. The look-up is
-   * enabled by default.
+   * Enables or disables service config look-up from the naming system. Enabled by default.
    *
    * @return this
    * @since 1.20.0

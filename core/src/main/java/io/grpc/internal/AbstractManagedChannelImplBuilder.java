@@ -387,6 +387,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
+    // TODO: use real parsing nameResolverHelper.parseServiceConfig() here or at build(),
     defaultServiceConfig = checkMapEntryTypes(serviceConfig);
     return thisT();
   }

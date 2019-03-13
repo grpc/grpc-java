@@ -242,11 +242,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
   @Nullable
-  private Map<String, ?> defaultServiceConfig;
+  private final Map<String, ?> defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
   // See service config error handling spec for reference.
   // TODO: check this value when error in service config resolution
-  private boolean selectedServiceConfigOrNoServiceConfig;
+  private boolean waitingForServiceConfig = true;
   private final boolean lookUpServiceConfig;
 
   // One instance per channel.
@@ -634,7 +634,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelz.addRootChannel(this);
     if (defaultServiceConfig != null && !lookUpServiceConfig) {
       channelLogger.log(ChannelLogLevel.INFO, "Using default service config");
-      selectedServiceConfigOrNoServiceConfig = true;
+      waitingForServiceConfig = false;
       serviceConfigInterceptor.handleUpdate(lastServiceConfig);
       if (retryEnabled) {
         throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
@@ -1338,7 +1338,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             lastServiceConfig = serviceConfig;
           }
-          selectedServiceConfigOrNoServiceConfig = true;
+          waitingForServiceConfig = false;
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
