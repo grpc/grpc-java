@@ -3434,7 +3434,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void disableNameResolverConfig_noDefaultConfig() throws Exception {
+  public void disableServiceConfigLookUp_noDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
       FakeNameResolverFactory nameResolverFactory =
@@ -3467,7 +3467,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void disableNameResolverConfig_withDefaultConfig() throws Exception {
+  public void disableServiceConfigLookUp_withDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
       FakeNameResolverFactory nameResolverFactory =
@@ -3502,7 +3502,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void noDiscardNameResolverConfig_noDefaultConfig() throws Exception {
+  public void enableServiceConfigLookUp_noDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
       FakeNameResolverFactory nameResolverFactory =
@@ -3554,7 +3554,7 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void noDiscardNameResolverConfig_withDefaultConfig() throws Exception {
+  public void enableServiceConfigLookUp_withDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
       FakeNameResolverFactory nameResolverFactory =
@@ -3569,8 +3569,8 @@ public class ManagedChannelImplTest {
 
       Map<String, Object> serviceConfig =
           parseConfig("{\"methodConfig\":[{"
-              + "\"name\":[{\"service\":\"SimpleService1\"}],"
-              + "\"waitForReady\":true}]}");
+              + "\"name\":[{\"service\":\"SimpleService2\"}],"
+              + "\"waitForReady\":false}]}");
       Attributes serviceConfigAttrs =
           Attributes.newBuilder()
               .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
@@ -3584,6 +3584,62 @@ public class ManagedChannelImplTest {
           attributesCaptor.capture());
       assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(serviceConfig);
+      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
+  @Test
+  public void enableServiceConfigLookUp_resolverReturnsNoConfig_withDefaultConfig()
+      throws Exception {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+          new FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup)).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+      Map<String, Object> defaultServiceConfig =
+          parseConfig("{\"methodConfig\":[{"
+              + "\"name\":[{\"service\":\"SimpleService1\"}],"
+              + "\"waitForReady\":true}]}");
+      channelBuilder.defaultServiceConfig(defaultServiceConfig);
+
+      Attributes serviceConfigAttrs = Attributes.EMPTY;
+      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+
+      createChannel();
+      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
+      verify(mockLoadBalancer).handleResolvedAddressGroups(
+          eq(ImmutableList.of(addressGroup)),
+          attributesCaptor.capture());
+      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+          .isEqualTo(defaultServiceConfig);
+      verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+    } finally {
+      LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
+    }
+  }
+
+  @Test
+  public void enableServiceConfigLookUp_resolverReturnsNoConfig_noDefaultConfig() {
+    LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
+    try {
+      FakeNameResolverFactory nameResolverFactory =
+          new FakeNameResolverFactory.Builder(expectedUri)
+              .setServers(ImmutableList.of(addressGroup)).build();
+      channelBuilder.nameResolverFactory(nameResolverFactory);
+
+      Attributes serviceConfigAttrs = Attributes.EMPTY;
+      nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
+
+      createChannel();
+      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
+      verify(mockLoadBalancer).handleResolvedAddressGroups(
+          eq(ImmutableList.of(addressGroup)),
+          attributesCaptor.capture());
+      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+          .isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
