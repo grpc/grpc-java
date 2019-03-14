@@ -1334,7 +1334,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             effectiveServiceConfig = defaultServiceConfig;
           } else {
-            // Try to use config if returned from name resolver and allowed
+            // Try to use config if returned from name resolver
             // Otherwise, try to use the default config if available
             if (serviceConfig != null) {
               effectiveServiceConfig = serviceConfig;
