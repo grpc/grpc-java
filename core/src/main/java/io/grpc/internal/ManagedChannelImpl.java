@@ -1351,7 +1351,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             //                 Name resolver should return the same config if txt record is the same
             if (effectiveServiceConfig != lastServiceConfig) {
               channelLogger.log(ChannelLogLevel.INFO,
-                  "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
+                  "Service config changed{0}", effectiveServiceConfig == null ? " to null" : "");
               lastServiceConfig = effectiveServiceConfig;
             }
 
