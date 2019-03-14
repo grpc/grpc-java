@@ -1325,7 +1325,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           final Map<String, ?> serviceConfig =
               attrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
           Map<String, ?> effectiveServiceConfig;
-          Attributes effectiveAttrs = attrs;
           if (!lookUpServiceConfig) {
             if (serviceConfig != null) {
               channelLogger.log(
@@ -1367,18 +1366,18 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
           }
 
-          if (effectiveServiceConfig != serviceConfig) {
-            effectiveAttrs = attrs.toBuilder()
-                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
-                .build();
-          }
-
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListenerImpl.this.helper == ManagedChannelImpl.this.lbHelper) {
             if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
               handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                   "Name resolver " + resolver + " returned an empty list"));
             } else {
+              Attributes effectiveAttrs = attrs;
+              if (effectiveServiceConfig != serviceConfig) {
+                effectiveAttrs = attrs.toBuilder()
+                    .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
+                    .build();
+              }
               helper.lb.handleResolvedAddressGroups(servers, effectiveAttrs);
             }
           }
