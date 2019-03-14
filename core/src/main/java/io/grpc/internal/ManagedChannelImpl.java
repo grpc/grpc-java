@@ -1319,11 +1319,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
             haveBackends = true;
           }
 
-          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
-            return;
-          }
-
           nameResolverBackoffPolicy = null;
 
           // Assuming no error in config resolution for now.
@@ -1378,11 +1373,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 .build();
           }
 
-          if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
-            handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
-                "Name resolver " + resolver + " returned an empty list"));
-          } else {
-            helper.lb.handleResolvedAddressGroups(servers, effectiveAttrs);
+          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+          if (NameResolverListenerImpl.this.helper == ManagedChannelImpl.this.lbHelper) {
+            if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
+              handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
+                  "Name resolver " + resolver + " returned an empty list"));
+            } else {
+              helper.lb.handleResolvedAddressGroups(servers, effectiveAttrs);
+            }
           }
         }
       }
