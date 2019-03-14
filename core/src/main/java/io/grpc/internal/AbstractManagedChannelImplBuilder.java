@@ -402,7 +402,7 @@ public abstract class AbstractManagedChannelImplBuilder
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       checkArgument(
           entry.getKey() instanceof String,
-          "The key of the entry '" + entry + "' is not of String type");
+          "The key of the entry '%s' is not of String type", entry);
 
       String key = (String) entry.getKey();
       Object value = entry.getValue();
