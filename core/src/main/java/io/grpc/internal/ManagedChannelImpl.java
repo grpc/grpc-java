@@ -638,12 +638,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
         channelLogger.log(
             ChannelLogLevel.INFO, "Service config look-up disabled, using default service config");
       }
-      waitingForServiceConfig = false;
       handleServiceConfigUpdate();
     }
   }
 
+  // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
+    waitingForServiceConfig = false;
     serviceConfigInterceptor.handleUpdate(lastServiceConfig);
     if (retryEnabled) {
       throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
@@ -1353,8 +1354,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
                   "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
               lastServiceConfig = effectiveServiceConfig;
             }
-
-            waitingForServiceConfig = false;
 
             try {
               handleServiceConfigUpdate();
