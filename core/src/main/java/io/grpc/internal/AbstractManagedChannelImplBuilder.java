@@ -387,7 +387,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   @Override
   public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
-    // TODO: use real parsing nameResolverHelper.parseServiceConfig() here or at build(),
+    // TODO(notcarl): use real parsing
     defaultServiceConfig = checkMapEntryTypes(serviceConfig);
     return thisT();
   }
@@ -400,10 +400,9 @@ public abstract class AbstractManagedChannelImplBuilder
     // Not using ImmutableMap.Builder because of extra guava dependency for Android.
     Map<String, Object> parsedMap = new LinkedHashMap<>();
     for (Map.Entry<?, ?> entry : map.entrySet()) {
-      if (!(entry.getKey() instanceof String)) {
-        throw new IllegalArgumentException(
-            "The key of the entry '" + entry + "' is not of String type");
-      }
+      checkArgument(
+          entry.getKey() instanceof String,
+          "The key of the entry '" + entry + "' is not of String type");
 
       String key = (String) entry.getKey();
       Object value = entry.getValue();
@@ -412,7 +411,7 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Map) {
         parsedMap.put(key, checkMapEntryTypes((Map<?, ?>) value));
       } else if (value instanceof List) {
-        parsedMap.put(key, checkListEnttryTypes((List<?>) value));
+        parsedMap.put(key, checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedMap.put(key, value);
       } else if (value instanceof Double) {
@@ -420,13 +419,15 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Boolean) {
         parsedMap.put(key, value);
       } else {
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException(
+            "The value of the map entry '" + entry + "' is of type '" + value.getClass()
+                + "', which is not supported");
       }
     }
     return Collections.unmodifiableMap(parsedMap);
   }
 
-  private static List<?> checkListEnttryTypes(List<?> list) {
+  private static List<?> checkListEntryTypes(List<?> list) {
     List<Object> parsedList = new ArrayList<>(list.size());
     for (Object value : list) {
       if (value == null) {
@@ -434,7 +435,7 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Map) {
         parsedList.add(checkMapEntryTypes((Map<?, ?>) value));
       } else if (value instanceof List) {
-        parsedList.add(checkListEnttryTypes((List<?>) value));
+        parsedList.add(checkListEntryTypes((List<?>) value));
       } else if (value instanceof String) {
         parsedList.add(value);
       } else if (value instanceof Double) {
@@ -442,7 +443,9 @@ public abstract class AbstractManagedChannelImplBuilder
       } else if (value instanceof Boolean) {
         parsedList.add(value);
       } else {
-        throw new IllegalArgumentException("Wrong type of the entry '" + value + "'");
+        throw new IllegalArgumentException(
+            "The entry '" + value + "' is of type '" + value.getClass()
+                + "', which is not supported");
       }
     }
     return Collections.unmodifiableList(parsedList);

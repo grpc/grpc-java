@@ -238,14 +238,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
   @CheckForNull
   private Boolean haveBackends; // a flag for doing channel tracing when flipped
   // Must be mutated and read from constructor or syncContext
-  // TODO: check this value when error in service config resolution
+  // TODO(notcarl): check this value when error in service config resolution
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
   @Nullable
   private final Map<String, ?> defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
   // See service config error handling spec for reference.
-  // TODO: check this value when error in service config resolution
+  // TODO(notcarl): check this value when error in service config resolution
   private boolean waitingForServiceConfig = true;
   private final boolean lookUpServiceConfig;
 
@@ -1346,8 +1346,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             }
 
-            // FIXME: reference equality is not right (although not harmful) right now. Name
-            //        resolver should return the same config if txt record is the same.
+            // FIXME(notcarl): reference equality is not right (although not harmful) right now.
+            //                 Name resolver should return the same config if txt record is the same
             if (effectiveServiceConfig != lastServiceConfig) {
               channelLogger.log(ChannelLogLevel.INFO,
                   "Service config changed" + (effectiveServiceConfig == null ? " to null" : ""));
