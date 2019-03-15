@@ -259,7 +259,7 @@ public abstract class NameResolver {
      * @since 1.20.0
      */
     public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      return ConfigOrError.UNKNOWN_CONFIG;
+      throw new UnsupportedOperationException("should have been implemented");
     }
 
     /**
