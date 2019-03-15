@@ -52,8 +52,8 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
   public abstract String getPolicyName();
 
   /**
-   * Parses the Load Balancing policy for the service config.  This will return a
-   * {@link ConfigOrError} which contains either the successfully parsed config, or the
+   * Parses the config for the Load Balancing policy unpacked from the service config.  This will
+   * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
    * {@link Status} representing the failure to parse.  Implementations are expected to not throw
    * exceptions but return a Status representing the failure.
    *
@@ -63,9 +63,9 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * @since 1.20.0
    * @see https://github.com/grpc/proposal/blob/master/A24-lb-policy-config.md
    */
-  public ConfigOrError<?> parseLoadBalancingConfigPolicy(
-      Map<String, ?> rawLoadBalancingConfigPolicy) {
-    return ConfigOrError.UNSUPPORTED_CONFIG;
+  public ConfigOrError<?> parseLoadBalancingPolicyConfig(
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
+    return ConfigOrError.UNKNOWN_CONFIG;
   }
 
   @Override

@@ -61,17 +61,17 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   @Override
-  public ConfigOrError<?> parseLoadBalancingConfigPolicy(
+  public ConfigOrError<?> parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingConfigPolicy) {
     return parseLoadBalancingConfigPolicyInternal(rawLoadBalancingConfigPolicy);
   }
 
   ConfigOrError<Mode> parseLoadBalancingConfigPolicyInternal(
-      Map<String, ?> rawLoadBalancingConfigPolicy) {
-    if (rawLoadBalancingConfigPolicy == null) {
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
+    if (rawLoadBalancingPolicyConfig == null) {
       return ConfigOrError.fromConfig(DEFAULT_MODE);
     }
-    List<?> rawChildPolicies = getList(rawLoadBalancingConfigPolicy, "childPolicy");
+    List<?> rawChildPolicies = getList(rawLoadBalancingPolicyConfig, "childPolicy");
     if (rawChildPolicies == null) {
       return ConfigOrError.fromConfig(DEFAULT_MODE);
     }

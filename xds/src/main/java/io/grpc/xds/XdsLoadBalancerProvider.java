@@ -66,16 +66,16 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   @Override
-  public ConfigOrError<?> parseLoadBalancingConfigPolicy(
-      Map<String, ?> rawLoadBalancingConfigPolicy) {
-    return parseLoadBalancingConfigPolicy(rawLoadBalancingConfigPolicy, registry);
+  public ConfigOrError<?> parseLoadBalancingPolicyConfig(
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
+    return parseLoadBalancingConfigPolicy(rawLoadBalancingPolicyConfig, registry);
   }
 
   static ConfigOrError<XdsConfig> parseLoadBalancingConfigPolicy(
-      Map<String, ?> rawLoadBalancingConfigPolicy, LoadBalancerRegistry registry) {
+      Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
       LbConfig newLbConfig =
-          ServiceConfigUtil.unwrapLoadBalancingConfig(rawLoadBalancingConfigPolicy);
+          ServiceConfigUtil.unwrapLoadBalancingConfig(rawLoadBalancingPolicyConfig);
       String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
       LbConfig childPolicy = selectChildPolicy(newLbConfig, registry);
       LbConfig fallbackPolicy = selectFallbackPolicy(newLbConfig, registry);

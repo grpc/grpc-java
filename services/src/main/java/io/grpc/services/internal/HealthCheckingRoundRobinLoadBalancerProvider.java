@@ -59,9 +59,9 @@ public final class HealthCheckingRoundRobinLoadBalancerProvider extends LoadBala
   }
 
   @Override
-  public ConfigOrError<?> parseLoadBalancingConfigPolicy(
-      Map<String, ?> rawLoadBalancingConfigPolicy) {
-    return rrProvider.parseLoadBalancingConfigPolicy(rawLoadBalancingConfigPolicy);
+  public ConfigOrError<?> parseLoadBalancingPolicyConfig(
+      Map<String, ?> rawLoadBalancingPolicyConfig) {
+    return rrProvider.parseLoadBalancingPolicyConfig(rawLoadBalancingPolicyConfig);
   }
 
   @VisibleForTesting

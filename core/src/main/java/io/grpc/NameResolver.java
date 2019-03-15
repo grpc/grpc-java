@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
-import io.grpc.NameResolver.Helper.ConfigOrError;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -260,7 +259,7 @@ public abstract class NameResolver {
      * @since 1.20.0
      */
     public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
-      return ConfigOrError.UNSUPPORTED_CONFIG;
+      return ConfigOrError.UNKNOWN_CONFIG;
     }
 
     /**
@@ -272,13 +271,13 @@ public abstract class NameResolver {
      */
     public static final class ConfigOrError<T> {
 
-      private static final class Unsuppported {
+      private static final class UnknownConfig {
 
-        Unsuppported() {}
+        UnknownConfig() {}
 
         @Override
         public String toString() {
-          return "service config parsing not supported";
+          return "service config is unused";
         }
       }
 
@@ -287,8 +286,8 @@ public abstract class NameResolver {
        * indicate that parsing of the service config is neither right nor wrong, but doesn't have
        * any meaning.
        */
-      public static final ConfigOrError<?> UNSUPPORTED_CONFIG =
-          ConfigOrError.fromConfig(new Unsuppported());
+      public static final ConfigOrError<?> UNKNOWN_CONFIG =
+          ConfigOrError.fromConfig(new UnknownConfig());
 
       /**
        * Returns a {@link ConfigOrError} for the successfully parsed config.
