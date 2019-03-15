@@ -278,6 +278,19 @@ public class TestServiceClient {
         tester.computeEngineCreds(defaultServiceAccount, oauthScope);
         break;
 
+      case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
+        ManagedChannel channel = ComputeEngineChannelBuilder.forAddress(
+            serverHost, serverPort).build();
+        try {
+          TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
+              TestServiceGrpc.newBlockingStub(channel);
+          tester.computeEngineChannelCredentials(defaultServiceAccount, computeEngineStub);
+        } finally {
+          channel.shutdownNow();
+        }
+        break;
+      }
+
       case SERVICE_ACCOUNT_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
