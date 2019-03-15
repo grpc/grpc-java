@@ -57,7 +57,7 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * {@link Status} representing the failure to parse.  Implementations are expected to not throw
    * exceptions but return a Status representing the failure.
    *
-   * @param rawLoadBalancingConfigPolicy The {@link Map} representation of the load balancing
+   * @param rawLoadBalancingPolicyConfig The {@link Map} representation of the load balancing
    *     policy choice.
    * @return a tuple of the fully parsed and validated balancer configuration, else the Status.
    * @since 1.20.0
