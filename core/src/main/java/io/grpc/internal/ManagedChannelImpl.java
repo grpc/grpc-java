@@ -243,10 +243,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
   @Nullable
   private final Map<String, ?> defaultServiceConfig;
-  // Must be mutated and read from constructor or syncContext
-  // See service config error handling spec for reference.
-  // TODO(notcarl): check this value when error in service config resolution
-  private boolean waitingForServiceConfig = true;
   private final boolean lookUpServiceConfig;
 
   // One instance per channel.
@@ -644,7 +640,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   // May only be called in constructor or syncContext
   private void handleServiceConfigUpdate() {
-    waitingForServiceConfig = false;
     serviceConfigInterceptor.handleUpdate(lastServiceConfig);
     if (retryEnabled) {
       throttle = ServiceConfigUtil.getThrottlePolicy(lastServiceConfig);
