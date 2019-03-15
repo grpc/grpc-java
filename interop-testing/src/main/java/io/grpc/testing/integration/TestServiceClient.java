@@ -279,8 +279,8 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-        ManagedChannel channel = ComputeEngineChannelBuilder.forAddress(
-            serverHost, serverPort).build();
+        ManagedChannel channel = ComputeEngineChannelBuilder
+            .forAddress(serverHost, serverPort).build();
         try {
           TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
               TestServiceGrpc.newBlockingStub(channel);
