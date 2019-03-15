@@ -221,27 +221,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T nameResolverFactory(NameResolver.Factory resolverFactory);
 
   /**
-   * Provides a custom {@link LoadBalancer.Factory} for the channel.
-   *
-   * <p>If this method is not called, the builder will use {@link PickFirstBalancerFactory}
-   * for the channel.
-   *
-   * <p>This method is implemented by all stock channel builders that
-   * are shipped with gRPC, but may not be implemented by custom channel builders, in which case
-   * this method will throw.
-   *
-   * @deprecated this method disables service-config-based policy selection, and may cause problems
-   *             if NameResolver returns GRPCLB balancer addresses but a non-GRPCLB LoadBalancer
-   *             is passed in here.  Use {@link #defaultLoadBalancingPolicy} instead.
-   *
-   * @return this
-   * @since 1.0.0
-   */
-  @Deprecated
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
-  public abstract T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory);
-
-  /**
    * Sets the default load-balancing policy that will be used if the service config doesn't specify
    * one.  If not set, the default will be the "pick_first" policy.
    *

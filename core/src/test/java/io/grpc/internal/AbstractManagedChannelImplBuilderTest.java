@@ -33,7 +33,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.LoadBalancer;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -123,34 +122,6 @@ public class AbstractManagedChannelImplBuilderTest {
   @Test(expected = IllegalStateException.class)
   public void nameResolverFactory_notAllowedWithDirectAddress() {
     directAddressBuilder.nameResolverFactory(mock(NameResolver.Factory.class));
-  }
-
-  @Test
-  public void loadBalancerFactory_default() {
-    assertNull(builder.loadBalancerFactory);
-  }
-
-  @Test
-  @Deprecated
-  public void loadBalancerFactory_normal() {
-    LoadBalancer.Factory loadBalancerFactory = mock(LoadBalancer.Factory.class);
-    assertEquals(builder, builder.loadBalancerFactory(loadBalancerFactory));
-    assertEquals(loadBalancerFactory, builder.loadBalancerFactory);
-  }
-
-  @Test
-  @Deprecated
-  public void loadBalancerFactory_null() {
-    LoadBalancer.Factory defaultValue = builder.loadBalancerFactory;
-    builder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
-    assertEquals(builder, builder.loadBalancerFactory(null));
-    assertEquals(defaultValue, builder.loadBalancerFactory);
-  }
-
-  @Test(expected = IllegalStateException.class)
-  @Deprecated
-  public void loadBalancerFactory_notAllowedWithDirectAddress() {
-    directAddressBuilder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
   }
 
   @Test
