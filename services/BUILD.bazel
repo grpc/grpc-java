@@ -20,7 +20,7 @@ java_library(
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
         "@com_google_re2j//jar",
-        "@io_grpc_grpc_proto//:binarylog_v1_java_proto",
+        "@io_grpc_grpc_proto//:binarylog_java_proto",
     ],
 )
 
