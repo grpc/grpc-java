@@ -33,6 +33,7 @@ import io.grpc.okhttp.internal.Platform;
 import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.concurrent.TimeUnit;
 import java.nio.charset.Charset;
 import javax.net.ssl.SSLSocketFactory;
 
@@ -287,6 +288,7 @@ public class TestServiceClient {
           tester.computeEngineChannelCredentials(defaultServiceAccount, computeEngineStub);
         } finally {
           channel.shutdownNow();
+          channel.awaitTermination(5, TimeUnit.SECONDS);
         }
         break;
       }
