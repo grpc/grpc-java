@@ -37,6 +37,7 @@ import io.grpc.LoadBalancerRegistry;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1782")
 @Deprecated
 public final class GrpclbLoadBalancerFactory extends LoadBalancer.Factory {
+
   private static GrpclbLoadBalancerFactory instance;
   private final LoadBalancerProvider provider;
 

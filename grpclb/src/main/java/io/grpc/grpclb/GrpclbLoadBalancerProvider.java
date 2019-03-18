@@ -20,6 +20,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.NameResolver.Helper.ConfigOrError;
+import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
@@ -63,7 +64,12 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public ConfigOrError<?> parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingConfigPolicy) {
-    return parseLoadBalancingConfigPolicyInternal(rawLoadBalancingConfigPolicy);
+    try {
+      return parseLoadBalancingConfigPolicyInternal(rawLoadBalancingConfigPolicy);
+    } catch (RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.INTERNAL.withDescription("can't parse config: " + e.getMessage()).withCause(e));
+    }
   }
 
   ConfigOrError<Mode> parseLoadBalancingConfigPolicyInternal(
