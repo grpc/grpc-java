@@ -33,8 +33,8 @@ import io.grpc.okhttp.internal.Platform;
 import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.FileInputStream;
-import java.util.concurrent.TimeUnit;
 import java.nio.charset.Charset;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
