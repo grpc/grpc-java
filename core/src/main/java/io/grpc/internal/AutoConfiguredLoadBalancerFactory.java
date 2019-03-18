@@ -315,7 +315,10 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
   /**
    * Unlike a normal {@link LoadBalancer.Factory}, this accepts a full service config rather than
    * the LoadBalancingConfig.
+   *
+   * @return null if no selection could be made.
    */
+  @Nullable
   ConfigOrError<PolicySelection> selectLoadBalancerPolicy(Map<String, ?> serviceConfig) {
     try {
       List<LbConfig> loadBalancerConfigs = null;
@@ -342,8 +345,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
             Status.UNKNOWN.withDescription(
                 "None of " + policiesTried + " specified by Service Config are available."));
       }
-      return ConfigOrError.fromError(
-          Status.UNKNOWN.withDescription("Empty Load Balancing config"));
+      return null;
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
           Status.UNKNOWN.withDescription("can't parse load balancer configuration").withCause(e));
