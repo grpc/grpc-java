@@ -27,20 +27,33 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Parses JSON with as few preconceived notions as possible.
  */
 public final class JsonParser {
+
+  private static final Logger logger = Logger.getLogger(JsonParser.class.getName());
+
   private JsonParser() {}
 
   /**
    * Parses a json string, returning either a {@code Map<String, ?>}, {@code List<?>},
    * {@code String}, {@code Double}, {@code Boolean}, or {@code null}.
    */
+  @SuppressWarnings("unchecked")
   public static Object parse(String raw) throws IOException {
-    try (JsonReader jr = new JsonReader(new StringReader(raw))) {
+    JsonReader jr = new JsonReader(new StringReader(raw));
+    try {
       return parseRecursive(jr);
+    } finally {
+      try {
+        jr.close();
+      } catch (IOException e) {
+        logger.log(Level.WARNING, "Failed to close", e);
+      }
     }
   }
 

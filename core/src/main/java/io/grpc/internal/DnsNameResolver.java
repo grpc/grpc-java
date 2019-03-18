@@ -138,7 +138,6 @@ final class DnsNameResolver extends NameResolver {
   private final String authority;
   private final String host;
   private final int port;
-  private final Helper helper;
   private final Resource<Executor> executorResource;
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
@@ -156,7 +155,7 @@ final class DnsNameResolver extends NameResolver {
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
       Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
-    this.helper = Preconditions.checkNotNull(helper, "helper");
+    Preconditions.checkNotNull(helper, "helper");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -288,7 +287,7 @@ final class DnsNameResolver extends NameResolver {
       Attributes.Builder attrs = Attributes.newBuilder();
       if (!resolutionResults.txtRecords.isEmpty()) {
         ConfigOrError<Map<String, ?>> serviceConfig =
-            parseServicConfig(resolutionResults.txtRecords, random, getLocalHostname(), helper);
+            parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
           if (serviceConfig.getError() != null) {
             savedListener.onError(serviceConfig.getError());
@@ -305,8 +304,8 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Nullable
-  static ConfigOrError<Map<String, ?>> parseServicConfig(
-      List<String> rawTxtRecords, Random random, String localHostname, Helper helper) {
+  static ConfigOrError<Map<String, ?>> parseServiceConfig(
+      List<String> rawTxtRecords, Random random, String localHostname) {
     List<Map<String, ?>> possibleServiceConfigChoices;
     try {
       possibleServiceConfigChoices = parseTxtResults(rawTxtRecords);
@@ -316,8 +315,13 @@ final class DnsNameResolver extends NameResolver {
     }
     Map<String, ?> possibleServiceConfig = null;
     for (Map<String, ?> possibleServiceConfigChoice : possibleServiceConfigChoices) {
-      possibleServiceConfig =
-          maybeChooseServiceConfig(possibleServiceConfigChoice, random, localHostname);
+      try {
+        possibleServiceConfig =
+            maybeChooseServiceConfig(possibleServiceConfigChoice, random, localHostname);
+      } catch (RuntimeException e) {
+        return ConfigOrError.fromError(
+            Status.UNKNOWN.withDescription("failed to pick service config choice").withCause(e));
+      }
       if (possibleServiceConfig != null) {
         break;
       }
