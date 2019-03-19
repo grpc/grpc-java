@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Verify.verify;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
@@ -131,6 +132,12 @@ final class ManagedChannelServiceConfig {
    */
   Map<String, MethodInfo> getServiceMethodMap() {
     return serviceMethodMap;
+  }
+
+  @VisibleForTesting
+  @Nullable
+  Object getLoadBalancingConfig() {
+    return loadBalancingConfig;
   }
 
   /**

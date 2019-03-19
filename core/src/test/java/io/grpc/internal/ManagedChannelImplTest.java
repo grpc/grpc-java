@@ -3438,6 +3438,34 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void nameResolverHelper_noConfigChosen() {
+    int defaultPort = 1;
+    ProxyDetector proxyDetector = GrpcUtil.getDefaultProxyDetector();
+    SynchronizationContext syncCtx =
+        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
+    boolean retryEnabled = false;
+    int maxRetryAttemptsLimit = 2;
+    int maxHedgedAttemptsLimit = 3;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory("pick_first");
+
+    NrHelper nrh = new NrHelper(
+        defaultPort,
+        proxyDetector,
+        syncCtx,
+        retryEnabled,
+        maxRetryAttemptsLimit,
+        maxHedgedAttemptsLimit,
+        autoConfiguredLoadBalancerFactory);
+
+    ConfigOrError<ManagedChannelServiceConfig> coe =
+        nrh.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
+
+    assertThat(coe.getError()).isNull();
+    assertThat(coe.getConfig().getLoadBalancingConfig()).isEqualTo(null);
+  }
+
+  @Test
   public void disableServiceConfigLookUp_noDefaultConfig() throws Exception {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     try {
