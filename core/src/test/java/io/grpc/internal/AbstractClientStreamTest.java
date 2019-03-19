@@ -454,7 +454,7 @@ public class AbstractClientStreamTest {
     stream.start(mockListener);
 
     ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(sink).writeHeaders(headersCaptor.capture(), any(byte[].class));
+    verify(sink).writeHeaders(headersCaptor.capture(), any());
 
     Metadata headers = headersCaptor.getValue();
     assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));

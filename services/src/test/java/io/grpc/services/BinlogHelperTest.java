@@ -1009,12 +1009,12 @@ public final class BinlogHelperTest {
         .logClientHeader(
             anyLong(),
             any(String.class),
-            any(String.class),
+            any(),
             callOptTimeoutCaptor.capture(),
             any(Metadata.class),
             any(GrpcLogEntry.Logger.class),
             anyLong(),
-            any(SocketAddress.class));
+            any());
     Duration timeout = callOptTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));
@@ -1066,12 +1066,12 @@ public final class BinlogHelperTest {
         .logClientHeader(
             anyLong(),
             any(String.class),
-            any(String.class),
+            any(),
             callOptTimeoutCaptor.capture(),
             any(Metadata.class),
             any(GrpcLogEntry.Logger.class),
             anyLong(),
-            any(SocketAddress.class));
+            any());
     Duration timeout = callOptTimeoutCaptor.getValue();
     assertThat(TimeUnit.SECONDS.toNanos(1) - Durations.toNanos(timeout))
         .isAtMost(TimeUnit.MILLISECONDS.toNanos(250));

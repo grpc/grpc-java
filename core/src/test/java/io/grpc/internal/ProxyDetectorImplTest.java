@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
@@ -192,12 +193,12 @@ public class ProxyDetectorImplTest {
         proxyUser,
         proxyPassword.toCharArray());
     when(authenticator.requestPasswordAuthentication(
-            any(String.class),
-            any(InetAddress.class),
+            anyString(),
+            any(),
             anyInt(),
-            any(String.class),
-            any(String.class),
-            any(String.class)))
+            anyString(),
+            anyString(),
+            any()))
       .thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 

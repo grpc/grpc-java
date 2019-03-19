@@ -197,10 +197,10 @@ public class CensusModulesTest {
   @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
     when(spyClientSpanBuilder.startSpan()).thenReturn(spyClientSpan);
-    when(tracer.spanBuilderWithExplicitParent(anyString(), any(Span.class)))
+    when(tracer.spanBuilderWithExplicitParent(anyString(), any()))
         .thenReturn(spyClientSpanBuilder);
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
-    when(tracer.spanBuilderWithRemoteParent(anyString(), any(SpanContext.class)))
+    when(tracer.spanBuilderWithRemoteParent(anyString(), any()))
         .thenReturn(spyServerSpanBuilder);
     when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
@@ -760,7 +760,7 @@ public class CensusModulesTest {
     Metadata headers = new Metadata();
     callTracer.newClientStreamTracer(STREAM_INFO, headers);
     assertFalse(headers.containsKey(censusStats.statsHeader));
-    // Clear recorded stats to satisfy the assertions in wrapUp() 
+    // Clear recorded stats to satisfy the assertions in wrapUp()
     statsRecorder.rolloverRecords();
   }
 
