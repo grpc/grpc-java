@@ -34,7 +34,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyObject;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
@@ -402,7 +401,7 @@ public class ManagedChannelImplTest {
             .build());
     createChannel();
     verify(executorPool).getObject();
-    verify(executorPool, never()).returnObject(anyObject());
+    verify(executorPool, never()).returnObject(any());
     channel.shutdown();
     assertTrue(channel.isShutdown());
     assertTrue(channel.isTerminated());
@@ -625,7 +624,7 @@ public class ManagedChannelImplTest {
     // Killing the remaining real transport will terminate the channel
     transportListener.transportShutdown(Status.UNAVAILABLE);
     assertFalse(channel.isTerminated());
-    verify(executorPool, never()).returnObject(anyObject());
+    verify(executorPool, never()).returnObject(any());
     transportListener.transportTerminated();
     assertTrue(channel.isTerminated());
     verify(executorPool).returnObject(executor.getScheduledExecutorService());
@@ -978,7 +977,7 @@ public class ManagedChannelImplTest {
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     doThrow(ex).when(mockLoadBalancer).handleResolvedAddressGroups(
-        ArgumentMatchers.<List<EquivalentAddressGroup>>anyObject(), any(Attributes.class));
+        ArgumentMatchers.<List<EquivalentAddressGroup>>any(), any(Attributes.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();

@@ -1178,7 +1178,7 @@ public class OkHttpClientTransportTest {
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
     verify(frameWriter, timeout(TIME_OUT_MS)).synStream(
-        eq(false), eq(false), eq(3), eq(0), ArgumentMatchers.anyListOf(Header.class));
+        eq(false), eq(false), eq(3), eq(0), ArgumentMatchers.<Header>anyList());
     if (shouldBeFlushed) {
       verify(frameWriter, timeout(TIME_OUT_MS)).flush();
     } else {

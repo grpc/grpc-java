@@ -53,6 +53,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -92,7 +93,7 @@ public class PickFirstLoadBalancerTest {
 
     when(mockSubchannel.getAllAddresses()).thenThrow(new UnsupportedOperationException());
     when(mockHelper.createSubchannel(
-        anyListOf(EquivalentAddressGroup.class), any(Attributes.class)))
+        ArgumentMatchers.<EquivalentAddressGroup>anyList(), any(Attributes.class)))
         .thenReturn(mockSubchannel);
 
     loadBalancer = new PickFirstLoadBalancer(mockHelper);
@@ -124,13 +125,13 @@ public class PickFirstLoadBalancerTest {
     loadBalancer.handleResolvedAddressGroups(servers, affinity);
     verifyNoMoreInteractions(mockSubchannel);
 
-    verify(mockHelper).createSubchannel(anyListOf(EquivalentAddressGroup.class),
+    verify(mockHelper).createSubchannel(ArgumentMatchers.<EquivalentAddressGroup>anyList(),
         any(Attributes.class));
     verify(mockHelper)
         .updateBalancingState(isA(ConnectivityState.class), isA(SubchannelPicker.class));
     // Updating the subchannel addresses is unnecessary, but doesn't hurt anything
     verify(mockHelper).updateSubchannelAddresses(
-        eq(mockSubchannel), anyListOf(EquivalentAddressGroup.class));
+        eq(mockSubchannel), ArgumentMatchers.<EquivalentAddressGroup>anyList());
 
     verifyNoMoreInteractions(mockHelper);
   }

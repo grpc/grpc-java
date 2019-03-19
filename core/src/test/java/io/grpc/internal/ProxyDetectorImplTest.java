@@ -45,6 +45,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.AdditionalMatchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -194,11 +196,11 @@ public class ProxyDetectorImplTest {
         proxyPassword.toCharArray());
     when(authenticator.requestPasswordAuthentication(
             anyString(),
-            any(),
+            ArgumentMatchers.<InetAddress>any(),
             anyInt(),
             anyString(),
             anyString(),
-            any()))
+            AdditionalMatchers.or(anyString(), ArgumentMatchers.<String>any())))
       .thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 

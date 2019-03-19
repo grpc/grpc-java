@@ -796,7 +796,7 @@ public class ServerImplTest {
 
     assertEquals(1, executor.runDueTasks());
     verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
-    verify(stream).close(same(status), notNull(Metadata.class));
+    verify(stream).close(same(status), ArgumentMatchers.<Metadata>notNull());
     verify(stream, atLeast(1)).statsTraceContext();
   }
 
@@ -972,7 +972,7 @@ public class ServerImplTest {
     assertTrue(onCancelCalled.get());
 
     // Close should never be called if asserts in listener pass.
-    verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
+    verify(stream, times(0)).close(isA(Status.class), ArgumentMatchers.<Metadata>isNotNull());
   }
 
   private ServerStreamListener testClientClose_setup(
@@ -1123,8 +1123,8 @@ public class ServerImplTest {
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertEquals(1, executor.runDueTasks());
-    verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>anyObject(),
-        ArgumentMatchers.<Metadata>anyObject());
+    verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>any(),
+        ArgumentMatchers.<Metadata>any());
     // This call will be handled by the fallbackRegistry because it's not registred in the internal
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", requestHeaders);

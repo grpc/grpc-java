@@ -19,7 +19,7 @@ package io.grpc.netty;
 import static io.grpc.Metadata.BINARY_BYTE_MARSHALLER;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
 import static io.netty.util.AsciiString.of;
-import static org.hamcrest.CoreArgumentMatchers.containsString;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
