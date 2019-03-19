@@ -20,10 +20,13 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -184,6 +187,7 @@ public abstract class NameResolver {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   @ThreadSafe
+  @Deprecated // Use Helper instead.
   public interface Listener {
     /**
      * Handles updates on resolved addresses and attributes.
@@ -252,7 +256,8 @@ public abstract class NameResolver {
      * Parses and validates the service configuration chosen by the name resolver.  This will
      * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
      * {@link Status} representing the failure to parse.  Implementations are expected to not throw
-     * exceptions but return a Status representing the failure.
+     * exceptions but return a Status representing the failure.  The value inside the
+     * {@link ConfigOrError} should implement {@link Object#equals()} and {@link Object#hashCode()}.
      *
      * @param rawServiceConfig The {@link Map} representation of the service config
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.
@@ -260,6 +265,29 @@ public abstract class NameResolver {
      */
     public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
       throw new UnsupportedOperationException("should have been implemented");
+    }
+
+    /**
+     * Updates the {@link Channel} with the name resolution result.  This should be called from
+     * the name resolver once the servers have been resolved.  Additionally, this also includes
+     * the Service Config associated with the servers, if supported.
+     *
+     * @param result The full result of name resolution.
+     * @since 1.20.0
+     */
+    public void updateNameResolutionResult(Result result) {
+      throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
+     * Updates the {@link Channel} with an error from the resolver. The caller is responsible for
+     * eventually invoking {@link NameResolver#refresh()} to re-attempt resolution.
+     *
+     * @param error a non-OK status
+     * @since 1.20.0
+     */
+    public void updateNameResolutionError(Status error) {
+      throw new UnsupportedOperationException("Not implemented");
     }
 
     /**
@@ -347,6 +375,145 @@ public abstract class NameResolver {
               .add("error", status)
               .toString();
         }
+      }
+    }
+  }
+
+  /**
+   * Represents the results from a Name Resolver.
+   *
+   * @since 1.20.0
+   */
+  @ExperimentalApi("FIXME")
+  public static final class Result {
+    private final List<EquivalentAddressGroup> servers;
+    @ResolutionResultAttr
+    private final Attributes attributes;
+    @Nullable
+    private final Object serviceConfig;
+
+    Result(
+        List<EquivalentAddressGroup> servers,
+        @ResolutionResultAttr Attributes attributes,
+        Object serviceConfig) {
+      this.servers = Collections.unmodifiableList(new ArrayList<>(servers));
+      this.attributes = checkNotNull(attributes, "attributes");
+      this.serviceConfig = serviceConfig;
+    }
+
+    /**
+     * Constructs a new builder of a name resolution result.
+     *
+     * @since 1.20.0
+     */
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    /**
+     * Gets the servers resolved by name resolution.
+     *
+     * @since 1.20.0
+     */
+    public List<EquivalentAddressGroup> getServers() {
+      return servers;
+    }
+
+    /**
+     * Gets the attributes associated with the servers resolved by name resolution.
+     *
+     * @since 1.20.0
+     */
+    @ResolutionResultAttr
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    /**
+     * Gets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+     *
+     * @since 1.20.0
+     */
+    @Nullable
+    public Object getServiceConfig() {
+      return serviceConfig;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("servers", servers)
+          .add("attributes", attributes)
+          .add("serviceConfig", serviceConfig)
+          .toString();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof Result)) {
+        return false;
+      }
+      Result that = (Result) obj;
+      return Objects.equal(this.servers, that.servers)
+          && Objects.equal(this.attributes, that.attributes)
+          && Objects.equal(this.serviceConfig, that.serviceConfig);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(servers, attributes, serviceConfig);
+    }
+
+    /**
+     * A builder for {@link NameResolver.Result}.
+     *
+     * @since 1.20.0
+     */
+    public static final class Builder {
+      private List<EquivalentAddressGroup> servers = Collections.emptyList();
+      private Attributes attributes = Attributes.EMPTY;
+      @Nullable
+      private Object serviceConfig;
+
+      Builder() {}
+
+      /**
+       * Sets the servers resolved by name resolution.
+       *
+       * @since 1.20.0
+       */
+      public Builder setServers(List<EquivalentAddressGroup> servers) {
+        this.servers = servers;
+        return this;
+      }
+
+      /**
+       * Sets the attributes for the servers resolved by name resolution.
+       *
+       * @since 1.20.0
+       */
+      public Builder setAttributes(Attributes attributes) {
+        this.attributes = attributes;
+        return this;
+      }
+
+      /**
+       * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+       *
+       * @since 1.20.0
+       */
+      public Builder setServiceConfig(@Nullable Object serviceConfig) {
+        this.serviceConfig = serviceConfig;
+        return this;
+      }
+
+      /**
+       * Constructs a new {@link Result} from this builder.
+       *
+       * @since 1.20.0
+       */
+      public Result build() {
+        return new Result(servers, attributes, serviceConfig);
       }
     }
   }
