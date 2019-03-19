@@ -1011,7 +1011,7 @@ public final class BinlogHelperTest {
         .logClientHeader(
             anyLong(),
             AdditionalMatchers.or(ArgumentMatchers.<String>isNull(), anyString()),
-            anyString(),
+            AdditionalMatchers.or(ArgumentMatchers.<String>isNull(), anyString()),
             callOptTimeoutCaptor.capture(),
             any(Metadata.class),
             any(GrpcLogEntry.Logger.class),
