@@ -1776,7 +1776,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         if (autoLoadBalancerFactory != null) {
           ConfigOrError<?> choiceFromLoadBalancer =
               autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
-          if (choiceFromLoadBalancer.getError() != null) {
+          if (choiceFromLoadBalancer == null) {
+            loadBalancingPolicySelection = null;
+          } else if (choiceFromLoadBalancer.getError() != null) {
             return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
           } else {
             loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
