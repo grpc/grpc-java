@@ -33,11 +33,11 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyObject;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyObject;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -142,7 +142,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
@@ -978,7 +978,7 @@ public class ManagedChannelImplTest {
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     doThrow(ex).when(mockLoadBalancer).handleResolvedAddressGroups(
-        Matchers.<List<EquivalentAddressGroup>>anyObject(), any(Attributes.class));
+        ArgumentMatchers.<List<EquivalentAddressGroup>>anyObject(), any(Attributes.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
@@ -1694,7 +1694,7 @@ public class ManagedChannelImplTest {
       Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
       subchannel.requestConnection();
     }
-    
+
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
 
@@ -3214,7 +3214,7 @@ public class ManagedChannelImplTest {
       @Override
       public void shutdown() {}
     }
-    
+
     final class FakeNameResolverFactory extends NameResolver.Factory {
       FakeNameResolver resolver;
 
@@ -3229,7 +3229,7 @@ public class ManagedChannelImplTest {
         return "fake";
       }
     }
-    
+
     FakeNameResolverFactory factory = new FakeNameResolverFactory();
     final class CustomBuilder extends AbstractManagedChannelImplBuilder<CustomBuilder> {
 
