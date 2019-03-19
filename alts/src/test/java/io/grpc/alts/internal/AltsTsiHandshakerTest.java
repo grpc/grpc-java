@@ -243,7 +243,8 @@ public class AltsTsiHandshakerTest {
   public void extractServerPeerSuccess() throws Exception {
     ByteBuffer outputFrame = ByteBuffer.allocate(OUT_FRAME_SIZE);
     ByteBuffer transportBuffer = ByteBuffer.allocate(TRANSPORT_BUFFER_SIZE);
-    when(mockServer.startServerHandshake(ArgumentMatchers.<ByteBuffer>any())).thenReturn(outputFrame);
+    when(mockServer.startServerHandshake(ArgumentMatchers.<ByteBuffer>any()))
+        .thenReturn(outputFrame);
     when(mockServer.isFinished()).thenReturn(true);
     when(mockServer.getResult()).thenReturn(getHandshakerResult(/* isClient = */ false));
 

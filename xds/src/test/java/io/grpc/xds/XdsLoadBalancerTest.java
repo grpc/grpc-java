@@ -320,7 +320,8 @@ public class XdsLoadBalancerTest {
     assertThat(xdsLbState1.childPolicy).isNull();
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
 
 
     lbConfigRaw = "{\"xds_experimental\" : { "
@@ -341,7 +342,8 @@ public class XdsLoadBalancerTest {
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     // verify ADS stream is unchanged
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
   }
 
   @Test
@@ -358,7 +360,8 @@ public class XdsLoadBalancerTest {
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -377,7 +380,8 @@ public class XdsLoadBalancerTest {
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
   }
 
   @Test
@@ -394,7 +398,8 @@ public class XdsLoadBalancerTest {
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
@@ -415,7 +420,8 @@ public class XdsLoadBalancerTest {
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
   }
 
   @Test
@@ -434,7 +440,8 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -452,7 +459,8 @@ public class XdsLoadBalancerTest {
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
   }
 
   @Test
@@ -469,7 +477,8 @@ public class XdsLoadBalancerTest {
     lb.handleResolvedAddressGroups(Collections.<EquivalentAddressGroup>emptyList(), attrs);
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8443\","
@@ -485,11 +494,14 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
     // verify oobChannel is unchanged
-    verify(helper, times(2)).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper, times(2)).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(),
+        anyString());
     verify(oobChannel1)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
     verify(oobChannel2)
-        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(), ArgumentMatchers.<CallOptions>any());
+        .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
+            ArgumentMatchers.<CallOptions>any());
     verifyNoMoreInteractions(oobChannel3);
   }
 
