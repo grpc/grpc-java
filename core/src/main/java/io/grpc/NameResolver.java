@@ -46,9 +46,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * {@link #refresh()}.
  *
  * <p>Implementations <strong>don't need to be thread-safe</strong>.  All methods are guaranteed to
- * be called sequentially.  Additionally, all methods that have side-effects, i.e., {@link #start},
- * {@link #shutdown} and {@link #refresh} are called from the same {@link SynchronizationContext} as
- * returned by {@link Helper#getSynchronizationContext}.
+ * be called sequentially.  Additionally, all methods that have side-effects, i.e.,
+ * {@link #start(Observer)}, {@link #shutdown} and {@link #refresh} are called from the same
+ * {@link SynchronizationContext} as returned by {@link Helper#getSynchronizationContext}.
  *
  * @since 1.0.0
  */
@@ -296,8 +296,8 @@ public abstract class NameResolver {
     public abstract ProxyDetector getProxyDetector();
 
     /**
-     * Returns the {@link SynchronizationContext} where {@link #start}, {@link #shutdown} and {@link
-     * #refresh} are run from.
+     * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
+     * and {@link #refresh} are run from.
      *
      * @since 1.20.0
      */

@@ -142,6 +142,7 @@ public class ManagedChannelImplIdlenessTest {
   private BlockingQueue<MockClientTransportInfo> newTransports;
 
   @Before
+  @SuppressWarnings("deprecation") // For NameResolver.Listener
   public void setUp() {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
@@ -193,6 +194,7 @@ public class ManagedChannelImplIdlenessTest {
         any(ClientTransportFactory.ClientTransportOptions.class),
         any(ChannelLogger.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
+    verify(mockNameResolver, never()).start(any(NameResolver.Observer.class));
   }
 
   @After
