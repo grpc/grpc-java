@@ -33,10 +33,14 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
+import okio.ByteString;
 
 final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
+
+  private static final OkHttpFrameLogger frameLogger =
+      new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
   // Some exceptions are not very useful and add too much noise to the log
   private static final Set<String> QUIET_ERRORS =
       Collections.unmodifiableSet(new HashSet<>(Arrays.asList("Socket closed")));
@@ -63,6 +67,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void ackSettings(Settings peerSettings) {
+    frameLogger.logSettingsAck(OkHttpFrameLogger.Direction.OUTBOUND);
     try {
       frameWriter.ackSettings(peerSettings);
     } catch (IOException e) {
@@ -72,6 +77,8 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void pushPromise(int streamId, int promisedStreamId, List<Header> requestHeaders) {
+    frameLogger.logPushPromise(OkHttpFrameLogger.Direction.OUTBOUND,
+        streamId, promisedStreamId, requestHeaders);
     try {
       frameWriter.pushPromise(streamId, promisedStreamId, requestHeaders);
     } catch (IOException e) {
@@ -123,6 +130,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void rstStream(int streamId, ErrorCode errorCode) {
+    frameLogger.logRstStream(OkHttpFrameLogger.Direction.OUTBOUND, streamId, errorCode);
     try {
       frameWriter.rstStream(streamId, errorCode);
     } catch (IOException e) {
@@ -137,6 +145,8 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void data(boolean outFinished, int streamId, Buffer source, int byteCount) {
+    frameLogger.logData(OkHttpFrameLogger.Direction.OUTBOUND,
+        streamId, source.buffer(), byteCount, outFinished);
     try {
       frameWriter.data(outFinished, streamId, source, byteCount);
     } catch (IOException e) {
@@ -146,6 +156,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void settings(Settings okHttpSettings) {
+    frameLogger.logSettings(OkHttpFrameLogger.Direction.OUTBOUND, okHttpSettings);
     try {
       frameWriter.settings(okHttpSettings);
     } catch (IOException e) {
@@ -155,6 +166,8 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void ping(boolean ack, int payload1, int payload2) {
+    frameLogger.logPing(OkHttpFrameLogger.Direction.OUTBOUND,
+        ((long)payload1 << 32) | (payload2 & 0xFFFFFFFFL));
     try {
       frameWriter.ping(ack, payload1, payload2);
     } catch (IOException e) {
@@ -165,6 +178,8 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
   @Override
   public void goAway(int lastGoodStreamId, ErrorCode errorCode,
       byte[] debugData) {
+    frameLogger.logGoAway(OkHttpFrameLogger.Direction.OUTBOUND,
+        lastGoodStreamId, errorCode, ByteString.of(debugData));
     try {
       frameWriter.goAway(lastGoodStreamId, errorCode, debugData);
       // Flush it since after goAway, we are likely to close this writer.
@@ -176,6 +191,8 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void windowUpdate(int streamId, long windowSizeIncrement) {
+    frameLogger.logWindowsUpdate(OkHttpFrameLogger.Direction.OUTBOUND,
+        streamId, windowSizeIncrement);
     try {
       frameWriter.windowUpdate(streamId, windowSizeIncrement);
     } catch (IOException e) {

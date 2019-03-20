@@ -1028,6 +1028,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
    */
   @VisibleForTesting
   class ClientFrameHandler implements FrameReader.Handler, Runnable {
+    private final OkHttpFrameLogger logger =
+        new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
     FrameReader frameReader;
     boolean firstSettings = true;
 
@@ -1079,6 +1081,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     @Override
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)
         throws IOException {
+      logger.logData(OkHttpFrameLogger.Direction.INBOUND,
+          streamId, in.buffer(), length, inFinished);
       OkHttpClientStream stream = getStream(streamId);
       if (stream == null) {
         if (mayHaveCreatedStream(streamId)) {
@@ -1121,6 +1125,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
         int associatedStreamId,
         List<Header> headerBlock,
         HeadersMode headersMode) {
+      logger.logHeaders(OkHttpFrameLogger.Direction.INBOUND, streamId, headerBlock, inFinished);
       boolean unknownStream = false;
       Status failedStatus = null;
       if (maxInboundMetadataSize != Integer.MAX_VALUE) {
@@ -1172,6 +1177,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void rstStream(int streamId, ErrorCode errorCode) {
+      logger.logRstStream(OkHttpFrameLogger.Direction.INBOUND, streamId, errorCode);
       Status status = toGrpcStatus(errorCode).augmentDescription("Rst Stream");
       boolean stopDelivery =
           (status.getCode() == Code.CANCELLED || status.getCode() == Code.DEADLINE_EXCEEDED);
@@ -1183,6 +1189,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void settings(boolean clearPrevious, Settings settings) {
+      logger.logSettings(OkHttpFrameLogger.Direction.INBOUND, settings);
       boolean outboundWindowSizeIncreased = false;
       synchronized (lock) {
         if (OkHttpSettingsUtil.isSet(settings, OkHttpSettingsUtil.MAX_CONCURRENT_STREAMS)) {
@@ -1216,13 +1223,14 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void ping(boolean ack, int payload1, int payload2) {
+      long ackPayload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
+      logger.logPing(OkHttpFrameLogger.Direction.INBOUND, ackPayload);
       if (!ack) {
         synchronized (lock) {
           frameWriter.ping(true, payload1, payload2);
         }
       } else {
         Http2Ping p = null;
-        long ackPayload = (((long) payload1) << 32) | (payload2 & 0xffffffffL);
         synchronized (lock) {
           if (ping != null) {
             if (ping.payload() == ackPayload) {
@@ -1250,6 +1258,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void goAway(int lastGoodStreamId, ErrorCode errorCode, ByteString debugData) {
+      logger.logGoAway(OkHttpFrameLogger.Direction.INBOUND, lastGoodStreamId, errorCode, debugData);
       if (errorCode == ErrorCode.ENHANCE_YOUR_CALM) {
         String data = debugData.utf8();
         log.log(Level.WARNING, String.format(
@@ -1270,6 +1279,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     @Override
     public void pushPromise(int streamId, int promisedStreamId, List<Header> requestHeaders)
         throws IOException {
+      logger.logPushPromise(OkHttpFrameLogger.Direction.INBOUND,
+          streamId, promisedStreamId, requestHeaders);
       // We don't accept server initiated stream.
       synchronized (lock) {
         frameWriter.rstStream(streamId, ErrorCode.PROTOCOL_ERROR);
@@ -1278,6 +1289,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     @Override
     public void windowUpdate(int streamId, long delta) {
+      logger.logWindowsUpdate(OkHttpFrameLogger.Direction.INBOUND, streamId, delta);
       if (delta == 0) {
         String errorMsg = "Received 0 flow control window increment.";
         if (streamId == 0) {
