@@ -42,6 +42,10 @@ abstract class ForwardingNameResolver extends NameResolver {
     delegate.start(listener);
   }
 
+  public void start(Observer observer) {
+    delegate.start(observer);
+  }
+
   @Override
   public void shutdown() {
     delegate.shutdown();

@@ -71,9 +71,23 @@ public abstract class NameResolver {
    * Starts the resolution.
    *
    * @param listener used to receive updates on the target
+   * @deprecated override {@link #start(Observer)} instead.
    * @since 1.0.0
    */
-  public abstract void start(Listener listener);
+  @Deprecated
+  public void start(Listener listener) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  /**
+   * Starts the resolution.  This method will become abstract in 1.21.0.
+   *
+   * @param observer used to receive updates on the target
+   * @since 1.20.0
+   */
+  public void start(Observer observer) {
+    start((Listener) observer);
+  }
 
   /**
    * Stops the resolution. Updates to the Listener will stop.
@@ -183,11 +197,12 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
+   * @deprecated use {@link Observer} instead.
    * @since 1.0.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   @ThreadSafe
-  @Deprecated // Use Helper instead.
+  @Deprecated
   public interface Listener {
     /**
      * Handles updates on resolved addresses and attributes.
@@ -209,6 +224,44 @@ public abstract class NameResolver {
      * @since 1.0.0
      */
     void onError(Status error);
+  }
+
+  /**
+   * Receives address updates.
+   *
+   * <p>All methods are expected to return quickly.
+   *
+   * @since 1.20.0
+   */
+  public abstract static class Observer implements Listener {
+    /**
+     * @deprecated This will be removed in 1.21.0
+     */
+    @Override
+    @Deprecated
+    public final void onAddresses(
+        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+      onResult(Result.newBuilder().setServers(servers).setAttributes(attributes).build());
+    }
+
+    /**
+     * Handles updates on resolved addresses and attributes.  If {@link Result#getServers()} is
+     * empty, {@link #onError(Status)} will be called.
+     *
+     * @param result the resolved server addresses, attributes, and Service Config.
+     * @since 1.20.0
+     */
+    public abstract void onResult(Result result);
+
+    /**
+     * Handles an error from the resolver. The observer is responsible for eventually invoking
+     * {@link NameResolver#refresh()} to re-attempt resolution.
+     *
+     * @param error a non-OK status
+     * @since 1.20.0
+     */
+    @Override
+    public abstract void onError(Status error);
   }
 
   /**
