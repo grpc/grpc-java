@@ -138,7 +138,7 @@ public class ManagedChannelImplIdlenessTest {
   @Mock private NameResolver.Factory mockNameResolverFactory;
   @Mock private ClientCall.Listener<Integer> mockCallListener;
   @Mock private ClientCall.Listener<Integer> mockCallListener2;
-  @Captor private ArgumentCaptor<NameResolver.Listener> nameResolverListenerCaptor;
+  @Captor private ArgumentCaptor<NameResolver.Observer> nameResolverObserverCaptor;
   private BlockingQueue<MockClientTransportInfo> newTransports;
 
   @Before
@@ -216,10 +216,15 @@ public class ManagedChannelImplIdlenessTest {
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
 
-    verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
+    verify(mockNameResolver).start(nameResolverObserverCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
-    nameResolverListenerCaptor.getValue().onAddresses(servers, Attributes.EMPTY);
+    NameResolver.Result result =
+        NameResolver.Result.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build();
+    nameResolverObserverCaptor.getValue().onResult(result);
     verify(mockLoadBalancer).handleResolvedAddressGroups(servers, Attributes.EMPTY);
   }
 
