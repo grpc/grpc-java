@@ -414,7 +414,7 @@ public abstract class NameResolver {
    *
    * @since 1.20.0
    */
-  @ExperimentalApi("FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ResolutionResult {
     private final List<EquivalentAddressGroup> servers;
     @ResolutionResultAttr
