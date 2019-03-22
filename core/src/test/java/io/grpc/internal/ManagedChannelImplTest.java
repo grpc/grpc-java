@@ -91,7 +91,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Helper.ConfigOrError;
-import io.grpc.NameResolver.Result;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
@@ -2586,13 +2586,13 @@ public class ManagedChannelImplTest {
     createChannel();
 
     int prevSize = getStats(channel).channelTrace.events.size();
-    Result result1 = Result.newBuilder()
+    ResolutionResult resolutionResult1 = ResolutionResult.newBuilder()
         .setServers(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(Attributes.EMPTY)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(result1);
+    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -2604,13 +2604,13 @@ public class ManagedChannelImplTest {
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    Result result2 = Result.newBuilder()
+    ResolutionResult resolutionResult2 = ResolutionResult.newBuilder()
         .setServers(Collections.singletonList(
             new EquivalentAddressGroup(
               Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(Attributes.EMPTY)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(result2);
+    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
   }
 
@@ -2630,13 +2630,13 @@ public class ManagedChannelImplTest {
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, new HashMap<String, Object>())
             .build();
-    Result result1 = Result.newBuilder()
+    ResolutionResult resolutionResult1 = ResolutionResult.newBuilder()
         .setServers(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(result1);
+    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -2646,13 +2646,13 @@ public class ManagedChannelImplTest {
             .build());
 
     prevSize = getStats(channel).channelTrace.events.size();
-    Result result2 = Result.newBuilder().setServers(
+    ResolutionResult resolutionResult2 = ResolutionResult.newBuilder().setServers(
         Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(result2);
+    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -2663,13 +2663,13 @@ public class ManagedChannelImplTest {
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
             .build();
     timer.forwardNanos(1234);
-    Result result3 = Result.newBuilder()
+    ResolutionResult resolutionResult3 = ResolutionResult.newBuilder()
         .setServers(Collections.singletonList(
             new EquivalentAddressGroup(
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(result3);
+    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult3);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -3219,7 +3219,7 @@ public class ManagedChannelImplTest {
       public void start(Observer observer) {
         this.observer = observer;
         observer.onResult(
-            Result.newBuilder()
+            ResolutionResult.newBuilder()
                 .setServers(addresses)
                 .setAttributes(
                     Attributes.newBuilder()
@@ -3280,7 +3280,7 @@ public class ManagedChannelImplTest {
     // ok the service config is bad, let's fix it.
 
     factory.resolver.observer.onResult(
-        Result.newBuilder()
+        ResolutionResult.newBuilder()
             .setServers(addresses)
             .setAttributes(
                 Attributes.newBuilder()
@@ -3858,7 +3858,7 @@ public class ManagedChannelImplTest {
           return;
         }
         observer.onResult(
-            Result.newBuilder()
+            ResolutionResult.newBuilder()
                 .setServers(servers)
                 .setAttributes(nextResolvedAttributes.get())
                 .build());

@@ -38,7 +38,7 @@ abstract class ForwardingNameResolver extends NameResolver {
   }
 
   @Override
-  @SuppressWarnings("deprecation")
+  @Deprecated
   public void start(Listener listener) {
     delegate.start(listener);
   }

@@ -241,17 +241,17 @@ public abstract class NameResolver {
     @Deprecated
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
-      onResult(Result.newBuilder().setServers(servers).setAttributes(attributes).build());
+      onResult(ResolutionResult.newBuilder().setServers(servers).setAttributes(attributes).build());
     }
 
     /**
-     * Handles updates on resolved addresses and attributes.  If {@link Result#getServers()} is
-     * empty, {@link #onError(Status)} will be called.
+     * Handles updates on resolved addresses and attributes.  If
+     * {@link ResolutionResult#getServers()} is empty, {@link #onError(Status)} will be called.
      *
-     * @param result the resolved server addresses, attributes, and Service Config.
+     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.20.0
      */
-    public abstract void onResult(Result result);
+    public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
      * Handles an error from the resolver. The observer is responsible for eventually invoking
@@ -318,29 +318,6 @@ public abstract class NameResolver {
      */
     public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
       throw new UnsupportedOperationException("should have been implemented");
-    }
-
-    /**
-     * Updates the {@link Channel} with the name resolution result.  This should be called from
-     * the name resolver once the servers have been resolved.  Additionally, this also includes
-     * the Service Config associated with the servers, if supported.
-     *
-     * @param result The full result of name resolution.
-     * @since 1.20.0
-     */
-    public void updateNameResolutionResult(Result result) {
-      throw new UnsupportedOperationException("Not implemented");
-    }
-
-    /**
-     * Updates the {@link Channel} with an error from the resolver. The caller is responsible for
-     * eventually invoking {@link NameResolver#refresh()} to re-attempt resolution.
-     *
-     * @param error a non-OK status
-     * @since 1.20.0
-     */
-    public void updateNameResolutionError(Status error) {
-      throw new UnsupportedOperationException("Not implemented");
     }
 
     /**
@@ -438,14 +415,14 @@ public abstract class NameResolver {
    * @since 1.20.0
    */
   @ExperimentalApi("FIXME")
-  public static final class Result {
+  public static final class ResolutionResult {
     private final List<EquivalentAddressGroup> servers;
     @ResolutionResultAttr
     private final Attributes attributes;
     @Nullable
     private final Object serviceConfig;
 
-    Result(
+    ResolutionResult(
         List<EquivalentAddressGroup> servers,
         @ResolutionResultAttr Attributes attributes,
         Object serviceConfig) {
@@ -503,10 +480,10 @@ public abstract class NameResolver {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof Result)) {
+      if (!(obj instanceof ResolutionResult)) {
         return false;
       }
-      Result that = (Result) obj;
+      ResolutionResult that = (ResolutionResult) obj;
       return Objects.equal(this.servers, that.servers)
           && Objects.equal(this.attributes, that.attributes)
           && Objects.equal(this.serviceConfig, that.serviceConfig);
@@ -518,7 +495,7 @@ public abstract class NameResolver {
     }
 
     /**
-     * A builder for {@link NameResolver.Result}.
+     * A builder for {@link ResolutionResult}.
      *
      * @since 1.20.0
      */
@@ -561,12 +538,12 @@ public abstract class NameResolver {
       }
 
       /**
-       * Constructs a new {@link Result} from this builder.
+       * Constructs a new {@link ResolutionResult} from this builder.
        *
        * @since 1.20.0
        */
-      public Result build() {
-        return new Result(servers, attributes, serviceConfig);
+      public ResolutionResult build() {
+        return new ResolutionResult(servers, attributes, serviceConfig);
       }
     }
   }

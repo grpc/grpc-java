@@ -60,6 +60,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -1311,14 +1312,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public void onResult(final NameResolver.Result result) {
+    public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
-          List<EquivalentAddressGroup> servers = result.getServers();
-          Attributes attrs = result.getAttributes();
+          List<EquivalentAddressGroup> servers = resolutionResult.getServers();
+          Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 

@@ -60,7 +60,7 @@ import javax.annotation.Nullable;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Observer#onResult(Result)}.
+ * passed to {@link NameResolver.Observer#onResult(ResolutionResult)}.
  *
  * @see DnsNameResolverProvider
  */
@@ -239,12 +239,12 @@ final class DnsNameResolver extends NameResolver {
           logger.finer("Using proxy address " + proxiedAddr);
         }
         EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
-        Result result =
-            NameResolver.Result.newBuilder()
+        ResolutionResult resolutionResult =
+            ResolutionResult.newBuilder()
                 .setServers(Collections.singletonList(server))
                 .setAttributes(Attributes.EMPTY)
                 .build();
-        savedObserver.onResult(result);
+        savedObserver.onResult(resolutionResult);
         return;
       }
 
@@ -305,9 +305,9 @@ final class DnsNameResolver extends NameResolver {
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-      Result result =
-          NameResolver.Result.newBuilder().setServers(servers).setAttributes(attrs.build()).build();
-      savedObserver.onResult(result);
+      ResolutionResult resolutionResult =
+          ResolutionResult.newBuilder().setServers(servers).setAttributes(attrs.build()).build();
+      savedObserver.onResult(resolutionResult);
     }
   }
 

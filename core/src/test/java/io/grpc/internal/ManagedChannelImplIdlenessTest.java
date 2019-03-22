@@ -53,6 +53,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -221,12 +222,12 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockNameResolver).start(nameResolverObserverCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
-    NameResolver.Result result =
-        NameResolver.Result.newBuilder()
+    ResolutionResult resolutionResult =
+        ResolutionResult.newBuilder()
             .setServers(servers)
             .setAttributes(Attributes.EMPTY)
             .build();
-    nameResolverObserverCaptor.getValue().onResult(result);
+    nameResolverObserverCaptor.getValue().onResult(resolutionResult);
     verify(mockLoadBalancer).handleResolvedAddressGroups(servers, Attributes.EMPTY);
   }
 

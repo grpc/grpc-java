@@ -40,7 +40,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.Helper.ConfigOrError;
-import io.grpc.NameResolver.Result;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -142,7 +142,7 @@ public class DnsNameResolverTest {
   @Mock
   private NameResolver.Observer mockObserver;
   @Captor
-  private ArgumentCaptor<Result> resultCaptor;
+  private ArgumentCaptor<ResolutionResult> resultCaptor;
   @Nullable
   private String networkaddressCacheTtlPropertyValue;
   @Mock
@@ -1072,10 +1072,10 @@ public class DnsNameResolverTest {
   }
 
   private static void assertAnswerMatches(
-      List<InetAddress> addrs, int port, Result result) {
-    assertEquals(addrs.size(), result.getServers().size());
+      List<InetAddress> addrs, int port, ResolutionResult resolutionResult) {
+    assertEquals(addrs.size(), resolutionResult.getServers().size());
     for (int i = 0; i < addrs.size(); i++) {
-      EquivalentAddressGroup addrGroup = result.getServers().get(i);
+      EquivalentAddressGroup addrGroup = resolutionResult.getServers().get(i);
       InetSocketAddress socketAddr =
           (InetSocketAddress) Iterables.getOnlyElement(addrGroup.getAddresses());
       assertEquals("Addr " + i, port, socketAddr.getPort());
