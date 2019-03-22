@@ -64,9 +64,9 @@ public final class HealthCheckingLoadBalancerUtil {
   public static LoadBalancer newHealthCheckingLoadBalancer(Factory factory, Helper helper) {
     HealthCheckingLoadBalancerFactory hcFactory =
         new HealthCheckingLoadBalancerFactory(
-            factory, new ExponentialBackoffPolicy.Provider(), TimeProvider.SYSTEM_TIME_PROVIDER,
-            Stopwatch
-                .createUnstarted());
+            factory, new ExponentialBackoffPolicy.Provider(),
+            TimeProvider.SYSTEM_TIME_PROVIDER,
+            Stopwatch.createUnstarted());
     return hcFactory.newLoadBalancer(helper);
   }
 }
