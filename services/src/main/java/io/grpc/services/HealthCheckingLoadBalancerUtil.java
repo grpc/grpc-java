@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import com.google.common.base.Stopwatch;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Factory;
@@ -63,7 +64,9 @@ public final class HealthCheckingLoadBalancerUtil {
   public static LoadBalancer newHealthCheckingLoadBalancer(Factory factory, Helper helper) {
     HealthCheckingLoadBalancerFactory hcFactory =
         new HealthCheckingLoadBalancerFactory(
-            factory, new ExponentialBackoffPolicy.Provider(), TimeProvider.SYSTEM_TIME_PROVIDER);
+            factory, new ExponentialBackoffPolicy.Provider(), TimeProvider.SYSTEM_TIME_PROVIDER,
+            Stopwatch
+                .createUnstarted());
     return hcFactory.newLoadBalancer(helper);
   }
 }
