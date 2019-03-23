@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -124,7 +124,9 @@ class OkHttpFrameLogger {
   }
 
   void logSettingsAck(Direction direction) {
-    logger.log(level, direction.name() + " SETTINGS: ack=true");
+    if (isEnabled()) {
+      logger.log(level, direction + " SETTINGS: ack=true");
+    }
   }
 
   void logSettings(Direction direction, Settings settings) {
