@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.Settings;
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.logging.Level;
@@ -55,7 +54,7 @@ class OkHttpFrameLogger {
   }
 
   private String toString(ByteString buf) {
-    if (level.intValue() <= Level.FINEST.intValue() || buf.size() <= BUFFER_LENGTH_THRESHOLD) {
+    if (level.intValue() <= Level.FINE.intValue() || buf.size() <= BUFFER_LENGTH_THRESHOLD) {
       // Log the entire buffer.
       return buf.hex();
     }
@@ -158,7 +157,7 @@ class OkHttpFrameLogger {
               + " promisedStreamId="
               + promisedStreamId
               + " headers="
-              + Arrays.toString(headers.toArray(new Header[0])));
+              + headers);
     }
   }
 
