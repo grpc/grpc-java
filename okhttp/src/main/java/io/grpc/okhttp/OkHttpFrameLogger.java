@@ -34,12 +34,8 @@ class OkHttpFrameLogger {
   private final Level level;
 
   OkHttpFrameLogger(Level level, Class<?> clazz) {
-    this(level, Logger.getLogger(clazz.getName()));
-  }
-
-  private OkHttpFrameLogger(Level level, Logger logger) {
     this.level = checkNotNull(level, "level");
-    this.logger = checkNotNull(logger, "logger");
+    this.logger = Logger.getLogger(clazz.getName());
   }
 
   private static String toString(Settings settings) {
@@ -53,8 +49,8 @@ class OkHttpFrameLogger {
     return map.toString();
   }
 
-  private String toString(ByteString buf) {
-    if (level.intValue() <= Level.FINE.intValue() || buf.size() <= BUFFER_LENGTH_THRESHOLD) {
+  private static String toString(ByteString buf) {
+    if (buf.size() <= BUFFER_LENGTH_THRESHOLD) {
       // Log the entire buffer.
       return buf.hex();
     }
