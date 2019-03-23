@@ -16,13 +16,12 @@
 
 package io.grpc.services;
 
-import com.google.common.base.Stopwatch;
 import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.TimeProvider;
+import io.grpc.internal.GrpcUtil;
 
 /**
  * Utility for enabling
@@ -65,8 +64,7 @@ public final class HealthCheckingLoadBalancerUtil {
     HealthCheckingLoadBalancerFactory hcFactory =
         new HealthCheckingLoadBalancerFactory(
             factory, new ExponentialBackoffPolicy.Provider(),
-            TimeProvider.SYSTEM_TIME_PROVIDER,
-            Stopwatch.createUnstarted());
+            GrpcUtil.STOPWATCH_SUPPLIER);
     return hcFactory.newLoadBalancer(helper);
   }
 }

@@ -38,6 +38,7 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Channel;
@@ -178,9 +179,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(11L, 21L, 31L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(12L, 22L, 32L);
 
+    Supplier<Stopwatch> fakeStopwatchSupplier = new Supplier<Stopwatch>() {
+      @Override
+      public Stopwatch get() {
+        return Stopwatch.createUnstarted(clock.getTicker());
+      }
+    };
     hcLbFactory = new HealthCheckingLoadBalancerFactory(
-        origLbFactory, backoffPolicyProvider, clock.getTimeProvider(),
-        Stopwatch.createUnstarted(clock.getTicker()));
+        origLbFactory, backoffPolicyProvider,
+        fakeStopwatchSupplier);
     hcLb = hcLbFactory.newLoadBalancer(origHelper);
     // Make sure all calls into the hcLb is from the syncContext
     hcLbEventDelivery = new LoadBalancer() {
