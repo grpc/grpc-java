@@ -266,9 +266,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     verify(testLbBalancerProvider).newLoadBalancer(same(helper));
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
-    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
-    verify(testLbBalancer).handleResolvedAddressGroups(eq(servers), attrsCaptor.capture());
-    assertThat(attrsCaptor.getValue().get(ATTR_LOAD_BALANCING_CONFIG))
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getServers()).containsExactlyElementsIn(servers).inOrder();
+    Attributes actualAttributes = resultCaptor.getValue().getAttributes();
+    assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(Collections.singletonMap("setting1", "high"));
     verify(testLbBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
     verifyNoMoreInteractions(testLbBalancer);
@@ -285,10 +288,13 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .setAttributes(serviceConfigAttrs)
             .build());
 
-    verify(testLbBalancer, times(2))
-        .handleResolvedAddressGroups(eq(servers), attrsCaptor.capture());
+    resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getServers()).containsExactlyElementsIn(servers).inOrder();
+    actualAttributes = resultCaptor.getValue().getAttributes();
     // But the balancer config is changed.
-    assertThat(attrsCaptor.getValue().get(ATTR_LOAD_BALANCING_CONFIG))
+    assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(Collections.singletonMap("setting1", "low"));
     // Service config didn't change policy, thus the delegateLb is not swapped
     verifyNoMoreInteractions(testLbBalancer);
@@ -320,8 +326,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .build());
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
-    verify(testLbBalancer).handleResolvedAddressGroups(
-        eq(Collections.singletonList(servers.get(0))), any(Attributes.class));
+    verify(testLbBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Collections.singletonList(servers.get(0)))
+            .setAttributes(Attributes.EMPTY)
+            .build());
   }
 
   @Test
@@ -367,13 +376,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer2);
     assertThat(testLbBalancer2.canHandleEmptyAddressListFromNameResolution()).isTrue();
-    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
-    verify(testLbBalancer2).handleResolvedAddressGroups(
-        eq(Collections.<EquivalentAddressGroup>emptyList()), attrsCaptor.capture());
-    Map<String, ?> lbConfig =
-        attrsCaptor.getValue().get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getServers()).isEmpty();
+    Attributes actualAttributes = resultCaptor.getValue().getAttributes();
+
+    Map<String, ?> lbConfig = actualAttributes.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
     assertThat(lbConfig).isEqualTo(Collections.<String, Object>singletonMap("setting1", "high"));
-    assertThat(attrsCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+    assertThat(actualAttributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isSameAs(serviceConfig);
   }
 

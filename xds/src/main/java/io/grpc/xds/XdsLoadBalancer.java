@@ -253,7 +253,12 @@ final class XdsLoadBalancer extends LoadBalancer {
           ChannelLogLevel.INFO, "Using fallback policy");
       fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
           .newLoadBalancer(helper);
-      fallbackBalancer.handleResolvedAddressGroups(fallbackServers, fallbackAttributes);
+      // TODO(carl-mastrangelo): propagate the load balancing config policy
+      fallbackBalancer.handleResolvedAddresses(
+          ResolvedAddresses.newBuilder()
+              .setServers(fallbackServers)
+              .setAttributes(fallbackAttributes)
+              .build());
       // TODO: maybe update picker
     }
 
@@ -269,7 +274,12 @@ final class XdsLoadBalancer extends LoadBalancer {
       this.fallbackPolicy = fallbackPolicy;
       if (fallbackBalancer != null) {
         if (fallbackPolicy.getPolicyName().equals(currentFallbackPolicy.getPolicyName())) {
-          fallbackBalancer.handleResolvedAddressGroups(fallbackServers, fallbackAttributes);
+          // TODO(carl-mastrangelo): propagate the load balancing config policy
+          fallbackBalancer.handleResolvedAddresses(
+              ResolvedAddresses.newBuilder()
+                  .setServers(fallbackServers)
+                  .setAttributes(fallbackAttributes)
+                  .build());
         } else {
           fallbackBalancer.shutdown();
           fallbackBalancer = null;

@@ -300,10 +300,10 @@ public abstract class LoadBalancer {
 
   /**
    * Whether this LoadBalancer can handle empty address group list to be passed to {@link
-   * #handleResolvedAddressGroups}.  The default implementation returns {@code false}, meaning that
-   * if the NameResolver returns an empty list, the Channel will turn that into an error and call
-   * {@link #handleNameResolutionError}.  LoadBalancers that want to accept empty lists should
-   * override this method and return {@code true}.
+   * #handleResolvedAddresses(ResolvedAddresses)}.  The default implementation returns
+   * {@code false}, meaning that if the NameResolver returns an empty list, the Channel will turn
+   * that into an error and call {@link #handleNameResolutionError}.  LoadBalancers that want to
+   * accept empty lists should override this method and return {@code true}.
    *
    * <p>This method should always return a constant value.  It's not specified when this will be
    * called.
