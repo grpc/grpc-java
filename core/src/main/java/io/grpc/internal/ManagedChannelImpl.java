@@ -1052,20 +1052,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
-      return createSubchannel(addressGroups, attrs, new LoadBalancer.SubchannelStateListener() {
-          @Override
-          public void onSubchannelState(
-              LoadBalancer.Subchannel subchannel, ConnectivityStateInfo newState) {
-            lb.handleSubchannelState(subchannel, newState);
-          }
-        });
-    }
-
-    @Override
-    public AbstractSubchannel createSubchannel(
-        List<EquivalentAddressGroup> addressGroups, Attributes attrs,
-        final LoadBalancer.SubchannelStateListener stateListener) {
-      checkNotNull(stateListener, "stateListener");
       try {
         syncContext.throwIfNotInThisSynchronizationContext();
       } catch (IllegalStateException e) {
@@ -1074,6 +1060,28 @@ final class ManagedChannelImpl extends ManagedChannel implements
             + " Otherwise, it may race with handleSubchannelState()."
             + " See https://github.com/grpc/grpc-java/issues/5015", e);
       }
+      return createSubchannelInternal(
+          addressGroups, attrs, new LoadBalancer.SubchannelStateListener() {
+              @Override
+              public void onSubchannelState(
+                  LoadBalancer.Subchannel subchannel, ConnectivityStateInfo newState) {
+                lb.handleSubchannelState(subchannel, newState);
+              }
+            });
+    }
+
+    @Override
+    public AbstractSubchannel createSubchannel(
+        List<EquivalentAddressGroup> addressGroups, Attributes attrs,
+        final LoadBalancer.SubchannelStateListener stateListener) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      return createSubchannelInternal(addressGroups, attrs, stateListener);
+    }
+
+    private AbstractSubchannel createSubchannelInternal(
+        List<EquivalentAddressGroup> addressGroups, Attributes attrs,
+        final LoadBalancer.SubchannelStateListener stateListener) {
+      checkNotNull(stateListener, "stateListener");
       checkNotNull(addressGroups, "addressGroups");
       checkNotNull(attrs, "attrs");
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?

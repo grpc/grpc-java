@@ -538,9 +538,10 @@ public abstract class LoadBalancer {
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
      * Subchannel.getAttributes()}.
      *
-     * <p>It is recommended you call this method from the Synchronization Context, otherwise your
-     * logic around the creation may race with {@link SubchannelStateListener#onSubchannelState}.
-     * See <a href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
+     * <p>This method <strong>must be called from the Synchronization Context</strong>, otherwise it
+     * may throw. This is to avoid the race between the caller and {@link
+     * SubchannelStateListener#onSubchannelState}.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
      *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
@@ -770,7 +771,7 @@ public abstract class LoadBalancer {
      */
     public final EquivalentAddressGroup getAddresses() {
       List<EquivalentAddressGroup> groups = getAllAddresses();
-      Preconditions.checkState(groups.size() == 1, "Does not have exactly one group");
+      Preconditions.checkState(groups.size() == 1, "%s does not have exactly one group", groups);
       return groups.get(0);
     }
 
