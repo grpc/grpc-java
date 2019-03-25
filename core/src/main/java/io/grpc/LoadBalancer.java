@@ -128,9 +128,12 @@ public abstract class LoadBalancer {
    * @since 1.2.0
    */
   @Deprecated
-  public abstract void handleResolvedAddressGroups(
+  public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers,
-      @NameResolver.ResolutionResultAttr Attributes attributes);
+      @NameResolver.ResolutionResultAttr Attributes attributes) {
+    handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+  }
 
   /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
@@ -172,6 +175,20 @@ public abstract class LoadBalancer {
 
     public static Builder newBuilder() {
       return new Builder();
+    }
+
+    public List<EquivalentAddressGroup> getServers() {
+      return servers;
+    }
+
+    @NameResolver.ResolutionResultAttr
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    @Nullable
+    public Object getLoadBalancingPolicyConfig() {
+      return loadBalancingPolicyConfig;
     }
 
     /**
