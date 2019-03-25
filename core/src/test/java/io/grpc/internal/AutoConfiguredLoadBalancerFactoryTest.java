@@ -756,9 +756,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     }
 
     @Override
+    @Deprecated
     public void handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers, Attributes attributes) {
       delegate().handleResolvedAddressGroups(servers, attributes);
+    }
+
+    @Override
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      delegate().handleResolvedAddresses(resolvedAddresses);
     }
 
     @Override

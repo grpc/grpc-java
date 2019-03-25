@@ -21,7 +21,6 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.Status;

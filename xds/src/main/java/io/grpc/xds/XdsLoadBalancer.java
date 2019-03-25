@@ -84,8 +84,9 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+    Attributes attributes = resolvedAddresses.getAttributes();
     Map<String, ?> newRawLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
 
