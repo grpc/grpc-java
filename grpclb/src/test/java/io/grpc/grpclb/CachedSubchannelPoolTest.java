@@ -21,7 +21,6 @@ import static io.grpc.grpclb.CachedSubchannelPool.SHUTDOWN_TIMEOUT_MS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -30,27 +29,31 @@ import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.hamcrest.MockitoHamcrest;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
@@ -79,7 +82,7 @@ public class CachedSubchannelPoolTest {
       };
 
   private final Helper helper = mock(Helper.class);
-  private final LoadBalancer balancer = mock(LoadBalancer.class);
+  private final SubchannelStateListener mockListener = mock(SubchannelStateListener.class);
   private final FakeClock clock = new FakeClock();
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -90,6 +93,8 @@ public class CachedSubchannelPoolTest {
       });
   private final CachedSubchannelPool pool = new CachedSubchannelPool();
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
+  // Listeners seen by the Helper
+  private final Map<Subchannel, SubchannelStateListener> stateListeners = new HashMap<>();
 
   @Before
   @SuppressWarnings("unchecked")
@@ -104,20 +109,14 @@ public class CachedSubchannelPoolTest {
           when(subchannel.getAllAddresses()).thenReturn(eagList);
           when(subchannel.getAttributes()).thenReturn(attrs);
           mockSubchannels.add(subchannel);
+          stateListeners.put(subchannel, (SubchannelStateListener) invocation.getArguments()[2]);
           return subchannel;
         }
-      }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock invocation) throws Throwable {
-          syncContext.throwIfNotInThisSynchronizationContext();
-          return null;
-        }
-      }).when(balancer).handleSubchannelState(
-          any(Subchannel.class), any(ConnectivityStateInfo.class));
+      }).when(helper).createSubchannel(any(List.class), any(Attributes.class),
+          any(SubchannelStateListener.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(clock.getScheduledExecutorService());
-    pool.init(helper, balancer);
+    pool.init(helper);
   }
 
   @After
@@ -126,21 +125,22 @@ public class CachedSubchannelPoolTest {
     for (Subchannel subchannel : mockSubchannels) {
       verify(subchannel, atMost(1)).shutdown();
     }
-    verify(balancer, atLeast(0))
-        .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
-    verifyNoMoreInteractions(balancer);
   }
 
   @Test
   public void subchannelExpireAfterReturned() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
     assertThat(subchannel1).isNotNull();
-    verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
+    verify(helper).createSubchannel(
+        eq(Arrays.asList(EAG1)), attrsThatIncludes(ATTR_KEY, "1"),
+        any(SubchannelStateListener.class));
 
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
     assertThat(subchannel2).isNotNull();
     assertThat(subchannel2).isNotSameAs(subchannel1);
-    verify(helper).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
+    verify(helper).createSubchannel(
+        eq(Arrays.asList(EAG2)), attrsThatIncludes(ATTR_KEY, "2"),
+        any(SubchannelStateListener.class));
 
     pool.returnSubchannel(subchannel1, READY_STATE);
 
@@ -163,14 +163,18 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void subchannelReused() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
     assertThat(subchannel1).isNotNull();
-    verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
+    verify(helper).createSubchannel(
+        eq(Arrays.asList(EAG1)), attrsThatIncludes(ATTR_KEY, "1"),
+        any(SubchannelStateListener.class));
 
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
     assertThat(subchannel2).isNotNull();
     assertThat(subchannel2).isNotSameAs(subchannel1);
-    verify(helper).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
+    verify(helper).createSubchannel(
+        eq(Arrays.asList(EAG2)), attrsThatIncludes(ATTR_KEY, "2"),
+        any(SubchannelStateListener.class));
 
     pool.returnSubchannel(subchannel1, READY_STATE);
 
@@ -178,7 +182,7 @@ public class CachedSubchannelPoolTest {
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
 
     // This will cancel the shutdown timer for subchannel1
-    Subchannel subchannel1a = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
+    Subchannel subchannel1a = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
     assertThat(subchannel1a).isSameAs(subchannel1);
 
     pool.returnSubchannel(subchannel2, READY_STATE);
@@ -190,9 +194,11 @@ public class CachedSubchannelPoolTest {
     verify(subchannel2).shutdown();
 
     // pool will create a new channel for EAG2 when requested
-    Subchannel subchannel2a = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
+    Subchannel subchannel2a = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
     assertThat(subchannel2a).isNotSameAs(subchannel2);
-    verify(helper, times(2)).createSubchannel(eq(Arrays.asList(EAG2)), same(ATTRS2));
+    verify(helper, times(2)).createSubchannel(
+        eq(Arrays.asList(EAG2)), attrsThatIncludes(ATTR_KEY, "2"),
+        any(SubchannelStateListener.class));
 
     // subchannel1 expires SHUTDOWN_TIMEOUT_MS after being returned
     pool.returnSubchannel(subchannel1a, READY_STATE);
@@ -206,54 +212,72 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void updateStateWhileInPool() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+
     pool.returnSubchannel(subchannel1, READY_STATE);
     pool.returnSubchannel(subchannel2, TRANSIENT_FAILURE_STATE);
 
     ConnectivityStateInfo anotherFailureState =
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("Another"));
 
-    pool.handleSubchannelState(subchannel1, anotherFailureState);
+    // Simulate a subchannel state update while it's in the pool
+    stateListeners.get(subchannel1).onSubchannelState(subchannel1, anotherFailureState);
 
-    verify(balancer, never())
-        .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
+    SubchannelStateListener mockListener1 = mock(SubchannelStateListener.class);
+    SubchannelStateListener mockListener2 = mock(SubchannelStateListener.class);
 
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameAs(subchannel1);
-    verify(balancer).handleSubchannelState(same(subchannel1), same(anotherFailureState));
-    verifyNoMoreInteractions(balancer);
+    // Saved state is populated to new mockListeners
+    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1)).isSameAs(subchannel1);
+    verify(mockListener1).onSubchannelState(same(subchannel1), same(anotherFailureState));
+    verifyNoMoreInteractions(mockListener1);
 
-    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2)).isSameAs(subchannel2);
-    verify(balancer).handleSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
-    verifyNoMoreInteractions(balancer);
+    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener2)).isSameAs(subchannel2);
+    verify(mockListener2).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
+    verifyNoMoreInteractions(mockListener2);
+
+    // The old mockListener doesn't receive the updates
+    verify(mockListener, never())
+        .onSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
   @Test
   public void updateStateWhileInPool_notSameObject() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
+    SubchannelStateListener mockListener1 = mock(SubchannelStateListener.class);
+    SubchannelStateListener mockListener1b = mock(SubchannelStateListener.class);
+    SubchannelStateListener mockListener2 = mock(SubchannelStateListener.class);
+    SubchannelStateListener mockListener3 = mock(SubchannelStateListener.class);
+
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener2);
+    Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener3);
+
     pool.returnSubchannel(subchannel1, READY_STATE);
 
-    Subchannel subchannel2 = helper.createSubchannel(EAG1, ATTRS1);
-    Subchannel subchannel3 = helper.createSubchannel(EAG2, ATTRS2);
+    // subchannel2 and subchannel3 are not in the pool, thus their state updates go directly into
+    // their mockListeners
+    stateListeners.get(subchannel2).onSubchannelState(subchannel2, TRANSIENT_FAILURE_STATE);
+    verify(mockListener2).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
+    stateListeners.get(subchannel3).onSubchannelState(subchannel3, TRANSIENT_FAILURE_STATE);
+    verify(mockListener3).onSubchannelState(same(subchannel3), same(TRANSIENT_FAILURE_STATE));
 
-    // subchannel2 is not in the pool, although with the same address
-    pool.handleSubchannelState(subchannel2, TRANSIENT_FAILURE_STATE);
+    // We take subchannel1 out of the pool.  Its state is still the original state, and will be
+    // delivered to the new mockListener
+    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1b)).isSameAs(subchannel1);
 
-    // subchannel3 is not in the pool.  In fact its address is not in the pool
-    pool.handleSubchannelState(subchannel3, TRANSIENT_FAILURE_STATE);
+    verify(mockListener1b).onSubchannelState(same(subchannel1), same(READY_STATE));
 
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1)).isSameAs(subchannel1);
+    // subchannel1's old mockListener doesn't receive anything
+    verifyZeroInteractions(mockListener1);
 
-    // subchannel1's state is unchanged
-    verify(balancer).handleSubchannelState(same(subchannel1), same(READY_STATE));
-    verifyNoMoreInteractions(balancer);
+    verifyNoMoreInteractions(mockListener1b, mockListener2, mockListener3);
   }
 
   @Test
   public void returnDuplicateAddressSubchannel() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG1, ATTRS2);
-    Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS1);
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG1, ATTRS2, mockListener);
+    Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS1, mockListener);
     assertThat(subchannel1).isNotSameAs(subchannel2);
 
     assertThat(clock.getPendingTasks(SHUTDOWN_TASK_FILTER)).isEmpty();
@@ -279,9 +303,9 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void clear() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
-    Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
+    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    Subchannel subchannel3 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
 
     pool.returnSubchannel(subchannel1, READY_STATE);
     pool.returnSubchannel(subchannel2, READY_STATE);
@@ -295,4 +319,26 @@ public class CachedSubchannelPoolTest {
     verify(subchannel3, never()).shutdown();
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
+
+  private Attributes attrsThatIncludes(
+      final Attributes.Key<?> expectedKey, final Object expectedValue) {
+    return MockitoHamcrest.argThat(
+        new org.hamcrest.BaseMatcher<Attributes>() {
+          @Override
+          public boolean matches(Object item) {
+            if (!(item instanceof Attributes)) {
+              return false;
+            }
+            Attributes that = (Attributes) item;
+            return expectedValue.equals(that.get(expectedKey));
+          }
+
+          @Override
+          public void describeTo(org.hamcrest.Description desc) {
+            desc.appendText(
+                "Matches Attributes that includes " + expectedKey + "=" + expectedValue);
+          }
+        });
+  }
+
 }

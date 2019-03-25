@@ -23,52 +23,52 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A {@link SubchannelPool} that keeps returned {@link Subchannel}s for a given time before it's
  * shut down by the pool.
  */
 final class CachedSubchannelPool implements SubchannelPool {
+  private static final Attributes.Key<AtomicReference<SubchannelStateListener>> STATE_LISTENER =
+      Attributes.Key.create("io.grpc.grpclb.CachedSubchannelPool.stateListener");
+
   private final HashMap<EquivalentAddressGroup, CacheEntry> cache =
       new HashMap<>();
 
   private Helper helper;
-  private LoadBalancer lb;
-  private SubchannelStateListener subchannelStateListener;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
 
   @Override
-  public void init(
-      Helper helper, LoadBalancer lb, SubchannelStateListener subchannelStateListener) {
+  public void init(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
-    this.lb = checkNotNull(lb, "lb");
-    this.subchannelStateListener = checkNotNull(subchannelStateListener, "subchannelStateListener");
   }
 
   @Override
   public Subchannel takeOrCreateSubchannel(
-      EquivalentAddressGroup eag, Attributes defaultAttributes) {
+      EquivalentAddressGroup eag, Attributes defaultAttributes, SubchannelStateListener listener) {
     final CacheEntry entry = cache.remove(eag);
     final Subchannel subchannel;
     if (entry == null) {
+      final Attributes attrs = defaultAttributes.toBuilder()
+          .set(STATE_LISTENER, new AtomicReference<>(listener)).build();
       subchannel = helper.createSubchannel(
-          eag, defaultAttributes,
+          eag, attrs,
           new SubchannelStateListener() {
             @Override
             public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
               CacheEntry cached = cache.get(subchannel.getAddresses());
               if (cached == null || cached.subchannel != subchannel) {
-                // Given subchannel is not cached, notify the original listener
-                subchannelStateListener.onSubchannelState(subchannel, entry.state);
+                // Given subchannel is not cached, notify the listener
+                attrs.get(STATE_LISTENER).get().onSubchannelState(subchannel, newState);
               } else {
                 cached.state = newState;
               }
@@ -77,12 +77,14 @@ final class CachedSubchannelPool implements SubchannelPool {
     } else {
       subchannel = entry.subchannel;
       entry.shutdownTimer.cancel();
-      // Make the balancer up-to-date with the latest state in case it has changed while it's
-      // in the cache.
+      subchannel.getAttributes().get(STATE_LISTENER).set(listener);
+      // Make the listener up-to-date with the latest state in case it has changed while it's in the
+      // cache.
       helper.getSynchronizationContext().execute(new Runnable() {
           @Override
           public void run() {
-            subchannelStateListener.onSubchannelState(subchannel, entry.state);
+            subchannel.getAttributes().get(STATE_LISTENER).get()
+                .onSubchannelState(subchannel, entry.state);
           }
         });
     }

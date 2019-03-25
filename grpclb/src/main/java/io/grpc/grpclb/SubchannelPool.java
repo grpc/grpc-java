@@ -19,9 +19,9 @@ package io.grpc.grpclb;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -34,19 +34,25 @@ interface SubchannelPool {
   /**
    * Pass essential utilities and the balancer that's using this pool.
    */
-  void init(
-      Helper helper, LoadBalancer lb, LoadBalancer.SubchannelStateListener subchannelStateListener);
+  void init(Helper helper);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
    * Otherwise, creates and returns a new {@code Subchannel} with the given {@code eag} and {@code
    * defaultAttributes}.
+   *
+   * @param defaultAttributes the attributes used to create the Subchannel.  Not used if a pooled
+   *        subchannel is returned.
+   * @param stateListener receives state updates from now on
    */
-  Subchannel takeOrCreateSubchannel(EquivalentAddressGroup eag, Attributes defaultAttributes);
+  Subchannel takeOrCreateSubchannel(
+      EquivalentAddressGroup eag, Attributes defaultAttributes,
+      SubchannelStateListener stateListener);
 
   /**
    * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the
-   * pool, and the caller should stop referencing to this Subchannel.
+   * pool, and the caller should stop referencing to this Subchannel.  The {@link
+   * SubchannelStateListener} will not receive any more updates.
    */
   void returnSubchannel(Subchannel subchannel, ConnectivityStateInfo lastKnownState);
 

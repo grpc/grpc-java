@@ -23,7 +23,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -62,15 +61,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @Nullable
   private GrpclbState grpclbState;
 
-  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-        if (grpclbState != null) {
-          grpclbState.subchannelStateListener.onSubchannelState(subchannel, newState);
-        }
-      }
-    };
-
   GrpclbLoadBalancer(
       Helper helper,
       SubchannelPool subchannelPool,
@@ -80,7 +70,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.time = checkNotNull(time, "time provider");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, this, subchannelStateListener);
+    this.subchannelPool.init(helper);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }

@@ -380,7 +380,8 @@ final class GrpclbState {
           if (subchannel == null) {
             subchannel = subchannels.get(eagAsList);
             if (subchannel == null) {
-              subchannel = subchannelPool.takeOrCreateSubchannel(eag, createSubchannelAttrs());
+              subchannel = subchannelPool.takeOrCreateSubchannel(
+                  eag, createSubchannelAttrs(), subchannelStateListener);
               subchannel.requestConnection();
             }
             newSubchannelMap.put(eagAsList, subchannel);
