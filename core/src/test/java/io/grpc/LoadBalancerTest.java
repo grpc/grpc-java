@@ -166,8 +166,14 @@ public class LoadBalancerTest {
   }
 
   @Test(expected = UnsupportedOperationException.class)
-  public void helper_createSubchannelList_throws() {
+  @SuppressWarnings("deprecation")
+  public void helper_createSubchannelList_oldApi_throws() {
     new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+  }
+
+  @Test(expected = UnsupportedOperationException.class)
+  public void helper_createSubchannelList_throws() {
+    new NoopHelper().createSubchannel(Arrays.asList(eag), attrs, subchannelStateListener);
   }
 
   @Test
