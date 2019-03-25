@@ -46,6 +46,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
     delegate().handleNameResolutionError(error);
   }
 
+  @Deprecated
   @Override
   public void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo) {

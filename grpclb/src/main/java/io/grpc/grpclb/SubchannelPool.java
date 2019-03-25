@@ -34,7 +34,8 @@ interface SubchannelPool {
   /**
    * Pass essential utilities and the balancer that's using this pool.
    */
-  void init(Helper helper, LoadBalancer lb);
+  void init(
+      Helper helper, LoadBalancer lb, LoadBalancer.SubchannelStateListener subchannelStateListener);
 
   /**
    * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
@@ -42,12 +43,6 @@ interface SubchannelPool {
    * defaultAttributes}.
    */
   Subchannel takeOrCreateSubchannel(EquivalentAddressGroup eag, Attributes defaultAttributes);
-
-  /**
-   * Gets notified about a state change of Subchannel that is possibly cached in this pool.  Do
-   * nothing if this pool doesn't own this Subchannel.
-   */
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo);
 
   /**
    * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the

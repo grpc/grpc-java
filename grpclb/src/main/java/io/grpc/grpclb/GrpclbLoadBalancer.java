@@ -62,6 +62,15 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @Nullable
   private GrpclbState grpclbState;
 
+  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+        if (grpclbState != null) {
+          grpclbState.subchannelStateListener.onSubchannelState(subchannel, newState);
+        }
+      }
+    };
+
   GrpclbLoadBalancer(
       Helper helper,
       SubchannelPool subchannelPool,
@@ -71,16 +80,9 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.time = checkNotNull(time, "time provider");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, this);
+    this.subchannelPool.init(helper, this, subchannelStateListener);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
-  }
-
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // grpclbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    grpclbState.handleSubchannelState(subchannel, newState);
   }
 
   @Override

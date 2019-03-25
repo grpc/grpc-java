@@ -81,6 +81,23 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   @Nullable
   private StickinessState stickinessState;
 
+  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+        if (subchannels.get(subchannel.getAddresses()) != subchannel) {
+          return;
+        }
+        if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
+          stickinessState.remove(subchannel);
+        }
+        if (stateInfo.getState() == IDLE) {
+          subchannel.requestConnection();
+        }
+        getSubchannelStateInfoRef(subchannel).value = stateInfo;
+        updateBalancingState();
+      }
+    };
+
   RoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
     this.random = new Random();
@@ -129,7 +146,8 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       }
 
       Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
+          helper.createSubchannel(addressGroup, subchannelAttrs.build(), subchannelStateListener),
+          "subchannel");
       if (stickyRef != null) {
         stickyRef.value = subchannel;
       }
@@ -157,21 +175,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     // ready pickers aren't affected by status changes
     updateBalancingState(TRANSIENT_FAILURE,
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
-  }
-
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    if (subchannels.get(subchannel.getAddresses()) != subchannel) {
-      return;
-    }
-    if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
-      stickinessState.remove(subchannel);
-    }
-    if (stateInfo.getState() == IDLE) {
-      subchannel.requestConnection();
-    }
-    getSubchannelStateInfoRef(subchannel).value = stateInfo;
-    updateBalancingState();
   }
 
   private void shutdownSubchannel(Subchannel subchannel) {

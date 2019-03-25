@@ -26,6 +26,7 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
@@ -40,14 +41,17 @@ final class CachedSubchannelPool implements SubchannelPool {
 
   private Helper helper;
   private LoadBalancer lb;
+  private SubchannelStateListener subchannelStateListener;
 
   @VisibleForTesting
   static final long SHUTDOWN_TIMEOUT_MS = 10000;
 
   @Override
-  public void init(Helper helper, LoadBalancer lb) {
+  public void init(
+      Helper helper, LoadBalancer lb, SubchannelStateListener subchannelStateListener) {
     this.helper = checkNotNull(helper, "helper");
     this.lb = checkNotNull(lb, "lb");
+    this.subchannelStateListener = checkNotNull(subchannelStateListener, "subchannelStateListener");
   }
 
   @Override
@@ -56,7 +60,20 @@ final class CachedSubchannelPool implements SubchannelPool {
     final CacheEntry entry = cache.remove(eag);
     final Subchannel subchannel;
     if (entry == null) {
-      subchannel = helper.createSubchannel(eag, defaultAttributes);
+      subchannel = helper.createSubchannel(
+          eag, defaultAttributes,
+          new SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+              CacheEntry cached = cache.get(subchannel.getAddresses());
+              if (cached == null || cached.subchannel != subchannel) {
+                // Given subchannel is not cached, notify the original listener
+                subchannelStateListener.onSubchannelState(subchannel, entry.state);
+              } else {
+                cached.state = newState;
+              }
+            }
+          });
     } else {
       subchannel = entry.subchannel;
       entry.shutdownTimer.cancel();
@@ -65,21 +82,11 @@ final class CachedSubchannelPool implements SubchannelPool {
       helper.getSynchronizationContext().execute(new Runnable() {
           @Override
           public void run() {
-            lb.handleSubchannelState(subchannel, entry.state);
+            subchannelStateListener.onSubchannelState(subchannel, entry.state);
           }
         });
     }
     return subchannel;
-  }
-
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newStateInfo) {
-    CacheEntry cached = cache.get(subchannel.getAddresses());
-    if (cached == null || cached.subchannel != subchannel) {
-      // Given subchannel is not cached.  Not our responsibility.
-      return;
-    }
-    cached.state = newStateInfo;
   }
 
   @Override

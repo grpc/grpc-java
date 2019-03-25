@@ -44,6 +44,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
@@ -201,7 +202,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
       @Override
-      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+      public Subchannel createSubchannel(
+          List<EquivalentAddressGroup> addrs, Attributes attrs,
+          SubchannelStateListener stateListener) {
         assertThat(addrs).isEqualTo(servers);
         return new TestSubchannel(addrs, attrs);
       }
@@ -213,11 +216,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
       @Override
       public void handleNameResolutionError(Status error) {
-        // noop
-      }
-
-      @Override
-      public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
         // noop
       }
 
@@ -668,7 +666,15 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
       @Override
+      @Deprecated
       public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+        return new TestSubchannel(addrs, attrs);
+      }
+
+      @Override
+      public Subchannel createSubchannel(
+          List<EquivalentAddressGroup> addrs, Attributes attrs,
+          SubchannelStateListener stateListener) {
         return new TestSubchannel(addrs, attrs);
       }
 

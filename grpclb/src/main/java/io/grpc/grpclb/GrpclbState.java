@@ -39,6 +39,7 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -150,6 +151,25 @@ final class GrpclbState {
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
 
+  final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
+      @Override
+      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+        if (newState.getState() == SHUTDOWN) {
+          return;
+        }
+        if (!subchannels.values().contains(subchannel)) {
+          return;
+        }
+        if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
+          subchannel.requestConnection();
+        }
+        subchannel.getAttributes().get(STATE_INFO).set(newState);
+        maybeUseFallbackBackends();
+        maybeUpdatePicker();
+      }
+    };
+
+
   GrpclbState(
       Mode mode,
       Helper helper,
@@ -166,24 +186,6 @@ final class GrpclbState {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
-  }
-
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    if (newState.getState() == SHUTDOWN) {
-      return;
-    }
-    if (!subchannels.values().contains(subchannel)) {
-      if (subchannelPool != null ) {
-        subchannelPool.handleSubchannelState(subchannel, newState);
-      }
-      return;
-    }
-    if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
-      subchannel.requestConnection();
-    }
-    subchannel.getAttributes().get(STATE_INFO).set(newState);
-    maybeUseFallbackBackends();
-    maybeUpdatePicker();
   }
 
   /**
@@ -419,7 +421,8 @@ final class GrpclbState {
         }
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
-          subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
+          subchannel =
+              helper.createSubchannel(eagList, createSubchannelAttrs(), subchannelStateListener);
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
           subchannel = subchannels.values().iterator().next();
