@@ -259,6 +259,7 @@ final class XdsLoadBalancer extends LoadBalancer {
               .setServers(fallbackServers)
               .setAttributes(fallbackAttributes)
               .build());
+
       // TODO: maybe update picker
     }
 

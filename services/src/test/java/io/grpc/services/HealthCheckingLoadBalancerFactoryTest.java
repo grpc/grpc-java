@@ -759,7 +759,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   @Test
   public void serviceConfigDisablesHealthCheckWhenRpcInactive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
-    ResolvedAddresses result1= ResolvedAddresses.newBuilder()
+    ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
         .setServers(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
