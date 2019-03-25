@@ -124,15 +124,14 @@ public abstract class LoadBalancer {
    *
    * @param servers the resolved server addresses, never empty.
    * @param attributes extra information from naming system.
-   * @deprecated use {@link #handleResolvedAddresses(ResolvedAddresses) instead}
+   * @deprecated override {@link #handleResolvedAddresses(ResolvedAddresses) instead}
    * @since 1.2.0
    */
   @Deprecated
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers,
       @NameResolver.ResolutionResultAttr Attributes attributes) {
-    handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+    throw new UnsupportedOperationException("Not implemented");
   }
 
   /**
@@ -145,8 +144,9 @@ public abstract class LoadBalancer {
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
    * @since 1.20.0
    */
+  @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    throw new UnsupportedOperationException("Not implemented");
+    handleResolvedAddressGroups(resolvedAddresses.getServers(), resolvedAddresses.getAttributes());
   }
 
   /**

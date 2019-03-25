@@ -42,6 +42,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
@@ -184,7 +185,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(helper);
     LoadBalancer oldDelegate = lb.getDelegate();
 
-    lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build());
 
     assertThat(lb.getDelegate()).isSameAs(oldDelegate);
   }
@@ -228,7 +233,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     };
     lb.setDelegate(testlb);
 
-    lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(serviceConfigAttrs)
+            .build());
 
     assertThat(lb.getDelegateProvider().getClass().getName()).isEqualTo(
         "io.grpc.util.SecretRoundRobinLoadBalancerProvider$Provider");
@@ -249,7 +258,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     AutoConfiguredLoadBalancer lb =
         (AutoConfiguredLoadBalancer) lbf.newLoadBalancer(helper);
 
-    lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(serviceConfigAttrs)
+            .build());
 
     verify(testLbBalancerProvider).newLoadBalancer(same(helper));
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
@@ -266,7 +279,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig)
             .build();
-    lb.handleResolvedAddressGroups(servers, serviceConfigAttrs);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(serviceConfigAttrs)
+            .build());
 
     verify(testLbBalancer, times(2))
         .handleResolvedAddressGroups(eq(servers), attrsCaptor.capture());
@@ -296,7 +313,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         (AutoConfiguredLoadBalancer) new AutoConfiguredLoadBalancerFactory(
             registry, GrpcUtil.DEFAULT_LB_POLICY).newLoadBalancer(helper);
 
-    lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build());
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
     verify(testLbBalancer).handleResolvedAddressGroups(
@@ -312,10 +333,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
-    lb.handleResolvedAddressGroups(
-        Collections.<EquivalentAddressGroup>emptyList(),
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build());
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(Attributes.newBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .build());
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
     assertThat(testLbBalancer.canHandleEmptyAddressListFromNameResolution()).isFalse();
@@ -335,10 +358,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     Map<String, ?> serviceConfig =
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
-    lb.handleResolvedAddressGroups(
-        Collections.<EquivalentAddressGroup>emptyList(),
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build());
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(Attributes.newBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .build());
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer2);
     assertThat(testLbBalancer2.canHandleEmptyAddressListFromNameResolution()).isTrue();
@@ -701,15 +726,22 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     LoadBalancer lb = new AutoConfiguredLoadBalancerFactory(GrpcUtil.DEFAULT_LB_POLICY)
         .newLoadBalancer(helper);
-    lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build());
 
     verifyNoMoreInteractions(channelLogger);
 
     Map<String, String> serviceConfig = new HashMap<>();
     serviceConfig.put("loadBalancingPolicy", "round_robin");
-    lb.handleResolvedAddressGroups(servers,
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build());
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.newBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .build());
 
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),
@@ -722,9 +754,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     verifyNoMoreInteractions(channelLogger);
 
     serviceConfig.put("loadBalancingPolicy", "round_robin");
-    lb.handleResolvedAddressGroups(servers,
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build());
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.newBuilder()
+                .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
+            .build());
     verify(channelLogger, times(2)).log(
         eq(ChannelLogLevel.DEBUG),
         eq("Load-balancing config: {0}"),
@@ -734,7 +769,11 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     servers = Collections.singletonList(new EquivalentAddressGroup(
         new SocketAddress(){},
         Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
-    lb.handleResolvedAddressGroups(servers, Attributes.EMPTY);
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build());
 
     verify(channelLogger).log(
         eq(ChannelLogLevel.INFO),

@@ -81,6 +81,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
@@ -651,8 +652,11 @@ public class ManagedChannelImplTest {
 
     FakeNameResolverFactory.FakeNameResolver resolver = nameResolverFactory.resolvers.get(0);
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleResolvedAddressGroups(
-        eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
+    verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Arrays.asList(addressGroup))
+            .setAttributes(Attributes.EMPTY)
+            .build());
 
     Subchannel subchannel1 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     Subchannel subchannel2 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
@@ -890,14 +894,15 @@ public class ManagedChannelImplTest {
 
     // LoadBalancer received the empty list and the LB config
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    ArgumentCaptor<Attributes> attrsCaptor = ArgumentCaptor.forClass(null);
-    verify(mockLoadBalancer).handleResolvedAddressGroups(
-        eq(ImmutableList.<EquivalentAddressGroup>of()), attrsCaptor.capture());
-    Map<String, ?> lbConfig =
-        attrsCaptor.getValue().get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
-    assertEquals(ImmutableMap.<String, String>of("setting1", "high"), lbConfig);
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getServers()).isEmpty();
+    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+    Map<String, ?> lbConfig = actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
+    assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
     assertSame(
-        serviceConfig, attrsCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
+        serviceConfig, actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
   }
 
   @Test
@@ -960,8 +965,12 @@ public class ManagedChannelImplTest {
 
     // LoadBalancer received the empty list and the LB config
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    verify(mockLoadBalancer).handleResolvedAddressGroups(
-        eq(ImmutableList.<EquivalentAddressGroup>of()), same(serviceConfigAttrs));
+    verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(serviceConfigAttrs)
+            .build());
+
   }
 
   @Test
@@ -977,8 +986,7 @@ public class ManagedChannelImplTest {
     createChannel();
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
-    doThrow(ex).when(mockLoadBalancer).handleResolvedAddressGroups(
-        ArgumentMatchers.<List<EquivalentAddressGroup>>any(), any(Attributes.class));
+    doThrow(ex).when(mockLoadBalancer).handleResolvedAddresses(any(ResolvedAddresses.class));
 
     // NameResolver returns addresses.
     nameResolverFactory.allResolved();
@@ -1040,8 +1048,11 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
-        eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
+    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Arrays.asList(addressGroup))
+            .setAttributes(Attributes.EMPTY)
+            .build());
     Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
@@ -1188,8 +1199,11 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(resolvedAddrs);
-    inOrder.verify(mockLoadBalancer).handleResolvedAddressGroups(
-        eq(Arrays.asList(addressGroup)), eq(Attributes.EMPTY));
+    inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(Arrays.asList(addressGroup))
+            .setAttributes(Attributes.EMPTY)
+            .build());
     Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
@@ -3044,9 +3058,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer)
-        .handleResolvedAddressGroups(
-            eq(nameResolverFactory.servers), same(attributesWithRetryPolicy));
+    verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(nameResolverFactory.servers)
+            .setAttributes(attributesWithRetryPolicy)
+            .build());
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
@@ -3141,8 +3157,11 @@ public class ManagedChannelImplTest {
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(Helper.class);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
     helper = helperCaptor.getValue();
-    verify(mockLoadBalancer)
-        .handleResolvedAddressGroups(nameResolverFactory.servers, attributesWithRetryPolicy);
+    verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setServers(nameResolverFactory.servers)
+            .setAttributes(attributesWithRetryPolicy)
+            .build());
 
     // simulating request connection and then transport ready after resolved address
     Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
@@ -3509,12 +3528,13 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isNull();
+
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
@@ -3544,11 +3564,14 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(defaultServiceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -3576,11 +3599,13 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
@@ -3596,11 +3621,11 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
       nameResolverFactory.allResolved();
 
-      attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer, times(2)).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+      resultCaptor = ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      actualAttrs = resultCaptor.getValue().getAttributes();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -3633,11 +3658,12 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(serviceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -3664,11 +3690,12 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
           .isEqualTo(defaultServiceConfig);
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
@@ -3689,12 +3716,12 @@ public class ManagedChannelImplTest {
       nameResolverFactory.nextResolvedAttributes.set(serviceConfigAttrs);
 
       createChannel();
-      ArgumentCaptor<Attributes> attributesCaptor = ArgumentCaptor.forClass(Attributes.class);
-      verify(mockLoadBalancer).handleResolvedAddressGroups(
-          eq(ImmutableList.of(addressGroup)),
-          attributesCaptor.capture());
-      assertThat(attributesCaptor.getValue().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-          .isNull();
+      ArgumentCaptor<ResolvedAddresses> resultCaptor =
+          ArgumentCaptor.forClass(ResolvedAddresses.class);
+      verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+      assertThat(resultCaptor.getValue().getServers()).containsExactly(addressGroup);
+      Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);

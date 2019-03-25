@@ -152,7 +152,11 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
                 "Name resolver returned no usable address. addrs="
                 + servers + ", attrs=" + attributes));
       } else {
-        delegate.handleResolvedAddressGroups(selection.serverList, attributes);
+        delegate.handleResolvedAddresses(
+            ResolvedAddresses.newBuilder()
+                .setServers(selection.serverList)
+                .setAttributes(attributes)
+                .build());
       }
     }
 
