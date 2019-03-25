@@ -491,7 +491,8 @@ public abstract class LoadBalancer {
      *
      * @since 1.2.0
      * @deprecated Use {@link #createSubchannel(EquivalentAddressGroup, Attributes,
-     * SubchannelStateListener)} instead.
+     *             SubchannelStateListener)} instead. Note the new API must be called from
+     *             {@link #getSynchronizationContext the Synchronization Context}.
      */
     @Deprecated
     public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
@@ -514,7 +515,9 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(List, Attributes, SubchannelStateListener)} instead.
+     * @deprecated Use {@link #createSubchannel(List, Attributes, SubchannelStateListener)}
+     *             instead. Note the new API must be called from {@link #getSynchronizationContext
+     *             the Synchronization Context}.
      */
     @Deprecated
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
@@ -525,7 +528,12 @@ public abstract class LoadBalancer {
      * Equivalent to {@link #createSubchannel(List, Attributes, SubchannelStateListener)} with the
      * given single {@code EquivalentAddressGroup}.
      *
-     * @since 1.20.0
+     * <p>This method <strong>must be called from the {@link #getSynchronizationContext
+     * Synchronization Context}</strong>, otherwise it may throw. This is to avoid the race between
+     * the caller and {@link SubchannelStateListener#onSubchannelState}.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
+     *
+     * @since 1.21.0
      */
     public final Subchannel createSubchannel(
         EquivalentAddressGroup addrs, Attributes attrs, SubchannelStateListener stateListener) {
@@ -538,16 +546,22 @@ public abstract class LoadBalancer {
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
      * Subchannel.getAttributes()}.
      *
-     * <p>This method <strong>must be called from the Synchronization Context</strong>, otherwise it
-     * may throw. This is to avoid the race between the caller and {@link
-     * SubchannelStateListener#onSubchannelState}.  See <a
+     * <p>This method <strong>must be called from the {@link #getSynchronizationContext
+     * Synchronization Context}</strong>, otherwise it may throw. This is to avoid the race between
+     * the caller and {@link SubchannelStateListener#onSubchannelState}.  See <a
      * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
      *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      *
+     * @param addrs the equivalent addresses to connect to
+     * @param attrs the attributes container that is returend by {@link Subchannel#getAttributes}
+     * @param stateListener receives state changes of the created Subchannel.  The listener is
+     *        called from the {@link #getSynchronizationContext Synchronization Context}.  It's safe
+     *        to share the listener among multiple Subchannels.
+     *
      * @throws IllegalArgumentException if {@code addrs} is empty
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public Subchannel createSubchannel(
         List<EquivalentAddressGroup> addrs, Attributes attrs,
@@ -833,7 +847,10 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * All methods are run under {@link Helper#getSynchronizationContext}.
+   * Receives state changes for one or more {@link Subchannel}s. All methods are run under {@link
+   * Helper#getSynchronizationContext}.
+   *
+   * @since 1.21.0
    */
   public abstract static class SubchannelStateListener {
     
@@ -855,8 +872,9 @@ public abstract class LoadBalancer {
      * SHUTDOWN can be safely ignored.
      *
      * @param subchannel the involved Subchannel
-     * @param stateInfo the new state
-     * @since 1.20.0
+     * @param newState the new state
+     *
+     * @since 1.21.0
      */
     public abstract void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
   }
