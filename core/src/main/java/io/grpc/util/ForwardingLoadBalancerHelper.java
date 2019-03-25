@@ -38,9 +38,17 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
    */
   protected abstract LoadBalancer.Helper delegate();
 
+  @Deprecated
   @Override
   public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
     return delegate().createSubchannel(addrs, attrs);
+  }
+
+  @Override
+  public Subchannel createSubchannel(
+      List<EquivalentAddressGroup> addrs, Attributes attrs,
+      LoadBalancer.SubchannelStateListener stateListener) {
+    return delegate().createSubchannel(addrs, attrs, stateListener);
   }
 
   @Override

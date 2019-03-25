@@ -155,9 +155,15 @@ public abstract class LoadBalancer {
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
    * @since 1.2.0
+   * @deprecated This method will be removed.  Stop overriding it.  Instead, pass {@link
+   *             SubchannelStateListener} to {@link Helper#createSubchannel(List, Attributes,
+   *             SubchannelStateListener)} or {@link Helper#createSubchannel(EquivalentAddressGroup,
+   *             Attributes, SubchannelStateListener)} to receive Subchannel state updates
    */
-  public abstract void handleSubchannelState(
-      Subchannel subchannel, ConnectivityStateInfo stateInfo);
+  @Deprecated
+  public void handleSubchannelState(
+      Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  }
 
   /**
    * The channel asks the load-balancer to shutdown.  No more callbacks will be called after this
@@ -484,7 +490,10 @@ public abstract class LoadBalancer {
      * EquivalentAddressGroup}.
      *
      * @since 1.2.0
+     * @deprecated Use {@link #createSubchannel(EquivalentAddressGroup, Attributes,
+     * SubchannelStateListener)} instead.
      */
+    @Deprecated
     public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
       Preconditions.checkNotNull(addrs, "addrs");
       return createSubchannel(Collections.singletonList(addrs), attrs);
@@ -505,8 +514,43 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
+     * @deprecated Use {@link #createSubchannel(List, Attributes, SubchannelStateListener)} instead.
      */
+    @Deprecated
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Equivalent to {@link #createSubchannel(List, Attributes, SubchannelStateListener)} with the
+     * given single {@code EquivalentAddressGroup}.
+     *
+     * @since 1.20.0
+     */
+    public final Subchannel createSubchannel(
+        EquivalentAddressGroup addrs, Attributes attrs, SubchannelStateListener stateListener) {
+      return createSubchannel(Collections.singletonList(addrs), attrs, stateListener);
+    }
+
+    /**
+     * Creates a Subchannel, which is a logical connection to the given group of addresses which are
+     * considered equivalent.  The {@code attrs} are custom attributes associated with this
+     * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
+     * Subchannel.getAttributes()}.
+     *
+     * <p>It is recommended you call this method from the Synchronization Context, otherwise your
+     * logic around the creation may race with {@link SubchannelStateListener#onSubchannelState}.
+     * See <a href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
+     *
+     * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
+     * Subchannels within {@link #shutdown}.
+     *
+     * @throws IllegalArgumentException if {@code addrs} is empty
+     * @since 1.20.0
+     */
+    public Subchannel createSubchannel(
+        List<EquivalentAddressGroup> addrs, Attributes attrs,
+        SubchannelStateListener stateListener) {
       throw new UnsupportedOperationException();
     }
 
@@ -785,6 +829,35 @@ public abstract class LoadBalancer {
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();
     }
+  }
+
+  /**
+   * All methods are run under {@link Helper#getSynchronizationContext}.
+   */
+  public abstract static class SubchannelStateListener {
+    
+    /**
+     * Handles a state change on a Subchannel.
+     *
+     * <p>The initial state of a Subchannel is IDLE. You won't get a notification for the initial
+     * IDLE state.
+     *
+     * <p>If the new state is not SHUTDOWN, this method should create a new picker and call {@link
+     * Helper#updateBalancingState Helper.updateBalancingState()}.  Failing to do so may result in
+     * unnecessary delays of RPCs. Please refer to {@link PickResult#withSubchannel
+     * PickResult.withSubchannel()}'s javadoc for more information.
+     *
+     * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
+     * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The
+     * other is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has
+     * already terminated, thus there won't be further requests to LoadBalancer.  Therefore,
+     * SHUTDOWN can be safely ignored.
+     *
+     * @param subchannel the involved Subchannel
+     * @param stateInfo the new state
+     * @since 1.20.0
+     */
+    public abstract void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
   }
 
   /**

@@ -1048,9 +1048,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
 
+    @Deprecated
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
+      return createSubchannel(addressGroups, attrs, new LoadBalancer.SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(
+              LoadBalancer.Subchannel subchannel, ConnectivityStateInfo newState) {
+            lb.handleSubchannelState(subchannel, newState);
+          }
+        });
+    }
+
+    @Override
+    public AbstractSubchannel createSubchannel(
+        List<EquivalentAddressGroup> addressGroups, Attributes attrs,
+        final LoadBalancer.SubchannelStateListener stateListener) {
+      checkNotNull(stateListener, "stateListener");
       try {
         syncContext.throwIfNotInThisSynchronizationContext();
       } catch (IllegalStateException e) {
@@ -1085,7 +1100,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           handleInternalSubchannelState(newState);
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (LbHelperImpl.this == ManagedChannelImpl.this.lbHelper) {
-            lb.handleSubchannelState(subchannel, newState);
+            stateListener.onSubchannelState(subchannel, newState);
           }
         }
 
