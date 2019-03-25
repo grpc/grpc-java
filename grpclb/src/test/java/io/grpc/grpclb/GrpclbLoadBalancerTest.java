@@ -45,7 +45,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Stopwatch;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
@@ -291,7 +290,7 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
-        Stopwatch.createUnstarted(fakeClock.getTicker()),
+        fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
     verify(subchannelPool).init(same(helper), same(balancer));
   }
