@@ -163,6 +163,7 @@ public abstract class LoadBalancer {
   @Deprecated
   public void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    throw new UnsupportedOperationException("Deprecated and unimplemented. Should not be called");
   }
 
   /**
