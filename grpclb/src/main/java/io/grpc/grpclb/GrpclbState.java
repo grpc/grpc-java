@@ -151,7 +151,7 @@ final class GrpclbState {
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
 
-  final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
+  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
       @Override
       public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
         if (newState.getState() == SHUTDOWN) {
