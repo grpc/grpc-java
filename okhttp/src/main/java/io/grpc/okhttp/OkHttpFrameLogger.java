@@ -57,7 +57,7 @@ class OkHttpFrameLogger {
 
     // Otherwise just log the first 64 bytes.
     int length = Math.min(buf.size(), BUFFER_LENGTH_THRESHOLD);
-    return buf.substring(0, length) + "...";
+    return buf.substring(0, length).hex() + "...";
   }
 
   private boolean isEnabled() {
