@@ -34,6 +34,7 @@ import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
@@ -112,16 +113,15 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
-    public Subchannel createSubchannel(
-        List<EquivalentAddressGroup> addrs, Attributes attrs,
-        SubchannelStateListener stateListener) {
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
       HealthCheckState hcState = new HealthCheckState(
-          this, stateListener, syncContext, delegate.getScheduledExecutorService());
+          this, args.getStateListener(), syncContext, delegate.getScheduledExecutorService());
       hcStates.add(hcState);
-      Subchannel subchannel = super.createSubchannel(addrs, attrs, hcState);
+      Subchannel subchannel =
+          super.createSubchannel(args.toBuilder().setStateListener(hcState).build());
       hcState.init(subchannel);
       if (healthCheckedService != null) {
         hcState.setServiceName(healthCheckedService);

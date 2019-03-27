@@ -41,6 +41,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -177,11 +178,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
       @Override
-      public Subchannel createSubchannel(
-          List<EquivalentAddressGroup> addrs, Attributes attrs,
-          SubchannelStateListener stateListener) {
-        assertThat(addrs).isEqualTo(servers);
-        return new TestSubchannel(addrs, attrs);
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        assertThat(args.getAddresses()).isEqualTo(servers);
+        return new TestSubchannel(args);
       }
     };
     AutoConfiguredLoadBalancer lb =
@@ -205,11 +204,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Collections.singletonList(new EquivalentAddressGroup(new SocketAddress(){}));
     Helper helper = new TestHelper() {
       @Override
-      public Subchannel createSubchannel(
-          List<EquivalentAddressGroup> addrs, Attributes attrs,
-          SubchannelStateListener stateListener) {
-        assertThat(addrs).isEqualTo(servers);
-        return new TestSubchannel(addrs, attrs);
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        assertThat(args.getAddresses()).isEqualTo(servers);
+        return new TestSubchannel(args);
       }
     };
     AutoConfiguredLoadBalancer lb =
@@ -671,14 +668,16 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       @Override
       @Deprecated
       public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-        return new TestSubchannel(addrs, attrs);
+        return new TestSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(addrs)
+            .setAttributes(attrs)
+            .setStateListener(mock(SubchannelStateListener.class))
+            .build());
       }
 
       @Override
-      public Subchannel createSubchannel(
-          List<EquivalentAddressGroup> addrs, Attributes attrs,
-          SubchannelStateListener stateListener) {
-        return new TestSubchannel(addrs, attrs);
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        return new TestSubchannel(args);
       }
 
       @Override
@@ -810,9 +809,9 @@ public class AutoConfiguredLoadBalancerFactoryTest {
   }
 
   private static class TestSubchannel extends Subchannel {
-    TestSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-      this.addrs = addrs;
-      this.attrs = attrs;
+    TestSubchannel(CreateSubchannelArgs args) {
+      this.addrs = args.getAddresses();
+      this.attrs = args.getAttributes();
     }
 
     final List<EquivalentAddressGroup> addrs;

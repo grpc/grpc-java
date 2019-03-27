@@ -19,6 +19,7 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
@@ -148,20 +149,23 @@ public class LoadBalancerTest {
       boolean ran;
 
       @Override
-      public Subchannel createSubchannel(
-          List<EquivalentAddressGroup> addrsIn, Attributes attrsIn,
-          SubchannelStateListener stateListenerIn) {
-        assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameAs(eag);
-        assertThat(attrsIn).isSameAs(attrs);
-        assertThat(stateListenerIn).isSameAs(subchannelStateListener);
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        assertThat(args).isEqualTo(CreateSubchannelArgs.newBuilder()
+            .setAddresses(eag)
+            .setAttributes(attrs)
+            .setStateListener(subchannelStateListener)
+            .build());
         ran = true;
         return subchannel;
       }
     }
 
     OverrideCreateSubchannel helper = new OverrideCreateSubchannel();
-    assertThat(helper.createSubchannel(eag, attrs, subchannelStateListener)).isSameAs(subchannel);
+    assertThat(helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(eag)
+            .setAttributes(attrs)
+            .setStateListener(subchannelStateListener)
+            .build())).isSameAs(subchannel);
     assertThat(helper.ran).isTrue();
   }
 
@@ -173,7 +177,11 @@ public class LoadBalancerTest {
 
   @Test(expected = UnsupportedOperationException.class)
   public void helper_createSubchannelList_throws() {
-    new NoopHelper().createSubchannel(Arrays.asList(eag), attrs, subchannelStateListener);
+    new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .build());
   }
 
   @Test

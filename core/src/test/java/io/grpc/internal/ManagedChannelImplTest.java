@@ -78,6 +78,7 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -402,7 +403,10 @@ public class ManagedChannelImplTest {
   public void createSubchannel_outsideSynchronizationContextShouldThrow() {
     createChannel();
     try {
-      helper.createSubchannel(addressGroup, Attributes.EMPTY, subchannelStateListener);
+      helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+          .setAddresses(addressGroup)
+          .setStateListener(subchannelStateListener)
+          .build());
       fail("Should throw");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().isEqualTo("Not called from the SynchronizationContext");
@@ -4004,7 +4008,11 @@ public class ManagedChannelImplTest {
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(helper.createSubchannel(addressGroup, attrs, stateListener));
+            resultCapture.set(helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                    .setAddresses(addressGroup)
+                    .setAttributes(attrs)
+                    .setStateListener(stateListener)
+                    .build()));
           }
         });
     return resultCapture.get();

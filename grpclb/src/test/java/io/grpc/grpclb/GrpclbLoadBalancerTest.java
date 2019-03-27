@@ -57,6 +57,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -166,6 +167,8 @@ public class GrpclbLoadBalancerTest {
   private LoadBalancerGrpc.LoadBalancerImplBase mockLbService;
   @Captor
   private ArgumentCaptor<StreamObserver<LoadBalanceResponse>> lbResponseObserverCaptor;
+  @Captor
+  private ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   private final FakeClock fakeClock = new FakeClock();
   private final LinkedList<StreamObserver<LoadBalanceRequest>> lbRequestObservers =
       new LinkedList<>();
@@ -270,19 +273,15 @@ public class GrpclbLoadBalancerTest {
         @Override
         public Subchannel answer(InvocationOnMock invocation) throws Throwable {
           Subchannel subchannel = mock(Subchannel.class);
-          List<EquivalentAddressGroup> eagList =
-              (List<EquivalentAddressGroup>) invocation.getArguments()[0];
-          Attributes attrs = (Attributes) invocation.getArguments()[1];
-          when(subchannel.getAllAddresses()).thenReturn(eagList);
-          when(subchannel.getAttributes()).thenReturn(attrs);
+          CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
+          when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
+          when(subchannel.getAttributes()).thenReturn(args.getAttributes());
           mockSubchannels.add(subchannel);
           unpooledSubchannelTracker.add(subchannel);
-          subchannelStateListeners.put(
-              subchannel, (SubchannelStateListener) invocation.getArguments()[2]);
+          subchannelStateListeners.put(subchannel, args.getStateListener());
           return subchannel;
         }
-      }).when(helper).createSubchannel(
-          any(List.class), any(Attributes.class), any(SubchannelStateListener.class));
+      }).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getChannelLogger()).thenReturn(channelLogger);
@@ -1746,12 +1745,11 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildInitialResponse());
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class),
-        any(SubchannelStateListener.class));
+    inOrder.verify(helper).createSubchannel(createArgsCaptor.capture());
+    assertThat(createArgsCaptor.getValue().getAddresses()).containsExactly(
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))
+        .inOrder();
 
     // Initially IDLE
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -1802,8 +1800,7 @@ public class GrpclbLoadBalancerTest {
 
     // new addresses will be updated to the existing subchannel
     // createSubchannel() has ever been called only once
-    verify(helper, times(1)).createSubchannel(
-        any(List.class), any(Attributes.class), any(SubchannelStateListener.class));
+    verify(helper, times(1)).createSubchannel(any(CreateSubchannelArgs.class));
     assertThat(mockSubchannels).isEmpty();
     inOrder.verify(helper).updateSubchannelAddresses(
         same(subchannel),
@@ -1866,9 +1863,9 @@ public class GrpclbLoadBalancerTest {
     fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // Entering fallback mode
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(grpclbResolutionList.get(0), grpclbResolutionList.get(2))),
-        any(Attributes.class), any(SubchannelStateListener.class));
+    inOrder.verify(helper).createSubchannel(createArgsCaptor.capture());
+    assertThat(createArgsCaptor.getValue().getAddresses()).containsExactly(
+        grpclbResolutionList.get(0), grpclbResolutionList.get(2)).inOrder();
 
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
@@ -1900,8 +1897,7 @@ public class GrpclbLoadBalancerTest {
 
     // new addresses will be updated to the existing subchannel
     // createSubchannel() has ever been called only once
-    verify(helper, times(1)).createSubchannel(
-        any(List.class), any(Attributes.class), any(SubchannelStateListener.class));
+    verify(helper, times(1)).createSubchannel(any(CreateSubchannelArgs.class));
     assertThat(mockSubchannels).isEmpty();
     inOrder.verify(helper).updateSubchannelAddresses(
         same(subchannel),
@@ -2000,12 +1996,11 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     // PICK_FIRST Subchannel
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
-        any(Attributes.class),
-        any(SubchannelStateListener.class));
+    inOrder.verify(helper).createSubchannel(createArgsCaptor.capture());
+    assertThat(createArgsCaptor.getValue().getAddresses()).containsExactly(
+            new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+            new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))
+        .inOrder();
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
   }

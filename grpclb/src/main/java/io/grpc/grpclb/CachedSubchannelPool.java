@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
@@ -60,20 +61,22 @@ final class CachedSubchannelPool implements SubchannelPool {
     if (entry == null) {
       final Attributes attrs = defaultAttributes.toBuilder()
           .set(STATE_LISTENER, new AtomicReference<>(listener)).build();
-      subchannel = helper.createSubchannel(
-          eag, attrs,
-          new SubchannelStateListener() {
-            @Override
-            public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-              CacheEntry cached = cache.get(subchannel.getAddresses());
-              if (cached == null || cached.subchannel != subchannel) {
-                // Given subchannel is not cached, notify the listener
-                attrs.get(STATE_LISTENER).get().onSubchannelState(subchannel, newState);
-              } else {
-                cached.state = newState;
+      subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+          .setAddresses(eag)
+          .setAttributes(attrs)
+          .setStateListener(new SubchannelStateListener() {
+              @Override
+              public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+                CacheEntry cached = cache.get(subchannel.getAddresses());
+                if (cached == null || cached.subchannel != subchannel) {
+                  // Given subchannel is not cached, notify the listener
+                  attrs.get(STATE_LISTENER).get().onSubchannelState(subchannel, newState);
+                } else {
+                  cached.state = newState;
+                }
               }
-            }
-          });
+            })
+          .build());
     } else {
       subchannel = entry.subchannel;
       entry.shutdownTimer.cancel();

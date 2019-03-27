@@ -16,6 +16,9 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -479,6 +482,141 @@ public abstract class LoadBalancer {
   }
 
   /**
+   * Arguments for {@link Helper#createSubchannel(CreateSubchannelArgs)}.
+   *
+   * @since 1.21.0
+   */
+  public static final class CreateSubchannelArgs {
+    private final List<EquivalentAddressGroup> addrs;
+    private final Attributes attrs;
+    private final SubchannelStateListener stateListener;
+
+    private CreateSubchannelArgs(
+        List<EquivalentAddressGroup> addrs, Attributes attrs,
+        SubchannelStateListener stateListener) {
+      this.addrs = checkNotNull(addrs, "addresses are not set");
+      this.attrs = checkNotNull(attrs, "attrs");
+      this.stateListener = checkNotNull(stateListener, "SubchannelStateListener is not set");
+    }
+
+    /**
+     * Returns the addresses, which is an unmodifiable list.
+     */
+    public List<EquivalentAddressGroup> getAddresses() {
+      return addrs;
+    }
+
+    /**
+     * Returns the attributes.
+     */
+    public Attributes getAttributes() {
+      return attrs;
+    }
+
+    /**
+     * Returns the state listener.
+     */
+    public SubchannelStateListener getStateListener() {
+      return stateListener;
+    }
+
+    /**
+     * Returns a builder with the same initial values as this object.
+     */
+    public Builder toBuilder() {
+      return newBuilder().setAddresses(addrs).setAttributes(attrs).setStateListener(stateListener);
+    }
+
+    /**
+     * Creates a new builder.
+     */
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    public static final class Builder {
+      private List<EquivalentAddressGroup> addrs;
+      private Attributes attrs = Attributes.EMPTY;
+      private SubchannelStateListener stateListener;
+
+      /**
+       * The addresses to connect to.  All addresses are considered equivalent and will be tried
+       * in the order they are provided.
+       */
+      public Builder setAddresses(EquivalentAddressGroup addrs) {
+        this.addrs = Collections.singletonList(addrs);
+        return this;
+      }
+
+      /**
+       * Required.  The addresses to connect to.  All addresses are considered equivalent and will
+       * be tried in the order they are provided.
+       *
+       * @throws IllegalArgumentException if {@code addrs} is empty
+       */
+      public Builder setAddresses(List<EquivalentAddressGroup> addrs) {
+        checkArgument(!addrs.isEmpty(), "addrs is empty");
+        this.addrs = Collections.unmodifiableList(addrs);
+        return this;
+      }
+      
+      /**
+       * Optional. Attributes provided here will be included in {@link Subchannel#getAttributes}.
+       * Default is empty.
+       */
+      public Builder setAttributes(Attributes attrs) {
+        this.attrs = checkNotNull(attrs, "attrs");
+        return this;
+      }
+
+      /**
+       * Required.  Receives state changes of the created Subchannel.  The listener is called from
+       * the {@link #getSynchronizationContext Synchronization Context}.  It's safe to share the
+       * listener among multiple Subchannels.
+       */
+      public Builder setStateListener(SubchannelStateListener listener) {
+        this.stateListener = checkNotNull(listener, "listener");
+        return this;
+      }
+
+      /**
+       * Creates a new args object.
+       */
+      public CreateSubchannelArgs build() {
+        return new CreateSubchannelArgs(addrs, attrs, stateListener);
+      }
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("addrs", addrs)
+          .add("attrs", attrs)
+          .add("listener", stateListener)
+          .toString();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(addrs, attrs, stateListener);
+    }
+
+    /**
+     * Returns true if the {@link Subchannel}, {@link Status}, and
+     * {@link ClientStreamTracer.Factory} all match.
+     */
+    @Override
+    public boolean equals(Object other) {
+      if (!(other instanceof CreateSubchannelArgs)) {
+        return false;
+      }
+      CreateSubchannelArgs that = (CreateSubchannelArgs) other;
+      return Objects.equal(addrs, that.addrs) && Objects.equal(attrs, that.attrs)
+          && Objects.equal(stateListener, that.stateListener);
+    }
+  }
+
+  /**
    * Provides essentials for LoadBalancer implementations.
    *
    * @since 1.2.0
@@ -491,9 +629,9 @@ public abstract class LoadBalancer {
      * EquivalentAddressGroup}.
      *
      * @since 1.2.0
-     * @deprecated Use {@link #createSubchannel(EquivalentAddressGroup, Attributes,
-     *             SubchannelStateListener)} instead. Note the new API must be called from
-     *             {@link #getSynchronizationContext the Synchronization Context}.
+     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
+     *             must be called from {@link #getSynchronizationContext the Synchronization
+     *             Context}.
      */
     @Deprecated
     public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
@@ -516,29 +654,13 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(List, Attributes, SubchannelStateListener)}
-     *             instead. Note the new API must be called from {@link #getSynchronizationContext
-     *             the Synchronization Context}.
+     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
+     *             must be called from {@link #getSynchronizationContext the Synchronization
+     *             Context}.
      */
     @Deprecated
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
       throw new UnsupportedOperationException();
-    }
-
-    /**
-     * Equivalent to {@link #createSubchannel(List, Attributes, SubchannelStateListener)} with the
-     * given single {@code EquivalentAddressGroup}.
-     *
-     * <p>This method <strong>must be called from the {@link #getSynchronizationContext
-     * Synchronization Context}</strong>, otherwise it may throw. This is to avoid the race between
-     * the caller and {@link SubchannelStateListener#onSubchannelState}.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
-     *
-     * @since 1.21.0
-     */
-    public final Subchannel createSubchannel(
-        EquivalentAddressGroup addrs, Attributes attrs, SubchannelStateListener stateListener) {
-      return createSubchannel(Collections.singletonList(addrs), attrs, stateListener);
     }
 
     /**
@@ -555,18 +677,9 @@ public abstract class LoadBalancer {
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      *
-     * @param addrs the equivalent addresses to connect to
-     * @param attrs the attributes container that is returend by {@link Subchannel#getAttributes}
-     * @param stateListener receives state changes of the created Subchannel.  The listener is
-     *        called from the {@link #getSynchronizationContext Synchronization Context}.  It's safe
-     *        to share the listener among multiple Subchannels.
-     *
-     * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.21.0
      */
-    public Subchannel createSubchannel(
-        List<EquivalentAddressGroup> addrs, Attributes attrs,
-        SubchannelStateListener stateListener) {
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
       throw new UnsupportedOperationException();
     }
 

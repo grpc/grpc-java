@@ -146,7 +146,11 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       }
 
       Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(addressGroup, subchannelAttrs.build(), subchannelStateListener),
+          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroup)
+              .setAttributes(subchannelAttrs.build())
+              .setStateListener(subchannelStateListener)
+              .build()),
           "subchannel");
       if (stickyRef != null) {
         stickyRef.value = subchannel;

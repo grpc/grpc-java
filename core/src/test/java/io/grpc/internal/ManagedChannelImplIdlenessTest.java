@@ -41,6 +41,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -507,7 +508,11 @@ public class ManagedChannelImplIdlenessTest {
           @Override
           public void run() {
             resultCapture.set(
-                helper.createSubchannel(addressGroup, attrs, subchannelStateListener));
+                helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                    .setAddresses(addressGroup)
+                    .setAttributes(attrs)
+                    .setStateListener(subchannelStateListener)
+                    .build()));
           }
         });
     return resultCapture.get();

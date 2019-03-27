@@ -34,6 +34,7 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -423,7 +424,11 @@ final class GrpclbState {
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
           subchannel =
-              helper.createSubchannel(eagList, createSubchannelAttrs(), subchannelStateListener);
+              helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                  .setAddresses(eagList)
+                  .setAttributes(createSubchannelAttrs())
+                  .setStateListener(subchannelStateListener)
+                  .build());
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
           subchannel = subchannels.values().iterator().next();

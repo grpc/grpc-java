@@ -22,6 +22,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer;
@@ -45,10 +46,8 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   }
 
   @Override
-  public Subchannel createSubchannel(
-      List<EquivalentAddressGroup> addrs, Attributes attrs,
-      LoadBalancer.SubchannelStateListener stateListener) {
-    return delegate().createSubchannel(addrs, attrs, stateListener);
+  public Subchannel createSubchannel(CreateSubchannelArgs args) {
+    return delegate().createSubchannel(args);
   }
 
   @Override

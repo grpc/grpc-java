@@ -83,7 +83,11 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers, Attributes attributes) {
     if (subchannel == null) {
-      subchannel = helper.createSubchannel(servers, Attributes.EMPTY, subchannelStateListener);
+      subchannel = helper.createSubchannel(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(servers)
+              .setStateListener(subchannelStateListener)
+              .build());
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
