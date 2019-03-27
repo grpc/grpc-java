@@ -65,6 +65,7 @@ import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
@@ -1771,13 +1772,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ConfigOrError<ManagedChannelServiceConfig> parseServiceConfig(
         Map<String, ?> rawServiceConfig) {
       try {
-        Object loadBalancingPolicySelection;
+        PolicySelection loadBalancingPolicySelection;
         if (autoLoadBalancerFactory != null) {
-          ConfigOrError<?> choiceFromLoadBalancer =
+          ConfigOrError<PolicySelection> choiceFromLoadBalancer =
               autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
           if (choiceFromLoadBalancer == null) {
             loadBalancingPolicySelection = null;

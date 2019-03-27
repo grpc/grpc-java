@@ -26,6 +26,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status.Code;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.PolicySelection;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -68,7 +69,7 @@ final class ManagedChannelServiceConfig {
       boolean retryEnabled,
       int maxRetryAttemptsLimit,
       int maxHedgedAttemptsLimit,
-      @Nullable Object loadBalancingConfig) {
+      @Nullable PolicySelection loadBalancingConfig) {
     Throttle retryThrottling = null;
     if (retryEnabled) {
       retryThrottling = ServiceConfigUtil.getThrottlePolicy(serviceConfig);

@@ -56,7 +56,7 @@ final class SecretRoundRobinLoadBalancerProvider {
     }
 
     @Override
-    public ConfigOrError<?> parseLoadBalancingPolicyConfig(
+    public ConfigOrError<String> parseLoadBalancingPolicyConfig(
         Map<String, ?> rawLoadBalancingPolicyConfig) {
       return ConfigOrError.fromConfig(NO_CONFIG);
     }
