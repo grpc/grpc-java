@@ -34,10 +34,11 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -627,10 +628,12 @@ public final class ClientCalls {
     }
   }
 
-  private static final class ThreadlessExecutor implements Executor {
+  @SuppressWarnings("serial")
+  private static final class ThreadlessExecutor extends ConcurrentLinkedQueue<Runnable>
+      implements Executor {
     private static final Logger log = Logger.getLogger(ThreadlessExecutor.class.getName());
 
-    private final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>();
+    private volatile Thread waiter;
 
     // Non private to avoid synthetic class
     ThreadlessExecutor() {}
@@ -639,20 +642,33 @@ public final class ClientCalls {
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
      */
     public void waitAndDrain() throws InterruptedException {
-      Runnable runnable = queue.take();
-      while (runnable != null) {
+      Runnable runnable = poll();
+      if (runnable == null) {
+        waiter = Thread.currentThread();
+        try {
+          while ((runnable = poll()) == null) {
+            LockSupport.park(this);
+          }
+        } finally {
+          waiter = null;
+        }
+      }
+      do {
         try {
           runnable.run();
         } catch (Throwable t) {
           log.log(Level.WARNING, "Runnable threw exception", t);
         }
-        runnable = queue.poll();
-      }
+      } while ((runnable = poll()) != null);
     }
 
     @Override
     public void execute(Runnable runnable) {
-      queue.add(runnable);
+      add(runnable);
+      final Thread waitingThread = waiter;
+      if (waitingThread != null) {
+        LockSupport.unpark(waitingThread);
+      }
     }
   }
 }
