@@ -28,14 +28,11 @@ import io.grpc.SecurityLevel;
 import io.grpc.Status;
 import io.grpc.StatusException;
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.security.PrivateKey;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -315,8 +312,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials2 {
         // Create the JWT Credentials Builder
         Object builder = newJwtBuilder.invoke(null);
 
-        // Create pairs of credentials getters / builder setters
-        for(MethodPair pair : this.methodPairs) {
+        // Get things from the credentials, and set them on the builder.
+        for (MethodPair pair : this.methodPairs) {
           pair.apply(creds, builder);
         }
 
