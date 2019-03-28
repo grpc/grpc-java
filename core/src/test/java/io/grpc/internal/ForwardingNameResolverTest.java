@@ -25,7 +25,6 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ForwardingTestUtil;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -61,8 +60,7 @@ public class ForwardingNameResolverTest {
   }
 
   @Test
-  @SuppressWarnings("deprecation") // this will be removed in 1.21.0
-  public void start_listener() {
+  public void start() {
     NameResolver.Listener listener = new NameResolver.Listener() {
       @Override
       public void onAddresses(List<EquivalentAddressGroup> servers, Attributes attributes) { }
@@ -73,22 +71,5 @@ public class ForwardingNameResolverTest {
 
     forwarder.start(listener);
     verify(delegate).start(listener);
-  }
-
-
-  @Test
-  public void start_observer() {
-    NameResolver.Observer observer = new NameResolver.Observer() {
-      @Override
-      public void onResult(ResolutionResult result) {
-
-      }
-
-      @Override
-      public void onError(Status error) { }
-    };
-
-    forwarder.start(observer);
-    verify(delegate).start(observer);
   }
 }
