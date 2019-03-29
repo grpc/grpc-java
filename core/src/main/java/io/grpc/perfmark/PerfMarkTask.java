@@ -20,7 +20,8 @@ import java.io.Closeable;
 
 /**
  * This class exists to make it easier for users to use the try-with-resource shorthand for
- * starting and ending a PerfMark Task.
+ * starting and ending a PerfMark Task.  This class is {@link io.grpc.Internal} and
+ * {@link io.grpc.ExperimentalApi}.  Do not use this yet.
  */
 public abstract class PerfMarkTask implements Closeable {
   @Override

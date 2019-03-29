@@ -19,6 +19,10 @@ package io.grpc.perfmark;
 import com.google.errorprone.annotations.CompileTimeConstant;
 import javax.annotation.concurrent.ThreadSafe;
 
+/**
+ * PerfMark is a collection of stub methods for marking key points in the RPC lifecycle.  This
+ * class is {@link io.grpc.Internal} and {@link io.grpc.ExperimentalApi}.  Do not use this yet.
+ */
 @ThreadSafe
 public final class PerfMark {
   private PerfMark() {
@@ -29,9 +33,9 @@ public final class PerfMark {
    * Start a Task with a Tag to identify it; a task represents some work that spans some time, and
    * you are interested in both its start time and end time.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskStart(String)} or {@link PerfTag#create(String)}.
    * @param taskName The name of the task. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this task.
@@ -45,9 +49,9 @@ public final class PerfMark {
    * @param scopeId The scope of the task. The scope id is used to join task starting and ending
    *     across threads. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskStart(String)} or {@link PerfTag#create(String)}.
    * @param taskName The name of the task. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this task.
@@ -85,9 +89,9 @@ public final class PerfMark {
    * threshold. In such cases, you can use this method. A Task that takes less than the specified
    * threshold, along with all its sub-tasks, events, and additional tags will be discarded.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskStartWithMinPeriod(long, String)} or {@link PerfTag#create(String)}.
    * @param minPeriodNanos Tasks that takes less than the specified time period, in nanosecond, will
    *     be discarded, along with its sub-tasks, events, and additional tags.
@@ -108,9 +112,9 @@ public final class PerfMark {
    * @param scopeId The scope of the task. The scope id is used to join task starting and ending
    *     across threads. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskStartWithMinPeriod(long, String)} or {@link PerfTag#create(String)}.
    * @param minPeriodNanos Tasks that takes less than the specified time period, in nanosecond, will
    *     be discarded, along with its sub-tasks, events, and additional tags.
@@ -177,9 +181,9 @@ public final class PerfMark {
    *
    * <p>Use this in a try-with-resource statement so that task will end automatically.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #task(String)} or {@link PerfTag#create(String)}.
    * @param taskName The name of the task. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this task.
@@ -197,9 +201,9 @@ public final class PerfMark {
    * @param scopeId The scope of the task. The scope id is used to join task starting and ending
    *     across threads. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #task(String)} or {@link PerfTag#create(String)}.
    * @param taskName The name of the task. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this task.
@@ -250,9 +254,9 @@ public final class PerfMark {
    * threshold. In such cases, you can use this method. A task that takes less than the specified
    * threshold, along with all its sub-tasks, events, and additional tags will be discarded.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskWithMinPeriod(long, String)} or {@link PerfTag#create(String)}.
    * @param minPeriodNanos Tasks that takes less than the specified time period, in nanosecond, will
    *     be discarded, along with its sub-tasks, events, and additional tags.
@@ -278,9 +282,9 @@ public final class PerfMark {
    * @param scopeId The scope of the task. The scope id is used to join task starting and ending
    *     across threads. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #taskWithMinPeriod(long, String)} or {@link PerfTag#create(String)}.
    * @param minPeriodNanos Tasks that takes less than the specified time period, in nanosecond, will
    *     be discarded, along with its sub-tasks, events, and additional tags.
@@ -350,9 +354,9 @@ public final class PerfMark {
    * <p>An Event is different from a Task in that you don't care how much time it spanned. You are
    * interested in only the time it happened.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #event(String)} or {@link PerfTag#create(String)}.
    * @param eventName The name of the event. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this event.
@@ -368,9 +372,9 @@ public final class PerfMark {
    * @param scopeId The scope of the event. The scope id is used to associated the event with a
    *     particular scope. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     #event(String)} or {@link PerfTag#create(String)}.
    * @param eventName The name of the event. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this event.
@@ -410,9 +414,9 @@ public final class PerfMark {
    * which this tag is added. Instead, it allows clients to associate an additional tag to the
    * current Task.
    *
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     PerfTag#create(String)}.
    * @param tagName The name of the tag. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this tag.
@@ -429,14 +433,13 @@ public final class PerfMark {
    * @param scopeId The scope of the tag. The scope id is used to associate a tag with a particular
    *     scope. The scope id must be a positive number.
    * @param scopeName The name of the scope.
-   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't use 0
-   *     for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task does
-   *     not have a numeric tag associated. In this case, you are encouraged to use {@link
+   * @param tag a Tag object associated with the task. See {@link PerfTag} for description. Don't
+   *     use 0 for the {@code numericTag} of the Tag object. 0 is reserved to represent that a task
+   *     does not have a numeric tag associated. In this case, you are encouraged to use {@link
    *     PerfTag#create(String)}.
    * @param tagName The name of the tag. <b>This parameter must be a compile-time constant!</b>
    *     Otherwise, instrumentation result will show "(invalid name)" for this tag.
    */
   public static void tag(
       long scopeId, String scopeName, PerfTag tag, @CompileTimeConstant String tagName) {}
-
 }

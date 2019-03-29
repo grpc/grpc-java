@@ -29,7 +29,10 @@ package io.grpc.perfmark;
  *
  * <p>Invocations to {@code create} methods in this class are a no-op unless PerfMark
  * instrumentation is enabled. If so, calls to {@code create} methods to this class are replaced for
- * calls to {@link TagFactory} create methods
+ * calls to {@link TagFactory} create methods.
+ *
+ * <p>This class is {@link io.grpc.Internal} and {@link io.grpc.ExperimentalApi}.  Do not use this
+ * yet.
  */
 public final class PerfTag {
 
@@ -76,8 +79,6 @@ public final class PerfTag {
   /**
    * Allocates a unique, mostly sequential unique id for Tags.  This method will be replaced with
    * a call to a real implementation if instrumentation is enabled.
-   *
-   * @return
    */
   public static final long allocateNumericId() {
     return NULL_NUMERIC_TAG;

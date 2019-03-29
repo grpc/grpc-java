@@ -27,6 +27,9 @@ import javax.lang.model.element.Modifier;
 
 /**
  * Annotation to add PerfMark instrumentation points surrounding method invocation.
+ *
+ * <p>This class is {@link io.grpc.Internal} and {@link io.grpc.ExperimentalApi}.  Do not use this
+ * yet.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
