@@ -480,14 +480,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
       final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
+      final Executor wrappedExecutor = SerializingExecutor.makeSerializing(executor);
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(

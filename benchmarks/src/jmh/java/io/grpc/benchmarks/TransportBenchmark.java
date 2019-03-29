@@ -18,6 +18,7 @@ package io.grpc.benchmarks;
 
 import static io.grpc.benchmarks.Utils.pickUnusedPort;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
@@ -30,6 +31,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.NettyServerBuilder;
@@ -42,6 +44,7 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import java.net.InetSocketAddress;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -65,15 +68,22 @@ public class TransportBenchmark {
   public Transport transport;
   @Param({"true", "false"})
   public boolean direct;
+  @Param({"true", "false"})
+  public boolean sequential;
+  @Param({"true", "false"})
+  public boolean wrapSerialized;
 
   private ManagedChannel channel;
   private Server server;
   private BenchmarkServiceGrpc.BenchmarkServiceBlockingStub stub;
   private volatile EventLoopGroup groupToShutdown;
+  private volatile ExecutorService executorToShutdown;
 
   @Setup
   @SuppressWarnings("LiteralClassName") // Epoll is not available on windows
   public void setUp() throws Exception {
+    System.setProperty("grpc.wrapSerialized", Boolean.toString(wrapSerialized));
+    
     AbstractServerImplBuilder<?> serverBuilder;
     AbstractManagedChannelImplBuilder<?> channelBuilder;
     switch (transport) {
@@ -144,11 +154,24 @@ public class TransportBenchmark {
       default:
         throw new Exception("Unknown transport: " + transport);
     }
+    
+    //serverBuilder.setTracingEnabled(false);
+    //serverBuilder.setStatsEnabled(false);
+    //channelBuilder.setStatsEnabled(false);
+    //channelBuilder.setTracingEnabled(false);
 
     if (direct) {
       serverBuilder.directExecutor();
       // Because blocking stubs avoid the executor, this doesn't do much.
       channelBuilder.directExecutor();
+    } else {
+      executorToShutdown = (ExecutorService)
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR.create();
+
+      serverBuilder.executor(!sequential ? executorToShutdown
+          : MoreExecutors.newSequentialExecutor(executorToShutdown));
+      channelBuilder.executor(!sequential ? executorToShutdown
+              : MoreExecutors.newSequentialExecutor(executorToShutdown));
     }
 
     server = serverBuilder
@@ -188,7 +211,7 @@ public class TransportBenchmark {
       .build();
 
   @Benchmark
-  @BenchmarkMode(Mode.SampleTime)
+  @BenchmarkMode(Mode.AverageTime)
   @OutputTimeUnit(TimeUnit.NANOSECONDS)
   public SimpleResponse unaryCall1024() {
     return stub.unaryCall(simpleRequest);
