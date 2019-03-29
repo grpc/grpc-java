@@ -16,14 +16,10 @@
 
 package io.grpc.perfmark;
 
-import com.google.errorprone.annotations.IncompatibleModifiers;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-
-import javax.lang.model.element.Modifier;
 
 /**
  * Annotation to add PerfMark instrumentation points surrounding method invocation.
@@ -33,7 +29,8 @@ import javax.lang.model.element.Modifier;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
-@IncompatibleModifiers(value = {Modifier.ABSTRACT, Modifier.NATIVE})
+// TODO(carl-mastrangelo): Add this line back in and make it okay on Android
+//@IncompatibleModifiers(value = {Modifier.ABSTRACT, Modifier.NATIVE})
 public @interface PerfMarker {
 
   /**
