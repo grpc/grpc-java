@@ -439,6 +439,11 @@ public abstract class NameResolver {
       return new Builder();
     }
 
+    /**
+     * Converts these results back to a builder.
+     *
+     * @since 1.21.0
+     */
     public Builder toBuilder() {
       return newBuilder()
           .setServers(servers)
@@ -456,7 +461,8 @@ public abstract class NameResolver {
     }
 
     /**
-     * Gets the attributes associated with the servers resolved by name resolution.
+     * Gets the attributes associated with the servers resolved by name resolution.  If there are
+     * no attributes, {@link Attributes#EMPTY} will be returned.
      *
      * @since 1.21.0
      */
@@ -515,7 +521,7 @@ public abstract class NameResolver {
       Builder() {}
 
       /**
-       * Sets the servers resolved by name resolution.
+       * Sets the servers resolved by name resolution.  This field is required.
        *
        * @since 1.21.0
        */
@@ -525,7 +531,8 @@ public abstract class NameResolver {
       }
 
       /**
-       * Sets the attributes for the servers resolved by name resolution.
+       * Sets the attributes for the servers resolved by name resolution.  If unset,
+       * {@link Attributes#EMPTY} will be used as a default.
        *
        * @since 1.21.0
        */
@@ -536,6 +543,7 @@ public abstract class NameResolver {
 
       /**
        * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+       * This field is optional.
        *
        * @since 1.21.0
        */
