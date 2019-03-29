@@ -177,6 +177,13 @@ public abstract class LoadBalancer {
       return new Builder();
     }
 
+    public Builder toBuilder() {
+      return newBuilder()
+          .setServers(servers)
+          .setAttributes(attributes)
+          .setLoadBalancingPolicyConfig(loadBalancingPolicyConfig);
+    }
+
     public List<EquivalentAddressGroup> getServers() {
       return servers;
     }
