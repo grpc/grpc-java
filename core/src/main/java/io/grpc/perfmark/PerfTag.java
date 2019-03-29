@@ -31,52 +31,62 @@ package io.grpc.perfmark;
  * instrumentation is enabled. If so, calls to {@code create} methods to this class are replaced for
  * calls to {@link TagFactory} create methods
  */
-public final class Tag {
+public final class PerfTag {
 
   private static final long NULL_NUMERIC_TAG = 0;
   private static final String NULL_STRING_TAG = "";
 
-  private static final Tag NULL_TAG = TagFactory.create(NULL_NUMERIC_TAG, NULL_STRING_TAG);
+  private static final PerfTag NULL_PERF_TAG = TagFactory.create(NULL_NUMERIC_TAG, NULL_STRING_TAG);
 
   /**
    * If PerfMark instrumentation is not enabled, returns a Tag with numericTag = 0L. Replacement
    * for {@link TagFactory#create(long, String)} if PerfMark agent is enabled.
    */
-  public static Tag create(
+  public static PerfTag create(
       @SuppressWarnings("unused") long numericTag, @SuppressWarnings("unused") String stringTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_TAG;
+    return NULL_PERF_TAG;
   }
 
   /**
    * If PerfMark instrumentation is not enabled returns a Tag with numericTag = 0L. Replacement
    * for {@link TagFactory#create(String)} if PerfMark agent is enabled.
    */
-  public static Tag create(@SuppressWarnings("unused") String stringTag) {
+  public static PerfTag create(@SuppressWarnings("unused") String stringTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_TAG;
+    return NULL_PERF_TAG;
   }
 
   /**
    * If PerfMark instrumentation is not enabled returns a Tag with numericTag = 0L. Replacement
    * for {@link TagFactory#create(long)} if PerfMark agent is enabled.
    */
-  public static Tag create(@SuppressWarnings("unused") long numericTag) {
+  public static PerfTag create(@SuppressWarnings("unused") long numericTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_TAG;
+    return NULL_PERF_TAG;
   }
 
   /**
    * Returns the null tag.
    */
-  public static Tag create() {
-    return NULL_TAG;
+  public static PerfTag create() {
+    return NULL_PERF_TAG;
+  }
+
+  /**
+   * Allocates a unique, mostly sequential unique id for Tags.  This method will be replaced with
+   * a call to a real implementation if instrumentation is enabled.
+   *
+   * @return
+   */
+  public static final long allocateNumericId() {
+    return NULL_NUMERIC_TAG;
   }
 
   private final long numericTag;
   private final String stringTag;
 
-  private Tag(long numericTag, String stringTag) {
+  private PerfTag(long numericTag, String stringTag) {
     this.numericTag = numericTag;
     if (stringTag == null) {
       throw new NullPointerException("stringTag");
@@ -107,10 +117,10 @@ public final class Tag {
 
   @Override
   public boolean equals(Object obj) {
-    if (!(obj instanceof Tag)) {
+    if (!(obj instanceof PerfTag)) {
       return false;
     }
-    Tag other = (Tag) obj;
+    PerfTag other = (PerfTag) obj;
     return this.numericTag == other.numericTag && this.stringTag.equals(other.stringTag);
   }
 
@@ -121,8 +131,8 @@ public final class Tag {
    * overhead involved in the creation of Tag objects when PerfMark instrumentation is not
    * enabled.
    *
-   * <p>Calls to {@link Tag#create(long)}, {@link Tag#create(long, String)} and {@link
-   * Tag#create(String)} are replaced with calls to the methods in this class using bytecode
+   * <p>Calls to {@link PerfTag#create(long)}, {@link PerfTag#create(long, String)} and {@link
+   * PerfTag#create(String)} are replaced with calls to the methods in this class using bytecode
    * rewriting, if enabled.
    */
   static final class TagFactory {
@@ -131,16 +141,16 @@ public final class Tag {
      */
     private TagFactory() {}
 
-    public static Tag create(long numericTag, String stringTag) {
-      return new Tag(numericTag, stringTag);
+    public static PerfTag create(long numericTag, String stringTag) {
+      return new PerfTag(numericTag, stringTag);
     }
 
-    public static Tag create(String stringTag) {
-      return new Tag(NULL_NUMERIC_TAG, stringTag);
+    public static PerfTag create(String stringTag) {
+      return new PerfTag(NULL_NUMERIC_TAG, stringTag);
     }
 
-    public static Tag create(long numericTag) {
-      return new Tag(numericTag, NULL_STRING_TAG);
+    public static PerfTag create(long numericTag) {
+      return new PerfTag(numericTag, NULL_STRING_TAG);
     }
   }
 }
