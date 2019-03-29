@@ -640,14 +640,18 @@ public final class ClientCalls {
 
     /**
      * Waits until there is a Runnable, then executes it and all queued Runnables after it.
+     * Must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
+      final Thread currentThread = Thread.currentThread();
+      throwIfInterrupted(currentThread);
       Runnable runnable = poll();
       if (runnable == null) {
-        waiter = Thread.currentThread();
+        waiter = currentThread;
         try {
           while ((runnable = poll()) == null) {
             LockSupport.park(this);
+            throwIfInterrupted(currentThread);
           }
         } finally {
           waiter = null;
@@ -662,13 +666,16 @@ public final class ClientCalls {
       } while ((runnable = poll()) != null);
     }
 
+    private static void throwIfInterrupted(Thread currentThread) throws InterruptedException {
+      if (currentThread.isInterrupted()) {
+        throw new InterruptedException();
+      }
+    }
+
     @Override
     public void execute(Runnable runnable) {
       add(runnable);
-      final Thread waitingThread = waiter;
-      if (waitingThread != null) {
-        LockSupport.unpark(waitingThread);
-      }
+      LockSupport.unpark(waiter); // no-op if null
     }
   }
 }
