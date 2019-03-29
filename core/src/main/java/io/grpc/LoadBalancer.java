@@ -231,7 +231,7 @@ public abstract class LoadBalancer {
     public static final class Builder {
       private List<EquivalentAddressGroup> servers;
       @NameResolver.ResolutionResultAttr
-      private Attributes attributes;
+      private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private Object loadBalancingPolicyConfig;
 
