@@ -296,43 +296,43 @@ public class AbstractManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_default() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
+  }
+
+  @Test
+  public void getEffectiveInterceptors_enableStats() {
+    builder.intercept(DUMMY_USER_INTERCEPTOR);
+    builder.setStatsEnabled(true);
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    assertEquals(2, effectiveInterceptors.size());
+    assertThat(effectiveInterceptors.get(0))
+        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+  }
+
+  @Test
+  public void getEffectiveInterceptors_enableTracing() {
+    builder.intercept(DUMMY_USER_INTERCEPTOR);
+    builder.setTracingEnabled(true);
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    assertEquals(2, effectiveInterceptors.size());
+    assertThat(effectiveInterceptors.get(0))
+        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
+    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+  }
+
+  @Test
+  public void getEffectiveInterceptors_enableBoth() {
+    builder.intercept(DUMMY_USER_INTERCEPTOR);
+    builder.setStatsEnabled(true);
+    builder.setTracingEnabled(true);
+    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
     assertEquals(3, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
         .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
     assertThat(effectiveInterceptors.get(1))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
     assertThat(effectiveInterceptors.get(2)).isSameAs(DUMMY_USER_INTERCEPTOR);
-  }
-
-  @Test
-  public void getEffectiveInterceptors_disableStats() {
-    builder.intercept(DUMMY_USER_INTERCEPTOR);
-    builder.setStatsEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
-  }
-
-  @Test
-  public void getEffectiveInterceptors_disableTracing() {
-    builder.intercept(DUMMY_USER_INTERCEPTOR);
-    builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
-  }
-
-  @Test
-  public void getEffectiveInterceptors_disableBoth() {
-    builder.intercept(DUMMY_USER_INTERCEPTOR);
-    builder.setStatsEnabled(false);
-    builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test

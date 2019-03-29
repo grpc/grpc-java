@@ -781,5 +781,18 @@ public final class GrpcUtil {
     return false;
   }
 
+  /**
+   * Returns true if the specified class is found on the classpath, false otherwise.
+   */
+  public static boolean classIsFound(String className, ClassLoader classLoader) {
+    try {
+      Class.forName(className, /* initialize = */ false, classLoader);
+      return true;
+    } catch (ClassNotFoundException e) {
+      // no problem
+    }
+    return false;
+  }
+
   private GrpcUtil() {}
 }

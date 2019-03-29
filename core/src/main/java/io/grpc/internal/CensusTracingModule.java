@@ -60,6 +60,8 @@ import javax.annotation.Nullable;
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
 
+  static final boolean OPENCENSUS_IMPL_PRESENT;
+
   @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
@@ -84,6 +86,11 @@ final class CensusTracingModule {
     }
     callEndedUpdater = tmpCallEndedUpdater;
     streamClosedUpdater = tmpStreamClosedUpdater;
+    
+    ClassLoader loader = io.opencensus.trace.TraceComponent.class.getClassLoader();
+    OPENCENSUS_IMPL_PRESENT =
+        GrpcUtil.classIsFound("io.opencensus.impl.trace.TraceComponentImpl", loader)
+        || GrpcUtil.classIsFound("io.opencensus.impllite.trace.TraceComponentImplLite", loader);
   }
 
   private final Tracer censusTracer;

@@ -49,17 +49,25 @@ public class AbstractServerImplBuilderTest {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
 
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-
-    assertEquals(3, factories.size());
-    assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
-    assertThat(factories.get(1)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
-    assertThat(factories.get(2)).isSameAs(DUMMY_USER_TRACER);
+    assertThat(factories).containsExactly(DUMMY_USER_TRACER);
   }
 
   @Test
-  public void getTracerFactories_disableStats() {
+  public void getTracerFactories_enableStats() {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setStatsEnabled(false);
+    builder.setStatsEnabled(true);
+
+    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
+
+    assertEquals(2, factories.size());
+    assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
+    assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
+  }
+
+  @Test
+  public void getTracerFactories_enableTracing() {
+    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
+    builder.setTracingEnabled(true);
 
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
 
@@ -69,24 +77,15 @@ public class AbstractServerImplBuilderTest {
   }
 
   @Test
-  public void getTracerFactories_disableTracing() {
+  public void getTracerFactories_enableBoth() {
     builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setTracingEnabled(false);
-
+    builder.setTracingEnabled(true);
+    builder.setStatsEnabled(true);
     List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-
-    assertEquals(2, factories.size());
+    assertEquals(3, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
-    assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
-  }
-
-  @Test
-  public void getTracerFactories_disableBoth() {
-    builder.addStreamTracerFactory(DUMMY_USER_TRACER);
-    builder.setTracingEnabled(false);
-    builder.setStatsEnabled(false);
-    List<? extends ServerStreamTracer.Factory> factories = builder.getTracerFactories();
-    assertThat(factories).containsExactly(DUMMY_USER_TRACER);
+    assertThat(factories.get(1)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
+    assertThat(factories.get(2)).isSameAs(DUMMY_USER_TRACER);
   }
 
   static class Builder extends AbstractServerImplBuilder<Builder> {

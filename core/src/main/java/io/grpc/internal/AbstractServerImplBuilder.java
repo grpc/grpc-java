@@ -79,11 +79,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
   @Nullable private CensusStatsModule censusStatsOverride;
-  private boolean statsEnabled = true;
+  private boolean statsEnabled = CensusStatsModule.OPENCENSUS_IMPL_PRESENT;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
-  private boolean tracingEnabled = true;
+  private boolean tracingEnabled = CensusTracingModule.OPENCENSUS_IMPL_PRESENT;
   @Nullable BinaryLog binlog;
   TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
   InternalChannelz channelz = InternalChannelz.instance();

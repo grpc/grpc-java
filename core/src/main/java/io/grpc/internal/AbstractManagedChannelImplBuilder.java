@@ -172,11 +172,11 @@ public abstract class AbstractManagedChannelImplBuilder
     return maxInboundMessageSize;
   }
 
-  private boolean statsEnabled = true;
+  private boolean statsEnabled = CensusStatsModule.OPENCENSUS_IMPL_PRESENT;
   private boolean recordStartedRpcs = true;
   private boolean recordFinishedRpcs = true;
   private boolean recordRealTimeMetrics = false;
-  private boolean tracingEnabled = true;
+  private boolean tracingEnabled = CensusTracingModule.OPENCENSUS_IMPL_PRESENT;
 
   @Nullable
   private CensusStatsModule censusStatsOverride;

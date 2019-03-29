@@ -71,6 +71,15 @@ public final class CensusStatsModule {
   private static final Logger logger = Logger.getLogger(CensusStatsModule.class.getName());
   private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
 
+  static final boolean OPENCENSUS_IMPL_PRESENT;
+
+  static {
+    ClassLoader loader = io.opencensus.stats.StatsComponent.class.getClassLoader();
+    OPENCENSUS_IMPL_PRESENT =
+        GrpcUtil.classIsFound("io.opencensus.impl.stats.StatsComponentImpl", loader)
+        || GrpcUtil.classIsFound("io.opencensus.impllite.stats.StatsComponentImplLite", loader);
+  }
+
   private final Tagger tagger;
   private final StatsRecorder statsRecorder;
   private final Supplier<Stopwatch> stopwatchSupplier;
