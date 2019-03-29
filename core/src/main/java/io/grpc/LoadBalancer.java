@@ -205,7 +205,8 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Gets the attributes associated with these addresses.
+     * Gets the attributes associated with these addresses.  If this was not previously set,
+     * {@link Attributes#EMPTY} will be returned.
      *
      * @since 1.21.0
      */
@@ -238,7 +239,7 @@ public abstract class LoadBalancer {
       Builder() {}
 
       /**
-       * Sets the servers.
+       * Sets the servers.  This field is required.
        *
        * @return this.
        */
@@ -248,7 +249,8 @@ public abstract class LoadBalancer {
       }
 
       /**
-       * Sets the attributes.
+       * Sets the attributes.  This field is optional; if not called, {@link Attributes#EMPTY}
+       * will be used.
        *
        * @return this.
        */
@@ -258,7 +260,7 @@ public abstract class LoadBalancer {
       }
 
       /**
-       * Sets the load balancing policy config.
+       * Sets the load balancing policy config. This field is optional.
        *
        * @return this.
        */
@@ -300,10 +302,6 @@ public abstract class LoadBalancer {
           && Objects.equal(this.loadBalancingPolicyConfig, that.loadBalancingPolicyConfig);
     }
   }
-
-
-
-
 
   /**
    * Handles an error from the name resolution system.
