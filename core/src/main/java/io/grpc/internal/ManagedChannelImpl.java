@@ -60,7 +60,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -373,8 +372,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // may throw. We don't want to confuse our state, even if we will enter panic mode.
     this.lbHelper = lbHelper;
 
-    NameResolverObserver observer = new NameResolverObserver(lbHelper, nameResolver);
-    nameResolver.start(observer);
+    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper, nameResolver);
+    nameResolver.start(listener);
     nameResolverStarted = true;
   }
 
@@ -1302,24 +1301,22 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final class NameResolverObserver extends NameResolver.Observer {
+  private class NameResolverListenerImpl implements NameResolver.Listener {
     final LbHelperImpl helper;
     final NameResolver resolver;
 
-    NameResolverObserver(LbHelperImpl helperImpl, NameResolver resolver) {
+    NameResolverListenerImpl(LbHelperImpl helperImpl, NameResolver resolver) {
       this.helper = checkNotNull(helperImpl, "helperImpl");
       this.resolver = checkNotNull(resolver, "resolver");
     }
 
     @Override
-    public void onResult(final ResolutionResult resolutionResult) {
+    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes attrs) {
       final class NamesResolved implements Runnable {
 
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
-          List<EquivalentAddressGroup> servers = resolutionResult.getServers();
-          Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 
@@ -1374,7 +1371,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverObserver.this.helper == ManagedChannelImpl.this.lbHelper) {
+          if (NameResolverListenerImpl.this.helper == ManagedChannelImpl.this.lbHelper) {
             if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
               handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                   "Name resolver " + resolver + " returned an empty list"));
@@ -1415,7 +1412,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         haveBackends = false;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-      if (NameResolverObserver.this.helper != ManagedChannelImpl.this.lbHelper) {
+      if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
       }
       helper.lb.handleNameResolutionError(error);
