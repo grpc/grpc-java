@@ -142,7 +142,7 @@ public abstract class LoadBalancer {
    * <p>Implementations should not modify the given {@code servers}.
    *
    * @param resolvedAddresses the resolved server addresses, attributes, and config.
-   * @since 1.20.0
+   * @since 1.21.0
    */
   @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -154,7 +154,7 @@ public abstract class LoadBalancer {
    * balancing policy config.  The config is from the {@link
    * LoadBalancerProvider#parseLoadBalancingPolicyConfig(Map)}.
    *
-   * @since 1.20.0
+   * @since 1.21.0
    */
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> servers;
@@ -162,6 +162,7 @@ public abstract class LoadBalancer {
     private final Attributes attributes;
     @Nullable
     private final Object loadBalancingPolicyConfig;
+    // Make sure to update toBuilder() below!
 
     private ResolvedAddresses(
         List<EquivalentAddressGroup> servers,
@@ -173,10 +174,20 @@ public abstract class LoadBalancer {
       this.loadBalancingPolicyConfig = loadBalancingPolicyConfig;
     }
 
+    /**
+     * Factory for constructing a new Builder.
+     *
+     * @since 1.21.0
+     */
     public static Builder newBuilder() {
       return new Builder();
     }
 
+    /**
+     * Converts this back to a builder.
+     *
+     * @since 1.21.0
+     */
     public Builder toBuilder() {
       return newBuilder()
           .setServers(servers)
@@ -184,15 +195,31 @@ public abstract class LoadBalancer {
           .setLoadBalancingPolicyConfig(loadBalancingPolicyConfig);
     }
 
+    /**
+     * Gets the server addresses.
+     *
+     * @since 1.21.0
+     */
     public List<EquivalentAddressGroup> getServers() {
       return servers;
     }
 
+    /**
+     * Gets the attributes associated with these addresses.
+     *
+     * @since 1.21.0
+     */
     @NameResolver.ResolutionResultAttr
     public Attributes getAttributes() {
       return attributes;
     }
 
+    /**
+     * Gets the domain specific load balancing policy.  This is the config produced by
+     * {@link LoadBalancerProvider#parseLoadBalancingPolicyConfig(Map)}.
+     *
+     * @since 1.21.0
+     */
     @Nullable
     public Object getLoadBalancingPolicyConfig() {
       return loadBalancingPolicyConfig;
@@ -211,7 +238,8 @@ public abstract class LoadBalancer {
       Builder() {}
 
       /**
-       * Sets the servers
+       * Sets the servers.
+       *
        * @return this.
        */
       public Builder setServers(List<EquivalentAddressGroup> servers) {
@@ -219,16 +247,29 @@ public abstract class LoadBalancer {
         return this;
       }
 
+      /**
+       * Sets the attributes.
+       *
+       * @return this.
+       */
       public Builder setAttributes(@NameResolver.ResolutionResultAttr Attributes attributes) {
         this.attributes = attributes;
         return this;
       }
 
+      /**
+       * Sets the load balancing policy config.
+       *
+       * @return this.
+       */
       public Builder setLoadBalancingPolicyConfig(@Nullable Object loadBalancingPolicyConfig) {
         this.loadBalancingPolicyConfig = loadBalancingPolicyConfig;
         return this;
       }
 
+      /**
+       * Constructs the {@link ResolvedAddresses}.
+       */
       public ResolvedAddresses build() {
         return new ResolvedAddresses(servers, attributes, loadBalancingPolicyConfig);
       }
