@@ -153,6 +153,7 @@ class XdsLbState {
 
   @VisibleForTesting // Interface of weighted Round-Robin algorithm that is convenient for test.
   interface WrrAlgorithm {
+    @Nullable
     Locality pickLocality(List<LocalityState> wrrList);
   }
 
@@ -160,6 +161,9 @@ class XdsLbState {
 
     @Override
     public Locality pickLocality(List<LocalityState> wrrList) {
+      if (wrrList.isEmpty()) {
+        return null;
+      }
       return wrrList.iterator().next().locality;
     }
   }
@@ -175,9 +179,6 @@ class XdsLbState {
 
     @Nullable
     Locality pickLocality() {
-      if (wrrList.isEmpty()) {
-        return null;
-      }
       return wrrAlgorithm.pickLocality(wrrList);
     }
 
@@ -247,6 +248,9 @@ class XdsLbState {
     }
   }
 
+  /**
+   * State about the locality for WRR locality picker.
+   */
   static final class LocalityState {
     final Locality locality;
     final int weight;
@@ -280,6 +284,9 @@ class XdsLbState {
     }
   }
 
+  /**
+   * Information about the locality from EDS response.
+   */
   static final class LocalityInfo {
     final List<EquivalentAddressGroup> eags;
     final List<Integer> endPointWeights;
