@@ -19,13 +19,34 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.Cluster;
+import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
+import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.XdsLbState.LbEndpoint;
+import io.grpc.xds.XdsLbState.Locality;
+import io.grpc.xds.XdsLbState.LocalityInfo;
+import io.grpc.xds.XdsLbState.SubchannelStore;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * ADS client implementation.
@@ -38,29 +59,138 @@ final class XdsComms {
   private AdsStream adsStream;
 
   private final class AdsStream {
+    static final String CDS_TYPE_URL =
+        "type.googleapis.com/envoy.api.v2.Cluster";
+    static final String EDS_TYPE_URL =
+        "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
+    static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
+    final SubchannelStore subchannelStore;
 
     final AdsStreamCallback adsStreamCallback;
 
     final StreamObserver<DiscoveryRequest> xdsRequestWriter;
 
+    LoadBalancerProvider lbProvider;
+
     final StreamObserver<DiscoveryResponse> xdsResponseReader =
         new StreamObserver<DiscoveryResponse>() {
 
           boolean firstResponseReceived;
+          boolean cdsResponseReceived;
 
           @Override
-          public void onNext(DiscoveryResponse value) {
-            if (!firstResponseReceived) {
-              firstResponseReceived = true;
-              helper.getSynchronizationContext().execute(
-                  new Runnable() {
-                    @Override
-                    public void run() {
-                      adsStreamCallback.onWorking();
+          public void onNext(final DiscoveryResponse value) {
+
+            class HandleResponseRunnable implements Runnable {
+
+              @Override
+              public void run() {
+                if (!firstResponseReceived) {
+                  firstResponseReceived = true;
+                  adsStreamCallback.onWorking();
+                }
+                String typeUrl = value.getTypeUrl();
+                if (CDS_TYPE_URL.equals(typeUrl)) {
+                  // Assuming standard mode for now
+                  // Assuming there is only one CDS response per stream for now.
+                  // TODO: handle the case that this CDS response is not the first one.
+
+                  cdsResponseReceived = true;
+                  Cluster cluster;
+                  try {
+                    // maybe better to run this deserialization task out of syncContext?
+                    cluster = value.getResources(0).unpack(Cluster.class);
+                  } catch (InvalidProtocolBufferException | NullPointerException e) {
+                    cancelRpc("Received invalid CDS response", e);
+                    return;
+                  }
+
+                  DiscoveryType discoveryType = cluster.getType();
+                  if (!DiscoveryType.EDS.equals(discoveryType)) {
+                    cancelRpc(
+                        "Received invalid CDS response. Wrong DiscoveryType '" + discoveryType
+                            + "'",
+                        null);
+                    return;
+                  }
+
+                  LbPolicy lbPolicy = cluster.getLbPolicy();
+                  if (lbPolicy == null) {
+                    cancelRpc("Received invalid CDS response. lbPolicy is null", null);
+                    return;
+                  }
+
+                  lbProvider = LoadBalancerRegistry.getDefaultRegistry()
+                      .getProvider(lbPolicy.name().toLowerCase());
+
+                  if (lbProvider == null)  {
+                    helper.getChannelLogger().log(
+                        ChannelLogLevel.INFO,
+                        "Unable to load lbPolicy '{0}', use round_robin instead", lbPolicy);
+                    lbProvider =  checkNotNull(
+                        LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin"),
+                        "Unable to find round-robin LoadBalancer");
+
+                  }
+                  subchannelStore.updateLoadBalancerProvider(lbProvider);
+
+                  // send EDS request
+                  xdsRequestWriter.onNext(
+                      DiscoveryRequest.newBuilder()
+                          .setNode(Node.newBuilder()
+                              .setMetadata(Struct.newBuilder()
+                                  .putFields(
+                                      TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                                      Value.newBuilder().setStringValue(helper.getAuthority())
+                                          .build())
+                                  .putFields(
+                                      "endpoints_required",
+                                      Value.newBuilder().setBoolValue(true).build())))
+                          .addResourceNames(helper.getAuthority())
+                          .setTypeUrl(EDS_TYPE_URL).build());
+                } else if (EDS_TYPE_URL.equals(typeUrl)) {
+                  // Assuming standard mode.
+                  if (!cdsResponseReceived) {
+                    cancelRpc("Received EDS response prior to CDS response", null);
+                    return;
+                  }
+
+                  ClusterLoadAssignment clusterLoadAssignment;
+                  try {
+                    // maybe better to run this deserialization task out of syncContext?
+                    clusterLoadAssignment =
+                        value.getResources(0).unpack(ClusterLoadAssignment.class);
+                  } catch (InvalidProtocolBufferException | NullPointerException e) {
+                    cancelRpc("Received invalid EDS response", e);
+                    return;
+                  }
+
+                  List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
+                  Map<Locality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
+                  for (LocalityLbEndpoints localityLbEndpoints : localities) {
+                    io.envoyproxy.envoy.api.v2.core.Locality localityProto =
+                        localityLbEndpoints.getLocality();
+                    Locality locality = new Locality(localityProto);
+                    List<LbEndpoint> lbEndPoints = new ArrayList<>();
+                    for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
+                        : localityLbEndpoints.getLbEndpointsList()) {
+                      lbEndPoints.add(new LbEndpoint(lbEndpoint));
                     }
-                  });
+                    int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
+
+                    localityEndpointsMapping.put(
+                        locality, new LocalityInfo(lbEndPoints, localityWeight));
+                  }
+
+                  localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
+
+                  // TODO: parse drop_percentage, and also updateLoacalistyStore with dropPercentage
+                  subchannelStore.updateLocalityStore(localityEndpointsMapping);
+                }
+              }
             }
-            // TODO: more impl
+
+            helper.getSynchronizationContext().execute(new HandleResponseRunnable());
           }
 
           @Override
@@ -88,10 +218,26 @@ final class XdsComms {
     boolean cancelled;
     boolean closed;
 
-    AdsStream(AdsStreamCallback adsStreamCallback) {
+    AdsStream(AdsStreamCallback adsStreamCallback, SubchannelStore subchannelStore) {
       this.adsStreamCallback = adsStreamCallback;
       this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
           .streamAggregatedResources(xdsResponseReader);
+      this.subchannelStore = subchannelStore;
+
+      // Assuming standard mode, send CDS request
+      xdsRequestWriter.onNext(
+          DiscoveryRequest.newBuilder()
+              .setNode(Node.newBuilder()
+                  .setMetadata(Struct.newBuilder()
+                      .putFields(
+                          TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                          Value.newBuilder().setStringValue(helper.getAuthority()).build())))
+              .addResourceNames(helper.getAuthority())
+              .setTypeUrl(CDS_TYPE_URL).build());
+    }
+
+    AdsStream(AdsStream adsStream) {
+      this(adsStream.adsStreamCallback, adsStream.subchannelStore);
     }
   }
 
@@ -99,10 +245,13 @@ final class XdsComms {
    * Starts a new ADS streaming RPC.
    */
   XdsComms(
-      ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback) {
+      ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
+      SubchannelStore subchannelStore) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
-    this.adsStream = new AdsStream(checkNotNull(adsStreamCallback, "adsStreamCallback"));
+    this.adsStream = new AdsStream(
+        checkNotNull(adsStreamCallback, "adsStreamCallback"),
+        checkNotNull(subchannelStore, "subchannelStore"));
   }
 
   void shutdownChannel() {
@@ -114,17 +263,21 @@ final class XdsComms {
     checkState(!channel.isShutdown(), "channel is alreday shutdown");
 
     if (adsStream.closed || adsStream.cancelled) {
-      adsStream = new AdsStream(adsStream.adsStreamCallback);
+      adsStream = new AdsStream(adsStream);
     }
   }
 
   void shutdownLbRpc(String message) {
+    cancelRpc(message, null);
+  }
+
+  private void cancelRpc(String message, Throwable cause) {
     if (adsStream.cancelled) {
       return;
     }
     adsStream.cancelled = true;
     adsStream.xdsRequestWriter.onError(
-        Status.CANCELLED.withDescription(message).asRuntimeException());
+        Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
   }
 
   /**

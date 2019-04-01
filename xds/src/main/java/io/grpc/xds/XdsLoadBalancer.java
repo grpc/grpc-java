@@ -17,8 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.IDLE;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -36,6 +34,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
+import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -76,11 +75,22 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private LbConfig fallbackPolicy;
 
+  @VisibleForTesting
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry, SubchannelStore subchannelStore) {
-    this.helper = checkNotNull(helper, "helper");
+    this.helper = helper;
     this.lbRegistry = lbRegistry;
     this.subchannelStore = subchannelStore;
     fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
+  }
+
+  private XdsLoadBalancer(
+      Helper helper, LoadBalancerRegistry lbRegistry, SubchannelPool subchannelPool) {
+    this(helper, lbRegistry, new SubchannelStoreImpl(helper, subchannelPool));
+    subchannelPool.init(helper, this);
+  }
+
+  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+    this(helper, lbRegistry, new CachedSubchannelPool());
   }
 
   @Override
@@ -159,23 +169,15 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // xdsLbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    if (newState.getState() == SHUTDOWN) {
-      return;
-    }
-
     if (fallbackManager.fallbackBalancer != null) {
       fallbackManager.fallbackBalancer.handleSubchannelState(subchannel, newState);
     }
-    if (subchannelStore.hasSubchannel(subchannel)) {
-      if (newState.getState() == IDLE) {
-        subchannel.requestConnection();
-      }
-      subchannel.getAttributes().get(STATE_INFO).set(newState);
-      xdsLbState.handleSubchannelState(subchannel, newState);
-      fallbackManager.maybeUseFallbackPolicy();
-    }
+
+    // xdsLbState should never be null here since handleSubchannelState cannot be called while the
+    // lb is shutdown.
+    checkNotNull(xdsLbState, "xdsState");
+    xdsLbState.handleSubchannelState(subchannel, newState);
+    fallbackManager.maybeUseFallbackPolicy();
   }
 
   @Override
@@ -259,8 +261,6 @@ final class XdsLoadBalancer extends LoadBalancer {
               .setAddresses(fallbackServers)
               .setAttributes(fallbackAttributes)
               .build());
-
-      // TODO: maybe update picker
     }
 
     void updateFallbackServers(

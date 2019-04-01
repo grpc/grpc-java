@@ -104,7 +104,8 @@ public class FallbackManagerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(channelLogger).when(helper).getChannelLogger();
-    fallbackManager = new FallbackManager(helper, new SubchannelStoreImpl(), lbRegistry);
+    fallbackManager = new FallbackManager(
+        helper, new SubchannelStoreImpl(helper, new CachedSubchannelPool()), lbRegistry);
     fallbackPolicy = new LbConfig("test_policy", new HashMap<String, Void>());
     lbRegistry.register(fakeLbProvider);
   }
