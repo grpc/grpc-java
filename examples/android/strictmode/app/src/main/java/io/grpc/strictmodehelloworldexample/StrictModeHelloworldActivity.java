@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.strictmode.helloworldexample;
+package io.grpc.strictmodehelloworldexample;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -49,7 +49,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-public class HelloworldActivity extends AppCompatActivity {
+public class StrictModeHelloworldActivity extends AppCompatActivity {
   private Button sendButton;
   private EditText hostEdit;
   private EditText portEdit;
@@ -71,7 +71,7 @@ public class HelloworldActivity extends AppCompatActivity {
                         new Runnable() {
                           @Override
                           public void run() {
-                            new AlertDialog.Builder(HelloworldActivity.this)
+                            new AlertDialog.Builder(StrictModeHelloworldActivity.this)
                                 .setTitle("StrictMode VM Violation")
                                 .setMessage(v.getLocalizedMessage())
                                 .show();
@@ -82,7 +82,7 @@ public class HelloworldActivity extends AppCompatActivity {
             .penaltyLog()
             .build();
     StrictMode.setVmPolicy(policy);
-    setContentView(R.layout.activity_helloworld);
+    setContentView(R.layout.activity_strictmodehelloworld);
     sendButton = (Button) findViewById(R.id.send_button);
     hostEdit = (EditText) findViewById(R.id.host_edit_text);
     portEdit = (EditText) findViewById(R.id.port_edit_text);

@@ -5,7 +5,7 @@ android {
     compileSdkVersion 28
 
     defaultConfig {
-        applicationId "io.grpc.strictmode.helloworldexample"
+        applicationId "io.grpc.strictmodehelloworldexample"
         // API level 28 is required for StrictMode penaltyListener
         minSdkVersion 28
         targetSdkVersion 28
