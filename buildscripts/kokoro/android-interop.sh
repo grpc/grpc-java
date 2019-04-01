@@ -15,9 +15,8 @@ export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
-export ANDROID_SDK_HOME=/opt/android-sdk/current
 
-echo y | ${ANDROID_SDK_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 
 # Proto deps
 buildscripts/make_dependencies.sh
