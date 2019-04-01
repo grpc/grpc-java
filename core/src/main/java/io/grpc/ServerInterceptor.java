@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import javax.annotation.Nonnull;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -48,7 +49,7 @@ public interface ServerInterceptor {
    * @return listener for processing incoming messages for {@code call}, never {@code null}.
    */
   <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
-      ServerCall<ReqT, RespT> call,
-      Metadata headers,
-      ServerCallHandler<ReqT, RespT> next);
+      @Nonnull ServerCall<ReqT, RespT> call,
+      @Nonnull Metadata headers,
+      @Nonnull ServerCallHandler<ReqT, RespT> next);
 }
