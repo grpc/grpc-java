@@ -37,7 +37,6 @@ import android.widget.TextView;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -118,10 +117,9 @@ public class StrictModeHelloworldActivity extends AppCompatActivity {
       String portStr = params[2];
       int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
       try {
-        //        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
         channel =
-            ((OkHttpChannelBuilder) ManagedChannelBuilder.forAddress(host, port))
-                .transportExecutor(new NetworkTaggingExecutor(100))
+            OkHttpChannelBuilder.forAddress(host, port)
+                .transportExecutor(new NetworkTaggingExecutor(0xFDD))
                 .usePlaintext()
                 .build();
         GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
