@@ -145,6 +145,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private final int initialWindowSize;
   private Listener listener;
   private FrameReader testFrameReader;
+  private OkHttpFrameLogger testFrameLogger;
   @GuardedBy("lock")
   private ExceptionHandlingFrameWriter frameWriter;
   private OutboundFlowController outboundFlow;
@@ -272,6 +273,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       Executor executor,
       FrameReader frameReader,
       FrameWriter testFrameWriter,
+      OkHttpFrameLogger testFrameLogger,
       int nextStreamId,
       Socket socket,
       Supplier<Stopwatch> stopwatchFactory,
@@ -291,6 +293,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.socketFactory = SocketFactory.getDefault();
     this.testFrameReader = Preconditions.checkNotNull(frameReader, "frameReader");
     this.testFrameWriter = Preconditions.checkNotNull(testFrameWriter, "testFrameWriter");
+    this.testFrameLogger = Preconditions.checkNotNull(testFrameLogger, "testFrameLogger");
     this.socket = Preconditions.checkNotNull(socket, "socket");
     this.nextStreamId = nextStreamId;
     this.stopwatchFactory = stopwatchFactory;
@@ -468,7 +471,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
     if (isForTest()) {
       synchronized (lock) {
-        frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter);
+        frameWriter = new ExceptionHandlingFrameWriter(OkHttpClientTransport.this, testFrameWriter,
+            testFrameLogger);
         outboundFlow =
             new OutboundFlowController(OkHttpClientTransport.this, frameWriter, initialWindowSize);
       }
@@ -478,7 +482,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           if (connectingCallback != null) {
             connectingCallback.run();
           }
-          clientFrameHandler = new ClientFrameHandler(testFrameReader);
+          clientFrameHandler = new ClientFrameHandler(testFrameReader, testFrameLogger);
           executor.execute(clientFrameHandler);
           synchronized (lock) {
             maxConcurrentStreams = Integer.MAX_VALUE;
@@ -1028,13 +1032,19 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
    */
   @VisibleForTesting
   class ClientFrameHandler implements FrameReader.Handler, Runnable {
-    private final OkHttpFrameLogger logger =
-        new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
+
+    private final OkHttpFrameLogger logger;
     FrameReader frameReader;
     boolean firstSettings = true;
 
     ClientFrameHandler(FrameReader frameReader) {
+      this(frameReader, new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class));
+    }
+
+    @VisibleForTesting
+    ClientFrameHandler(FrameReader frameReader, OkHttpFrameLogger frameLogger) {
       this.frameReader = frameReader;
+      logger = frameLogger;
     }
 
     @Override

@@ -18,6 +18,7 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.okhttp.internal.framed.ErrorCode;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.Settings;
@@ -34,8 +35,13 @@ class OkHttpFrameLogger {
   private final Level level;
 
   OkHttpFrameLogger(Level level, Class<?> clazz) {
+    this(level, Logger.getLogger(clazz.getName()));
+  }
+
+  @VisibleForTesting
+  OkHttpFrameLogger(Level level, Logger logger) {
     this.level = checkNotNull(level, "level");
-    this.logger = Logger.getLogger(clazz.getName());
+    this.logger = checkNotNull(logger, "logger");
   }
 
   private static String toString(Settings settings) {
@@ -76,7 +82,7 @@ class OkHttpFrameLogger {
               + " length="
               + length
               + " bytes="
-              + toString(data.snapshot(length)));
+              + toString(data.snapshot((int) Math.min(data.size(), BUFFER_LENGTH_THRESHOLD + 1))));
     }
   }
 
