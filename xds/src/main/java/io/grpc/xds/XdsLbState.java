@@ -554,10 +554,9 @@ class XdsLbState {
       currentState = state;
       helper.getChannelLogger().log(
             ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
-      if (state == null) {
-        state = IDLE;
+      if (state != null) {
+        helper.updateBalancingState(state, picker);
       }
-      helper.updateBalancingState(state, picker);
     }
 
     private void updateChildState(

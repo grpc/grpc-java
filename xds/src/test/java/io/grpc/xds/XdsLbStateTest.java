@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -209,18 +208,16 @@ public class XdsLbStateTest {
     verify(loadBalancers.get("sz2")).handleResolvedAddresses(resolvedAddressesCaptor.capture());
     assertThat(resolvedAddressesCaptor.getValue().getServers())
         .containsExactly(eag21, eag22).inOrder();
-    verify(helper).updateBalancingState(eq(IDLE), subchannelPickerCaptor.capture());
-
-    wrrAlgorithm.setNextIndex(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs)).isSameAs(
-        PickResult.withNoResult());
+    verify(helper, never()).updateBalancingState(
+        any(ConnectivityState.class), any(SubchannelPicker.class));
 
     SubchannelPicker childPicker1 = mock(SubchannelPicker.class);
     PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class));
     doReturn(pickResult1).when(childPicker1).pickSubchannel(any(PickSubchannelArgs.class));
     childHelpers.get("sz1").updateBalancingState(READY, childPicker1);
-
     verify(helper).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
+
+    wrrAlgorithm.setNextIndex(1);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs)).isSameAs(
         PickResult.withNoResult());
 

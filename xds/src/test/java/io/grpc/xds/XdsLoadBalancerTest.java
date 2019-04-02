@@ -552,7 +552,6 @@ public class XdsLoadBalancerTest {
             .build());
 
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-
     doReturn(true).when(fakeSubchannelStore).hasReadyBackends();
     serverResponseWriter.onError(new Exception("fake error"));
 
