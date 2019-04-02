@@ -55,15 +55,15 @@ class OkHttpFrameLogger {
     return map.toString();
   }
 
-  private static String toString(ByteString buf) {
+  private static String toString(Buffer buf) {
     if (buf.size() <= BUFFER_LENGTH_THRESHOLD) {
       // Log the entire buffer.
-      return buf.hex();
+      return buf.snapshot().hex();
     }
 
     // Otherwise just log the first 64 bytes.
-    int length = Math.min(buf.size(), BUFFER_LENGTH_THRESHOLD);
-    return buf.substring(0, length).hex() + "...";
+    int length = (int) Math.min(buf.size(), BUFFER_LENGTH_THRESHOLD);
+    return buf.snapshot(length).hex() + "...";
   }
 
   private boolean isEnabled() {
@@ -82,7 +82,7 @@ class OkHttpFrameLogger {
               + " length="
               + length
               + " bytes="
-              + toString(data.snapshot((int) Math.min(data.size(), BUFFER_LENGTH_THRESHOLD + 1))));
+              + toString(data));
     }
   }
 
@@ -175,7 +175,7 @@ class OkHttpFrameLogger {
               + " length="
               + debugData.size()
               + " bytes="
-              + toString(debugData));
+              + toString(new Buffer().write(debugData)));
     }
   }
 
