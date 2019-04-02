@@ -39,8 +39,6 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
 
-  private static final OkHttpFrameLogger frameLogger =
-      new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class);
   // Some exceptions are not very useful and add too much noise to the log
   private static final Set<String> QUIET_ERRORS =
       Collections.unmodifiableSet(new HashSet<>(Arrays.asList("Socket closed")));
@@ -49,11 +47,23 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private final FrameWriter frameWriter;
 
+  private final OkHttpFrameLogger frameLogger;
+
   ExceptionHandlingFrameWriter(
       TransportExceptionHandler transportExceptionHandler, FrameWriter frameWriter) {
+    this(transportExceptionHandler, frameWriter,
+        new OkHttpFrameLogger(Level.FINE, OkHttpClientTransport.class));
+  }
+
+  @VisibleForTesting
+  ExceptionHandlingFrameWriter(
+      TransportExceptionHandler transportExceptionHandler,
+      FrameWriter frameWriter,
+      OkHttpFrameLogger frameLogger) {
     this.transportExceptionHandler =
         checkNotNull(transportExceptionHandler, "transportExceptionHandler");
     this.frameWriter = Preconditions.checkNotNull(frameWriter, "frameWriter");
+    this.frameLogger = Preconditions.checkNotNull(frameLogger, "frameLogger");
   }
 
   @Override
@@ -121,6 +131,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   @Override
   public void headers(int streamId, List<Header> headerBlock) {
+    frameLogger.logHeaders(OkHttpFrameLogger.Direction.OUTBOUND, streamId, headerBlock, false);
     try {
       frameWriter.headers(streamId, headerBlock);
     } catch (IOException e) {
