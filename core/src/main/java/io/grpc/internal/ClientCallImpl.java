@@ -527,12 +527,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
         @Override
         public final void runInContext() {
+          if (closed) {
+            return;
+          }
           PerfMark.taskStart(
               listenerScopeId, Thread.currentThread().getName(), tag, "ClientCall.headersRead");
           try {
-            if (closed) {
-              return;
-            }
             observer.onHeaders(headers);
           } catch (Throwable t) {
             Status status =
@@ -557,6 +557,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
         @Override
         public final void runInContext() {
+          if (closed) {
+            GrpcUtil.closeQuietly(producer);
+            return;
+          }
           PerfMark.taskStart(
               listenerScopeId,
               Thread.currentThread().getName(),
@@ -564,10 +568,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
               "ClientCall.messagesAvailable");
           try {
             InputStream message;
-            if (closed) {
-              GrpcUtil.closeQuietly(producer);
-              return;
-            }
             while ((message = producer.next()) != null) {
               try {
                 observer.onMessage(method.parseResponse(message));
@@ -633,13 +633,13 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
         @Override
         public final void runInContext() {
+          if (closed) {
+            // We intentionally don't keep the status or metadata from the server.
+            return;
+          }
           PerfMark.taskStart(
               listenerScopeId, Thread.currentThread().getName(), tag, "ClientCall.closed");
           try {
-            if (closed) {
-              // We intentionally don't keep the status or metadata from the server.
-              return;
-            }
             close(savedStatus, savedTrailers);
           } finally {
             PerfMark.taskEnd(listenerScopeId, Thread.currentThread().getName());
