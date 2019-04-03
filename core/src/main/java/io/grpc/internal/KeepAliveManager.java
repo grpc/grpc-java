@@ -36,6 +36,7 @@ public class KeepAliveManager {
   private static final long MIN_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.MILLISECONDS.toNanos(10L);
 
   private final ScheduledExecutorService scheduler;
+  @GuardedBy("this")
   private final Stopwatch stopwatch;
   private final KeepAlivePinger keepAlivePinger;
   private final boolean keepAliveDuringTransportIdle;
