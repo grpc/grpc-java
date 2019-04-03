@@ -51,7 +51,6 @@ import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -61,6 +60,7 @@ import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
@@ -298,6 +298,7 @@ public class GrpclbLoadBalancerTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
+        fakeClock.getStopwatchSupplier().get(),
         backoffPolicyProvider);
     verify(subchannelPool).init(same(helper));
   }
@@ -2104,7 +2105,8 @@ public class GrpclbLoadBalancerTest {
     syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          balancer.handleResolvedAddressGroups(addrs, attrs);
+          balancer.handleResolvedAddresses(
+              ResolvedAddresses.newBuilder().setServers(addrs).setAttributes(attrs).build());
         }
       });
   }
