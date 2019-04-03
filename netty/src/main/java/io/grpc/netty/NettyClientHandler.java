@@ -445,12 +445,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.attributes = this.attributes.toBuilder().setAll(attributes).build();
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
-    // Once protocol negotiator is complete, release all writes and remove the buffer.
-    ChannelHandlerContext handlerCtx =
-        ctx().pipeline().context(WriteBufferingAndExceptionHandler.class);
-    if (handlerCtx != null) {
-      ((WriteBufferingAndExceptionHandler) handlerCtx.handler()).writeBufferedAndRemove(handlerCtx);
-    }
+    WriteBufferingAndExceptionHandlerUtils.writeBufferingAndRemove(ctx().channel());
   }
 
   @Override
