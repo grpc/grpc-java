@@ -54,6 +54,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.collect.ImmutableList;
+import com.google.common.truth.Truth;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -294,7 +295,7 @@ public class OkHttpClientTransportTest {
     ArgumentCaptor<String> logCaptor = ArgumentCaptor.forClass(String.class);
     verify(log, atLeastOnce()).log(any(Level.class), logCaptor.capture());
     String data = logCaptor.getValue();
-    assertTrue(data.endsWith("..."));
+    Truth.assertThat(data).endsWith("...");
     assertTrue(data.substring(data.indexOf("bytes="), data.indexOf("...")).length() - 6 <= 64 * 2);
 
     frameHandler().settings(false, new Settings());

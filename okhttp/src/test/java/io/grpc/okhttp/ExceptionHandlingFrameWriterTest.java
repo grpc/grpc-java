@@ -28,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.truth.Truth;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.OkHttpFrameLogger.Direction;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -124,7 +125,7 @@ public class ExceptionHandlingFrameWriterTest {
     ArgumentCaptor<String> logCaptor = ArgumentCaptor.forClass(String.class);
     verify(log, atLeastOnce()).log(any(Level.class), logCaptor.capture());
     String data = logCaptor.getValue();
-    assertTrue(data.endsWith("..."));
+    Truth.assertThat(data).endsWith("...");
     assertTrue(data.substring(data.indexOf("bytes="), data.indexOf("...")).length() - 6 <= 64 * 2);
 
     exceptionHandlingFrameWriter.ackSettings(new Settings());
