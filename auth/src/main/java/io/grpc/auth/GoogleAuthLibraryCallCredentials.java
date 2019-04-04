@@ -279,9 +279,25 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials2 {
       build = builderClass.getMethod("build");
 
       methodPairs = new ArrayList<>();
-      for (String key : new String[] { "ClientId", "ClientEmail", "PrivateKey", "PrivateKey" }) {
-        Method getter = serviceAccountClass.getMethod("get" + key);
-        Method setter = builderClass.getMethod("set" + key, getter.getReturnType());
+
+      {
+        Method getter = serviceAccountClass.getMethod("getClientId");
+        Method setter = builderClass.getMethod("setClientId", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getClientEmail");
+        Method setter = builderClass.getMethod("setClientEmail", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getPrivateKey");
+        Method setter = builderClass.getMethod("setPrivateKey", getter.getReturnType());
+        methodPairs.add(new MethodPair(getter, setter));
+      }
+      {
+        Method getter = serviceAccountClass.getMethod("getPrivateKey");
+        Method setter = builderClass.getMethod("setPrivateKey", getter.getReturnType());
         methodPairs.add(new MethodPair(getter, setter));
       }
     }
