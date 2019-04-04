@@ -18,15 +18,19 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import io.grpc.Internal;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 
 /** Utility class for {@link WriteBufferingAndExceptionHandler}. */
-public final class WriteBufferingAndExceptionHandlerUtils {
+@Internal
+public final class InternalWriteBufferingAndExceptionHandlerUtils {
 
   /**
    * Writes buffered data and removes {@link WriteBufferingAndExceptionHandler} from {@link
    * io.netty.channel.ChannelPipeline}.
+   *
+   * <p>Internal use only. Do not use.
    */
   public static void writeBufferingAndRemove(Channel channel) {
     checkNotNull(channel, "channel");

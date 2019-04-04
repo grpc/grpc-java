@@ -445,7 +445,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.attributes = this.attributes.toBuilder().setAll(attributes).build();
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
-    WriteBufferingAndExceptionHandlerUtils.writeBufferingAndRemove(ctx().channel());
+    InternalWriteBufferingAndExceptionHandlerUtils.writeBufferingAndRemove(ctx().channel());
   }
 
   @Override
