@@ -60,7 +60,8 @@ final class CachedSubchannelPool implements SubchannelPool {
     final Subchannel subchannel;
     if (entry == null) {
       final Attributes attrs = defaultAttributes.toBuilder()
-          .set(STATE_LISTENER, new AtomicReference<>(listener)).build();
+          .set(STATE_LISTENER, new AtomicReference<>(listener))
+          .build();
       subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
           .setAddresses(eag)
           .setAttributes(attrs)
