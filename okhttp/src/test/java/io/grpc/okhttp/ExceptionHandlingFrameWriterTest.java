@@ -19,7 +19,6 @@ package io.grpc.okhttp;
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.okhttp.ExceptionHandlingFrameWriter.getLogLevel;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.atLeastOnce;
@@ -28,7 +27,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.common.truth.Truth;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
 import io.grpc.okhttp.OkHttpFrameLogger.Direction;
 import io.grpc.okhttp.internal.framed.ErrorCode;
@@ -125,8 +123,8 @@ public class ExceptionHandlingFrameWriterTest {
     ArgumentCaptor<String> logCaptor = ArgumentCaptor.forClass(String.class);
     verify(log, atLeastOnce()).log(any(Level.class), logCaptor.capture());
     String data = logCaptor.getValue();
-    Truth.assertThat(data).endsWith("...");
-    assertTrue(data.substring(data.indexOf("bytes="), data.indexOf("...")).length() - 6 <= 64 * 2);
+    assertThat(data).endsWith("...");
+    assertThat(data.substring(data.indexOf("bytes="), data.indexOf("..."))).hasLength(64 * 2 + 6);
 
     exceptionHandlingFrameWriter.ackSettings(new Settings());
     verify(log).log(any(Level.class), startsWith(Direction.OUTBOUND + " SETTINGS: ack=true"));
