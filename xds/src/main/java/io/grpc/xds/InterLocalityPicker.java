@@ -39,6 +39,8 @@ final class InterLocalityPicker extends SubchannelPicker {
 
     WeightedChildPicker(int weight, SubchannelPicker childPicker) {
       checkArgument(weight >= 0, "weight is negative");
+      checkNotNull(childPicker, "childPicker is null");
+
       this.weight = weight;
       this.childPicker = childPicker;
     }
@@ -71,11 +73,9 @@ final class InterLocalityPicker extends SubchannelPicker {
 
   @VisibleForTesting
   InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, Random random) {
-
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
-    checkArgument(
-        !weightedChildPickers.isEmpty(),
-        "weightedChildPickers is empty");
+    checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
+
     this.weightedChildPickers = ImmutableList.copyOf(weightedChildPickers);
 
     int totalWeight = 0;
