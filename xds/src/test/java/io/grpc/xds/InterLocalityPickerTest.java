@@ -106,7 +106,6 @@ public class InterLocalityPickerTest {
     new InterLocalityPicker(emptyList);
   }
 
-
   @Test
   public void negativeWeight() {
     thrown.expect(IllegalArgumentException.class);
@@ -150,7 +149,6 @@ public class InterLocalityPickerTest {
     WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(0, childPicker1);
     WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
     WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(0, childPicker3);
-
 
     InterLocalityPicker xdsPicker = new InterLocalityPicker(
         Arrays.asList(
