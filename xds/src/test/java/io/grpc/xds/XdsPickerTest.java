@@ -123,6 +123,18 @@ public class XdsPickerTest {
   }
 
   @Test
+  public void negativeWeight() {
+    List<String> localities = Arrays.asList("l1", "l2");
+    List<Integer> weights = Arrays.asList(1, -2);
+    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
+    subChannelPickers.put("l1", subPicker1);
+    subChannelPickers.put("l2", subPicker2);
+
+    thrown.expect(IllegalArgumentException.class);
+    new XdsPicker<String>(localities, weights, subChannelPickers);
+  }
+
+  @Test
   public void missingPicker() {
     List<String> localities = Arrays.asList("l1", "l2");
     List<Integer> weights = Arrays.asList(1, 2);
