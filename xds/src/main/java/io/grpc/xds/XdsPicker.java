@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 
 final class XdsPicker<LocalityT> extends SubchannelPicker {
 
@@ -41,7 +42,17 @@ final class XdsPicker<LocalityT> extends SubchannelPicker {
       List<LocalityT> localities,
       List<Integer> weights,
       Map<LocalityT, SubchannelPicker> childPickers) {
-    this(localities, weights, childPickers, new Random());
+    this(localities, weights, childPickers, ThreadSafeRadom.instance);
+  }
+
+  private static final class ThreadSafeRadom extends Random {
+    static final long serialVersionUID = 145234;
+    static final Random instance = new ThreadSafeRadom();
+
+    @Override
+    public int nextInt(int bound) {
+      return ThreadLocalRandom.current().nextInt();
+    }
   }
 
   @VisibleForTesting
