@@ -113,7 +113,7 @@ public class InterLocalityPickerTest {
   }
 
   @Test
-  public void pickWithFakeWrrAlgorithm() {
+  public void pickWithFakeRandom() {
     WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
     WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(15, childPicker1);
     WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
