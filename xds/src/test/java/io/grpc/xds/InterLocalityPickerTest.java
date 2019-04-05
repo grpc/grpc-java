@@ -143,4 +143,33 @@ public class InterLocalityPickerTest {
     fakeRandom.nextInt = 24;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
   }
+
+  @Test
+  public void allZeroWeights() {
+    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
+    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(0, childPicker1);
+    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
+    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(0, childPicker3);
+
+
+    InterLocalityPicker xdsPicker = new InterLocalityPicker(
+        Arrays.asList(
+            weightedChildPicker0,
+            weightedChildPicker1,
+            weightedChildPicker2,
+            weightedChildPicker3),
+        fakeRandom);
+
+    fakeRandom.nextInt = 0;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult0);
+
+    fakeRandom.nextInt = 1;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+
+    fakeRandom.nextInt = 2;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult2);
+
+    fakeRandom.nextInt = 3;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+  }
 }
