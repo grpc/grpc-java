@@ -32,7 +32,7 @@ import java.util.Random;
 final class XdsPicker<LocalityT> extends SubchannelPicker {
 
   private final List<LocalityT> localities;
-  private final int[] accumulatedWeights;
+  private final List<Integer> weights;
   private final Map<LocalityT, SubchannelPicker> childPickers;
   private final Random random;
   private final int totalWeight;
@@ -50,32 +50,33 @@ final class XdsPicker<LocalityT> extends SubchannelPicker {
       List<Integer> weights,
       Map<LocalityT, SubchannelPicker> childPickers,
       Random random) {
-    checkArgument(
-        !checkNotNull(localities, "localities in null").isEmpty(),
-        "localities list is empty");
-    checkArgument(
-        checkNotNull(weights, "weights in null").size() == localities.size(),
-        "localities and weights are of different sizes");
 
+    checkNotNull(localities, "localities in null");
+    checkArgument(
+        !localities.isEmpty(),
+        "localities list is empty");
     this.localities = ImmutableList.copyOf(localities);
 
-
-    accumulatedWeights = new int[weights.size()];
+    checkNotNull(weights, "weights in null");
+    checkArgument(
+        weights.size() == localities.size(),
+        "localities and weights are of different sizes");
     int totalWeight = 0;
     for (int i = 0; i < weights.size(); i++) {
       checkArgument(weights.get(i) >= 0, "weights[%s] is negative", i);
       totalWeight += weights.get(i);
-      accumulatedWeights[i] = totalWeight;
     }
     this.totalWeight = totalWeight;
+    this.weights = ImmutableList.copyOf(weights);
 
-    this.childPickers = ImmutableMap.copyOf(childPickers);
+    checkNotNull(childPickers, "childPickers is null");
     for (LocalityT locality : localities) {
       checkArgument(
           childPickers.containsKey(locality),
           "childPickers does not contain picker for locality %s",
           locality);
     }
+    this.childPickers = ImmutableMap.copyOf(childPickers);
 
     this.random = random;
   }
@@ -91,8 +92,10 @@ final class XdsPicker<LocalityT> extends SubchannelPicker {
 
       // Find the first idx such that rand < accumulatedWeights[idx]
       // Not using Arrays.binarySearch for better readability.
-      for (int idx = 0; idx < accumulatedWeights.length; idx++) {
-        if (rand < accumulatedWeights[idx]) {
+      int accumulatedWeight = 0;
+      for (int idx = 0; idx < weights.size(); idx++) {
+        accumulatedWeight += weights.get(idx);
+        if (rand < accumulatedWeight) {
           locality = localities.get(idx);
           break;
         }
