@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
-final class XdsPicker<LocalityT> extends SubchannelPicker {
+final class InterLocalityPicker<LocalityT> extends SubchannelPicker {
 
   private final List<LocalityT> localities;
   private final List<Integer> weights;
@@ -38,7 +38,7 @@ final class XdsPicker<LocalityT> extends SubchannelPicker {
   private final Random random;
   private final int totalWeight;
 
-  XdsPicker(
+  InterLocalityPicker(
       List<LocalityT> localities,
       List<Integer> weights,
       Map<LocalityT, SubchannelPicker> childPickers) {
@@ -56,7 +56,7 @@ final class XdsPicker<LocalityT> extends SubchannelPicker {
   }
 
   @VisibleForTesting
-  XdsPicker(
+  InterLocalityPicker(
       List<LocalityT> localities,
       List<Integer> weights,
       Map<LocalityT, SubchannelPicker> childPickers,

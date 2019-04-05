@@ -40,7 +40,7 @@ import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
 /**
- * Tests for {@link XdsPicker}.
+ * Tests for {@link InterLocalityPicker}.
  */
 @RunWith(JUnit4.class)
 public class XdsPickerTest {
@@ -106,7 +106,7 @@ public class XdsPickerTest {
     Map<String, SubchannelPicker> emptyPickers = new HashMap<>();
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker<String>(emptyList, weights, emptyPickers);
+    new InterLocalityPicker<String>(emptyList, weights, emptyPickers);
   }
 
   @Test
@@ -119,7 +119,7 @@ public class XdsPickerTest {
     subChannelPickers.put("l3", subPicker3);
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker<String>(localities, weights, subChannelPickers);
+    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
   }
 
   @Test
@@ -131,7 +131,7 @@ public class XdsPickerTest {
     subChannelPickers.put("l2", subPicker2);
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker<String>(localities, weights, subChannelPickers);
+    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
   }
 
   @Test
@@ -143,7 +143,7 @@ public class XdsPickerTest {
     subChannelPickers.put("l3", subPicker1);
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker<String>(localities, weights, subChannelPickers);
+    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
   }
 
   @Test
@@ -156,8 +156,8 @@ public class XdsPickerTest {
     subChannelPickers.put("l2", subPicker2);
     subChannelPickers.put("l3", subPicker3);
 
-    XdsPicker<String> xdsPicker =
-        new XdsPicker<String>(localities, weights, subChannelPickers, fakeRandom);
+    InterLocalityPicker<String> xdsPicker =
+        new InterLocalityPicker<String>(localities, weights, subChannelPickers, fakeRandom);
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
