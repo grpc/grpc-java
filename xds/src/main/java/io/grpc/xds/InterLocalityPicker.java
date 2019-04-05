@@ -30,7 +30,7 @@ import java.util.concurrent.ThreadLocalRandom;
 final class InterLocalityPicker extends SubchannelPicker {
 
   private final List<WeightedChildPicker> weightedChildPickers;
-  private final Random random;
+  private final ThreadSafeRandom random;
   private final int totalWeight;
 
   static final class WeightedChildPicker {
@@ -54,12 +54,12 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
   }
 
-  interface Random {
+  interface ThreadSafeRandom {
     int nextInt(int bound);
   }
 
-  private static final class ThreadSafeRadom implements Random {
-    static final Random instance = new ThreadSafeRadom();
+  private static final class ThreadSafeRadomImpl implements ThreadSafeRandom {
+    static final ThreadSafeRandom instance = new ThreadSafeRadomImpl();
 
     @Override
     public int nextInt(int bound) {
@@ -68,11 +68,11 @@ final class InterLocalityPicker extends SubchannelPicker {
   }
 
   InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
-    this(weightedChildPickers, ThreadSafeRadom.instance);
+    this(weightedChildPickers, ThreadSafeRadomImpl.instance);
   }
 
   @VisibleForTesting
-  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, Random random) {
+  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, ThreadSafeRandom random) {
     checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(!weightedChildPickers.isEmpty(), "weightedChildPickers is empty");
 
