@@ -110,6 +110,19 @@ public class XdsPickerTest {
   }
 
   @Test
+  public void localitiesAndWeightsSizeMismatch() {
+    List<String> localities = Arrays.asList("l1", "l2", "l3");
+    List<Integer> weights = Arrays.asList(1, 2);
+    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
+    subChannelPickers.put("l1", subPicker1);
+    subChannelPickers.put("l2", subPicker2);
+    subChannelPickers.put("l3", subPicker3);
+
+    thrown.expect(IllegalArgumentException.class);
+    new XdsPicker<String>(localities, weights, subChannelPickers);
+  }
+
+  @Test
   public void missingPicker() {
     List<String> localities = Arrays.asList("l1", "l2");
     List<Integer> weights = Arrays.asList(1, 2);
