@@ -19,120 +19,87 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
-import javax.annotation.concurrent.Immutable;
+import java.util.Random;
 
-abstract class XdsPicker extends SubchannelPicker {
+final class XdsPicker<LocalityT> extends SubchannelPicker {
 
-  protected final List<LocalityState> wrrList;
-  private final Map<Locality, SubchannelPicker> childPickers;
+  private final List<LocalityT> localities;
+  private final int[] accumulatedWeights;
+  private final Map<LocalityT, SubchannelPicker> childPickers;
+  private final Random random;
+  private final int totalWeight;
 
-  abstract Locality pickLocality();
+  XdsPicker(
+      List<LocalityT> localities,
+      List<Integer> weights,
+      Map<LocalityT, SubchannelPicker> childPickers) {
+    this(localities, weights, childPickers, new Random());
+  }
 
-  XdsPicker(List<LocalityState> wrrList, Map<Locality, SubchannelPicker> childPickers) {
-    checkArgument(!checkNotNull(wrrList, "wrrList in null").isEmpty(), "wrrList is empty");
-    for (LocalityState localityState : wrrList) {
-      checkArgument(
-          childPickers.containsKey(localityState.locality),
-          "childPickers does not contain picker for locality %s",
-          localityState.locality);
+  @VisibleForTesting
+  XdsPicker(
+      List<LocalityT> localities,
+      List<Integer> weights,
+      Map<LocalityT, SubchannelPicker> childPickers,
+      Random random) {
+    checkArgument(
+        !checkNotNull(localities, "localities in null").isEmpty(),
+        "localities list is empty");
+    checkArgument(
+        checkNotNull(weights, "weights in null").size() == localities.size(),
+        "localities and weights are of different sizes");
+
+    this.localities = ImmutableList.copyOf(localities);
+
+
+    accumulatedWeights = new int[weights.size()];
+    int totalWeight = 0;
+    for (int i = 0; i < weights.size(); i++) {
+      checkArgument(weights.get(i) >= 0, "weights[%s] is negative", i);
+      totalWeight += weights.get(i);
+      accumulatedWeights[i] = totalWeight;
     }
-    this.wrrList = ImmutableList.copyOf(wrrList);
+    this.totalWeight = totalWeight;
+
     this.childPickers = ImmutableMap.copyOf(childPickers);
+    for (LocalityT locality : localities) {
+      checkArgument(
+          childPickers.containsKey(locality),
+          "childPickers does not contain picker for locality %s",
+          locality);
+    }
+
+    this.random = random;
   }
 
   @Override
   public final PickResult pickSubchannel(PickSubchannelArgs args) {
-    Locality locality = pickLocality();
+    LocalityT locality = null;
+
+    if (totalWeight == 0) {
+      locality = localities.get(random.nextInt(localities.size()));
+    } else {
+      int rand = random.nextInt(totalWeight);
+
+      // Find the first idx such that rand < accumulatedWeights[idx]
+      // Not using Arrays.binarySearch for better readability.
+      for (int idx = 0; idx < accumulatedWeights.length; idx++) {
+        if (rand < accumulatedWeights[idx]) {
+          locality = localities.get(idx);
+          break;
+        }
+      }
+      checkNotNull(locality, "locality not found");
+    }
+
     return childPickers.get(locality).pickSubchannel(args);
-  }
-
-
-  @Immutable
-  static final class Locality {
-    final String region;
-    final String zone;
-    final String subzone;
-
-    Locality(String region, String zone, String subzone) {
-      this.region = region;
-      this.zone = zone;
-      this.subzone = subzone;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      Locality locality = (Locality) o;
-      return Objects.equal(region, locality.region)
-          && Objects.equal(zone, locality.zone)
-          && Objects.equal(subzone, locality.subzone);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(region, zone, subzone);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("region", region)
-          .add("zone", zone)
-          .add("subzone", subzone)
-          .toString();
-    }
-  }
-
-  /**
-   * State about the locality for WRR locality picker.
-   */
-  @Immutable
-  static final class LocalityState {
-    final Locality locality;
-    final int weight;
-    @Nullable // null means the subchannel state is not updated at the moment yet
-    @SuppressWarnings("unused") // TODO: make use of it for WrrAlgorithmImpl
-    final ConnectivityState state;
-
-    LocalityState(Locality locality, int weight, @Nullable ConnectivityState state) {
-      this.locality = locality;
-      this.weight = weight;
-      this.state = state;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      LocalityState that = (LocalityState) o;
-      return weight == that.weight
-          && Objects.equal(locality, that.locality)
-          && state == that.state;
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(locality, weight, state);
-    }
   }
 }

@@ -24,14 +24,12 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
-import io.grpc.xds.XdsPicker.Locality;
-import io.grpc.xds.XdsPicker.LocalityState;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -58,6 +56,7 @@ public class XdsPickerTest {
   private final PickResult pickResult0 = PickResult.withNoResult();
   private final PickResult pickResult1 = PickResult.withDrop(Status.UNAVAILABLE);
   private final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
+  private final PickResult pickResult3 = PickResult.withSubchannel(mock(Subchannel.class));
 
   private final SubchannelPicker subPicker0 = new SubchannelPicker() {
     @Override
@@ -80,62 +79,74 @@ public class XdsPickerTest {
     }
   };
 
-  private static final class FakeXdsPicker extends XdsPicker {
-
-    FakeXdsPicker(List<LocalityState> wwrList, Map<Locality, SubchannelPicker> childPickers) {
-      super(wwrList, childPickers);
+  private final SubchannelPicker subPicker3 = new SubchannelPicker() {
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return pickResult3;
     }
+  };
 
-    int nextIdx;
+  private static final class FakeRandom extends Random {
+    int nextInt;
 
     @Override
-    Locality pickLocality() {
-      return super.wrrList.get(nextIdx).locality;
+    public int nextInt(int bound) {
+      assertThat(nextInt).isAtLeast(0);
+      assertThat(nextInt).isLessThan(bound);
+      return nextInt;
     }
   }
 
+  private final FakeRandom fakeRandom = new FakeRandom();
 
   @Test
   public void emptyList() {
-    List<LocalityState> emptyList = new ArrayList<>();
-    Map<Locality, SubchannelPicker> emptyPickers = new HashMap<>();
+    List<String> emptyList = new ArrayList<>();
+    List<Integer> weights = new ArrayList<>();
+    Map<String, SubchannelPicker> emptyPickers = new HashMap<>();
 
     thrown.expect(IllegalArgumentException.class);
-    new FakeXdsPicker(emptyList, emptyPickers);
+    new XdsPicker<String>(emptyList, weights, emptyPickers);
   }
 
   @Test
   public void missingPicker() {
-    List<LocalityState> localityStates = Arrays.asList(
-        new LocalityState(new Locality("r1", "z1", "sz1"), 0, null),
-        new LocalityState(new Locality("r2", "z2", "sz2"), 0, null));
-    Map<Locality, SubchannelPicker> subChannelPickers = new HashMap<>();
-    subChannelPickers.put(new Locality("r1", "z1", "sz1"), subPicker0);
-    subChannelPickers.put(new Locality("r2", "z3", "sz2"), subPicker1);
+    List<String> localities = Arrays.asList("l1", "l2");
+    List<Integer> weights = Arrays.asList(1, 2);
+    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
+    subChannelPickers.put("l1", subPicker0);
+    subChannelPickers.put("l3", subPicker1);
 
     thrown.expect(IllegalArgumentException.class);
-    new FakeXdsPicker(localityStates, subChannelPickers);
+    new XdsPicker<String>(localities, weights, subChannelPickers);
   }
 
   @Test
   public void pickWithFakeWrrAlgorithm() {
-    List<LocalityState> wrrList = Arrays.asList(
-        new LocalityState(new Locality("r0", "z0", "sz0"), 0, null),
-        new LocalityState(new Locality("r1", "z1", "sz1"), 0, null),
-        new LocalityState(new Locality("r2", "z2", "sz2"), 0, null));
-    Map<Locality, SubchannelPicker> subChannelPickers = new LinkedHashMap<>();
-    subChannelPickers.put(new Locality("r1", "z1", "sz1"), subPicker1);
-    subChannelPickers.put(new Locality("r0", "z0", "sz0"), subPicker0);
-    subChannelPickers.put(new Locality("r2", "z2", "sz2"), subPicker2);
-    FakeXdsPicker xdsPicker = new FakeXdsPicker(wrrList, subChannelPickers);
+    List<String> localities = Arrays.asList("l0", "l1", "l2", "l3");
+    List<Integer> weights = Arrays.asList(0, 15, 0, 10);
+    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
+    subChannelPickers.put("l0", subPicker0);
+    subChannelPickers.put("l1", subPicker1);
+    subChannelPickers.put("l2", subPicker2);
+    subChannelPickers.put("l3", subPicker3);
 
-    xdsPicker.nextIdx = 1;
+    XdsPicker<String> xdsPicker =
+        new XdsPicker<String>(localities, weights, subChannelPickers, fakeRandom);
+
+    fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
 
-    xdsPicker.nextIdx = 2;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult2);
+    fakeRandom.nextInt = 1;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
 
-    xdsPicker.nextIdx = 0;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult0);
+    fakeRandom.nextInt = 14;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+
+    fakeRandom.nextInt = 15;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+
+    fakeRandom.nextInt = 24;
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
   }
 }
