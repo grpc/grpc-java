@@ -89,13 +89,6 @@ task stresstest_client(type: CreateStartScripts) {
     ]
 }
 
-task grpclb_test_client(type: CreateStartScripts) {
-    mainClassName = "io.grpc.testing.integration.GrpclbTestClient"
-    applicationName = "grpclb-test-client"
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = jar.outputs.files + configurations.runtime
-}
-
 task http2_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.Http2Client"
     applicationName = "http2-client"
@@ -108,7 +101,6 @@ applicationDistribution.into("bin") {
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
-    from(grpclb_test_client)
     from(http2_client)
     fileMode = 0755
 }
