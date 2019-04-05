@@ -43,7 +43,7 @@ import org.mockito.junit.MockitoRule;
  * Tests for {@link InterLocalityPicker}.
  */
 @RunWith(JUnit4.class)
-public class XdsPickerTest {
+public class InterLocalityPickerTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
