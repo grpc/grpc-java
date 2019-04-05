@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.LoadBalancer.PickResult;
@@ -27,7 +26,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
 import io.grpc.xds.XdsPicker.Locality;
 import io.grpc.xds.XdsPicker.LocalityState;
-import io.grpc.xds.XdsPicker.WrrAlgorithm;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -54,8 +52,6 @@ public class XdsPickerTest {
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  @Mock
-  private WrrAlgorithm wrrAlgorithm;
   @Mock
   private PickSubchannelArgs pickSubchannelArgs;
 
@@ -84,6 +80,20 @@ public class XdsPickerTest {
     }
   };
 
+  private static final class FakeXdsPicker extends XdsPicker {
+
+    FakeXdsPicker(List<LocalityState> wwrList, Map<Locality, SubchannelPicker> childPickers) {
+      super(wwrList, childPickers);
+    }
+
+    int nextIdx;
+
+    @Override
+    Locality pickLocality() {
+      return super.wrrList.get(nextIdx).locality;
+    }
+  }
+
 
   @Test
   public void emptyList() {
@@ -91,7 +101,7 @@ public class XdsPickerTest {
     Map<Locality, SubchannelPicker> emptyPickers = new HashMap<>();
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker(emptyList, emptyPickers);
+    new FakeXdsPicker(emptyList, emptyPickers);
   }
 
   @Test
@@ -104,11 +114,11 @@ public class XdsPickerTest {
     subChannelPickers.put(new Locality("r2", "z3", "sz2"), subPicker1);
 
     thrown.expect(IllegalArgumentException.class);
-    new XdsPicker(localityStates, subChannelPickers);
+    new FakeXdsPicker(localityStates, subChannelPickers);
   }
 
   @Test
-  public void pickWithFakeAlgorithm() {
+  public void pickWithFakeWrrAlgorithm() {
     List<LocalityState> wrrList = Arrays.asList(
         new LocalityState(new Locality("r0", "z0", "sz0"), 0, null),
         new LocalityState(new Locality("r1", "z1", "sz1"), 0, null),
@@ -117,15 +127,15 @@ public class XdsPickerTest {
     subChannelPickers.put(new Locality("r1", "z1", "sz1"), subPicker1);
     subChannelPickers.put(new Locality("r0", "z0", "sz0"), subPicker0);
     subChannelPickers.put(new Locality("r2", "z2", "sz2"), subPicker2);
-    XdsPicker xdsPicker = new XdsPicker(wrrList, subChannelPickers, wrrAlgorithm);
+    FakeXdsPicker xdsPicker = new FakeXdsPicker(wrrList, subChannelPickers);
 
-    doReturn(wrrList.get(1).locality).when(wrrAlgorithm).pickLocality(wrrList);
+    xdsPicker.nextIdx = 1;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
 
-    doReturn(wrrList.get(2).locality).when(wrrAlgorithm).pickLocality(wrrList);
+    xdsPicker.nextIdx = 2;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult2);
 
-    doReturn(wrrList.get(0).locality).when(wrrAlgorithm).pickLocality(wrrList);
+    xdsPicker.nextIdx = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult0);
   }
 }

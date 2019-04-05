@@ -19,9 +19,10 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -31,23 +32,14 @@ import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
-class XdsPicker extends SubchannelPicker {
+abstract class XdsPicker extends SubchannelPicker {
 
-  private static final WrrAlgorithm wrrAlgo = new WrrAlgorithmImpl();
-
-  private final List<LocalityState> wrrList;
-  private final WrrAlgorithm wrrAlgorithm;
+  protected final List<LocalityState> wrrList;
   private final Map<Locality, SubchannelPicker> childPickers;
 
-  XdsPicker(List<LocalityState> wrrList, Map<Locality, SubchannelPicker> childPickers) {
-    this(wrrList, childPickers, wrrAlgo);
-  }
+  abstract Locality pickLocality();
 
-  @VisibleForTesting
-  XdsPicker(
-      List<LocalityState> wrrList,
-      Map<Locality, SubchannelPicker> childPickers,
-      WrrAlgorithm wrrAlgorithm) {
+  XdsPicker(List<LocalityState> wrrList, Map<Locality, SubchannelPicker> childPickers) {
     checkArgument(!checkNotNull(wrrList, "wrrList in null").isEmpty(), "wrrList is empty");
     for (LocalityState localityState : wrrList) {
       checkArgument(
@@ -55,30 +47,16 @@ class XdsPicker extends SubchannelPicker {
           "childPickers does not contain picker for locality %s",
           localityState.locality);
     }
-    this.wrrList = wrrList;
-    this.childPickers = childPickers;
-    this.wrrAlgorithm = wrrAlgorithm;
+    this.wrrList = ImmutableList.copyOf(wrrList);
+    this.childPickers = ImmutableMap.copyOf(childPickers);
   }
 
   @Override
-  public PickResult pickSubchannel(PickSubchannelArgs args) {
-    Locality locality = wrrAlgorithm.pickLocality(wrrList);
+  public final PickResult pickSubchannel(PickSubchannelArgs args) {
+    Locality locality = pickLocality();
     return childPickers.get(locality).pickSubchannel(args);
   }
 
-  @VisibleForTesting // Interface of weighted Round-Robin algorithm that is convenient for test.
-  interface WrrAlgorithm {
-    Locality pickLocality(List<LocalityState> wrrList);
-  }
-
-  private static final class WrrAlgorithmImpl implements WrrAlgorithm {
-
-    @Override
-    public Locality pickLocality(List<LocalityState> wrrList) {
-      // TODO: impl
-      return wrrList.iterator().next().locality;
-    }
-  }
 
   @Immutable
   static final class Locality {
