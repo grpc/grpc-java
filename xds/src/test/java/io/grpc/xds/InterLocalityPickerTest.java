@@ -24,12 +24,10 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
+import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -58,35 +56,35 @@ public class InterLocalityPickerTest {
   private final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
   private final PickResult pickResult3 = PickResult.withSubchannel(mock(Subchannel.class));
 
-  private final SubchannelPicker subPicker0 = new SubchannelPicker() {
+  private final SubchannelPicker childPicker0 = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return pickResult0;
     }
   };
 
-  private final SubchannelPicker subPicker1 = new SubchannelPicker() {
+  private final SubchannelPicker childPicker1 = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return pickResult1;
     }
   };
 
-  private final SubchannelPicker subPicker2 = new SubchannelPicker() {
+  private final SubchannelPicker childPicker2 = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return pickResult2;
     }
   };
 
-  private final SubchannelPicker subPicker3 = new SubchannelPicker() {
+  private final SubchannelPicker childPicker3 = new SubchannelPicker() {
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       return pickResult3;
     }
   };
 
-  private static final class FakeRandom extends Random {
+  private static final class FakeRandom implements InterLocalityPicker.Random {
     int nextInt;
 
     @Override
@@ -101,63 +99,34 @@ public class InterLocalityPickerTest {
 
   @Test
   public void emptyList() {
-    List<String> emptyList = new ArrayList<>();
-    List<Integer> weights = new ArrayList<>();
-    Map<String, SubchannelPicker> emptyPickers = new HashMap<>();
+    List<WeightedChildPicker> emptyList = new ArrayList<>();
 
     thrown.expect(IllegalArgumentException.class);
-    new InterLocalityPicker<String>(emptyList, weights, emptyPickers);
+    new InterLocalityPicker(emptyList);
   }
 
-  @Test
-  public void localitiesAndWeightsSizeMismatch() {
-    List<String> localities = Arrays.asList("l1", "l2", "l3");
-    List<Integer> weights = Arrays.asList(1, 2);
-    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
-    subChannelPickers.put("l1", subPicker1);
-    subChannelPickers.put("l2", subPicker2);
-    subChannelPickers.put("l3", subPicker3);
-
-    thrown.expect(IllegalArgumentException.class);
-    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
-  }
 
   @Test
   public void negativeWeight() {
-    List<String> localities = Arrays.asList("l1", "l2");
-    List<Integer> weights = Arrays.asList(1, -2);
-    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
-    subChannelPickers.put("l1", subPicker1);
-    subChannelPickers.put("l2", subPicker2);
-
     thrown.expect(IllegalArgumentException.class);
-    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
-  }
-
-  @Test
-  public void missingPicker() {
-    List<String> localities = Arrays.asList("l1", "l2");
-    List<Integer> weights = Arrays.asList(1, 2);
-    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
-    subChannelPickers.put("l1", subPicker0);
-    subChannelPickers.put("l3", subPicker1);
-
-    thrown.expect(IllegalArgumentException.class);
-    new InterLocalityPicker<String>(localities, weights, subChannelPickers);
+    new WeightedChildPicker(-1, childPicker0);
   }
 
   @Test
   public void pickWithFakeWrrAlgorithm() {
-    List<String> localities = Arrays.asList("l0", "l1", "l2", "l3");
-    List<Integer> weights = Arrays.asList(0, 15, 0, 10);
-    Map<String, SubchannelPicker> subChannelPickers = new HashMap<>();
-    subChannelPickers.put("l0", subPicker0);
-    subChannelPickers.put("l1", subPicker1);
-    subChannelPickers.put("l2", subPicker2);
-    subChannelPickers.put("l3", subPicker3);
+    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
+    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(15, childPicker1);
+    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
+    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(10, childPicker3);
 
-    InterLocalityPicker<String> xdsPicker =
-        new InterLocalityPicker<String>(localities, weights, subChannelPickers, fakeRandom);
+
+    InterLocalityPicker xdsPicker = new InterLocalityPicker(
+        Arrays.asList(
+            weightedChildPicker0,
+            weightedChildPicker1,
+            weightedChildPicker2,
+            weightedChildPicker3),
+        fakeRandom);
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);

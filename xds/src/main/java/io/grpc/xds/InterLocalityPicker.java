@@ -21,32 +21,42 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
-import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 
-final class InterLocalityPicker<LocalityT> extends SubchannelPicker {
+final class InterLocalityPicker extends SubchannelPicker {
 
-  private final List<LocalityT> localities;
-  private final List<Integer> weights;
-  private final Map<LocalityT, SubchannelPicker> childPickers;
+  private final List<WeightedChildPicker> weightedChildPickers;
   private final Random random;
   private final int totalWeight;
 
-  InterLocalityPicker(
-      List<LocalityT> localities,
-      List<Integer> weights,
-      Map<LocalityT, SubchannelPicker> childPickers) {
-    this(localities, weights, childPickers, ThreadSafeRadom.instance);
+  static final class WeightedChildPicker {
+    final int weight;
+    final SubchannelPicker childPicker;
+
+    WeightedChildPicker(int weight, SubchannelPicker childPicker) {
+      checkArgument(weight >= 0, "weight is negative");
+      this.weight = weight;
+      this.childPicker = childPicker;
+    }
+
+    int getWeight() {
+      return weight;
+    }
+
+    SubchannelPicker getPicker() {
+      return childPicker;
+    }
   }
 
-  private static final class ThreadSafeRadom extends Random {
-    static final long serialVersionUID = 145234;
+  interface Random {
+    int nextInt(int bound);
+  }
+
+  private static final class ThreadSafeRadom implements Random {
     static final Random instance = new ThreadSafeRadom();
 
     @Override
@@ -55,65 +65,52 @@ final class InterLocalityPicker<LocalityT> extends SubchannelPicker {
     }
   }
 
+  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
+    this(weightedChildPickers, ThreadSafeRadom.instance);
+  }
+
   @VisibleForTesting
-  InterLocalityPicker(
-      List<LocalityT> localities,
-      List<Integer> weights,
-      Map<LocalityT, SubchannelPicker> childPickers,
-      Random random) {
+  InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers, Random random) {
 
-    checkNotNull(localities, "localities in null");
+    checkNotNull(weightedChildPickers, "weightedChildPickers in null");
     checkArgument(
-        !localities.isEmpty(),
-        "localities list is empty");
-    this.localities = ImmutableList.copyOf(localities);
+        !weightedChildPickers.isEmpty(),
+        "weightedChildPickers is empty");
+    this.weightedChildPickers = ImmutableList.copyOf(weightedChildPickers);
 
-    checkNotNull(weights, "weights in null");
-    checkArgument(
-        weights.size() == localities.size(),
-        "localities and weights are of different sizes");
     int totalWeight = 0;
-    for (int i = 0; i < weights.size(); i++) {
-      checkArgument(weights.get(i) >= 0, "weights[%s] is negative", i);
-      totalWeight += weights.get(i);
+    for (WeightedChildPicker weightedChildPicker : weightedChildPickers) {
+      int weight = weightedChildPicker.getWeight();
+      totalWeight += weight;
     }
     this.totalWeight = totalWeight;
-    this.weights = ImmutableList.copyOf(weights);
-
-    checkNotNull(childPickers, "childPickers is null");
-    for (LocalityT locality : localities) {
-      checkArgument(
-          childPickers.containsKey(locality),
-          "childPickers does not contain picker for locality %s",
-          locality);
-    }
-    this.childPickers = ImmutableMap.copyOf(childPickers);
 
     this.random = random;
   }
 
   @Override
   public final PickResult pickSubchannel(PickSubchannelArgs args) {
-    LocalityT locality = null;
+    SubchannelPicker childPicker = null;
 
     if (totalWeight == 0) {
-      locality = localities.get(random.nextInt(localities.size()));
+      childPicker =
+          weightedChildPickers.get(random.nextInt(weightedChildPickers.size())).getPicker();
     } else {
       int rand = random.nextInt(totalWeight);
 
       // Find the first idx such that rand < accumulatedWeights[idx]
       // Not using Arrays.binarySearch for better readability.
       int accumulatedWeight = 0;
-      for (int idx = 0; idx < weights.size(); idx++) {
-        accumulatedWeight += weights.get(idx);
+      for (int idx = 0; idx < weightedChildPickers.size(); idx++) {
+        accumulatedWeight += weightedChildPickers.get(idx).getWeight();
         if (rand < accumulatedWeight) {
-          locality = localities.get(idx);
+          childPicker = weightedChildPickers.get(idx).getPicker();
           break;
         }
       }
-      checkNotNull(locality, "locality not found");
+      checkNotNull(childPicker, "childPicker not found");
     }
 
-    return childPickers.get(locality).pickSubchannel(args);
+    return childPicker.pickSubchannel(args);
   }
 }
