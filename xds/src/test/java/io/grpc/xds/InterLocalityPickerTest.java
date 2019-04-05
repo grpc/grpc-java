@@ -119,7 +119,6 @@ public class InterLocalityPickerTest {
     WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
     WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(10, childPicker3);
 
-
     InterLocalityPicker xdsPicker = new InterLocalityPicker(
         Arrays.asList(
             weightedChildPicker0,
