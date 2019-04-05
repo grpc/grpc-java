@@ -51,7 +51,7 @@ final class InterLocalityPicker<LocalityT> extends SubchannelPicker {
 
     @Override
     public int nextInt(int bound) {
-      return ThreadLocalRandom.current().nextInt();
+      return ThreadLocalRandom.current().nextInt(bound);
     }
   }
 
