@@ -87,9 +87,12 @@ public class InterLocalityPickerTest {
 
   private static final class FakeRandom implements ThreadSafeRandom {
     int nextInt;
+    int bound;
 
     @Override
     public int nextInt(int bound) {
+      this.bound = bound;
+
       assertThat(nextInt).isAtLeast(0);
       assertThat(nextInt).isLessThan(bound);
       return nextInt;
@@ -129,18 +132,23 @@ public class InterLocalityPickerTest {
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 1;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 14;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 15;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 24;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(fakeRandom.bound).isEqualTo(25);
   }
 
   @Test
@@ -160,14 +168,18 @@ public class InterLocalityPickerTest {
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult0);
+    assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 1;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 2;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult2);
+    assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 3;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(fakeRandom.bound).isEqualTo(4);
   }
 }
