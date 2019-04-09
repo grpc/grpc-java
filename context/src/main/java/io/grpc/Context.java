@@ -131,9 +131,9 @@ public class Context {
     static {
       AtomicReference<Throwable> deferredStorageFailure = new AtomicReference<>();
       storage = createStorage(deferredStorageFailure);
-      Throwable failure;
+      Throwable failure = deferredStorageFailure.get();
       // Logging must happen after storage has been set, as loggers may use Context.
-      if ((failure = deferredStorageFailure.get()) != null) {
+      if (failure!= null) {
         log.log(Level.FINE, "Storage override doesn't exist. Using default", failure);
       }
     }
