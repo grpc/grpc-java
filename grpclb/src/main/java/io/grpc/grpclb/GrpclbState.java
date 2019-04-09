@@ -326,7 +326,7 @@ final class GrpclbState {
         // We close the subchannels through subchannelPool instead of helper just for convenience of
         // testing.
         for (Subchannel subchannel : subchannels.values()) {
-          returnSubchannelToPool(subchannel);
+          subchannelPool.returnSubchannel(subchannel);
         }
         subchannelPool.clear();
         break;
@@ -348,10 +348,6 @@ final class GrpclbState {
       maybeUpdatePicker(
           TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
     }
-  }
-
-  private void returnSubchannelToPool(Subchannel subchannel) {
-    subchannelPool.returnSubchannel(subchannel, subchannel.getAttributes().get(STATE_INFO).get());
   }
 
   @VisibleForTesting
@@ -403,7 +399,7 @@ final class GrpclbState {
         for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
           List<EquivalentAddressGroup> eagList = entry.getKey();
           if (!newSubchannelMap.containsKey(eagList)) {
-            returnSubchannelToPool(entry.getValue());
+            subchannelPool.returnSubchannel(entry.getValue());
           }
         }
         subchannels = Collections.unmodifiableMap(newSubchannelMap);

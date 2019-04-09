@@ -322,7 +322,7 @@ public class GrpclbLoadBalancerTest {
       }
       // GRPCLB manages subchannels only through subchannelPool
       for (Subchannel subchannel : pooledSubchannelTracker) {
-        verify(subchannelPool).returnSubchannel(same(subchannel), any(ConnectivityStateInfo.class));
+        verify(subchannelPool).returnSubchannel(same(subchannel));
         // Our mock subchannelPool never calls Subchannel.shutdown(), thus we can tell if
         // LoadBalancer has called it expectedly.
         verify(subchannel, never()).shutdown();
@@ -1080,8 +1080,7 @@ public class GrpclbLoadBalancerTest {
             new ServerEntry("127.0.0.1", 2010, "token0004"),  // Existing address with token changed
             new ServerEntry("127.0.0.1", 2030, "token0005"),  // New address appearing second time
             new ServerEntry("token0006"));  // drop
-    verify(subchannelPool, never())
-        .returnSubchannel(same(subchannel1), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(same(subchannel1));
 
     lbResponseObserver.onNext(buildLbResponse(backends2));
     assertThat(logs).containsExactly(
@@ -1097,10 +1096,9 @@ public class GrpclbLoadBalancerTest {
     logs.clear();
 
     // not in backends2, closed
-    verify(subchannelPool).returnSubchannel(same(subchannel1), same(errorState1));
+    verify(subchannelPool).returnSubchannel(same(subchannel1));
     // backends2[2], will be kept
-    verify(subchannelPool, never())
-        .returnSubchannel(same(subchannel2), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(same(subchannel2));
 
     inOrder.verify(subchannelPool, never()).takeOrCreateSubchannel(
         eq(new EquivalentAddressGroup(backends2.get(2).addr, LB_BACKEND_ATTRS)),
@@ -1159,15 +1157,12 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel3, getLoadRecorder(), "token0003"),
         new BackendEntry(subchannel2, getLoadRecorder(), "token0004"),
         new BackendEntry(subchannel3, getLoadRecorder(), "token0005")).inOrder();
-    verify(subchannelPool, never())
-        .returnSubchannel(same(subchannel3), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(same(subchannel3));
 
     // Update backends, with no entry
     lbResponseObserver.onNext(buildLbResponse(Collections.<ServerEntry>emptyList()));
-    verify(subchannelPool)
-        .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(READY)));
-    verify(subchannelPool)
-        .returnSubchannel(same(subchannel3), eq(ConnectivityStateInfo.forNonError(READY)));
+    verify(subchannelPool).returnSubchannel(same(subchannel2));
+    verify(subchannelPool).returnSubchannel(same(subchannel3));
     inOrder.verify(helper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
     RoundRobinPicker picker10 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker10.dropList).isEmpty();
@@ -1836,8 +1831,7 @@ public class GrpclbLoadBalancerTest {
     verify(subchannelPool, never()).takeOrCreateSubchannel(
         any(EquivalentAddressGroup.class), any(Attributes.class),
         any(SubchannelStateListener.class));
-    verify(subchannelPool, never()).returnSubchannel(
-        any(Subchannel.class), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(any(Subchannel.class));
   }
 
   @SuppressWarnings("unchecked")
@@ -1916,8 +1910,7 @@ public class GrpclbLoadBalancerTest {
     verify(subchannelPool, never()).takeOrCreateSubchannel(
         any(EquivalentAddressGroup.class), any(Attributes.class),
         any(SubchannelStateListener.class));
-    verify(subchannelPool, never())
-        .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(any(Subchannel.class));
   }
 
   @Test
@@ -1962,8 +1955,7 @@ public class GrpclbLoadBalancerTest {
     assertEquals(2, mockSubchannels.size());
     Subchannel subchannel1 = mockSubchannels.poll();
     Subchannel subchannel2 = mockSubchannels.poll();
-    verify(subchannelPool, never())
-        .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
+    verify(subchannelPool, never()).returnSubchannel(any(Subchannel.class));
 
     // Switch to PICK_FIRST
     lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
@@ -1974,10 +1966,8 @@ public class GrpclbLoadBalancerTest {
 
     // GrpclbState will be shutdown, and a new one will be created
     assertThat(oobChannel.isShutdown()).isTrue();
-    verify(subchannelPool)
-        .returnSubchannel(same(subchannel1), eq(ConnectivityStateInfo.forNonError(IDLE)));
-    verify(subchannelPool)
-        .returnSubchannel(same(subchannel2), eq(ConnectivityStateInfo.forNonError(IDLE)));
+    verify(subchannelPool).returnSubchannel(same(subchannel1));
+    verify(subchannelPool).returnSubchannel(same(subchannel2));
 
     // A new LB stream is created
     assertEquals(1, fakeOobChannels.size());

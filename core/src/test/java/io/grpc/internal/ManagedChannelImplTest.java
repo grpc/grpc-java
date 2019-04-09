@@ -1105,7 +1105,6 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setServers(Arrays.asList(addressGroup))
-            .setAttributes(Attributes.EMPTY)
             .build());
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1257,7 +1256,6 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setServers(Arrays.asList(addressGroup))
-            .setAttributes(Attributes.EMPTY)
             .build());
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);

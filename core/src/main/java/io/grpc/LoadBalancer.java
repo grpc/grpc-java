@@ -715,6 +715,9 @@ public abstract class LoadBalancer {
       private Attributes attrs = Attributes.EMPTY;
       private SubchannelStateListener stateListener;
 
+      Builder() {
+      }
+
       /**
        * The addresses to connect to.  All addresses are considered equivalent and will be tried
        * in the order they are provided.
@@ -732,7 +735,7 @@ public abstract class LoadBalancer {
        */
       public Builder setAddresses(List<EquivalentAddressGroup> addrs) {
         checkArgument(!addrs.isEmpty(), "addrs is empty");
-        this.addrs = Collections.unmodifiableList(addrs);
+        this.addrs = Collections.unmodifiableList(new ArrayList<>(addrs));
         return this;
       }
       
