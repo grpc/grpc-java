@@ -465,8 +465,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   public Runnable start(Listener listener) {
     this.listener = Preconditions.checkNotNull(listener, "listener");
 
-    scheduler = SharedResourceHolder.get(TIMER_SERVICE);
     if (enableKeepAlive) {
+      scheduler = SharedResourceHolder.get(TIMER_SERVICE);
       keepAliveManager = new KeepAliveManager(
           new ClientKeepAlivePinger(this), scheduler, keepAliveTimeNanos, keepAliveTimeoutNanos,
           keepAliveWithoutCalls);
@@ -519,7 +519,6 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           latch.await();
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          return;
         }
         // Use closed source on failure so that the reader immediately shuts down.
         BufferedSource source = Okio.buffer(new Source() {
@@ -593,20 +592,15 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       }
     });
     // Schedule to send connection preface & settings before any other write.
-    ScheduledFuture<?> unused = scheduler.schedule(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          synchronized (lock) {
-            frameWriter.connectionPreface();
-            Settings settings = new Settings();
-            frameWriter.settings(settings);
-          }
-        } finally {
-          latch.countDown();
-        }
+    try {
+      synchronized (lock) {
+        frameWriter.connectionPreface();
+        Settings settings = new Settings();
+        frameWriter.settings(settings);
       }
-    }, 0, TimeUnit.MILLISECONDS);
+    } finally {
+      latch.countDown();
+    }
 
     serializingExecutor.execute(new Runnable() {
       @Override
@@ -941,9 +935,9 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
 
     if (keepAliveManager != null) {
       keepAliveManager.onTransportTermination();
+      // KeepAliveManager should stop using the scheduler after onTransportTermination gets called.
+      scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
     }
-    // KeepAliveManager should stop using the scheduler after onTransportTermination gets called.
-    scheduler = SharedResourceHolder.release(TIMER_SERVICE, scheduler);
 
     if (ping != null) {
       ping.failed(getPingFailure());
