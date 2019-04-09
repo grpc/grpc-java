@@ -133,7 +133,7 @@ public class Context {
       storage = createStorage(deferredStorageFailure);
       Throwable failure = deferredStorageFailure.get();
       // Logging must happen after storage has been set, as loggers may use Context.
-      if (failure!= null) {
+      if (failure != null) {
         log.log(Level.FINE, "Storage override doesn't exist. Using default", failure);
       }
     }
