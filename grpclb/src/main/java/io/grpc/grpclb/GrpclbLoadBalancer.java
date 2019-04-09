@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -52,6 +53,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
   private final TimeProvider time;
+  private final Stopwatch stopwatch;
   private final SubchannelPool subchannelPool;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -65,9 +67,11 @@ class GrpclbLoadBalancer extends LoadBalancer {
       Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
+      Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.helper = checkNotNull(helper, "helper");
     this.time = checkNotNull(time, "time provider");
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
     this.subchannelPool.init(helper);
@@ -76,8 +80,9 @@ class GrpclbLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> updatedServers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getServers();
+    Attributes attributes = resolvedAddresses.getAttributes();
     // LB addresses and backend addresses are treated separately
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
     List<EquivalentAddressGroup> newBackendServers = new ArrayList<>();
@@ -146,7 +151,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private void recreateStates() {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
-    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, backoffPolicyProvider);
+    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, stopwatch,
+        backoffPolicyProvider);
   }
 
   @Override

@@ -26,13 +26,13 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import io.grpc.Attributes;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Factory;
@@ -51,11 +51,9 @@ import io.grpc.health.v1.HealthGrpc;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.TimeProvider;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -77,13 +75,14 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
   private final Factory delegateFactory;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final TimeProvider time;
+  private final Supplier<Stopwatch> stopwatchSupplier;
 
   public HealthCheckingLoadBalancerFactory(
-      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider, TimeProvider time) {
+      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.delegateFactory = checkNotNull(delegateFactory, "delegateFactory");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.time = checkNotNull(time, "time");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
   @Override
@@ -161,13 +160,12 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
-    public void handleResolvedAddressGroups(
-        List<EquivalentAddressGroup> servers, Attributes attributes) {
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       Map<String, ?> serviceConfig =
-          attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+          resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
       helper.setHealthCheckedService(serviceName);
-      super.handleResolvedAddressGroups(servers, attributes);
+      super.handleResolvedAddresses(resolvedAddresses);
     }
 
     @Override
@@ -345,11 +343,11 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private class HcStream extends ClientCall.Listener<HealthCheckResponse> {
       private final ClientCall<HealthCheckRequest, HealthCheckResponse> call;
       private final String callServiceName;
-      private final long callCreationNanos;
+      private final Stopwatch stopwatch;
       private boolean callHasResponded;
 
       HcStream() {
-        callCreationNanos = time.currentTimeNanos();
+        stopwatch = stopwatchSupplier.get().start();
         callServiceName = serviceName;
         call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
       }
@@ -434,8 +432,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
           if (backoffPolicy == null) {
             backoffPolicy = backoffPolicyProvider.get();
           }
-          delayNanos =
-              callCreationNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
+          delayNanos = backoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
         if (delayNanos <= 0) {
           startRpc();

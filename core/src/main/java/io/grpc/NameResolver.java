@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import io.grpc.NameResolver.Helper.ConfigOrError;
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -75,15 +76,29 @@ public abstract class NameResolver {
    * @since 1.0.0
    */
   @Deprecated
-  public void start(Listener listener) {
-    throw new UnsupportedOperationException("Not implemented");
+  public void start(final Listener listener) {
+    if (listener instanceof Observer) {
+      start((Observer) listener);
+    } else {
+      start(new Observer() {
+          @Override
+          public void onError(Status error) {
+            listener.onError(error);
+          }
+
+          @Override
+          public void onResult(ResolutionResult resolutionResult) {
+            listener.onAddresses(resolutionResult.getServers(), resolutionResult.getAttributes());
+          }
+      });
+    }
   }
 
   /**
    * Starts the resolution.  This method will become abstract in 1.21.0.
    *
    * @param observer used to receive updates on the target
-   * @since 1.20.0
+   * @since 1.21.0
    */
   public void start(Observer observer) {
     start((Listener) observer);
@@ -141,6 +156,10 @@ public abstract class NameResolver {
     public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
         Attributes.Key.create("params-proxy-detector");
 
+    @Deprecated
+    private static final Attributes.Key<SynchronizationContext> PARAMS_SYNC_CONTEXT =
+        Attributes.Key.create("params-sync-context");
+
     /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
@@ -157,8 +176,24 @@ public abstract class NameResolver {
      */
     @Nullable
     @Deprecated
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
-      throw new UnsupportedOperationException("This method is going to be deleted");
+    public NameResolver newNameResolver(URI targetUri, final Attributes params) {
+      Helper helper = new Helper() {
+          @Override
+          public int getDefaultPort() {
+            return checkNotNull(params.get(PARAMS_DEFAULT_PORT), "default port not available");
+          }
+
+          @Override
+          public ProxyDetector getProxyDetector() {
+            return checkNotNull(params.get(PARAMS_PROXY_DETECTOR), "proxy detector not available");
+          }
+
+          @Override
+          public SynchronizationContext getSynchronizationContext() {
+            return checkNotNull(params.get(PARAMS_SYNC_CONTEXT), "sync context not available");
+          }
+        };
+      return newNameResolver(targetUri, helper);
     }
 
     /**
@@ -179,6 +214,7 @@ public abstract class NameResolver {
           Attributes.newBuilder()
               .set(PARAMS_DEFAULT_PORT, helper.getDefaultPort())
               .set(PARAMS_PROXY_DETECTOR, helper.getProxyDetector())
+              .set(PARAMS_SYNC_CONTEXT, helper.getSynchronizationContext())
               .build());
     }
 
@@ -231,7 +267,7 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
-   * @since 1.20.0
+   * @since 1.21.0
    */
   public abstract static class Observer implements Listener {
     /**
@@ -249,7 +285,7 @@ public abstract class NameResolver {
      * {@link ResolutionResult#getServers()} is empty, {@link #onError(Status)} will be called.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public abstract void onResult(ResolutionResult resolutionResult);
 
@@ -258,7 +294,7 @@ public abstract class NameResolver {
      * {@link NameResolver#refresh()} to re-attempt resolution.
      *
      * @param error a non-OK status
-     * @since 1.20.0
+     * @since 1.21.0
      */
     @Override
     public abstract void onError(Status error);
@@ -299,7 +335,7 @@ public abstract class NameResolver {
      * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
      * and {@link #refresh} are run from.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public SynchronizationContext getSynchronizationContext() {
       throw new UnsupportedOperationException("Not implemented");
@@ -316,7 +352,7 @@ public abstract class NameResolver {
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.
      * @since 1.20.0
      */
-    public ConfigOrError<?> parseServiceConfig(Map<String, ?> rawServiceConfig) {
+    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       throw new UnsupportedOperationException("should have been implemented");
     }
 
@@ -324,10 +360,9 @@ public abstract class NameResolver {
      * Represents either a successfully parsed service config, containing all necessary parts to be
      * later applied by the channel, or a Status containing the error encountered while parsing.
      *
-     * @param <T> The message type of the config.
      * @since 1.20.0
      */
-    public static final class ConfigOrError<T> {
+    public static final class ConfigOrError {
 
       private static final class UnknownConfig {
 
@@ -344,14 +379,14 @@ public abstract class NameResolver {
        * indicate that parsing of the service config is neither right nor wrong, but doesn't have
        * any meaning.
        */
-      public static final ConfigOrError<?> UNKNOWN_CONFIG =
+      public static final ConfigOrError UNKNOWN_CONFIG =
           ConfigOrError.fromConfig(new UnknownConfig());
 
       /**
        * Returns a {@link ConfigOrError} for the successfully parsed config.
        */
-      public static <T> ConfigOrError<T> fromConfig(T config) {
-        return new ConfigOrError<>(config);
+      public static ConfigOrError fromConfig(Object config) {
+        return new ConfigOrError(config);
       }
 
       /**
@@ -359,14 +394,14 @@ public abstract class NameResolver {
        *
        * @param status a non-OK status
        */
-      public static <T> ConfigOrError<T> fromError(Status status) {
-        return new ConfigOrError<>(status);
+      public static ConfigOrError fromError(Status status) {
+        return new ConfigOrError(status);
       }
 
       private final Status status;
-      private final T config;
+      private final Object config;
 
-      private ConfigOrError(T config) {
+      private ConfigOrError(Object config) {
         this.config = checkNotNull(config, "config");
         this.status = null;
       }
@@ -381,7 +416,7 @@ public abstract class NameResolver {
        * Returns config if exists, otherwise null.
        */
       @Nullable
-      public T getConfig() {
+      public Object getConfig() {
         return config;
       }
 
@@ -412,7 +447,7 @@ public abstract class NameResolver {
   /**
    * Represents the results from a Name Resolver.
    *
-   * @since 1.20.0
+   * @since 1.21.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ResolutionResult {
@@ -420,12 +455,12 @@ public abstract class NameResolver {
     @ResolutionResultAttr
     private final Attributes attributes;
     @Nullable
-    private final Object serviceConfig;
+    private final ConfigOrError serviceConfig;
 
     ResolutionResult(
         List<EquivalentAddressGroup> servers,
         @ResolutionResultAttr Attributes attributes,
-        Object serviceConfig) {
+        ConfigOrError serviceConfig) {
       this.servers = Collections.unmodifiableList(new ArrayList<>(servers));
       this.attributes = checkNotNull(attributes, "attributes");
       this.serviceConfig = serviceConfig;
@@ -434,25 +469,38 @@ public abstract class NameResolver {
     /**
      * Constructs a new builder of a name resolution result.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public static Builder newBuilder() {
       return new Builder();
     }
 
     /**
+     * Converts these results back to a builder.
+     *
+     * @since 1.21.0
+     */
+    public Builder toBuilder() {
+      return newBuilder()
+          .setServers(servers)
+          .setAttributes(attributes)
+          .setServiceConfig(serviceConfig);
+    }
+
+    /**
      * Gets the servers resolved by name resolution.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public List<EquivalentAddressGroup> getServers() {
       return servers;
     }
 
     /**
-     * Gets the attributes associated with the servers resolved by name resolution.
+     * Gets the attributes associated with the servers resolved by name resolution.  If there are
+     * no attributes, {@link Attributes#EMPTY} will be returned.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     @ResolutionResultAttr
     public Attributes getAttributes() {
@@ -462,10 +510,10 @@ public abstract class NameResolver {
     /**
      * Gets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     @Nullable
-    public Object getServiceConfig() {
+    public ConfigOrError getServiceConfig() {
       return serviceConfig;
     }
 
@@ -497,20 +545,21 @@ public abstract class NameResolver {
     /**
      * A builder for {@link ResolutionResult}.
      *
-     * @since 1.20.0
+     * @since 1.21.0
      */
     public static final class Builder {
       private List<EquivalentAddressGroup> servers = Collections.emptyList();
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
-      private Object serviceConfig;
+      private ConfigOrError serviceConfig;
+      //  Make sure to update #toBuilder above!
 
       Builder() {}
 
       /**
-       * Sets the servers resolved by name resolution.
+       * Sets the servers resolved by name resolution.  This field is required.
        *
-       * @since 1.20.0
+       * @since 1.21.0
        */
       public Builder setServers(List<EquivalentAddressGroup> servers) {
         this.servers = servers;
@@ -518,9 +567,10 @@ public abstract class NameResolver {
       }
 
       /**
-       * Sets the attributes for the servers resolved by name resolution.
+       * Sets the attributes for the servers resolved by name resolution.  If unset,
+       * {@link Attributes#EMPTY} will be used as a default.
        *
-       * @since 1.20.0
+       * @since 1.21.0
        */
       public Builder setAttributes(Attributes attributes) {
         this.attributes = attributes;
@@ -529,10 +579,11 @@ public abstract class NameResolver {
 
       /**
        * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+       * This field is optional.
        *
-       * @since 1.20.0
+       * @since 1.21.0
        */
-      public Builder setServiceConfig(@Nullable Object serviceConfig) {
+      public Builder setServiceConfig(@Nullable ConfigOrError serviceConfig) {
         this.serviceConfig = serviceConfig;
         return this;
       }
@@ -540,7 +591,7 @@ public abstract class NameResolver {
       /**
        * Constructs a new {@link ResolutionResult} from this builder.
        *
-       * @since 1.20.0
+       * @since 1.21.0
        */
       public ResolutionResult build() {
         return new ResolutionResult(servers, attributes, serviceConfig);

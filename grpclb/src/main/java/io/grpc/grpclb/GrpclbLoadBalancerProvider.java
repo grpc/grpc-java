@@ -16,6 +16,7 @@
 
 package io.grpc.grpclb;
 
+import com.google.common.base.Stopwatch;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -58,11 +59,12 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
   public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
     return new GrpclbLoadBalancer(
         helper, new CachedSubchannelPool(), TimeProvider.SYSTEM_TIME_PROVIDER,
+        Stopwatch.createUnstarted(),
         new ExponentialBackoffPolicy.Provider());
   }
 
   @Override
-  public ConfigOrError<?> parseLoadBalancingPolicyConfig(
+  public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingConfigPolicy) {
     try {
       return parseLoadBalancingConfigPolicyInternal(rawLoadBalancingConfigPolicy);
@@ -72,7 +74,7 @@ public final class GrpclbLoadBalancerProvider extends LoadBalancerProvider {
     }
   }
 
-  ConfigOrError<Mode> parseLoadBalancingConfigPolicyInternal(
+  ConfigOrError parseLoadBalancingConfigPolicyInternal(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
     if (rawLoadBalancingPolicyConfig == null) {
       return ConfigOrError.fromConfig(DEFAULT_MODE);

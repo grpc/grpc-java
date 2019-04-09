@@ -21,7 +21,6 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -80,8 +79,8 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
     if (subchannel == null) {
       subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
