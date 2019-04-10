@@ -3381,7 +3381,6 @@ public class ManagedChannelImplTest {
     assertThat(helper).isNotNull();
     assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(helper.getProxyDetector()).isSameAs(neverProxy);
-    assertThat(helper.getSynchronizationContext()).isSameAs(channel.syncContext);
   }
 
   @Test

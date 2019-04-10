@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -115,10 +117,6 @@ public abstract class NameResolver {
     public static final Attributes.Key<ProxyDetector> PARAMS_PROXY_DETECTOR =
         Attributes.Key.create("params-proxy-detector");
 
-    @Deprecated
-    private static final Attributes.Key<SynchronizationContext> PARAMS_SYNC_CONTEXT =
-        Attributes.Key.create("params-sync-context");
-
     /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
@@ -146,11 +144,6 @@ public abstract class NameResolver {
           public ProxyDetector getProxyDetector() {
             return checkNotNull(params.get(PARAMS_PROXY_DETECTOR), "proxy detector not available");
           }
-
-          @Override
-          public SynchronizationContext getSynchronizationContext() {
-            return checkNotNull(params.get(PARAMS_SYNC_CONTEXT), "sync context not available");
-          }
         };
       return newNameResolver(targetUri, helper);
     }
@@ -173,7 +166,6 @@ public abstract class NameResolver {
           Attributes.newBuilder()
               .set(PARAMS_DEFAULT_PORT, helper.getDefaultPort())
               .set(PARAMS_PROXY_DETECTOR, helper.getProxyDetector())
-              .set(PARAMS_SYNC_CONTEXT, helper.getSynchronizationContext())
               .build());
     }
 
