@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -146,44 +147,28 @@ public class LoadBalancerTest {
   }
 
   @Test
-  public void helper_createSubchannel_delegates() {
-    class OverrideCreateSubchannel extends NoopHelper {
-      boolean ran;
-
-      @Override
-      public Subchannel createSubchannel(CreateSubchannelArgs args) {
-        assertThat(args).isEqualTo(CreateSubchannelArgs.newBuilder()
-            .setAddresses(eag)
-            .setAttributes(attrs)
-            .setStateListener(subchannelStateListener)
-            .build());
-        ran = true;
-        return subchannel;
-      }
-    }
-
-    OverrideCreateSubchannel helper = new OverrideCreateSubchannel();
-    assertThat(helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-            .setAddresses(eag)
-            .setAttributes(attrs)
-            .setStateListener(subchannelStateListener)
-            .build())).isSameAs(subchannel);
-    assertThat(helper.ran).isTrue();
-  }
-
-  @Test(expected = UnsupportedOperationException.class)
   @SuppressWarnings("deprecation")
   public void helper_createSubchannelList_oldApi_throws() {
-    new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+    try {
+      new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // exepcted
+    }
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
   public void helper_createSubchannelList_throws() {
-    new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
-        .setAddresses(eag)
-        .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
-        .build());
+    try {
+      new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
+          .setAddresses(eag)
+          .setAttributes(attrs)
+          .setStateListener(subchannelStateListener)
+          .build());
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
   }
 
   @Test
