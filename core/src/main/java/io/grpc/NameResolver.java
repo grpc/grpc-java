@@ -16,6 +16,8 @@
 
 package io.grpc;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -131,8 +133,19 @@ public abstract class NameResolver {
      */
     @Nullable
     @Deprecated
-    public NameResolver newNameResolver(URI targetUri, Attributes params) {
-      throw new UnsupportedOperationException("This method is going to be deleted");
+    public NameResolver newNameResolver(URI targetUri, final Attributes params) {
+      Helper helper = new Helper() {
+          @Override
+          public int getDefaultPort() {
+            return checkNotNull(params.get(PARAMS_DEFAULT_PORT), "default port not available");
+          }
+
+          @Override
+          public ProxyDetector getProxyDetector() {
+            return checkNotNull(params.get(PARAMS_PROXY_DETECTOR), "proxy detector not available");
+          }
+        };
+      return newNameResolver(targetUri, helper);
     }
 
     /**
