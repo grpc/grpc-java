@@ -24,6 +24,10 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ManagedChannel;
+import io.grpc.MethodDescriptor;
 import java.util.concurrent.Executor;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,6 +41,9 @@ public class AbstractStubTest {
 
   @Mock
   Channel channel;
+
+  @Mock
+  ManagedChannel managedChannel;
 
   @Before
   public void setup() {
@@ -97,5 +104,20 @@ public class AbstractStubTest {
     callOptions = stub.getCallOptions();
 
     assertEquals(callOptions.getExecutor(), executor);
+  }
+
+  @Test
+  public void withInterceptorIsManagedChannel() {
+    NoopStub stub = new NoopStub(managedChannel);
+
+    stub = stub.withInterceptors(new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        return next.newCall(method, callOptions);
+      }
+    });
+
+    assertTrue(stub.getChannel() instanceof ManagedChannel);
   }
 }
