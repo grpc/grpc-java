@@ -30,6 +30,7 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
 
@@ -38,41 +39,9 @@ import java.util.List;
  * NameResolver}.  The channel's default behavior is used, which is walking down the address list
  * and sticking to the first that works.
  */
-final class PickFirstLoadBalancer extends LoadBalancer {
+final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStateListener {
   private final Helper helper;
   private Subchannel subchannel;
-
-  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-        ConnectivityState currentState = stateInfo.getState();
-        if (subchannel != PickFirstLoadBalancer.this.subchannel || currentState == SHUTDOWN) {
-          return;
-        }
-
-        SubchannelPicker picker;
-        switch (currentState) {
-          case IDLE:
-            picker = new RequestConnectionPicker(subchannel);
-            break;
-          case CONNECTING:
-            // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could
-            // leave the current picker in-place. But ignoring the potential optimization is
-            // simpler.
-            picker = new Picker(PickResult.withNoResult());
-            break;
-          case READY:
-            picker = new Picker(PickResult.withSubchannel(subchannel));
-            break;
-          case TRANSIENT_FAILURE:
-            picker = new Picker(PickResult.withError(stateInfo.getStatus()));
-            break;
-          default:
-            throw new IllegalArgumentException("Unsupported state:" + currentState);
-        }
-        helper.updateBalancingState(currentState, picker);
-      }
-    };
 
   PickFirstLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -85,7 +54,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
               .setAddresses(servers)
-              .setStateListener(subchannelStateListener)
+              .setStateListener(this)
               .build());
 
       // The channel state does not get updated when doing name resolving today, so for the moment
@@ -106,6 +75,35 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     // NB(lukaszx0) Whether we should propagate the error unconditionally is arguable. It's fine
     // for time being.
     helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
+  }
+
+  @Override
+  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    ConnectivityState currentState = stateInfo.getState();
+    if (subchannel != PickFirstLoadBalancer.this.subchannel || currentState == SHUTDOWN) {
+      return;
+    }
+
+    SubchannelPicker picker;
+    switch (currentState) {
+      case IDLE:
+        picker = new RequestConnectionPicker(subchannel);
+        break;
+      case CONNECTING:
+        // It's safe to use RequestConnectionPicker here, so when coming from IDLE we could leave
+        // the current picker in-place. But ignoring the potential optimization is simpler.
+        picker = new Picker(PickResult.withNoResult());
+        break;
+      case READY:
+        picker = new Picker(PickResult.withSubchannel(subchannel));
+        break;
+      case TRANSIENT_FAILURE:
+        picker = new Picker(PickResult.withError(stateInfo.getStatus()));
+        break;
+      default:
+        throw new IllegalArgumentException("Unsupported state:" + currentState);
+    }
+    helper.updateBalancingState(currentState, picker);
   }
 
   @Override

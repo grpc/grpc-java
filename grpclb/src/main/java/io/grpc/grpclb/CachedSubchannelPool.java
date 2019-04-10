@@ -60,13 +60,7 @@ final class CachedSubchannelPool implements SubchannelPool {
       subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
           .setAddresses(eag)
           .setAttributes(defaultAttributes)
-          .setStateListener(new SubchannelStateListener() {
-              @Override
-              public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-                newEntry.state = newState;
-                newEntry.maybeNotifyStateListener();
-              }
-            })
+          .setStateListener(new StateListener(newEntry))
           .build());
       newEntry.init(subchannel);
       cache.put(eag, newEntry);
@@ -165,6 +159,20 @@ final class CachedSubchannelPool implements SubchannelPool {
       if (stateListener != null && state != null) {
         stateListener.onSubchannelState(subchannel, state);
       }
+    }
+  }
+
+  private static final class StateListener implements SubchannelStateListener {
+    private final CacheEntry entry;
+
+    StateListener(CacheEntry entry) {
+      this.entry = checkNotNull(entry, "entry");
+    }
+
+    @Override
+    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+      entry.state = newState;
+      entry.maybeNotifyStateListener();
     }
   }
 }

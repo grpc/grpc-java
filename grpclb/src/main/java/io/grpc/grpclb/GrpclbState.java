@@ -83,7 +83,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * switches away from GRPCLB mode.
  */
 @NotThreadSafe
-final class GrpclbState {
+final class GrpclbState implements SubchannelStateListener {
   static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
@@ -153,25 +153,6 @@ final class GrpclbState {
   private RoundRobinPicker currentPicker =
       new RoundRobinPicker(Collections.<DropEntry>emptyList(), Arrays.asList(BUFFER_ENTRY));
 
-  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-        if (newState.getState() == SHUTDOWN) {
-          return;
-        }
-        if (!subchannels.values().contains(subchannel)) {
-          return;
-        }
-        if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
-          subchannel.requestConnection();
-        }
-        subchannel.getAttributes().get(STATE_INFO).set(newState);
-        maybeUseFallbackBackends();
-        maybeUpdatePicker();
-      }
-    };
-
-
   GrpclbState(
       Mode mode,
       Helper helper,
@@ -190,6 +171,22 @@ final class GrpclbState {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
+  }
+
+  @Override
+  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+    if (newState.getState() == SHUTDOWN) {
+      return;
+    }
+    if (!subchannels.values().contains(subchannel)) {
+      return;
+    }
+    if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
+      subchannel.requestConnection();
+    }
+    subchannel.getAttributes().get(STATE_INFO).set(newState);
+    maybeUseFallbackBackends();
+    maybeUpdatePicker();
   }
 
   /**
@@ -381,7 +378,7 @@ final class GrpclbState {
             subchannel = subchannels.get(eagAsList);
             if (subchannel == null) {
               subchannel = subchannelPool.takeOrCreateSubchannel(
-                  eag, createSubchannelAttrs(), subchannelStateListener);
+                  eag, createSubchannelAttrs(), this);
               subchannel.requestConnection();
             }
             newSubchannelMap.put(eagAsList, subchannel);
@@ -426,7 +423,7 @@ final class GrpclbState {
               helper.createSubchannel(CreateSubchannelArgs.newBuilder()
                   .setAddresses(eagList)
                   .setAttributes(createSubchannelAttrs())
-                  .setStateListener(subchannelStateListener)
+                  .setStateListener(this)
                   .build());
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);

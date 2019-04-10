@@ -37,6 +37,7 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
@@ -63,7 +64,7 @@ import javax.annotation.Nullable;
  * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-final class RoundRobinLoadBalancer extends LoadBalancer {
+final class RoundRobinLoadBalancer extends LoadBalancer implements SubchannelStateListener {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
@@ -80,23 +81,6 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   @Nullable
   private StickinessState stickinessState;
-
-  private final SubchannelStateListener subchannelStateListener = new SubchannelStateListener() {
-      @Override
-      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-        if (subchannels.get(subchannel.getAddresses()) != subchannel) {
-          return;
-        }
-        if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
-          stickinessState.remove(subchannel);
-        }
-        if (stateInfo.getState() == IDLE) {
-          subchannel.requestConnection();
-        }
-        getSubchannelStateInfoRef(subchannel).value = stateInfo;
-        updateBalancingState();
-      }
-    };
 
   RoundRobinLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -150,7 +134,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
           helper.createSubchannel(CreateSubchannelArgs.newBuilder()
               .setAddresses(addressGroup)
               .setAttributes(subchannelAttrs.build())
-              .setStateListener(subchannelStateListener)
+              .setStateListener(this)
               .build()),
           "subchannel");
       if (stickyRef != null) {
@@ -180,6 +164,21 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
     // ready pickers aren't affected by status changes
     updateBalancingState(TRANSIENT_FAILURE,
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
+  }
+
+  @Override
+  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    if (subchannels.get(subchannel.getAddresses()) != subchannel) {
+      return;
+    }
+    if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
+      stickinessState.remove(subchannel);
+    }
+    if (stateInfo.getState() == IDLE) {
+      subchannel.requestConnection();
+    }
+    getSubchannelStateInfoRef(subchannel).value = stateInfo;
+    updateBalancingState();
   }
 
   private void shutdownSubchannel(Subchannel subchannel) {

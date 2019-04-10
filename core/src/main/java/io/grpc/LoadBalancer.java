@@ -1145,7 +1145,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
-  public abstract static class SubchannelStateListener {
+  public interface SubchannelStateListener {
     
     /**
      * Handles a state change on a Subchannel.
@@ -1169,7 +1169,7 @@ public abstract class LoadBalancer {
      *
      * @since 1.21.0
      */
-    public abstract void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+    void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
   }
 
   /**

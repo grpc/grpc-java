@@ -189,7 +189,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
   
   // All methods are run from syncContext
-  private final class HealthCheckState extends SubchannelStateListener {
+  private final class HealthCheckState implements SubchannelStateListener {
     private final Runnable retryTask = new Runnable() {
         @Override
         public void run() {
