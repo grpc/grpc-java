@@ -46,7 +46,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * <p>Keys are allowed to be associated with more than one value.
  *
  * <p>This class is not thread safe, implementations should ensure that header reads and writes do
- * not occur in multiple threads concurrently.
+ * not occur in multiple threads concurrently.  Reads may happen concurrently with other reads.
  */
 @NotThreadSafe
 public final class Metadata {
