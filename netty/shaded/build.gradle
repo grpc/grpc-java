@@ -20,10 +20,8 @@ dependencies {
     shadow project(':grpc-core')
 }
 
-jar {
-    // Must use a different classifier to avoid conflicting with shadowJar
-    classifier = 'original'
-}
+jar { // Must use a different classifier to avoid conflicting with shadowJar
+    classifier = 'original' }
 
 shadowJar {
     classifier = null

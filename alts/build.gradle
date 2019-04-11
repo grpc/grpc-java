@@ -61,10 +61,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 javadoc { exclude 'io/grpc/alts/internal/**' }
 
-jar {
-    // Must use a different classifier to avoid conflicting with shadowJar
-    classifier = 'original'
-}
+jar { // Must use a different classifier to avoid conflicting with shadowJar
+    classifier = 'original' }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
 // source to work with Bazel, so we rewrite the code as part of the build.
