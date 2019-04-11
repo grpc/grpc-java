@@ -23,7 +23,6 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
-import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -69,7 +68,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
-  private Class<? extends ServerChannel> channelType = NioServerSocketChannel.class;
+  @Nullable
+  private Class<? extends ServerChannel> channelType;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
   @Nullable
   private EventLoopGroup bossEventLoopGroup;
@@ -132,10 +132,16 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Specify the channel type to use, by default we use {@link NioServerSocketChannel}.
+   * Specify the channel type to use, by default we use {@link NioServerSocketChannel} or {@code
+   * EpollServerSocketChannel}.
+   *
+   * <p>You must also provide corresponding {@link EventLoopGroup} using {@link
+   * #workerEventLoopGroup} and {@link #bossEventLoopGroup}. For example, {@link
+   * NioServerSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup}, otherwise
+   * your server won't start.
    */
-  public NettyServerBuilder channelType(Class<? extends ServerChannel> channelType) {
-    this.channelType = Preconditions.checkNotNull(channelType, "channelType");
+  public NettyServerBuilder channelType(@Nullable Class<? extends ServerChannel> channelType) {
+    this.channelType = channelType;
     return this;
   }
 

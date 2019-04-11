@@ -37,7 +37,6 @@ import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Collections;
@@ -58,7 +57,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        null, // no channel type
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group
@@ -96,7 +95,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        null, // no channel type
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group
@@ -134,7 +133,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        null, // no channel type
         channelOptions,
         null, // no boss group
         null, // no event group
@@ -184,7 +183,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        null, // no channel type
         new HashMap<ChannelOption<?>, Object>(),
         null, // no boss group
         null, // no event group

@@ -34,9 +34,14 @@ import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
@@ -47,12 +52,15 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 
 /**
  * Common utility methods.
  */
 class Utils {
+  private static final Logger logger = Logger.getLogger(Utils.class.getName());
 
   public static final AsciiString STATUS_OK = AsciiString.of("200");
   public static final AsciiString HTTP_METHOD = AsciiString.of(GrpcUtil.HTTP_METHOD);
@@ -176,6 +184,73 @@ class Utils {
     return s;
   }
 
+  /**
+   * Returns a {@link ChannelFactory} of default channel; {@code
+   * io.netty.channel.epoll.EpollSocketChannel} when Epoll is available, otherwise using {@link
+   * NioSocketChannel}.
+   */
+  @SuppressWarnings("unchecked")
+  static ChannelFactory<? extends Channel> defaultChannelFactory() {
+    if (isEpollAvailable()) {
+      try {
+        Class<Channel> channel =
+            (Class<Channel>) Class.forName("io.netty.channel.epoll.EpollSocketChannel");
+        return new ReflectiveChannelFactory<>(channel);
+      } catch (ClassNotFoundException e) {
+        // NO-OP
+      }
+    }
+
+    logger.log(
+        Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+    return new ReflectiveChannelFactory<>(NioSocketChannel.class);
+  }
+
+  private static boolean isEpollAvailable() {
+    try {
+      return (Boolean)
+          Class
+              .forName("io.netty.channel.epoll.Epoll")
+              .getDeclaredMethod("isAvailable")
+              .invoke(null);
+    } catch (Exception e) {
+      logger.log(Level.INFO, "Epoll runtime dependency is not available");
+      return false;
+    }
+  }
+
+  private static Throwable getEpollUnavailabilityCause() {
+    try {
+      return (Throwable)
+          Class
+              .forName("io.netty.channel.epoll.Epoll")
+              .getDeclaredMethod("unavailabilityCause")
+              .invoke(null);
+    } catch (Exception e) {
+      return e;
+    }
+  }
+
+  /**
+   * Returns a default server {@link Channel} type; {@code
+   * io.netty.channel.epoll.EpollServerSocketChannel} when Epoll is available, otherwise using
+   * {@link NioServerSocketChannel}.
+   */
+  @SuppressWarnings("unchecked")
+  static Class<? extends ServerChannel> defaultServerChannel() {
+    if (isEpollAvailable()) {
+      try {
+        return
+            (Class<ServerChannel>) Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
+      } catch (ClassNotFoundException e) {
+        // NO-OP
+      }
+    }
+    logger.log(
+        Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+    return NioServerSocketChannel.class;
+  }
+
   private static class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
     private final String name;
     private final int numEventLoops;
@@ -192,6 +267,18 @@ class Utils {
       ThreadFactory threadFactory = new DefaultThreadFactory(name, useDaemonThreads);
       int parallelism = numEventLoops == 0
           ? Runtime.getRuntime().availableProcessors() * 2 : numEventLoops;
+      if (isEpollAvailable()) {
+        try {
+          EventLoopGroup eventLoopGroup = (EventLoopGroup) Class
+              .forName("io.netty.channel.epoll.EpollEventLoopGroup")
+              .getConstructor(Integer.TYPE, ThreadFactory.class)
+              .newInstance(parallelism, threadFactory);
+          return eventLoopGroup;
+        } catch (Exception e) {
+          logger
+              .log(Level.INFO, "Can't create EpollEventLoopGroup, fall back to NioEventLoopGroup");
+        }
+      }
       return new NioEventLoopGroup(parallelism, threadFactory);
     }
 

@@ -25,6 +25,7 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.util.concurrent.TimeUnit;
 
@@ -57,6 +58,7 @@ final class HandshakerServiceChannel {
           new NioEventLoopGroup(1, new DefaultThreadFactory("handshaker pool", true));
       ManagedChannel channel = NettyChannelBuilder.forTarget(target)
           .directExecutor()
+          .channelType(NioSocketChannel.class)
           .eventLoopGroup(eventGroup)
           .usePlaintext()
           .build();

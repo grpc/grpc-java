@@ -72,9 +72,8 @@ public final class NettyChannelBuilder
 
   private NegotiationType negotiationType = NegotiationType.TLS;
   private OverrideAuthorityChecker authorityChecker;
-  private ChannelFactory<? extends Channel> channelFactory =
-      new ReflectiveChannelFactory<>(NioSocketChannel.class);
-
+  @Nullable
+  private ChannelFactory<? extends Channel> channelFactory;
   @Nullable
   private EventLoopGroup eventLoopGroup;
   private SslContext sslContext;
@@ -140,24 +139,39 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Specifies the channel type to use, by default we use {@link NioSocketChannel}.
+   * Specifies the channel type to use, by default we use {@link EpollSocketChannel} if available,
+   * otherwise using {@link NioSocketChannel}.
    *
    * <p>You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
    * {@link Channel} implementation has no no-args constructor.
+   *
+   * <p>You must also provide corresponding {@link #eventLoopGroup(EventLoopGroup)}. For example,
+   * {@link NioSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup}, otherwise
+   * your application won't start.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
    */
-  public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
-    checkNotNull(channelType, "channelType");
-    return channelFactory(new ReflectiveChannelFactory<>(channelType));
+  public NettyChannelBuilder channelType(@Nullable Class<? extends Channel> channelType) {
+    return channelFactory(channelType == null ? null : new ReflectiveChannelFactory<>(channelType));
   }
 
   /**
    * Specifies the {@link ChannelFactory} to create {@link Channel} instances. This method is
    * usually only used if the specific {@code Channel} requires complex logic which requires
-   * additional information to create the {@code Channel}. Otherwise, recommend to use {@link
+   * additional information to e the {@code Channel}. Otherwise, recommend to use {@link
    * #channelType(Class)}.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link #eventLoopGroup(EventLoopGroup)}. For example,
+   * {@link NioSocketChannel} based {@link ChannelFactory} must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your application won't start.
    */
-  public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
-    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
+  public NettyChannelBuilder channelFactory(
+      @Nullable ChannelFactory<? extends Channel> channelFactory) {
+    this.channelFactory = channelFactory;
     return this;
   }
 
@@ -185,6 +199,10 @@ public final class NettyChannelBuilder
    *
    * <p>It's an optional parameter. If the user has not provided an EventGroupLoop when the channel
    * is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link #channelType(Class)} or {@link
+   * #channelFactory(ChannelFactory)} corresponding to the given {@code EventLoopGroup}. For
+   * example, {@link io.netty.channel.nio.NioEventLoopGroup} requires {@link NioSocketChannel}
    *
    * <p>The channel won't take ownership of the given EventLoopGroup. It's caller's responsibility
    * to shut it down when it's desired.
@@ -524,12 +542,13 @@ public final class NettyChannelBuilder
     private boolean closed;
 
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
-        ChannelFactory<? extends Channel> channelFactory, Map<ChannelOption<?>, ?> channelOptions,
-        EventLoopGroup group, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+        @Nullable ChannelFactory<? extends Channel> channelFactory,
+        Map<ChannelOption<?>, ?> channelOptions, @Nullable EventLoopGroup group,
+        int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
-      this.channelFactory = channelFactory;
+      this.channelFactory = channelFactory == null ? Utils.defaultChannelFactory() : channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;

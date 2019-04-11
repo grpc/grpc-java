@@ -97,7 +97,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       new AtomicReference<>();
 
   NettyServer(
-      SocketAddress address, Class<? extends ServerChannel> channelType,
+      SocketAddress address, @Nullable Class<? extends ServerChannel> channelType,
       Map<ChannelOption<?>, ?> channelOptions,
       @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
       ProtocolNegotiator protocolNegotiator,
@@ -110,7 +110,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
       InternalChannelz channelz) {
     this.address = address;
-    this.channelType = checkNotNull(channelType, "channelType");
+    this.channelType = channelType == null ? Utils.defaultServerChannel() : channelType;
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroup = bossGroup;
