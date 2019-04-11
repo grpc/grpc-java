@@ -42,6 +42,7 @@ dependencies {
             libraries.mockito,
             libraries.truth
     testRuntime libraries.netty_tcnative,
+            libraries.netty_epoll,
             libraries.conscrypt
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
