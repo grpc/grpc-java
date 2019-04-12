@@ -27,7 +27,6 @@ import io.grpc.benchmarks.proto.WorkerServiceGrpc;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -51,7 +50,6 @@ public class LoadWorker {
             .build());
     this.driverServer = NettyServerBuilder.forPort(driverPort)
         .directExecutor()
-        .channelType(NioServerSocketChannel.class)
         .workerEventLoopGroup(singleThreadGroup)
         .bossEventLoopGroup(singleThreadGroup)
         .addService(new WorkerServiceImpl())

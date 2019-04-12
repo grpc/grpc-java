@@ -58,7 +58,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * Netty-based server implementation.
@@ -97,9 +96,9 @@ class NettyServer implements InternalServer, InternalWithLogId {
       new AtomicReference<>();
 
   NettyServer(
-      SocketAddress address, @Nullable Class<? extends ServerChannel> channelType,
+      SocketAddress address, Class<? extends ServerChannel> channelType,
       Map<ChannelOption<?>, ?> channelOptions,
-      @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
+      EventLoopGroup bossGroup, EventLoopGroup workerGroup,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -108,17 +107,17 @@ class NettyServer implements InternalServer, InternalWithLogId {
       long maxConnectionIdleInNanos,
       long maxConnectionAgeInNanos, long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls, long permitKeepAliveTimeInNanos,
-      InternalChannelz channelz) {
+      InternalChannelz channelz, boolean usingSharedBossGroup, boolean usingSharedWorkerGroup) {
     this.address = address;
-    this.channelType = channelType == null ? Utils.defaultServerChannel() : channelType;
+    this.channelType = checkNotNull(channelType, "channelType");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
-    this.bossGroup = bossGroup;
-    this.workerGroup = workerGroup;
+    this.bossGroup = checkNotNull(bossGroup, "bossGroup");
+    this.workerGroup = checkNotNull(workerGroup, "workerGroup");
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.usingSharedBossGroup = bossGroup == null;
-    this.usingSharedWorkerGroup = workerGroup == null;
+    this.usingSharedBossGroup = usingSharedBossGroup;
+    this.usingSharedWorkerGroup = usingSharedWorkerGroup;
     this.transportTracerFactory = transportTracerFactory;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
     this.flowControlWindow = flowControlWindow;
@@ -153,9 +152,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
   @Override
   public void start(ServerListener serverListener) throws IOException {
     listener = checkNotNull(serverListener, "serverListener");
-
-    // If using the shared groups, get references to them.
-    allocateSharedGroups();
 
     ServerBootstrap b = new ServerBootstrap();
     b.group(bossGroup, workerGroup);
@@ -288,15 +284,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
         eventLoopReferenceCounter.release();
       }
     });
-  }
-
-  private void allocateSharedGroups() {
-    if (bossGroup == null) {
-      bossGroup = SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
-    }
-    if (workerGroup == null) {
-      workerGroup = SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-    }
   }
 
   @Override

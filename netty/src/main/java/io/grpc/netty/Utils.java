@@ -34,10 +34,8 @@ import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
-import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -73,11 +71,50 @@ class Utils {
   public static final AsciiString TE_TRAILERS = AsciiString.of(GrpcUtil.TE_TRAILERS);
   public static final AsciiString USER_AGENT = AsciiString.of(GrpcUtil.USER_AGENT_KEY.name());
 
-  public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP =
-      new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG");
+  public static final Resource<EventLoopGroup> NIO_BOSS_EVENT_LOOP_GROUP
+      = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", NioEventLoopGroup.class);
+  public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
+      = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", NioEventLoopGroup.class);
+  public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
+  public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
-  public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP =
-      new DefaultEventLoopGroupResource(0, "grpc-default-worker-ELG");
+  private static final Class<? extends ServerChannel> defaultServerChannelType;
+  private static final Class<? extends Channel> defaultClientChannelType;
+
+  static {
+    // Decide default channel types and EventLoopGroup based on Epoll availability
+    Class<? extends ServerChannel> serverChannelType = NioServerSocketChannel.class;
+    Class<? extends Channel> clientChannelType = NioSocketChannel.class;
+    Class<? extends EventLoopGroup> eventLoopGroupType = NioEventLoopGroup.class;
+    boolean epollSuccessful = false;
+
+    try {
+      if (isEpollAvailable()) {
+        serverChannelType = epollServerChannelType();
+        clientChannelType = epollChannelType();
+        // load EventLoopGroup to make sure all defaults are using same type.
+        eventLoopGroupType = epollEventLoopGroupType();
+        epollSuccessful = true;
+      }
+    } catch (Exception e) {
+      serverChannelType = NioServerSocketChannel.class;
+      clientChannelType = NioSocketChannel.class;
+      eventLoopGroupType = NioEventLoopGroup.class;
+    }
+
+    defaultServerChannelType = serverChannelType;
+    defaultClientChannelType = clientChannelType;
+
+    if (epollSuccessful) {
+      DEFAULT_BOSS_EVENT_LOOP_GROUP
+          = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", eventLoopGroupType);
+      DEFAULT_WORKER_EVENT_LOOP_GROUP
+          = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", eventLoopGroupType);
+    } else {
+      DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
+      DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
+    }
+  }
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {
     if (http2Headers instanceof GrpcHttp2InboundHeaders) {
@@ -184,27 +221,6 @@ class Utils {
     return s;
   }
 
-  /**
-   * Returns a {@link ChannelFactory} of default channel; {@code
-   * io.netty.channel.epoll.EpollSocketChannel} when Epoll is available, otherwise using {@link
-   * NioSocketChannel}.
-   */
-  @SuppressWarnings("unchecked")
-  static ChannelFactory<? extends Channel> defaultChannelFactory() {
-    if (isEpollAvailable()) {
-      try {
-        Class<Channel> channel =
-            (Class<Channel>) Class.forName("io.netty.channel.epoll.EpollSocketChannel");
-        logger.log(Level.FINE, "Using EpollSocketChannel");
-        return new ReflectiveChannelFactory<>(channel);
-      } catch (ClassNotFoundException e) {
-        logger.log(Level.INFO, "netty-epoll is not available (this may be normal)");
-      }
-    }
-
-    logger.log(Level.FINE, "Epoll is not available, using NioSocketChannel");
-    return new ReflectiveChannelFactory<>(NioSocketChannel.class);
-  }
 
   private static boolean isEpollAvailable() {
     try {
@@ -214,11 +230,11 @@ class Utils {
               .getDeclaredMethod("isAvailable")
               .invoke(null);
       if (!available) {
-        logger.log(Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+        logger.log(Level.FINE, "Epoll is not available", getEpollUnavailabilityCause());
       }
       return available;
     } catch (Exception e) {
-      logger.log(Level.INFO, "netty-epoll is not available (this may be normal)");
+      logger.log(Level.FINE, "netty-epoll is not available (this may be normal)");
       return false;
     }
   }
@@ -235,34 +251,76 @@ class Utils {
     }
   }
 
+  // Must call when epoll is available
+  private static Class<? extends Channel> epollChannelType() {
+    try {
+      Class<? extends Channel> channelType = Class
+          .forName("io.netty.channel.epoll.EpollSocketChannel").asSubclass(Channel.class);
+      return channelType;
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Epoll is available, but cannot load EpollSocketChannel", e);
+    }
+  }
+
+  // Must call when epoll is available
+  private static Class<? extends EventLoopGroup> epollEventLoopGroupType() {
+    try {
+      return Class
+          .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class);
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Cannot create EpollEventLoopGroup", e);
+    }
+  }
+
   /**
    * Returns a default server {@link Channel} type; {@code
    * io.netty.channel.epoll.EpollServerSocketChannel} when Epoll is available, otherwise using
    * {@link NioServerSocketChannel}.
    */
-  @SuppressWarnings("unchecked")
-  static Class<? extends ServerChannel> defaultServerChannel() {
-    if (isEpollAvailable()) {
-      try {
-        Class<ServerChannel> serverSocketChannel = (Class<ServerChannel>) Class
-            .forName("io.netty.channel.epoll.EpollServerSocketChannel");
-        logger.log(Level.FINE, "Using EpollServerSocketChannel");
-        return serverSocketChannel;
-      } catch (ClassNotFoundException e) {
-        logger.log(Level.WARNING, "netty-epoll is not available", e);
-      }
+  private static Class<? extends ServerChannel> epollServerChannelType() {
+    try {
+      Class<? extends ServerChannel> serverSocketChannel =
+          Class
+              .forName("io.netty.channel.epoll.EpollServerSocketChannel")
+              .asSubclass(ServerChannel.class);
+      logger.log(Level.FINE, "Using EpollServerSocketChannel");
+      return serverSocketChannel;
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Epoll is available, but cannot load EpollServerSocketChannel", e);
     }
-    logger.log(Level.FINE, "Epoll is not available, using NioServerSocketChannel");
-    return NioServerSocketChannel.class;
+  }
+
+  public static Class<? extends ServerChannel> defaultServerChannelType() {
+    return defaultServerChannelType;
+  }
+
+  public static Class<? extends Channel> defaultClientChannelType() {
+    return defaultClientChannelType;
+  }
+
+  private static EventLoopGroup createEventLoopGroup(
+      Class<? extends EventLoopGroup> eventLoopGroupType,
+      int parallelism,
+      ThreadFactory threadFactory) {
+    try {
+      return eventLoopGroupType
+          .getConstructor(Integer.TYPE, ThreadFactory.class)
+          .newInstance(parallelism, threadFactory);
+    } catch (Exception e) {
+      throw new RuntimeException("Cannot create EventLoopGroup for " + eventLoopGroupType, e);
+    }
   }
 
   private static class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
     private final String name;
     private final int numEventLoops;
+    private final Class<? extends EventLoopGroup> eventLoopGroupType;
 
-    DefaultEventLoopGroupResource(int numEventLoops, String name) {
+    DefaultEventLoopGroupResource(
+        int numEventLoops, String name, Class<? extends EventLoopGroup> eventLoopGroupType) {
       this.name = name;
       this.numEventLoops = numEventLoops;
+      this.eventLoopGroupType = eventLoopGroupType;
     }
 
     @Override
@@ -272,22 +330,7 @@ class Utils {
       ThreadFactory threadFactory = new DefaultThreadFactory(name, useDaemonThreads);
       int parallelism = numEventLoops == 0
           ? Runtime.getRuntime().availableProcessors() * 2 : numEventLoops;
-      if (isEpollAvailable()) {
-        try {
-          return (EventLoopGroup) Class
-              .forName("io.netty.channel.epoll.EpollEventLoopGroup")
-              .getConstructor(Integer.TYPE, ThreadFactory.class)
-              .newInstance(parallelism, threadFactory);
-        } catch (Exception e) {
-          logger
-              .log(
-                  Level.WARNING,
-                  "Can't use EpollEventLoopGroup, fall back to NioEventLoopGroup",
-                  e);
-        }
-      }
-      logger.log(Level.FINE, "Using NioEventLoopGroup as default");
-      return new NioEventLoopGroup(parallelism, threadFactory);
+      return createEventLoopGroup(eventLoopGroupType, parallelism, threadFactory);
     }
 
     @Override

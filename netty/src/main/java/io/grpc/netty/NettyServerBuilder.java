@@ -23,6 +23,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
+import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
@@ -30,6 +31,7 @@ import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.SharedResourceHolder;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
@@ -45,6 +47,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -55,6 +59,8 @@ import javax.net.ssl.SSLException;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CanIgnoreReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
+  private static final Logger logger = Logger.getLogger(NettyServerBuilder.class.getName());
+
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
@@ -68,8 +74,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
-  @Nullable
-  private Class<? extends ServerChannel> channelType;
+  private Class<? extends ServerChannel> channelType = Utils.defaultServerChannelType();
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
   @Nullable
   private EventLoopGroup bossEventLoopGroup;
@@ -140,8 +145,8 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * NioServerSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup}, otherwise
    * your server won't start.
    */
-  public NettyServerBuilder channelType(@Nullable Class<? extends ServerChannel> channelType) {
-    this.channelType = channelType;
+  public NettyServerBuilder channelType(Class<? extends ServerChannel> channelType) {
+    this.channelType = Preconditions.checkNotNull(channelType, "channelType");
     return this;
   }
 
@@ -462,6 +467,12 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
               ProtocolNegotiators.serverPlaintext();
     }
+
+    boolean usingSharedBossGroup = bossEventLoopGroup == null;
+    boolean usingSharedWorkerGroup = workerEventLoopGroup == null;
+
+    populateDefaultChannelAndGroups();
+
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
@@ -471,10 +482,45 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
           maxConnectionIdleInNanos,
           maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
-          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
+          permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz(),
+          usingSharedBossGroup, usingSharedWorkerGroup);
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);
+  }
+
+  private void populateDefaultChannelAndGroups() {
+    boolean groupOrChannelTypeProvided =
+        channelType != Utils.defaultServerChannelType()
+            || bossEventLoopGroup != null
+            || workerEventLoopGroup != null;
+
+    if (groupOrChannelTypeProvided) {
+      // Use NIO based channel type and eventloop group for backward compatibility reason
+      logger.log(
+          Level.WARNING,
+          "All EventLoopGroups (boss, worker) and ChannelType should be provided, otherwise server "
+              + "may not start depends on the default value.");
+      if (channelType == Utils.defaultServerChannelType()) {
+        channelType = NioServerSocketChannel.class;
+        logger.log(Level.FINE, String.format("Using default ChannelType %s", channelType));
+      }
+      if (bossEventLoopGroup == null) {
+        bossEventLoopGroup = SharedResourceHolder.get(Utils.NIO_BOSS_EVENT_LOOP_GROUP);
+        logger.log(
+            Level.FINE, String.format("Using default boss EventLoopGroup: %s", bossEventLoopGroup));
+      }
+      if (workerEventLoopGroup == null) {
+        workerEventLoopGroup = SharedResourceHolder.get(Utils.NIO_WORKER_EVENT_LOOP_GROUP);
+        logger.log(
+            Level.FINE,
+            String.format("Using default worker EventLoopGroup: %s", workerEventLoopGroup));
+      }
+    } else {
+      channelType = Utils.defaultServerChannelType();
+      bossEventLoopGroup = SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
+      workerEventLoopGroup = SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
+    }
   }
 
   @Override
