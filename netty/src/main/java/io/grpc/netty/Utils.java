@@ -221,7 +221,6 @@ class Utils {
     return s;
   }
 
-
   private static boolean isEpollAvailable() {
     try {
       boolean available = (Boolean)
@@ -311,7 +310,7 @@ class Utils {
     }
   }
 
-  private static class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
+  private static final class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
     private final String name;
     private final int numEventLoops;
     private final Class<? extends EventLoopGroup> eventLoopGroupType;
@@ -326,11 +325,8 @@ class Utils {
     @Override
     public EventLoopGroup create() {
       // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
-      boolean useDaemonThreads = true;
-      ThreadFactory threadFactory = new DefaultThreadFactory(name, useDaemonThreads);
-      int parallelism = numEventLoops == 0
-          ? Runtime.getRuntime().availableProcessors() * 2 : numEventLoops;
-      return createEventLoopGroup(eventLoopGroupType, parallelism, threadFactory);
+      ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
+      return createEventLoopGroup(eventLoopGroupType, numEventLoops, threadFactory);
     }
 
     @Override
