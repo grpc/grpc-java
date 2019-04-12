@@ -31,7 +31,7 @@ import io.grpc.InternalChannelz;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
@@ -85,7 +85,7 @@ public abstract class AbstractManagedChannelImplBuilder
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
-      NameResolverProvider.asFactory();
+      NameResolverRegistry.getDefaultRegistry().asFactory();
 
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
