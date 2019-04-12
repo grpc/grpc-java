@@ -195,26 +195,30 @@ class Utils {
       try {
         Class<Channel> channel =
             (Class<Channel>) Class.forName("io.netty.channel.epoll.EpollSocketChannel");
+        logger.log(Level.FINE, "Using EpollSocketChannel");
         return new ReflectiveChannelFactory<>(channel);
       } catch (ClassNotFoundException e) {
-        // NO-OP
+        logger.log(Level.INFO, "netty-epoll is not available (this may be normal)");
       }
     }
 
-    logger.log(
-        Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+    logger.log(Level.FINE, "Epoll is not available, using NioSocketChannel");
     return new ReflectiveChannelFactory<>(NioSocketChannel.class);
   }
 
   private static boolean isEpollAvailable() {
     try {
-      return (Boolean)
+      boolean available = (Boolean)
           Class
               .forName("io.netty.channel.epoll.Epoll")
               .getDeclaredMethod("isAvailable")
               .invoke(null);
+      if (!available) {
+        logger.log(Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+      }
+      return available;
     } catch (Exception e) {
-      logger.log(Level.INFO, "Epoll runtime dependency is not available");
+      logger.log(Level.INFO, "netty-epoll is not available (this may be normal)");
       return false;
     }
   }
@@ -240,14 +244,15 @@ class Utils {
   static Class<? extends ServerChannel> defaultServerChannel() {
     if (isEpollAvailable()) {
       try {
-        return
-            (Class<ServerChannel>) Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
+        Class<ServerChannel> serverSocketChannel = (Class<ServerChannel>) Class
+            .forName("io.netty.channel.epoll.EpollServerSocketChannel");
+        logger.log(Level.FINE, "Using EpollServerSocketChannel");
+        return serverSocketChannel;
       } catch (ClassNotFoundException e) {
-        // NO-OP
+        logger.log(Level.WARNING, "netty-epoll is not available", e);
       }
     }
-    logger.log(
-        Level.INFO, "Epoll is not available", getEpollUnavailabilityCause());
+    logger.log(Level.FINE, "Epoll is not available, using NioServerSocketChannel");
     return NioServerSocketChannel.class;
   }
 
@@ -269,16 +274,19 @@ class Utils {
           ? Runtime.getRuntime().availableProcessors() * 2 : numEventLoops;
       if (isEpollAvailable()) {
         try {
-          EventLoopGroup eventLoopGroup = (EventLoopGroup) Class
+          return (EventLoopGroup) Class
               .forName("io.netty.channel.epoll.EpollEventLoopGroup")
               .getConstructor(Integer.TYPE, ThreadFactory.class)
               .newInstance(parallelism, threadFactory);
-          return eventLoopGroup;
         } catch (Exception e) {
           logger
-              .log(Level.INFO, "Can't create EpollEventLoopGroup, fall back to NioEventLoopGroup");
+              .log(
+                  Level.WARNING,
+                  "Can't use EpollEventLoopGroup, fall back to NioEventLoopGroup",
+                  e);
         }
       }
+      logger.log(Level.FINE, "Using NioEventLoopGroup as default");
       return new NioEventLoopGroup(parallelism, threadFactory);
     }
 
