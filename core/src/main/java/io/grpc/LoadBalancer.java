@@ -710,62 +710,6 @@ public abstract class LoadBalancer {
       return new Builder();
     }
 
-    public static final class Builder {
-      private List<EquivalentAddressGroup> addrs;
-      private Attributes attrs = Attributes.EMPTY;
-      private SubchannelStateListener stateListener;
-
-      Builder() {
-      }
-
-      /**
-       * The addresses to connect to.  All addresses are considered equivalent and will be tried
-       * in the order they are provided.
-       */
-      public Builder setAddresses(EquivalentAddressGroup addrs) {
-        this.addrs = Collections.singletonList(addrs);
-        return this;
-      }
-
-      /**
-       * Required.  The addresses to connect to.  All addresses are considered equivalent and will
-       * be tried in the order they are provided.
-       *
-       * @throws IllegalArgumentException if {@code addrs} is empty
-       */
-      public Builder setAddresses(List<EquivalentAddressGroup> addrs) {
-        checkArgument(!addrs.isEmpty(), "addrs is empty");
-        this.addrs = Collections.unmodifiableList(new ArrayList<>(addrs));
-        return this;
-      }
-      
-      /**
-       * Optional. Attributes provided here will be included in {@link Subchannel#getAttributes}.
-       * Default is empty.
-       */
-      public Builder setAttributes(Attributes attrs) {
-        this.attrs = checkNotNull(attrs, "attrs");
-        return this;
-      }
-
-      /**
-       * Required.  Receives state changes of the created Subchannel.  The listener is called from
-       * the {@link #getSynchronizationContext Synchronization Context}.  It's safe to share the
-       * listener among multiple Subchannels.
-       */
-      public Builder setStateListener(SubchannelStateListener listener) {
-        this.stateListener = checkNotNull(listener, "listener");
-        return this;
-      }
-
-      /**
-       * Creates a new args object.
-       */
-      public CreateSubchannelArgs build() {
-        return new CreateSubchannelArgs(addrs, attrs, stateListener);
-      }
-    }
-
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -792,6 +736,67 @@ public abstract class LoadBalancer {
       CreateSubchannelArgs that = (CreateSubchannelArgs) other;
       return Objects.equal(addrs, that.addrs) && Objects.equal(attrs, that.attrs)
           && Objects.equal(stateListener, that.stateListener);
+    }
+
+    public static final class Builder {
+      private List<EquivalentAddressGroup> addrs;
+      private Attributes attrs = Attributes.EMPTY;
+      private SubchannelStateListener stateListener;
+
+      Builder() {
+      }
+
+      /**
+       * The addresses to connect to.  All addresses are considered equivalent and will be tried
+       * in the order they are provided.
+       */
+      public Builder setAddresses(EquivalentAddressGroup addrs) {
+        this.addrs = Collections.singletonList(addrs);
+        return this;
+      }
+
+      /**
+       * The addresses to connect to.  All addresses are considered equivalent and will
+       * be tried in the order they are provided.
+       *
+       * <p>This is a <strong>required</strong> property.
+       *
+       * @throws IllegalArgumentException if {@code addrs} is empty
+       */
+      public Builder setAddresses(List<EquivalentAddressGroup> addrs) {
+        checkArgument(!addrs.isEmpty(), "addrs is empty");
+        this.addrs = Collections.unmodifiableList(new ArrayList<>(addrs));
+        return this;
+      }
+      
+      /**
+       * Attributes provided here will be included in {@link Subchannel#getAttributes}.
+       *
+       * <p>This is an <strong>optional</strong> property.  Default is empty if not set.
+       */
+      public Builder setAttributes(Attributes attrs) {
+        this.attrs = checkNotNull(attrs, "attrs");
+        return this;
+      }
+
+      /**
+       * Receives state changes of the created Subchannel.  The listener is called from
+       * the {@link #getSynchronizationContext Synchronization Context}.  It's safe to share the
+       * listener among multiple Subchannels.
+       *
+       * <p>This is a <strong>required</strong> property.
+       */
+      public Builder setStateListener(SubchannelStateListener listener) {
+        this.stateListener = checkNotNull(listener, "listener");
+        return this;
+      }
+
+      /**
+       * Creates a new args object.
+       */
+      public CreateSubchannelArgs build() {
+        return new CreateSubchannelArgs(addrs, attrs, stateListener);
+      }
     }
   }
 
