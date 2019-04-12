@@ -159,7 +159,7 @@ public final class NettyChannelBuilder
   /**
    * Specifies the {@link ChannelFactory} to create {@link Channel} instances. This method is
    * usually only used if the specific {@code Channel} requires complex logic which requires
-   * additional information to e the {@code Channel}. Otherwise, recommend to use {@link
+   * additional information to create the {@code Channel}. Otherwise, recommend to use {@link
    * #channelType(Class)}.
    *
    * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
