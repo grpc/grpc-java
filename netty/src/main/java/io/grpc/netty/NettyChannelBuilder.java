@@ -159,6 +159,7 @@ public final class NettyChannelBuilder
    * when the channel is built, the builder will use the default one which is static.
    */
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
+    checkNotNull(channelType, "channelType");
     return channelFactory(new ReflectiveChannelFactory<>(channelType));
   }
 
@@ -176,7 +177,7 @@ public final class NettyChannelBuilder
    * io.netty.channel.nio.NioEventLoopGroup}, otherwise your application won't start.
    */
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
-    this.channelFactory = channelFactory;
+    this.channelFactory = checkNotNull(channelFactory, "channelFactory");
     return this;
   }
 

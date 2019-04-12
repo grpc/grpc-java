@@ -257,7 +257,7 @@ class Utils {
           .forName("io.netty.channel.epoll.EpollSocketChannel").asSubclass(Channel.class);
       return channelType;
     } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Epoll is available, but cannot load EpollSocketChannel", e);
+      throw new RuntimeException("Cannot load EpollSocketChannel", e);
     }
   }
 
@@ -271,11 +271,7 @@ class Utils {
     }
   }
 
-  /**
-   * Returns a default server {@link Channel} type; {@code
-   * io.netty.channel.epoll.EpollServerSocketChannel} when Epoll is available, otherwise using
-   * {@link NioServerSocketChannel}.
-   */
+  // Must call when epoll is available
   private static Class<? extends ServerChannel> epollServerChannelType() {
     try {
       Class<? extends ServerChannel> serverSocketChannel =
@@ -285,7 +281,7 @@ class Utils {
       logger.log(Level.FINE, "Using EpollServerSocketChannel");
       return serverSocketChannel;
     } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Epoll is available, but cannot load EpollServerSocketChannel", e);
+      throw new RuntimeException("Cannot load EpollServerSocketChannel", e);
     }
   }
 
