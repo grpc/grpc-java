@@ -39,7 +39,7 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   @Override
   public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-    counter.callsStarted.getAndIncrement();
+    counter.callsInProgress.getAndIncrement();
     final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
     return new StreamTracer(delegateTracer);
   }
@@ -56,7 +56,7 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   static class ClientLoadCounter {
-    private AtomicLong callsStarted = new AtomicLong();
+    private AtomicLong callsInProgress = new AtomicLong();
     private AtomicLong callsFinished = new AtomicLong();
     private AtomicLong callsFailed = new AtomicLong();
 
@@ -65,13 +65,9 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
      */
     ClientLoadSnapshot snapshot() {
       ClientLoadSnapshot snapshot = new ClientLoadSnapshot();
-      long numStarted = callsStarted.get();
-      long numFinished = callsFinished.getAndSet(0);
-      // Number of calls started rolls over to next snapshot to account for calls in progress.
-      callsStarted.set(numStarted - numFinished);
       snapshot.callsFailed = callsFailed.getAndSet(0);
-      snapshot.callsSucceed = numFinished - snapshot.callsFailed;
-      snapshot.callsInProgress = numStarted - numFinished;
+      snapshot.callsSucceed = callsFinished.getAndSet(0) - snapshot.callsFailed;
+      snapshot.callsInProgress = callsInProgress.get();
       return snapshot;
     }
   }
@@ -92,6 +88,7 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
     @Override
     public void streamClosed(Status status) {
       counter.callsFinished.getAndIncrement();
+      counter.callsInProgress.getAndDecrement();
       if (!status.isOk()) {
         counter.callsFailed.getAndIncrement();
       }
