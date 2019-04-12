@@ -34,7 +34,7 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   XdsClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
     this.counter = checkNotNull(counter, "counter");
-    this.delegate = checkNotNull(delegate, " delegate");
+    this.delegate = checkNotNull(delegate, "delegate");
   }
 
   @Override
@@ -92,7 +92,7 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
     @Override
     public void streamClosed(Status status) {
       counter.callsFinished.getAndIncrement();
-      if (status != Status.OK) {
+      if (!status.isOk()) {
         counter.callsFailed.getAndIncrement();
       }
     }

@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
@@ -26,23 +27,30 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
-import io.grpc.Status;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster. Methods
  * should be called in a synchronized context.
  */
+@NotThreadSafe
 class XdsLoadReportStore {
 
   private final String clusterName;
   private final Map<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityLoadCounters;
 
   XdsLoadReportStore(String clusterName) {
-    this.clusterName = checkNotNull(clusterName, "clusterName");
-    localityLoadCounters = new HashMap<>();
+    this(clusterName, new HashMap<Locality, ClientLoadCounter>());
+  }
+
+  @VisibleForTesting
+  XdsLoadReportStore(String clusetrName,
+      Map<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityLoadCounters) {
+    this.clusterName = checkNotNull(clusetrName, "clusterName");
+    this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
   }
 
   /**
@@ -67,8 +75,8 @@ class XdsLoadReportStore {
   /**
    * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
    */
-  PickResult interceptPickeResult(PickResult pickResult, Locality locality) {
-    if (pickResult.getStatus() != Status.OK) {
+  PickResult interceptPickResult(PickResult pickResult, Locality locality) {
+    if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
     ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
