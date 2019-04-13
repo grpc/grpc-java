@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.ThreadSafe;
 
 @ThreadSafe
-public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   private final ClientStreamTracer.Factory delegate;
   private final ClientLoadCounter counter;
@@ -48,14 +48,20 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
    * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter} to be sent as
    * part of {@link io.envoyproxy.envoy.api.v2.endpoint.ClusterStats} to the balancer.
    */
-  static class ClientLoadSnapshot {
+  static final class ClientLoadSnapshot {
 
-    long callsSucceed;
-    long callsInProgress;
-    long callsFailed;
+    final long callsSucceed;
+    final long callsInProgress;
+    final long callsFailed;
+
+    ClientLoadSnapshot(long callsSucceed, long callsInProgress, long callsFailed) {
+      this.callsSucceed = callsSucceed;
+      this.callsInProgress = callsInProgress;
+      this.callsFailed = callsFailed;
+    }
   }
 
-  static class ClientLoadCounter {
+  static final class ClientLoadCounter {
     private AtomicLong callsInProgress = new AtomicLong();
     private AtomicLong callsFinished = new AtomicLong();
     private AtomicLong callsFailed = new AtomicLong();
@@ -64,11 +70,11 @@ public class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
      * Generate a query count snapshot and reset counts for next snapshot.
      */
     ClientLoadSnapshot snapshot() {
-      ClientLoadSnapshot snapshot = new ClientLoadSnapshot();
-      snapshot.callsFailed = callsFailed.getAndSet(0);
-      snapshot.callsSucceed = callsFinished.getAndSet(0) - snapshot.callsFailed;
-      snapshot.callsInProgress = callsInProgress.get();
-      return snapshot;
+      long numFailed = callsFailed.getAndSet(0);
+      return new ClientLoadSnapshot(
+          callsFinished.getAndSet(0) - numFailed,
+          callsInProgress.get(),
+          numFailed);
     }
   }
 

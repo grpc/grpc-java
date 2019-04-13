@@ -36,7 +36,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
  */
 @ThreadSafe
-class XdsLoadReportStore {
+final class XdsLoadReportStore {
 
   private final String clusterName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
