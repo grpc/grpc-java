@@ -9,8 +9,8 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
+        "//api",
         "//context",
-        "//core",
         "//core:inprocess",
         "//core:util",
         "//stub",
@@ -29,7 +29,7 @@ java_library(
     ]),
     visibility = ["//:__subpackages__"],
     deps = [
-        "//core",
+        "//api",
         "//core:internal",
     ],
 )

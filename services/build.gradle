@@ -19,7 +19,8 @@ description = "gRPC: Services"
 
 dependencies {
     compile project(':grpc-protobuf'),
-            project(':grpc-stub')
+            project(':grpc-stub'),
+            project(':grpc-core')
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'

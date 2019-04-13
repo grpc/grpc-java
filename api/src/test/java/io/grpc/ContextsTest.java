@@ -28,11 +28,13 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import io.grpc.internal.FakeClock;
+import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.internal.NoopServerCall;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.junit.Test;
@@ -213,11 +215,29 @@ public class ContextsTest {
 
   @Test
   public void statusFromCancelled_TimeoutExceptionShouldMapToDeadlineExceeded() {
-    FakeClock fakeClock = new FakeClock();
+    final long expectedDelay = 100;
+    final TimeUnit expectedUnit = TimeUnit.SECONDS;
+    class MockScheduledExecutorService extends ForwardingScheduledExecutorService {
+      private ScheduledExecutorService delegate = TestingExecutors.noOpScheduledExecutor();
+      Runnable command;
+
+      @Override public ScheduledExecutorService delegate() {
+        return delegate;
+      }
+
+      @Override public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+        if (delay > unit.convert(expectedDelay, expectedUnit)) {
+          fail("Delay larger than expected: " + delay + " " + unit);
+        }
+        this.command = command;
+        return super.schedule(command, delay, unit);
+      }
+    }
+
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     Context.CancellableContext cancellableContext = Context.current()
-        .withDeadlineAfter(100, TimeUnit.NANOSECONDS, fakeClock.getScheduledExecutorService());
-    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
-    fakeClock.forwardNanos(100);
+        .withDeadlineAfter(expectedDelay, expectedUnit, executorService);
+    executorService.command.run();
 
     assertTrue(cancellableContext.isCancelled());
     assertThat(cancellableContext.cancellationCause(), instanceOf(TimeoutException.class));

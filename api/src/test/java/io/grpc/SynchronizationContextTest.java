@@ -25,11 +25,13 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.util.concurrent.testing.TestingExecutors;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.FakeClock;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -231,46 +233,46 @@ public class SynchronizationContextTest {
 
   @Test
   public void schedule() {
-    FakeClock clock = new FakeClock();
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
-        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
-    assertThat(handle.isPending()).isTrue();
-    assertThat(clock.runDueTasks()).isEqualTo(0);
-    assertThat(clock.forwardNanos(109)).isEqualTo(0);
+        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, executorService);
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(110, TimeUnit.NANOSECONDS));
     assertThat(handle.isPending()).isTrue();
     verify(task1, never()).run();
 
-    assertThat(clock.forwardNanos(1)).isEqualTo(1);
+    executorService.command.run();
     assertThat(handle.isPending()).isFalse();
     verify(task1).run();
   }
 
   @Test
   public void scheduleDueImmediately() {
-    FakeClock clock = new FakeClock();
-    ScheduledHandle handle =
-        syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
+    ScheduledHandle handle = syncContext.schedule(task1, -1, TimeUnit.NANOSECONDS, executorService);
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(-1, TimeUnit.NANOSECONDS));
     verify(task1, never()).run();
     assertThat(handle.isPending()).isTrue();
 
-    assertThat(clock.runDueTasks()).isEqualTo(1);
+    executorService.command.run();
     assertThat(handle.isPending()).isFalse();
     verify(task1).run();
   }
 
   @Test
   public void scheduleHandle_cancel() {
-    FakeClock clock = new FakeClock();
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
     ScheduledHandle handle =
-        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+        syncContext.schedule(task1, 110, TimeUnit.NANOSECONDS, executorService);
     assertThat(handle.isPending()).isTrue();
-    assertThat(clock.runDueTasks()).isEqualTo(0);
-    assertThat(handle.isPending()).isTrue();
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(110, TimeUnit.NANOSECONDS));
 
     handle.cancel();
     assertThat(handle.isPending()).isFalse();
     syncContext.drain();
-    assertThat(clock.numPendingTasks()).isEqualTo(0);
+    assertThat(executorService.future.isCancelled()).isTrue();
     verify(task1, never()).run();
   }
 
@@ -278,7 +280,7 @@ public class SynchronizationContextTest {
   // ScheduledExecutorService, but before the task is run.
   @Test
   public void scheduledHandle_cancelRacesWithTimerExpiration() throws Exception {
-    FakeClock clock = new FakeClock();
+    MockScheduledExecutorService executorService = new MockScheduledExecutorService();
 
     final CountDownLatch task1Running = new CountDownLatch(1);
     final LinkedBlockingQueue<ScheduledHandle> task2HandleQueue = new LinkedBlockingQueue<>();
@@ -309,8 +311,7 @@ public class SynchronizationContextTest {
         }
       };
 
-    ScheduledHandle handle =
-        syncContext.schedule(task2, 10, TimeUnit.NANOSECONDS, clock.getScheduledExecutorService());
+    ScheduledHandle handle = syncContext.schedule(task2, 10, TimeUnit.NANOSECONDS, executorService);
     // This will execute and block in task1
     sideThread.start();
 
@@ -318,8 +319,9 @@ public class SynchronizationContextTest {
     assertThat(task1Running.await(5, TimeUnit.SECONDS)).isTrue();
 
     // Timer expires. task2 will be enqueued, but blocked by task1
-    assertThat(clock.forwardNanos(10)).isEqualTo(1);
-    assertThat(clock.numPendingTasks()).isEqualTo(0);
+    assertThat(executorService.delay)
+        .isEqualTo(executorService.unit.convert(10, TimeUnit.NANOSECONDS));
+    executorService.command.run();
     assertThat(handle.isPending()).isTrue();
 
     // Enqueue task3 following task2
@@ -335,6 +337,25 @@ public class SynchronizationContextTest {
     assertThat(handle.isPending()).isFalse();
     verify(task2, never()).run();
     verify(task3).run();
-    assertThat(clock.numPendingTasks()).isEqualTo(0);
+  }
+
+  static class MockScheduledExecutorService extends ForwardingScheduledExecutorService {
+    private ScheduledExecutorService delegate = TestingExecutors.noOpScheduledExecutor();
+
+    Runnable command;
+    long delay;
+    TimeUnit unit;
+    ScheduledFuture<?> future;
+
+    @Override public ScheduledExecutorService delegate() {
+      return delegate;
+    }
+
+    @Override public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+      this.command = command;
+      this.delay = delay;
+      this.unit = unit;
+      return future = super.schedule(command, delay, unit);
+    }
   }
 }

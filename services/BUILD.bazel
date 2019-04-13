@@ -13,8 +13,8 @@ java_library(
         "src/main/java/io/grpc/services/TempFileSink.java",
     ],
     deps = [
+        "//api",
         "//context",
-        "//core",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
@@ -31,8 +31,8 @@ java_library(
     ],
     deps = [
         ":_channelz_java_grpc",
+        "//api",
         "//context",
-        "//core",
         "//stub",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
@@ -49,8 +49,8 @@ java_library(
     ],
     deps = [
         ":_reflection_java_grpc",
+        "//api",
         "//context",
-        "//core",
         "//core:internal",
         "//core:util",
         "//protobuf",
