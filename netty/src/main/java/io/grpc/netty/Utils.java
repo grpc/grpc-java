@@ -23,6 +23,7 @@ import static io.netty.channel.ChannelOption.SO_LINGER;
 import static io.netty.channel.ChannelOption.SO_TIMEOUT;
 import static io.netty.util.CharsetUtil.UTF_8;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
@@ -221,7 +222,8 @@ class Utils {
     return s;
   }
 
-  private static boolean isEpollAvailable() {
+  @VisibleForTesting
+  static boolean isEpollAvailable() {
     try {
       boolean available = (Boolean)
           Class
