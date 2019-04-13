@@ -28,27 +28,26 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
-import java.util.HashMap;
-import java.util.Map;
-import javax.annotation.concurrent.NotThreadSafe;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster. Methods
- * should be called in a synchronized context.
+ * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
  */
-@NotThreadSafe
+@ThreadSafe
 class XdsLoadReportStore {
 
   private final String clusterName;
-  private final Map<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityLoadCounters;
+  private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
 
   XdsLoadReportStore(String clusterName) {
-    this(clusterName, new HashMap<Locality, ClientLoadCounter>());
+    this(clusterName, new ConcurrentHashMap<Locality, ClientLoadCounter>());
   }
 
   @VisibleForTesting
   XdsLoadReportStore(String clusetrName,
-      Map<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityLoadCounters) {
+      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters) {
     this.clusterName = checkNotNull(clusetrName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
   }
@@ -89,11 +88,10 @@ class XdsLoadReportStore {
         }
       };
     }
-    XdsClientLoadRecorder.ClientLoadCounter counter;
-    counter = localityLoadCounters.get(locality);
+    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters
+        .putIfAbsent(locality, new ClientLoadCounter());
     if (counter == null) {
-      counter = new ClientLoadCounter();
-      localityLoadCounters.put(locality, counter);
+      counter = localityLoadCounters.get(locality);
     }
     XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
     return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
