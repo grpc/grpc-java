@@ -1,16 +1,7 @@
 java_library(
     name = "core",
-    srcs = glob([
-        "src/main/java/io/grpc/*.java",
-    ]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_failureaccess//jar",  # future transitive dep of Guava. See #5214
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-    ],
+    exports = ["//api"],
 )
 
 java_library(
@@ -20,8 +11,8 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
         "//context",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
@@ -39,8 +30,8 @@ java_library(
     ]),
     visibility = ["//:__subpackages__"],
     deps = [
-        ":core",
         ":perfmark",
+        "//api",
         "//context",
         "@com_google_android_annotations//jar",
         "@com_google_code_findbugs_jsr305//jar",
@@ -64,8 +55,8 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",

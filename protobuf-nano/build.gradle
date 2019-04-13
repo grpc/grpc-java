@@ -10,7 +10,7 @@ buildscript {
 description = 'gRPC: Protobuf Nano'
 
 dependencies {
-    compile project(':grpc-core'),
+    compile project(':grpc-api'),
             libraries.protobuf_nano
     compile (libraries.guava) {
         // prefer 2.3.2 from libraries instead of 2.1.3

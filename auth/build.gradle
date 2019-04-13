@@ -1,6 +1,6 @@
 description = "gRPC: Auth"
 dependencies {
-    compile project(':grpc-core'),
+    compile project(':grpc-api'),
             libraries.google_auth_credentials
     testCompile project(':grpc-testing'),
             libraries.google_auth_oauth2_http

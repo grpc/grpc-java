@@ -1,6 +1,6 @@
 description = "gRPC: Stub"
 dependencies {
-    compile project(':grpc-core')
+    compile project(':grpc-api')
     testCompile libraries.truth,
             project(':grpc-testing')
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
