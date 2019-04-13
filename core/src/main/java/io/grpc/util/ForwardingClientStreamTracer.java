@@ -18,9 +18,11 @@ package io.grpc.util;
 
 import com.google.common.base.MoreObjects;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ExperimentalApi;
 import io.grpc.Metadata;
 import io.grpc.Status;
 
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
 public abstract class ForwardingClientStreamTracer extends ClientStreamTracer {
   /** Returns the underlying {@code ClientStreamTracer}. */
   protected abstract ClientStreamTracer delegate();
