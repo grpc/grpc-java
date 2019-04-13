@@ -19,11 +19,15 @@ package io.grpc.netty;
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
 import static io.grpc.internal.TransportFrameUtil.toHttp2Headers;
 import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
+import static io.grpc.netty.EpollUtils.epollChannelType;
+import static io.grpc.netty.EpollUtils.epollEventLoopGroupType;
+import static io.grpc.netty.EpollUtils.epollServerChannelType;
+import static io.grpc.netty.EpollUtils.getEpollUnavailabilityCause;
+import static io.grpc.netty.EpollUtils.isEpollAvailable;
 import static io.netty.channel.ChannelOption.SO_LINGER;
 import static io.netty.channel.ChannelOption.SO_TIMEOUT;
 import static io.netty.util.CharsetUtil.UTF_8;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalMetadata;
@@ -204,68 +208,6 @@ class Utils {
       return Status.INTERNAL.withDescription("http2 exception").withCause(t);
     }
     return s;
-  }
-
-  @VisibleForTesting
-  static boolean isEpollAvailable() {
-    try {
-      return (boolean) (Boolean)
-          Class
-              .forName("io.netty.channel.epoll.Epoll")
-              .getDeclaredMethod("isAvailable")
-              .invoke(null);
-    } catch (ClassNotFoundException e) {
-      // this is normal if netty-epoll runtime dependency doesn't exist.
-      return false;
-    } catch (Exception e) {
-      throw new RuntimeException("Exception while checking Epoll availability", e);
-    }
-  }
-
-  private static Throwable getEpollUnavailabilityCause() {
-    try {
-      return (Throwable)
-          Class
-              .forName("io.netty.channel.epoll.Epoll")
-              .getDeclaredMethod("unavailabilityCause")
-              .invoke(null);
-    } catch (Exception e) {
-      return e;
-    }
-  }
-
-  // Must call when epoll is available
-  private static Class<? extends Channel> epollChannelType() {
-    try {
-      Class<? extends Channel> channelType = Class
-          .forName("io.netty.channel.epoll.EpollSocketChannel").asSubclass(Channel.class);
-      return channelType;
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Cannot load EpollSocketChannel", e);
-    }
-  }
-
-  // Must call when epoll is available
-  private static Class<? extends EventLoopGroup> epollEventLoopGroupType() {
-    try {
-      return Class
-          .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class);
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Cannot load EpollEventLoopGroup", e);
-    }
-  }
-
-  // Must call when epoll is available
-  private static Class<? extends ServerChannel> epollServerChannelType() {
-    try {
-      Class<? extends ServerChannel> serverSocketChannel =
-          Class
-              .forName("io.netty.channel.epoll.EpollServerSocketChannel")
-              .asSubclass(ServerChannel.class);
-      return serverSocketChannel;
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Cannot load EpollServerSocketChannel", e);
-    }
   }
 
   private static EventLoopGroup createEventLoopGroup(

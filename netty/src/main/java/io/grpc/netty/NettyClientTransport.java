@@ -59,6 +59,7 @@ import java.net.SocketAddress;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -220,11 +221,26 @@ class NettyClientTransport implements ConnectionClientTransport {
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
     b.option(SO_KEEPALIVE, true);
+    // For non-epoll based channel, the option will be ignored.
+    ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+    int tcpUserTimeoutMillis = -1;
+    if (tcpUserTimeoutOption != null && keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
+      tcpUserTimeoutMillis = (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeNanos);
+      b.option(tcpUserTimeoutOption, tcpUserTimeoutMillis);
+    }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
+      Object value = entry.getValue();
+      // For TCP_USER_TIMEOUT we want to use Min(keepAliveTime, channelOption), so skip if the
+      // provided value is greater than keepAliveTime if keepAliveTime is used.
+      if (tcpUserTimeoutMillis != -1
+          && tcpUserTimeoutOption.equals(entry.getKey())
+          && (Integer) value >= tcpUserTimeoutMillis) {
+        continue;
+      }
       // Every entry in the map is obtained from
       // NettyChannelBuilder#withOption(ChannelOption<T> option, T value)
       // so it is safe to pass the key-value pair to b.option().
-      b.option((ChannelOption<Object>) entry.getKey(), entry.getValue());
+      b.option((ChannelOption<Object>) entry.getKey(), value);
     }
 
     ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);

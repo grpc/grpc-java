@@ -179,7 +179,7 @@ public class UtilsTest {
 
   @Test
   public void defaultEventLoopGroup_whenEpollIsAvailable() {
-    assume().that(Utils.isEpollAvailable()).isTrue();
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
 
     EventLoopGroup defaultBossGroup = Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP.create();
     EventLoopGroup defaultWorkerGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
@@ -195,7 +195,7 @@ public class UtilsTest {
 
   @Test
   public void defaultClientChannelType_whenEpollIsAvailable() {
-    assume().that(Utils.isEpollAvailable()).isTrue();
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
 
     Class<? extends Channel> clientChannelType = Utils.DEFAULT_CLIENT_CHANNEL_TYPE;
 
@@ -205,7 +205,7 @@ public class UtilsTest {
 
   @Test
   public void defaultServerChannelType_whenEpollIsAvailable() {
-    assume().that(Utils.isEpollAvailable()).isTrue();
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
 
     Class<? extends Channel> clientChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
 

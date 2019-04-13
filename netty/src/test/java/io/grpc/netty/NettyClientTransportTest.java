@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
@@ -69,6 +70,7 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -480,7 +482,8 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        new ReflectiveChannelFactory<>(NioSocketChannel.class));
+        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(NioSocketChannel.class),
+        group);
 
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -493,7 +496,7 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        new ReflectiveChannelFactory<>(LocalChannel.class));
+        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(LocalChannel.class), group);
 
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -609,6 +612,145 @@ public class NettyClientTransportTest {
     assertNull(transport.keepAliveManager());
   }
 
+  @Test
+  public void keepAliveEnabled_shouldSetTcpUserTimeout() throws Exception {
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
+
+    startServer();
+    EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+    int keepAliveTimeMillis = 1234567;
+    try {
+      NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
+          GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
+          TimeUnit.MILLISECONDS.toNanos(keepAliveTimeMillis),
+          new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup);
+
+      callMeMaybe(transport.start(clientTransportListener));
+
+      ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+      assertThat(tcpUserTimeoutOption).isNotNull();
+      // on some linux based system, the integer value may have error (usually +-1)
+      assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
+          .isWithin(5.0).of((double) keepAliveTimeMillis);
+    } finally {
+      epollGroup.shutdownGracefully();
+    }
+  }
+
+  @Test
+  public void keepAliveDisabled_shouldNotSetTcpUserTimeout() throws Exception {
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
+
+    startServer();
+    EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+    int keepAliveTimeMillis = 12345670;
+    try {
+      NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
+          GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */,
+          TimeUnit.MILLISECONDS.toNanos(keepAliveTimeMillis),
+          new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup);
+
+      callMeMaybe(transport.start(clientTransportListener));
+
+      ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+      assertThat(tcpUserTimeoutOption).isNotNull();
+      // default TCP_USER_TIMEOUT=0 (use the system default)
+      assertThat(transport.channel().config().getOption(tcpUserTimeoutOption)).isEqualTo(0);
+    } finally {
+      epollGroup.shutdownGracefully();
+    }
+  }
+
+  @Test
+  public void keepAliveDisabled_TcpUserTimeoutProvided() throws Exception {
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
+
+    startServer();
+    EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+    int tcpUserTimeoutMillis = 12345670;
+    Map<ChannelOption<?>, Object> channelOptionMap = new HashMap<>();
+    try {
+      ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+      channelOptionMap.put(tcpUserTimeoutOption, tcpUserTimeoutMillis);
+
+      NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
+          GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */,
+          TimeUnit.SECONDS.toNanos(10L),
+          new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup,
+          channelOptionMap);
+
+      callMeMaybe(transport.start(clientTransportListener));
+
+      assertThat(tcpUserTimeoutOption).isNotNull();
+      assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
+          .isWithin(5.0).of(tcpUserTimeoutMillis);
+    } finally {
+      epollGroup.shutdownGracefully();
+    }
+  }
+
+  @Test
+  public void keepAliveEnabled_biggerTcpUserTimeoutProvided() throws Exception {
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
+
+    startServer();
+    EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+    int tcpUserTimeoutMillis = 12345670;
+    long keepAliveTimeNano = TimeUnit.SECONDS.toNanos(10L);
+    Map<ChannelOption<?>, Object> channelOptionMap = new HashMap<>();
+    try {
+      ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+      channelOptionMap.put(tcpUserTimeoutOption, tcpUserTimeoutMillis);
+      assertThat(tcpUserTimeoutMillis)
+          .isGreaterThan((int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeNano));
+
+      NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
+          GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
+          keepAliveTimeNano,
+          new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup,
+          channelOptionMap);
+
+      callMeMaybe(transport.start(clientTransportListener));
+
+      assertThat(tcpUserTimeoutOption).isNotNull();
+      assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
+          .isWithin(5.0).of(TimeUnit.NANOSECONDS.toMillis(keepAliveTimeNano));
+    } finally {
+      epollGroup.shutdownGracefully();
+    }
+  }
+
+  @Test
+  public void keepAliveEnabled_smallerTcpUserTimeoutProvided() throws Exception {
+    assume().that(EpollUtils.isEpollAvailable()).isTrue();
+
+    startServer();
+    EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+    int tcpUserTimeoutMillis = 120;
+    long keepAliveTimeNano = TimeUnit.SECONDS.toNanos(10L);
+    Map<ChannelOption<?>, Object> channelOptionMap = new HashMap<>();
+    try {
+      ChannelOption<Integer> tcpUserTimeoutOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+      channelOptionMap.put(tcpUserTimeoutOption, tcpUserTimeoutMillis);
+      assertThat(tcpUserTimeoutMillis)
+          .isLessThan((int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeNano));
+
+      NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
+          GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
+          keepAliveTimeNano,
+          new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup,
+          channelOptionMap);
+
+      callMeMaybe(transport.start(clientTransportListener));
+
+      assertThat(tcpUserTimeoutOption).isNotNull();
+      assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
+          .isWithin(5.0).of(tcpUserTimeoutMillis);
+    } finally {
+      epollGroup.shutdownGracefully();
+    }
+  }
+
   private Throwable getRootCause(Throwable t) {
     if (t.getCause() == null) {
       return t;
@@ -631,19 +773,28 @@ public class NettyClientTransportTest {
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive) {
     return newTransport(negotiator, maxMsgSize, maxHeaderListSize, userAgent, enableKeepAlive,
-        new ReflectiveChannelFactory<>(NioSocketChannel.class));
+        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(NioSocketChannel.class),
+        group);
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
-      int maxHeaderListSize, String userAgent, boolean enableKeepAlive,
-      ChannelFactory<? extends Channel> channelFactory) {
-    long keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
+      int maxHeaderListSize, String userAgent, boolean enableKeepAlive, long keepAliveTimeNano,
+      ChannelFactory<? extends Channel> channelFactory, EventLoopGroup group) {
+    return newTransport(
+        negotiator, maxMsgSize, maxHeaderListSize, userAgent, enableKeepAlive, keepAliveTimeNano,
+        channelFactory, group, new HashMap<ChannelOption<?>, Object>());
+  }
+
+  private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
+      int maxHeaderListSize, String userAgent, boolean enableKeepAlive, long keepAliveTimeNano,
+      ChannelFactory<? extends Channel> channelFactory, EventLoopGroup group,
+      Map<ChannelOption<?>, Object> channelOptionMap) {
     long keepAliveTimeoutNano = TimeUnit.SECONDS.toNanos(1L);
-    if (enableKeepAlive) {
-      keepAliveTimeNano = TimeUnit.SECONDS.toNanos(10L);
+    if (!enableKeepAlive) {
+      keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
     NettyClientTransport transport = new NettyClientTransport(
-        address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
+        address, channelFactory, channelOptionMap, group,
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
