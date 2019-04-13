@@ -54,6 +54,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 
 /**
  * Common utility methods.
@@ -71,7 +72,6 @@ class Utils {
   public static final AsciiString TE_HEADER = AsciiString.of(GrpcUtil.TE_HEADER.name());
   public static final AsciiString TE_TRAILERS = AsciiString.of(GrpcUtil.TE_TRAILERS);
   public static final AsciiString USER_AGENT = AsciiString.of(GrpcUtil.USER_AGENT_KEY.name());
-
   public static final Resource<EventLoopGroup> NIO_BOSS_EVENT_LOOP_GROUP
       = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", NioEventLoopGroup.class);
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
@@ -279,6 +279,31 @@ class Utils {
     } catch (Exception e) {
       throw new RuntimeException("Cannot create EventLoopGroup for " + eventLoopGroupType, e);
     }
+  }
+
+  /**
+   * Returns TCP_USER_TIMEOUT channel option for Epoll channel if Epoll is available, otherwise
+   * null.
+   */
+  @Nullable
+  static ChannelOption<Integer> maybeGetTcpUserTimeoutOption() {
+    return getEpollChannelOption("TCP_USER_TIMEOUT");
+  }
+
+  @Nullable
+  @SuppressWarnings("unchecked")
+  private static <T> ChannelOption<T> getEpollChannelOption(String optionName) {
+    if (isEpollAvailable()) {
+      try {
+        return
+            (ChannelOption<T>) Class.forName("io.netty.channel.epoll.EpollChannelOption")
+                .getField(optionName)
+                .get(null);
+      } catch (Exception e) {
+        throw new RuntimeException("ChannelOption(" + optionName + ") is not available", e);
+      }
+    }
+    return null;
   }
 
   private static final class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
