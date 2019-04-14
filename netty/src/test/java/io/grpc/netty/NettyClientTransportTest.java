@@ -53,6 +53,7 @@ import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
@@ -660,7 +661,7 @@ public class NettyClientTransportTest {
         TestUtils.testServerAddress(new InetSocketAddress(0)),
         NioServerSocketChannel.class,
         new HashMap<ChannelOption<?>, Object>(),
-        group, group, negotiator,
+        new FixedObjectPool<>(group), new FixedObjectPool<>(group), negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         maxStreamsPerConnection,
@@ -668,7 +669,7 @@ public class NettyClientTransportTest {
         DEFAULT_SERVER_KEEPALIVE_TIME_NANOS, DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS,
         MAX_CONNECTION_IDLE_NANOS_DISABLED,
         MAX_CONNECTION_AGE_NANOS_DISABLED, MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE, true, 0,
-        channelz, false, false);
+        channelz);
     server.start(serverListener);
     address = TestUtils.testServerAddress((InetSocketAddress) server.getListenSocketAddress());
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());

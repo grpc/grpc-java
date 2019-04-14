@@ -79,39 +79,23 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
-  private static final Class<? extends ServerChannel> defaultServerChannelType;
-  private static final Class<? extends Channel> defaultClientChannelType;
+  private static final Class<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_TYPE;
+  private static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
 
   static {
     // Decide default channel types and EventLoopGroup based on Epoll availability
-    Class<? extends ServerChannel> serverChannelType = NioServerSocketChannel.class;
-    Class<? extends Channel> clientChannelType = NioSocketChannel.class;
-    Class<? extends EventLoopGroup> eventLoopGroupType = NioEventLoopGroup.class;
-    boolean epollSuccessful = false;
-
-    try {
-      if (isEpollAvailable()) {
-        serverChannelType = epollServerChannelType();
-        clientChannelType = epollChannelType();
-        // load EventLoopGroup to make sure all defaults are using same type.
-        eventLoopGroupType = epollEventLoopGroupType();
-        epollSuccessful = true;
-      }
-    } catch (Exception e) {
-      serverChannelType = NioServerSocketChannel.class;
-      clientChannelType = NioSocketChannel.class;
-      eventLoopGroupType = NioEventLoopGroup.class;
-    }
-
-    defaultServerChannelType = serverChannelType;
-    defaultClientChannelType = clientChannelType;
-
-    if (epollSuccessful) {
+    if (isEpollAvailable()) {
+      DEFAULT_SERVER_CHANNEL_TYPE = epollServerChannelType();
+      DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
+      Class<? extends EventLoopGroup> eventLoopGroupType = epollEventLoopGroupType();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
-          = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", eventLoopGroupType);
+        = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", eventLoopGroupType);
       DEFAULT_WORKER_EVENT_LOOP_GROUP
-          = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", eventLoopGroupType);
+        = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", eventLoopGroupType);
     } else {
+      logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
+      DEFAULT_SERVER_CHANNEL_TYPE = NioServerSocketChannel.class;
+      DEFAULT_CLIENT_CHANNEL_TYPE = NioSocketChannel.class;
       DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
     }
@@ -225,18 +209,16 @@ class Utils {
   @VisibleForTesting
   static boolean isEpollAvailable() {
     try {
-      boolean available = (Boolean)
+      return (boolean) (Boolean)
           Class
               .forName("io.netty.channel.epoll.Epoll")
               .getDeclaredMethod("isAvailable")
               .invoke(null);
-      if (!available) {
-        logger.log(Level.FINE, "Epoll is not available", getEpollUnavailabilityCause());
-      }
-      return available;
-    } catch (Exception e) {
-      logger.log(Level.FINE, "netty-epoll is not available (this may be normal)");
+    } catch (ClassNotFoundException e) {
+      // this is normal if netty-epoll runtime dependency doesn't exist.
       return false;
+    } catch (Exception e) {
+      throw new RuntimeException("Exception while checking Epoll availability", e);
     }
   }
 
@@ -269,7 +251,7 @@ class Utils {
       return Class
           .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class);
     } catch (ClassNotFoundException e) {
-      throw new RuntimeException("Cannot create EpollEventLoopGroup", e);
+      throw new RuntimeException("Cannot load EpollEventLoopGroup", e);
     }
   }
 
@@ -280,7 +262,6 @@ class Utils {
           Class
               .forName("io.netty.channel.epoll.EpollServerSocketChannel")
               .asSubclass(ServerChannel.class);
-      logger.log(Level.FINE, "Using EpollServerSocketChannel");
       return serverSocketChannel;
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("Cannot load EpollServerSocketChannel", e);
@@ -288,11 +269,11 @@ class Utils {
   }
 
   public static Class<? extends ServerChannel> defaultServerChannelType() {
-    return defaultServerChannelType;
+    return DEFAULT_SERVER_CHANNEL_TYPE;
   }
 
   public static Class<? extends Channel> defaultClientChannelType() {
-    return defaultClientChannelType;
+    return DEFAULT_CLIENT_CHANNEL_TYPE;
   }
 
   private static EventLoopGroup createEventLoopGroup(

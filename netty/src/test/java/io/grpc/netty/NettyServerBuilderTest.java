@@ -16,12 +16,16 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
 import io.grpc.ServerStreamTracer.Factory;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -127,5 +131,46 @@ public class NettyServerBuilderTest {
     thrown.expectMessage("permit keepalive time must be non-negative");
 
     builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyBossGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyWorkerGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyTypeProvided() {
+    builder.channelType(LocalServerChannel.class);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_usingDefault() {
+    assertFalse(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_allProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    builder.channelType(LocalServerChannel.class);
+
+    assertFalse(builder.shouldFallBackToNio());
   }
 }

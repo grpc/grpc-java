@@ -33,7 +33,7 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -60,8 +60,8 @@ public class NettyServerTest {
         addr,
         Utils.defaultServerChannelType(),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -73,9 +73,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
-        channelz,
-        true,
-        true);
+        channelz);
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -100,8 +98,8 @@ public class NettyServerTest {
         addr,
         Utils.defaultServerChannelType(),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -113,9 +111,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
-        channelz,
-        true,
-        true);
+        channelz);
 
     assertThat(ns.getListenSocketAddress()).isEqualTo(addr);
   }
@@ -140,8 +136,8 @@ public class NettyServerTest {
         addr,
         Utils.defaultServerChannelType(),
         channelOptions,
-        SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -153,9 +149,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
-        channelz,
-        true,
-        true);
+        channelz);
     ns.start(new ServerListener() {
       @Override
       public ServerTransportListener transportCreated(ServerTransport transport) {
@@ -192,8 +186,8 @@ public class NettyServerTest {
         addr,
         Utils.defaultServerChannelType(),
         new HashMap<ChannelOption<?>, Object>(),
-        SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
-        SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -205,9 +199,7 @@ public class NettyServerTest {
         1, 1, // ignore
         1, 1, // ignore
         true, 0, // ignore
-        channelz,
-        true,
-        true);
+        channelz);
     final SettableFuture<Void> shutdownCompleted = SettableFuture.create();
     ns.start(new ServerListener() {
       @Override

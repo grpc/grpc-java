@@ -17,11 +17,16 @@
 package io.grpc.netty;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -193,5 +198,54 @@ public class NettyChannelBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("keepalive timeout must be positive");
     builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyGroupProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    builder.eventLoopGroup(mock(EventLoopGroup.class));
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyTypeProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    builder.channelType(LocalChannel.class);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyFactoryProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    builder.channelFactory(new ChannelFactory<Channel>() {
+      @Override
+      public Channel newChannel() {
+        return null;
+      }
+    });
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_usingDefault() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    assertFalse(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_bothProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    builder.eventLoopGroup(mock(EventLoopGroup.class));
+    builder.channelType(LocalChannel.class);
+
+    assertFalse(builder.shouldFallBackToNio());
   }
 }
