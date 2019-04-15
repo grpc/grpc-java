@@ -70,6 +70,62 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
+  public void testUntrackedLocalityNoLoadRecording() {
+    Locality locality =
+        Locality.newBuilder()
+            .setRegion("test_region")
+            .setZone("test_zone")
+            .setSubZone("test_subzone")
+            .build();
+    PickResult pickResult = PickResult.withSubchannel(fakeSubchannel);
+    // XdsClientLoadStore does not record loads for untracked localities.
+    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, locality);
+    assertThat(localityLoadCounters).hasSize(0);
+    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
+    // Client loads are recorded for tracked localities.
+    loadStore.addLocality(locality);
+    assertThat(localityLoadCounters).containsKey(locality);
+    interceptedPickResult = loadStore.interceptPickResult(pickResult, locality);
+    ClientStreamTracer tracer = interceptedPickResult
+        .getStreamTracerFactory()
+        .newClientStreamTracer(STREAM_INFO, new Metadata());
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
+    XdsClientLoadRecorder.ClientLoadSnapshot snapshot = counter.snapshot();
+    assertEquals(0, snapshot.callsSucceed);
+    assertEquals(0, snapshot.callsFailed);
+    assertEquals(1, snapshot.callsInProgress);
+    // Client loads for localities no longer tracked are not recorded any more,
+    // even if calls are in progress.
+    loadStore.removeLocality(locality);
+    assertThat(localityLoadCounters).doesNotContainKey(locality);
+    tracer.streamClosed(Status.OK);
+    counter.snapshot();
+    assertEquals(0, snapshot.callsSucceed);
+    assertEquals(0, snapshot.callsFailed);
+    assertEquals(1, snapshot.callsInProgress);
+  }
+
+  @Test
+  public void testInvalidPickResultNotIntercepted() {
+    Locality locality =
+        Locality.newBuilder()
+            .setRegion("test_region")
+            .setZone("test_zone")
+            .setSubZone("test_subzone")
+            .build();
+    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
+    PickResult emptyResult = PickResult.withNoResult();
+    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
+    PickResult interceptedErrorResult = loadStore.interceptPickResult(errorResult, locality);
+    PickResult interceptedEmptyResult = loadStore.interceptPickResult(emptyResult, locality);
+    PickResult interceptedDroppedResult = loadStore.interceptPickResult(droppedResult, locality);
+    assertThat(localityLoadCounters).hasSize(0);
+    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedEmptyResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
   public void testInterceptPreserveOriginStreamTracer() {
     Locality locality =
         Locality.newBuilder()
@@ -77,6 +133,7 @@ public class XdsLoadReportStoreTest {
             .setZone("test_zone")
             .setSubZone("test_subzone")
             .build();
+    loadStore.addLocality(locality);
     ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     when(mockFactory
@@ -105,6 +162,7 @@ public class XdsLoadReportStoreTest {
             .setZone("test_zone")
             .setSubZone("test_subzone")
             .build();
+    loadStore.addLocality(locality1);
     PickResult pickResult1 = PickResult.withSubchannel(fakeSubchannel);
     PickResult interceptedPickResult1 = loadStore.interceptPickResult(pickResult1, locality1);
     assertThat(interceptedPickResult1.getSubchannel()).isSameAs(fakeSubchannel);
@@ -159,6 +217,7 @@ public class XdsLoadReportStoreTest {
             .setZone("test_zone")
             .setSubZone("test_subzone")
             .build();
+    loadStore.addLocality(locality2);
     PickResult pickResult3 = PickResult.withSubchannel(fakeSubchannel);
     PickResult interceptedPickResult3 = loadStore.interceptPickResult(pickResult3, locality2);
     assertThat(localityLoadCounters).containsKey(locality2);

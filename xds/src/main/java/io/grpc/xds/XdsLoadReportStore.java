@@ -85,11 +85,20 @@ final class XdsLoadReportStore {
   }
 
   /**
+   * Create a {@link ClientLoadCounter} for the provided locality if not present in this {@link
+   * XdsLoadReportStore}. This method needs to be called at locality updates for newly assigned
+   * localities in balancer discovery responses.
+   */
+  void addLocality(Locality locality) {
+    localityLoadCounters.putIfAbsent(locality, new ClientLoadCounter());
+  }
+
+  /**
    * Discard the {@link ClientLoadCounter} for the provided locality if owned by this {@link
    * XdsLoadReportStore} to avoid map size growing infinitely. To be called at locality updates when
-   * the provided locality is no longer considered in balancer discovery response.
+   * the provided locality is no longer considered in balancer discovery response.s
    */
-  void discardClientLoadCounter(Locality locality) {
+  void removeLocality(Locality locality) {
     localityLoadCounters.remove(locality);
   }
 
@@ -97,7 +106,7 @@ final class XdsLoadReportStore {
    * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
    */
   PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    if (!pickResult.getStatus().isOk()) {
+    if (!pickResult.getStatus().isOk() || !localityLoadCounters.containsKey(locality)) {
       return pickResult;
     }
     ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
@@ -111,12 +120,7 @@ final class XdsLoadReportStore {
       };
     }
 
-    // TODO (chengyuanzhang): use a createClientLoadCounter method instead better?
-    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters
-        .putIfAbsent(locality, new ClientLoadCounter());
-    if (counter == null) {
-      counter = localityLoadCounters.get(locality);
-    }
+    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters.get(locality);
     XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
     return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
