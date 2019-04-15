@@ -44,7 +44,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import javafx.scene.paint.Stop;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -74,7 +73,6 @@ class XdsLrsClient {
 
   @Nullable
   private LrsStream lrsStream;
-  private List<String> serviceList;  // list of services of interest to be reported
 
   XdsLrsClient(ManagedChannel channel, Helper helper, Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider) {
@@ -124,6 +122,18 @@ class XdsLrsClient {
     if (lrsStream != null) {
       lrsStream.close(null);
     }
+  }
+
+  void cancelLrsRpcRetryTimer() {
+    if (lrsRpcRetryTimer != null) {
+      lrsRpcRetryTimer.cancel();
+    }
+  }
+
+  void shutdown() {
+    shutdownLrsRpc();
+    cancelLrsRpcRetryTimer();
+    // Do not shutdown channel as it is not owned by LrsClient.
   }
 
   @VisibleForTesting
@@ -249,7 +259,12 @@ class XdsLrsClient {
       }
       loadReportIntervalNano
           = durationToNum(response.getLoadReportingInterval(), TimeUnit.NANOSECONDS);
-      serviceList = Collections.unmodifiableList(response.getClustersList());
+      List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
+      // For gRPC use case, LRS response will only contain one cluster, which is the same as in
+      // the EDS response.
+      checkState(serviceList.size() == 1, "Excessive reporting cluster: %s", serviceList);
+      checkState(serviceList.get(0).equals(serviceName), "Unmatched cluster name: %s with EDS: %s",
+          serviceList.get(0), serviceName);
       scheduleNextLoadReport();
     }
 
@@ -306,6 +321,5 @@ class XdsLrsClient {
         lrsStream = null;
       }
     }
-
   }
 }
