@@ -35,7 +35,6 @@ import javax.annotation.Nullable;
  * running at the same time.
  */
 // TODO(madongfly): figure out a way to not expose it or move it to transport package.
-@SuppressWarnings("unchecked")
 public final class SerializingExecutor implements Executor, Runnable {
   private static final Logger log =
       Logger.getLogger(SerializingExecutor.class.getName());
@@ -70,7 +69,7 @@ public final class SerializingExecutor implements Executor, Runnable {
       // Use reflection to maintain compatibility with Guava versions < 23.1
       Class<? extends Executor> seqExecutorClass =
           lookupExecutorClass("com.google.common.util.concurrent.SequentialExecutor");
-      if (!wrapSerialized && seqExecutorClass == null) {
+      if (seqExecutorClass == null) {
         // The class had a different name prior to version 23.3
         seqExecutorClass =
             lookupExecutorClass("com.google.common.util.concurrent.SerializingExecutor");
@@ -85,7 +84,7 @@ public final class SerializingExecutor implements Executor, Runnable {
   // returns null if not found or not loadable
   private static Class<? extends Executor> lookupExecutorClass(String name) {
     try {
-      return (Class<? extends Executor>) Class.forName(name);
+      return Class.forName(name).asSubclass(Executor.class);
     } catch (Exception e) {
       return null;
     }
