@@ -73,6 +73,15 @@ final class XdsLoadReportStore {
   }
 
   /**
+   * Discard the {@link ClientLoadCounter} for the provided locality if owned by this {@link
+   * XdsLoadReportStore} to avoid map size growing infinitely. To be called at locality updates when
+   * the provided locality is no longer considered in balancer discovery response.
+   */
+  void discardClientLoadCounter(Locality locality) {
+    localityLoadCounters.remove(locality);
+  }
+
+  /**
    * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
    */
   PickResult interceptPickResult(PickResult pickResult, Locality locality) {
@@ -89,6 +98,8 @@ final class XdsLoadReportStore {
         }
       };
     }
+
+    // TODO (chengyuanzhang): use a createClientLoadCounter method instead better?
     XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters
         .putIfAbsent(locality, new ClientLoadCounter());
     if (counter == null) {
