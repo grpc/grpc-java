@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -43,6 +44,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javafx.scene.paint.Stop;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -60,6 +62,7 @@ class XdsLrsClient {
   private final Helper helper;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
+  private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch stopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -73,18 +76,21 @@ class XdsLrsClient {
   private LrsStream lrsStream;
   private List<String> serviceList;  // list of services of interest to be reported
 
-  XdsLrsClient(ManagedChannel channel, Helper helper, Stopwatch stopwatch,
+  XdsLrsClient(ManagedChannel channel, Helper helper, Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    this.stopwatch = stopwatchSupplier.get();
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
+  // TODO (chengyuanzhang): consider putting to a util class.
+  @VisibleForTesting
   static long durationToNum(Duration duration, TimeUnit unit) {
     return unit.convert(duration.getSeconds() * 1000_000_000L + duration.getNanos(),
         TimeUnit.NANOSECONDS);
@@ -94,9 +100,10 @@ class XdsLrsClient {
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
     LoadReportingServiceGrpc.LoadReportingServiceStub stub
         = LoadReportingServiceGrpc.newStub(channel);
-    lrsStream = new LrsStream(stub);
+    lrsStream = new LrsStream(stub, stopwatchSupplier.get());
     lrsStream.start();
     stopwatch.reset().start();
+    lrsStream.stopwatch.reset().start();
 
     LoadStatsRequest initRequest =
         LoadStatsRequest.newBuilder()
@@ -107,7 +114,6 @@ class XdsLrsClient {
                         Value.newBuilder().setStringValue(serviceName).build())))
             .build();
     try {
-      lrsStream.prevLoadReportNano = stopwatch.elapsed(TimeUnit.NANOSECONDS);
       lrsStream.lrsRequestWriter.onNext(initRequest);
     } catch (Exception e) {
       lrsStream.close(e);
@@ -144,6 +150,7 @@ class XdsLrsClient {
     }
   }
 
+  // TODO (chengyuanzhang): consider putting to a util class.
   @VisibleForTesting
   static Duration numToDuration(long duration, TimeUnit unit) {
     long time = unit.toNanos(duration);
@@ -155,15 +162,16 @@ class XdsLrsClient {
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
+    final Stopwatch stopwatch;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
     boolean initialResponseReceived;
     boolean closed;
-    long prevLoadReportNano;
     long loadReportIntervalNano = -1;
     ScheduledHandle loadReportTimer;
 
-    LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub) {
+    LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
+      this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     }
 
     void start() {
@@ -203,8 +211,8 @@ class XdsLrsClient {
     }
 
     private void sendLoadReport() {
-      long interval = stopwatch.elapsed(TimeUnit.NANOSECONDS) - prevLoadReportNano;
-      prevLoadReportNano = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      long interval = stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      stopwatch.reset().start();
       // TODO: get load report and send to management server
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
           .setNode(Node.newBuilder()

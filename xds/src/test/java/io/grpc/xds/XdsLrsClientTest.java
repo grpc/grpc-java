@@ -179,7 +179,7 @@ public class XdsLrsClientTest {
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
-    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier().get(),
+    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
         backoffPolicyProvider);
   }
 
