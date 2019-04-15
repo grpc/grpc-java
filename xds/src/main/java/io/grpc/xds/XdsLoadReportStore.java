@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
@@ -31,6 +32,7 @@ import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -41,16 +43,21 @@ final class XdsLoadReportStore {
 
   private final String clusterName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  // Cluster level dropped request counts for each category specified in the DropOverload policy.
+  private final ConcurrentMap<String, AtomicLong> dropCounters;
 
   XdsLoadReportStore(String clusterName) {
-    this(clusterName, new ConcurrentHashMap<Locality, ClientLoadCounter>());
+    this(clusterName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
+        new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
   XdsLoadReportStore(String clusterName,
-      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters) {
+      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
+      ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
+    this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
 
   /**
@@ -68,6 +75,11 @@ final class XdsLoadReportStore {
               .setTotalSuccessfulRequests(snapshot.callsSucceed)
               .setTotalErrorRequests(snapshot.callsFailed)
               .setTotalRequestsInProgress(snapshot.callsInProgress));
+    }
+    for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
+      statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
+          .setCategory(entry.getKey())
+          .setDroppedCount(entry.getValue().get()));
     }
     return statsBuilder.build();
   }
@@ -107,5 +119,18 @@ final class XdsLoadReportStore {
     }
     XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
     return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
+  }
+
+  /**
+   * Record that a request has been dropped by drop overload policy with the provided category
+   * instructed by the remote balancer.
+   */
+  void recordDroppedRequest(String category) {
+    // TODO (chengyuanzhang): do we consider a dropped request to be a call started and finished?
+    AtomicLong counter = dropCounters.putIfAbsent(category, new AtomicLong());
+    if (counter == null) {
+      counter = dropCounters.get(category);
+    }
+    counter.getAndIncrement();
   }
 }

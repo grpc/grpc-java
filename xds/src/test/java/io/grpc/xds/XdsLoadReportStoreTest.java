@@ -34,6 +34,7 @@ import io.grpc.Status;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -57,13 +58,15 @@ public class XdsLoadReportStoreTest {
       };
   @Mock Subchannel fakeSubchannel;
   private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  private ConcurrentMap<String, AtomicLong> dropCounters;
   private XdsLoadReportStore loadStore;
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     localityLoadCounters = new ConcurrentHashMap<>();
-    loadStore = new XdsLoadReportStore(SERVICE_NAME, localityLoadCounters);
+    dropCounters = new ConcurrentHashMap<>();
+    loadStore = new XdsLoadReportStore(SERVICE_NAME, localityLoadCounters, dropCounters);
   }
 
   @Test
