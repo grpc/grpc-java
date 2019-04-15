@@ -98,6 +98,7 @@ final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
       if (!status.isOk()) {
         counter.callsFailed.getAndIncrement();
       }
+      delegate().streamClosed(status);
     }
   }
 }
