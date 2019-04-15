@@ -41,6 +41,16 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class XdsLoadReportStore {
 
+  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+      new ClientStreamTracer() {
+      };
+  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+      new ClientStreamTracer.Factory() {
+        @Override
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+          return NOOP_CLIENT_STREAM_TRACER;
+        }
+      };
   private final String clusterName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
@@ -111,13 +121,7 @@ final class XdsLoadReportStore {
     }
     ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
     if (originFactory == null) {
-      originFactory = new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return new ClientStreamTracer() {
-          };
-        }
-      };
+      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
     }
 
     XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters.get(locality);
