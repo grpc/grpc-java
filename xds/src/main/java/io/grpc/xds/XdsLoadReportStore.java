@@ -47,9 +47,9 @@ final class XdsLoadReportStore {
   }
 
   @VisibleForTesting
-  XdsLoadReportStore(String clusetrName,
+  XdsLoadReportStore(String clusterName,
       ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters) {
-    this.clusterName = checkNotNull(clusetrName, "clusterName");
+    this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
   }
 
