@@ -498,7 +498,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
     ObjectPool<? extends EventLoopGroup> resolvedWorkerGroupPool = workerEventLoopGroupPool;
 
     if (shouldFallBackToNio()) {
-      // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.21.0
+      // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
       // Use NIO based channel type and eventloop group for backward compatibility reason
       logger.log(
           Level.WARNING,

@@ -438,7 +438,7 @@ public final class NettyChannelBuilder
       negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
     }
 
-    // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.21.0
+    // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
     ObjectPool<? extends EventLoopGroup> resolvedEventLoopGroupPool = eventLoopGroupPool;
     ChannelFactory<? extends Channel> resolvedChannelFactory = channelFactory;
     if (shouldFallBackToNio()) {
