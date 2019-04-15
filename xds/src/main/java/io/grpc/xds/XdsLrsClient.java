@@ -51,7 +51,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Client of XDS load reporting service. It should be run in some serialized context.
  */
 @NotThreadSafe
-class XdsLrsClient {
+final class XdsLrsClient {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME

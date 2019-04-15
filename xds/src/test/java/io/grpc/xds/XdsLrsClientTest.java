@@ -153,22 +153,26 @@ public class XdsLrsClientTest {
     long nanos = TimeUnit.SECONDS.toNanos(numSeconds) + numNanos;
     long convertedNanos = XdsLrsClient.durationToNum(duration, TimeUnit.NANOSECONDS);
     Duration convertedDuration = XdsLrsClient.numToDuration(nanos, TimeUnit.NANOSECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedNanos, TimeUnit.NANOSECONDS), convertedDuration);
+    assertEquals(XdsLrsClient.numToDuration(convertedNanos, TimeUnit.NANOSECONDS),
+        convertedDuration);
 
     long micros = TimeUnit.SECONDS.toMicros(numSeconds) + TimeUnit.NANOSECONDS.toMicros(numNanos);
     long convertedMicros = XdsLrsClient.durationToNum(duration, TimeUnit.MICROSECONDS);
     convertedDuration = XdsLrsClient.numToDuration(micros, TimeUnit.MICROSECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedMicros, TimeUnit.MICROSECONDS), convertedDuration);
+    assertEquals(XdsLrsClient.numToDuration(convertedMicros, TimeUnit.MICROSECONDS),
+        convertedDuration);
 
     long millis = TimeUnit.SECONDS.toMillis(numSeconds) + TimeUnit.NANOSECONDS.toMillis(numNanos);
     long convertedMillis = XdsLrsClient.durationToNum(duration, TimeUnit.MILLISECONDS);
     convertedDuration = XdsLrsClient.numToDuration(millis, TimeUnit.MILLISECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedMillis, TimeUnit.MILLISECONDS), convertedDuration);
+    assertEquals(XdsLrsClient.numToDuration(convertedMillis, TimeUnit.MILLISECONDS),
+        convertedDuration);
 
     long seconds = numSeconds + TimeUnit.NANOSECONDS.toSeconds(numNanos);
     long convertedSeconds = XdsLrsClient.durationToNum(duration, TimeUnit.SECONDS);
     convertedDuration = XdsLrsClient.numToDuration(seconds, TimeUnit.SECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedSeconds, TimeUnit.SECONDS), convertedDuration);
+    assertEquals(XdsLrsClient.numToDuration(convertedSeconds, TimeUnit.SECONDS),
+        convertedDuration);
   }
 
   @SuppressWarnings("unchecked")
