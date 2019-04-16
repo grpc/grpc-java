@@ -71,7 +71,8 @@ final class XdsLoadReportStore {
 
   /**
    * Generates a {@link ClusterStats} containing load stats in locality granularity.
-   * This method should be called in a synchronized context.
+   * This method should be called in the same synchronized context that
+   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
@@ -100,10 +101,11 @@ final class XdsLoadReportStore {
   }
 
   /**
-   * Create a {@link ClientLoadCounter} for the provided locality or make it active
-   * if already in this {@link XdsLoadReportStore}. This method needs to be called at
-   * locality updates only for newly assigned localities in balancer discovery responses.
-   * This method should be called in a synchronized context.
+   * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
+   * this {@link XdsLoadReportStore}. This method needs to be called at locality updates only for
+   * newly assigned localities in balancer discovery responses.
+   * This method should be called in the same synchronized context that
+   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   void addLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
@@ -121,7 +123,8 @@ final class XdsLoadReportStore {
    * {@link XdsLoadReportStore}. Inactive {@link ClientLoadCounter}s are for localities
    * no longer exposed by the remote balancer. This method needs to be called at
    * locality updates only for localities newly removed from balancer discovery responses.
-   * This method should be called in a synchronized context.
+   * This method should be called in the same synchronized context that
+   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   void removeLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
@@ -154,7 +157,6 @@ final class XdsLoadReportStore {
    * instructed by the remote balancer.
    */
   void recordDroppedRequest(String category) {
-    // TODO (chengyuanzhang): do we consider a dropped request to be a call started and finished?
     AtomicLong counter = dropCounters.putIfAbsent(category, new AtomicLong());
     if (counter == null) {
       counter = dropCounters.get(category);
