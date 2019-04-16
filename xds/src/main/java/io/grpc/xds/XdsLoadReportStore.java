@@ -116,15 +116,17 @@ final class XdsLoadReportStore {
    * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
    */
   PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    if (!pickResult.getStatus().isOk() || !localityLoadCounters.containsKey(locality)) {
+    if (!pickResult.getStatus().isOk()) {
+      return pickResult;
+    }
+    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters.get(locality);
+    if (counter == null) {
       return pickResult;
     }
     ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
     if (originFactory == null) {
       originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
     }
-
-    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters.get(locality);
     XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
     return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
