@@ -56,7 +56,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class XdsLrsClient {
 
   @VisibleForTesting
-  static final String TRAFFICDIRECTOR_GRPC_HOSTNAME
+  static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
   private final String serviceName;
   private final ManagedChannel channel;
@@ -110,7 +110,7 @@ final class XdsLrsClient {
             .setNode(Node.newBuilder()
                 .setMetadata(Struct.newBuilder()
                     .putFields(
-                        TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                        TRAFFICDIRECTOR_HOSTNAME_FIELD,
                         Value.newBuilder().setStringValue(serviceName).build())))
             .build();
     try {
@@ -230,7 +230,7 @@ final class XdsLrsClient {
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
-                      TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                      TRAFFICDIRECTOR_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
           .addClusterStats(ClusterStats.newBuilder().setLoadReportInterval(
               numToDuration(interval, TimeUnit.NANOSECONDS)))

@@ -122,7 +122,7 @@ public class XdsLrsClientTest {
       .setNode(Node.newBuilder()
           .setMetadata(Struct.newBuilder()
               .putFields(
-                  XdsLrsClient.TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                  XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                   Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
       .build();
   @Mock
@@ -234,7 +234,7 @@ public class XdsLrsClientTest {
         eq(LoadStatsRequest.newBuilder().setNode(Node.newBuilder()
             .setMetadata(Struct.newBuilder()
                 .putFields(
-                    XdsLrsClient.TRAFFICDIRECTOR_GRPC_HOSTNAME,
+                    XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                     Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
             .addClusterStats(ClusterStats.newBuilder(expectedStats))
             .build()));
