@@ -11,7 +11,8 @@ sourceSets { testShadow {} }
 
 dependencies {
     compile project(':grpc-netty')
-    runtime libraries.netty_tcnative
+    runtime libraries.netty_tcnative,
+            libraries.netty_epoll
     testShadowCompile files(shadowJar),
             configurations.shadow,
             project(':grpc-testing-proto'),
