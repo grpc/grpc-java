@@ -53,6 +53,7 @@ import io.grpc.internal.ClientStream;
 import io.grpc.internal.ClientStreamListener;
 import io.grpc.internal.ClientTransport;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
@@ -660,7 +661,7 @@ public class NettyClientTransportTest {
         TestUtils.testServerAddress(new InetSocketAddress(0)),
         NioServerSocketChannel.class,
         new HashMap<ChannelOption<?>, Object>(),
-        group, group, negotiator,
+        new FixedObjectPool<>(group), new FixedObjectPool<>(group), negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         maxStreamsPerConnection,

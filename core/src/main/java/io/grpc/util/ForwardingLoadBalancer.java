@@ -21,7 +21,6 @@ import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.ExperimentalApi;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer;
 import io.grpc.NameResolver;
 import io.grpc.Status;
@@ -35,6 +34,7 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   protected abstract LoadBalancer delegate();
 
   @Override
+  @Deprecated
   public void handleResolvedAddressGroups(
         List<EquivalentAddressGroup> servers,
         @NameResolver.ResolutionResultAttr Attributes attributes) {
@@ -42,10 +42,16 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    delegate().handleResolvedAddresses(resolvedAddresses);
+  }
+
+  @Override
   public void handleNameResolutionError(Status error) {
     delegate().handleNameResolutionError(error);
   }
 
+  @Deprecated
   @Override
   public void handleSubchannelState(
       Subchannel subchannel, ConnectivityStateInfo stateInfo) {

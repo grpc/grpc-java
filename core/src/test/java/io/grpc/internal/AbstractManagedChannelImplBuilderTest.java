@@ -464,7 +464,7 @@ public class AbstractManagedChannelImplBuilderTest {
     Builder builder = new Builder("target");
     assertThat(builder.lookUpServiceConfig).isTrue();
 
-    builder.lookUpServiceConfig(false);
+    builder.disableServiceConfigLookUp();
     assertThat(builder.lookUpServiceConfig).isFalse();
   }
 

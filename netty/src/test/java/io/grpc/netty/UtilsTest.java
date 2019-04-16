@@ -16,12 +16,13 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.TruthJUnit.assume;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.truth.Truth;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.SocketOptions;
 import io.grpc.Metadata;
@@ -30,6 +31,7 @@ import io.grpc.internal.GrpcUtil;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ConnectTimeoutException;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -170,8 +172,44 @@ public class UtilsTest {
 
   private static void assertStatusEquals(Status expected, Status actual) {
     assertEquals(expected.getCode(), actual.getCode());
-    Truth.assertThat(MoreObjects.firstNonNull(actual.getDescription(), ""))
+    assertThat(MoreObjects.firstNonNull(actual.getDescription(), ""))
         .contains(MoreObjects.firstNonNull(expected.getDescription(), ""));
     assertEquals(expected.getCause(), actual.getCause());
+  }
+
+  @Test
+  public void defaultEventLoopGroup_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    EventLoopGroup defaultBossGroup = Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP.create();
+    EventLoopGroup defaultWorkerGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
+
+    assertThat(defaultBossGroup.getClass().getName())
+        .isEqualTo("io.netty.channel.epoll.EpollEventLoopGroup");
+    assertThat(defaultWorkerGroup.getClass().getName())
+        .isEqualTo("io.netty.channel.epoll.EpollEventLoopGroup");
+
+    defaultBossGroup.shutdownGracefully();
+    defaultWorkerGroup.shutdownGracefully();
+  }
+
+  @Test
+  public void defaultClientChannelType_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    Class<? extends Channel> clientChannelType = Utils.DEFAULT_CLIENT_CHANNEL_TYPE;
+
+    assertThat(clientChannelType.getName())
+        .isEqualTo("io.netty.channel.epoll.EpollSocketChannel");
+  }
+
+  @Test
+  public void defaultServerChannelType_whenEpollIsAvailable() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    Class<? extends Channel> clientChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
+
+    assertThat(clientChannelType.getName())
+        .isEqualTo("io.netty.channel.epoll.EpollServerSocketChannel");
   }
 }

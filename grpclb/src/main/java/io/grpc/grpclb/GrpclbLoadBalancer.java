@@ -20,10 +20,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
@@ -53,6 +53,7 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
   private final TimeProvider time;
+  private final Stopwatch stopwatch;
   private final SubchannelPool subchannelPool;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -66,26 +67,22 @@ class GrpclbLoadBalancer extends LoadBalancer {
       Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
+      Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.helper = checkNotNull(helper, "helper");
     this.time = checkNotNull(time, "time provider");
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper, this);
+    this.subchannelPool.init(helper);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }
 
   @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // grpclbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    grpclbState.handleSubchannelState(subchannel, newState);
-  }
-
-  @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> updatedServers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> updatedServers = resolvedAddresses.getServers();
+    Attributes attributes = resolvedAddresses.getAttributes();
     // LB addresses and backend addresses are treated separately
     List<LbAddressGroup> newLbAddressGroups = new ArrayList<>();
     List<EquivalentAddressGroup> newBackendServers = new ArrayList<>();
@@ -117,12 +114,12 @@ class GrpclbLoadBalancer extends LoadBalancer {
       if (rawLbConfigValue == null) {
         return DEFAULT_MODE;
       }
-      Object rawChildPolicies = rawLbConfigValue.get("childPolicy");
+      List<?> rawChildPolicies = getList(rawLbConfigValue, "childPolicy");
       if (rawChildPolicies == null) {
         return DEFAULT_MODE;
       }
       List<LbConfig> childPolicies =
-          ServiceConfigUtil.unwrapLoadBalancingConfigList(rawChildPolicies);
+          ServiceConfigUtil.unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
       for (LbConfig childPolicy : childPolicies) {
         String childPolicyName = childPolicy.getPolicyName();
         switch (childPolicyName) {
@@ -154,7 +151,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private void recreateStates() {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
-    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, backoffPolicyProvider);
+    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, stopwatch,
+        backoffPolicyProvider);
   }
 
   @Override
@@ -173,5 +171,39 @@ class GrpclbLoadBalancer extends LoadBalancer {
   @Nullable
   GrpclbState getGrpclbState() {
     return grpclbState;
+  }
+
+  // TODO(carl-mastrangelo): delete getList and checkObjectList once apply is complete for SVCCFG.
+  /**
+   * Gets a list from an object for the given key.  Copy of
+   * {@link io.grpc.internal.ServiceConfigUtil#getList}.
+   */
+  @SuppressWarnings("unchecked")
+  @Nullable
+  private static List<?> getList(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
+    }
+    Object value = obj.get(key);
+    if (!(value instanceof List)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in %s is not List", value, key, obj));
+    }
+    return (List<?>) value;
+  }
+
+  /**
+   * Copy of {@link io.grpc.internal.ServiceConfigUtil#checkObjectList}.
+   */
+  @SuppressWarnings("unchecked")
+  private static List<Map<String, ?>> checkObjectList(List<?> rawList) {
+    for (int i = 0; i < rawList.size(); i++) {
+      if (!(rawList.get(i) instanceof Map)) {
+        throw new ClassCastException(
+            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
+      }
+    }
+    return (List<Map<String, ?>>) rawList;
   }
 }

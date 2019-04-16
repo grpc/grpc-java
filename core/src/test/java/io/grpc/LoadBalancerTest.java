@@ -17,13 +17,18 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,6 +38,8 @@ import org.junit.runners.JUnit4;
 public class LoadBalancerTest {
   private final Subchannel subchannel = mock(Subchannel.class);
   private final Subchannel subchannel2 = mock(Subchannel.class);
+  private final SubchannelStateListener subchannelStateListener =
+      mock(SubchannelStateListener.class);
   private final ClientStreamTracer.Factory tracerFactory = mock(ClientStreamTracer.Factory.class);
   private final Status status = Status.UNAVAILABLE.withDescription("for test");
   private final Status status2 = Status.UNAVAILABLE.withDescription("for test 2");
@@ -118,8 +125,9 @@ public class LoadBalancerTest {
     assertThat(error1).isNotEqualTo(drop1);
   }
 
+  @Deprecated
   @Test
-  public void helper_createSubchannel_delegates() {
+  public void helper_createSubchannel_old_delegates() {
     class OverrideCreateSubchannel extends NoopHelper {
       boolean ran;
 
@@ -138,9 +146,29 @@ public class LoadBalancerTest {
     assertThat(helper.ran).isTrue();
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
+  @SuppressWarnings("deprecation")
+  public void helper_createSubchannelList_oldApi_throws() {
+    try {
+      new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
+  }
+
+  @Test
   public void helper_createSubchannelList_throws() {
-    new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+    try {
+      new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
+          .setAddresses(eag)
+          .setAttributes(attrs)
+          .setStateListener(subchannelStateListener)
+          .build());
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
   }
 
   @Test
@@ -195,6 +223,74 @@ public class LoadBalancerTest {
         return Arrays.asList(eag, eag);
       }
     }.getAddresses();
+  }
+
+  @Deprecated
+  @Test
+  public void handleResolvedAddressGroups_delegatesToHandleResolvedAddresses() {
+    final AtomicReference<ResolvedAddresses> resultCapture = new AtomicReference<>();
+
+    LoadBalancer balancer = new LoadBalancer() {
+        @Override
+        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+          resultCapture.set(resolvedAddresses);
+        }
+
+        @Override
+        public void handleNameResolutionError(Status error) {
+        }
+
+        @Override
+        public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
+        }
+
+        @Override
+        public void shutdown() {
+        }
+      };
+
+    List<EquivalentAddressGroup> servers = Arrays.asList(
+        new EquivalentAddressGroup(new SocketAddress(){}),
+        new EquivalentAddressGroup(new SocketAddress(){}));
+    balancer.handleResolvedAddressGroups(servers, attrs);
+    assertThat(resultCapture.get()).isEqualTo(
+        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attrs).build());
+  }
+
+  @Deprecated
+  @Test
+  public void handleResolvedAddresses_delegatesToHandleResolvedAddressGroups() {
+    final AtomicReference<List<EquivalentAddressGroup>> serversCapture = new AtomicReference<>();
+    final AtomicReference<Attributes> attrsCapture = new AtomicReference<>();
+
+    LoadBalancer balancer = new LoadBalancer() {
+        @Override
+        public void handleResolvedAddressGroups(
+            List<EquivalentAddressGroup> servers, Attributes attrs) {
+          serversCapture.set(servers);
+          attrsCapture.set(attrs);
+        }
+
+        @Override
+        public void handleNameResolutionError(Status error) {
+        }
+
+        @Override
+        public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo state) {
+        }
+
+        @Override
+        public void shutdown() {
+        }
+      };
+
+    List<EquivalentAddressGroup> servers = Arrays.asList(
+        new EquivalentAddressGroup(new SocketAddress(){}),
+        new EquivalentAddressGroup(new SocketAddress(){}));
+    balancer.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attrs).build());
+    assertThat(serversCapture.get()).isEqualTo(servers);
+    assertThat(attrsCapture.get()).isEqualTo(attrs);
   }
 
   private static class NoopHelper extends LoadBalancer.Helper {

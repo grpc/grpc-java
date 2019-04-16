@@ -439,8 +439,8 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public T lookUpServiceConfig(boolean enable) {
-    this.lookUpServiceConfig = enable;
+  public T disableServiceConfigLookUp() {
+    this.lookUpServiceConfig = false;
     return thisT();
   }
 
@@ -590,10 +590,12 @@ public abstract class AbstractManagedChannelImplBuilder
         }
 
         @Override
-        public void start(final Listener listener) {
-          listener.onAddresses(
-              Collections.singletonList(new EquivalentAddressGroup(address)),
-              Attributes.EMPTY);
+        public void start(Observer observer) {
+          observer.onResult(
+              ResolutionResult.newBuilder()
+                  .setServers(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAttributes(Attributes.EMPTY)
+                  .build());
         }
 
         @Override

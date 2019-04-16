@@ -24,9 +24,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.base.Verify;
+import com.google.common.base.VerifyException;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
@@ -58,7 +60,7 @@ import javax.annotation.Nullable;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Listener#onAddresses(List, Attributes)}
+ * passed to {@link NameResolver.Observer#onResult(ResolutionResult)}.
  *
  * @see DnsNameResolverProvider
  */
@@ -148,9 +150,9 @@ final class DnsNameResolver extends NameResolver {
   private Executor executor;
   private boolean resolving;
 
-  // The field must be accessed from syncContext, although the methods on a Listener can be called
+  // The field must be accessed from syncContext, although the methods on an Observer can be called
   // from any thread.
-  private Listener listener;
+  private NameResolver.Observer observer;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
       Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
@@ -183,24 +185,24 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public void start(Listener listener) {
-    Preconditions.checkState(this.listener == null, "already started");
+  public void start(Observer observer) {
+    Preconditions.checkState(this.observer == null, "already started");
     executor = SharedResourceHolder.get(executorResource);
-    this.listener = Preconditions.checkNotNull(listener, "listener");
+    this.observer = Preconditions.checkNotNull(observer, "observer");
     resolve();
   }
 
   @Override
   public void refresh() {
-    Preconditions.checkState(listener != null, "not started");
+    Preconditions.checkState(observer != null, "not started");
     resolve();
   }
 
   private final class Resolve implements Runnable {
-    private final Listener savedListener;
+    private final Observer savedObserver;
 
-    Resolve(Listener savedListener) {
-      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
+    Resolve(Observer savedObserver) {
+      this.savedObserver = Preconditions.checkNotNull(savedObserver, "savedObserver");
     }
 
     @Override
@@ -228,7 +230,7 @@ final class DnsNameResolver extends NameResolver {
       try {
         proxiedAddr = proxyDetector.proxyFor(destination);
       } catch (IOException e) {
-        savedListener.onError(
+        savedObserver.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
         return;
       }
@@ -237,7 +239,12 @@ final class DnsNameResolver extends NameResolver {
           logger.finer("Using proxy address " + proxiedAddr);
         }
         EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
-        savedListener.onAddresses(Collections.singletonList(server), Attributes.EMPTY);
+        ResolutionResult resolutionResult =
+            ResolutionResult.newBuilder()
+                .setServers(Collections.singletonList(server))
+                .setAttributes(Attributes.EMPTY)
+                .build();
+        savedObserver.onResult(resolutionResult);
         return;
       }
 
@@ -267,7 +274,7 @@ final class DnsNameResolver extends NameResolver {
           logger.finer("Found DNS results " + resolutionResults + " for " + host);
         }
       } catch (Exception e) {
-        savedListener.onError(
+        savedObserver.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
         return;
       }
@@ -278,37 +285,61 @@ final class DnsNameResolver extends NameResolver {
       }
       servers.addAll(resolutionResults.balancerAddresses);
       if (servers.isEmpty()) {
-        savedListener.onError(Status.UNAVAILABLE.withDescription(
+        savedObserver.onError(Status.UNAVAILABLE.withDescription(
             "No DNS backend or balancer addresses found for " + host));
         return;
       }
 
       Attributes.Builder attrs = Attributes.newBuilder();
       if (!resolutionResults.txtRecords.isEmpty()) {
-        Map<String, ?> serviceConfig = null;
-        try {
-          for (Map<String, ?> possibleConfig : parseTxtResults(resolutionResults.txtRecords)) {
-            try {
-              serviceConfig =
-                  maybeChooseServiceConfig(possibleConfig, random, getLocalHostname());
-            } catch (RuntimeException e) {
-              logger.log(Level.WARNING, "Bad service config choice " + possibleConfig, e);
-            }
-            if (serviceConfig != null) {
-              break;
-            }
-          }
-        } catch (RuntimeException e) {
-          logger.log(Level.WARNING, "Can't parse service Configs", e);
-        }
+        ConfigOrError serviceConfig =
+            parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
-          attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig);
+          if (serviceConfig.getError() != null) {
+            savedObserver.onError(serviceConfig.getError());
+            return;
+          } else {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
+            attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
+          }
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-      savedListener.onAddresses(servers, attrs.build());
+      ResolutionResult resolutionResult =
+          ResolutionResult.newBuilder().setServers(servers).setAttributes(attrs.build()).build();
+      savedObserver.onResult(resolutionResult);
     }
+  }
+
+  @Nullable
+  static ConfigOrError parseServiceConfig(
+      List<String> rawTxtRecords, Random random, String localHostname) {
+    List<Map<String, ?>> possibleServiceConfigChoices;
+    try {
+      possibleServiceConfigChoices = parseTxtResults(rawTxtRecords);
+    } catch (IOException | RuntimeException e) {
+      return ConfigOrError.fromError(
+          Status.UNKNOWN.withDescription("failed to parse TXT records").withCause(e));
+    }
+    Map<String, ?> possibleServiceConfig = null;
+    for (Map<String, ?> possibleServiceConfigChoice : possibleServiceConfigChoices) {
+      try {
+        possibleServiceConfig =
+            maybeChooseServiceConfig(possibleServiceConfigChoice, random, localHostname);
+      } catch (RuntimeException e) {
+        return ConfigOrError.fromError(
+            Status.UNKNOWN.withDescription("failed to pick service config choice").withCause(e));
+      }
+      if (possibleServiceConfig != null) {
+        break;
+      }
+    }
+    if (possibleServiceConfig == null) {
+      return null;
+    }
+    return ConfigOrError.fromConfig(possibleServiceConfig);
   }
 
   private void resolve() {
@@ -316,7 +347,7 @@ final class DnsNameResolver extends NameResolver {
       return;
     }
     resolving = true;
-    executor.execute(new Resolve(listener));
+    executor.execute(new Resolve(observer));
   }
 
   private boolean cacheRefreshRequired() {
@@ -403,35 +434,27 @@ final class DnsNameResolver extends NameResolver {
     return new ResolutionResults(addresses, txtRecords, balancerAddresses);
   }
 
+  /**
+   *
+   * @throws IOException if one of the txt records contains improperly formatted JSON.
+   */
   @SuppressWarnings("unchecked")
   @VisibleForTesting
-  static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) {
-    List<Map<String, ?>> serviceConfigs = new ArrayList<>();
+  static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) throws IOException {
+    List<Map<String, ?>> possibleServiceConfigChoices = new ArrayList<>();
     for (String txtRecord : txtRecords) {
-      if (txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
-        List<Map<String, ?>> choices;
-        try {
-          Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
-          if (!(rawChoices instanceof List)) {
-            throw new IOException("wrong type " + rawChoices);
-          }
-          List<?> listChoices = (List<?>) rawChoices;
-          for (Object obj : listChoices) {
-            if (!(obj instanceof Map)) {
-              throw new IOException("wrong element type " + rawChoices);
-            }
-          }
-          choices = (List<Map<String, ?>>) listChoices;
-        } catch (IOException e) {
-          logger.log(Level.WARNING, "Bad service config: " + txtRecord, e);
-          continue;
-        }
-        serviceConfigs.addAll(choices);
-      } else {
+      if (!txtRecord.startsWith(SERVICE_CONFIG_PREFIX)) {
         logger.log(Level.FINE, "Ignoring non service config {0}", new Object[]{txtRecord});
+        continue;
       }
+      Object rawChoices = JsonParser.parse(txtRecord.substring(SERVICE_CONFIG_PREFIX.length()));
+      if (!(rawChoices instanceof List)) {
+        throw new ClassCastException("wrong type " + rawChoices);
+      }
+      List<?> listChoices = (List<?>) rawChoices;
+      possibleServiceConfigChoices.addAll(ServiceConfigUtil.checkObjectList(listChoices));
     }
-    return serviceConfigs;
+    return possibleServiceConfigChoices;
   }
 
   @Nullable
@@ -536,7 +559,13 @@ final class DnsNameResolver extends NameResolver {
         return null;
       }
     }
-    return ServiceConfigUtil.getObject(choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY);
+    Map<String, ?> sc =
+        ServiceConfigUtil.getObject(choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY);
+    if (sc == null) {
+      throw new VerifyException(String.format(
+          "key '%s' missing in '%s'", choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY));
+    }
+    return sc;
   }
 
   /**
@@ -666,6 +695,7 @@ final class DnsNameResolver extends NameResolver {
           Level.FINE,
           "JndiResourceResolverFactory not available, skipping.",
           rrf.unavailabilityCause());
+      return null;
     }
     return rrf;
   }

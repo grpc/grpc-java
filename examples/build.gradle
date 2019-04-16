@@ -2,15 +2,14 @@ plugins {
     // Provide convenience executables for trying out the examples.
     id 'application'
     // ASSUMES GRADLE 2.12 OR HIGHER. Use plugin version 0.7.5 with earlier gradle versions
-    id 'com.google.protobuf' version '0.8.5'
+    id 'com.google.protobuf' version '0.8.8'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
 }
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
-    }
+        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
     mavenLocal()
 }
 
@@ -22,8 +21,8 @@ targetCompatibility = 1.7
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.20.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.7.0'
+def grpcVersion = '1.21.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def protobufVersion = '3.7.1'
 def protocVersion = protobufVersion
 
 dependencies {
@@ -38,7 +37,7 @@ dependencies {
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
     testImplementation "junit:junit:4.12"
-    testImplementation "org.mockito:mockito-core:1.10.19"
+    testImplementation "org.mockito:mockito-core:2.25.1"
 }
 
 protobuf {

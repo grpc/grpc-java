@@ -23,9 +23,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -41,11 +41,14 @@ import io.grpc.ClientInterceptor;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
@@ -53,6 +56,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.Status;
 import io.grpc.StringMarshaller;
 import io.grpc.internal.FakeClock.ScheduledTask;
@@ -111,6 +115,7 @@ public class ManagedChannelImplIdlenessTest {
 
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer mockLoadBalancer;
+  @Mock private SubchannelStateListener subchannelStateListener;
   private final LoadBalancerProvider mockLoadBalancerProvider =
       mock(LoadBalancerProvider.class, delegatesTo(new LoadBalancerProvider() {
           @Override
@@ -138,10 +143,11 @@ public class ManagedChannelImplIdlenessTest {
   @Mock private NameResolver.Factory mockNameResolverFactory;
   @Mock private ClientCall.Listener<Integer> mockCallListener;
   @Mock private ClientCall.Listener<Integer> mockCallListener2;
-  @Captor private ArgumentCaptor<NameResolver.Listener> nameResolverListenerCaptor;
+  @Captor private ArgumentCaptor<NameResolver.Observer> nameResolverObserverCaptor;
   private BlockingQueue<MockClientTransportInfo> newTransports;
 
   @Before
+  @SuppressWarnings("deprecation") // For NameResolver.Listener
   public void setUp() {
     LoadBalancerRegistry.getDefaultRegistry().register(mockLoadBalancerProvider);
     when(mockNameResolver.getServiceAuthority()).thenReturn(AUTHORITY);
@@ -193,6 +199,7 @@ public class ManagedChannelImplIdlenessTest {
         any(ClientTransportFactory.ClientTransportOptions.class),
         any(ChannelLogger.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
+    verify(mockNameResolver, never()).start(any(NameResolver.Observer.class));
   }
 
   @After
@@ -216,11 +223,17 @@ public class ManagedChannelImplIdlenessTest {
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
 
-    verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
+    verify(mockNameResolver).start(nameResolverObserverCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
-    nameResolverListenerCaptor.getValue().onAddresses(servers, Attributes.EMPTY);
-    verify(mockLoadBalancer).handleResolvedAddressGroups(servers, Attributes.EMPTY);
+    ResolutionResult resolutionResult =
+        ResolutionResult.newBuilder()
+            .setServers(servers)
+            .setAttributes(Attributes.EMPTY)
+            .build();
+    nameResolverObserverCaptor.getValue().onResult(resolutionResult);
+    verify(mockLoadBalancer).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(Attributes.EMPTY).build());
   }
 
   @Test
@@ -489,14 +502,19 @@ public class ManagedChannelImplIdlenessTest {
   }
 
   // We need this because createSubchannel() should be called from the SynchronizationContext
-  private static Subchannel createSubchannelSafely(
+  private Subchannel createSubchannelSafely(
       final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs) {
     final AtomicReference<Subchannel> resultCapture = new AtomicReference<>();
     helper.getSynchronizationContext().execute(
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(helper.createSubchannel(addressGroup, attrs));
+            resultCapture.set(
+                helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                    .setAddresses(addressGroup)
+                    .setAttributes(attrs)
+                    .setStateListener(subchannelStateListener)
+                    .build()));
           }
         });
     return resultCapture.get();

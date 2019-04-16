@@ -53,13 +53,17 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -372,8 +376,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // may throw. We don't want to confuse our state, even if we will enter panic mode.
     this.lbHelper = lbHelper;
 
-    NameResolverListenerImpl listener = new NameResolverListenerImpl(lbHelper, nameResolver);
-    nameResolver.start(listener);
+    NameResolverObserver observer = new NameResolverObserver(lbHelper, nameResolver);
+    nameResolver.start(observer);
     nameResolverStarted = true;
   }
 
@@ -555,6 +559,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
     this.nameResolverHelper =
         new NrHelper(
             builder.getDefaultPort(),
@@ -562,7 +569,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
             syncContext,
             retryEnabled,
             builder.maxRetryAttempts,
-            builder.maxHedgedAttempts);
+            builder.maxHedgedAttempts,
+            autoConfiguredLoadBalancerFactory);
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
@@ -570,7 +578,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
         "Channel for '" + target + "'");
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-    this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
@@ -1038,6 +1045,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
 
+    @Deprecated
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
@@ -1049,17 +1057,36 @@ final class ManagedChannelImpl extends ManagedChannel implements
             + " Otherwise, it may race with handleSubchannelState()."
             + " See https://github.com/grpc/grpc-java/issues/5015", e);
       }
-      checkNotNull(addressGroups, "addressGroups");
-      checkNotNull(attrs, "attrs");
+      return createSubchannelInternal(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroups)
+              .setAttributes(attrs)
+              .setStateListener(new LoadBalancer.SubchannelStateListener() {
+                  @Override
+                  public void onSubchannelState(
+                      LoadBalancer.Subchannel subchannel, ConnectivityStateInfo newState) {
+                    lb.handleSubchannelState(subchannel, newState);
+                  }
+                })
+              .build());
+    }
+
+    @Override
+    public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      return createSubchannelInternal(args);
+    }
+
+    private AbstractSubchannel createSubchannelInternal(final CreateSubchannelArgs args) {
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
-      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
+      final SubchannelImpl subchannel = new SubchannelImpl(args.getAttributes());
       long subchannelCreationTime = timeProvider.currentTimeNanos();
       InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ null);
       ChannelTracer subchannelTracer =
           new ChannelTracer(
               subchannelLogId, maxTraceEvents, subchannelCreationTime,
-              "Subchannel for " + addressGroups);
+              "Subchannel for " + args.getAddresses());
 
       final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
         // All callbacks are run in syncContext
@@ -1075,7 +1102,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           handleInternalSubchannelState(newState);
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (LbHelperImpl.this == ManagedChannelImpl.this.lbHelper) {
-            lb.handleSubchannelState(subchannel, newState);
+            args.getStateListener().onSubchannelState(subchannel, newState);
           }
         }
 
@@ -1091,7 +1118,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroups,
+          args.getAddresses(),
           authority(),
           userAgent,
           backoffPolicyProvider,
@@ -1292,22 +1319,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private class NameResolverListenerImpl implements NameResolver.Listener {
+  private final class NameResolverObserver extends NameResolver.Observer {
     final LbHelperImpl helper;
     final NameResolver resolver;
 
-    NameResolverListenerImpl(LbHelperImpl helperImpl, NameResolver resolver) {
+    NameResolverObserver(LbHelperImpl helperImpl, NameResolver resolver) {
       this.helper = checkNotNull(helperImpl, "helperImpl");
       this.resolver = checkNotNull(resolver, "resolver");
     }
 
     @Override
-    public void onAddresses(final List<EquivalentAddressGroup> servers, final Attributes attrs) {
+    public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
+          List<EquivalentAddressGroup> servers = resolutionResult.getServers();
+          Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 
@@ -1362,7 +1391,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverListenerImpl.this.helper == ManagedChannelImpl.this.lbHelper) {
+          if (NameResolverObserver.this.helper == ManagedChannelImpl.this.lbHelper) {
             if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
               handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                   "Name resolver " + resolver + " returned an empty list"));
@@ -1373,7 +1402,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
                     .build();
               }
-              helper.lb.handleResolvedAddressGroups(servers, effectiveAttrs);
+              helper.lb.handleResolvedAddresses(
+                  ResolvedAddresses.newBuilder()
+                      .setServers(servers)
+                      .setAttributes(effectiveAttrs)
+                      .build());
             }
           }
         }
@@ -1403,7 +1436,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         haveBackends = false;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-      if (NameResolverListenerImpl.this.helper != ManagedChannelImpl.this.lbHelper) {
+      if (NameResolverObserver.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
       }
       helper.lb.handleNameResolutionError(error);
@@ -1723,6 +1756,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private final boolean retryEnabled;
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
+    // TODO(zhangkun83): remove this once setting a specific LB is prohibited.
+    @Nullable private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
 
     NrHelper(
         int defaultPort,
@@ -1730,13 +1765,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
         SynchronizationContext syncCtx,
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
-        int maxHedgedAttemptsLimit) {
+        int maxHedgedAttemptsLimit,
+        AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
       this.defaultPort = defaultPort;
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector");
       this.syncCtx = checkNotNull(syncCtx, "syncCtx");
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
       this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
+      this.autoLoadBalancerFactory = autoLoadBalancerFactory;
     }
 
     @Override
@@ -1756,17 +1793,29 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     @SuppressWarnings("unchecked")
-    public ConfigOrError<ManagedChannelServiceConfig> parseServiceConfig(
-        Map<String, ?> rawServiceConfig) {
-      // TODO(carl-mastrangelo): Change the type from Map<String, Object> to Map<String, ?>
-      Map<String, Object> cfg = (Map<String, Object>) rawServiceConfig;
+    public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
+        Object loadBalancingPolicySelection;
+        if (autoLoadBalancerFactory != null) {
+          ConfigOrError choiceFromLoadBalancer =
+              autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
+          if (choiceFromLoadBalancer == null) {
+            loadBalancingPolicySelection = null;
+          } else if (choiceFromLoadBalancer.getError() != null) {
+            return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
+          } else {
+            loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
+          }
+        } else {
+          loadBalancingPolicySelection = null;
+        }
         return ConfigOrError.fromConfig(
             ManagedChannelServiceConfig.fromServiceConfig(
-                cfg,
+                rawServiceConfig,
                 retryEnabled,
                 maxRetryAttemptsLimit,
-                maxHedgedAttemptsLimit));
+                maxHedgedAttemptsLimit,
+                loadBalancingPolicySelection));
       } catch (RuntimeException e) {
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));

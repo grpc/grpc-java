@@ -47,6 +47,7 @@ public class TestCasesTest {
       "server_compressed_unary",
       "client_streaming",
       "client_compressed_streaming",
+      "compute_engine_channel_credentials",
       "server_streaming",
       "server_compressed_streaming",
       "ping_pong",
@@ -71,7 +72,8 @@ public class TestCasesTest {
     String[] additionalTestCases = {
       "client_compressed_unary_noprobe",
       "client_compressed_streaming_noprobe",
-      "very_large_request"
+      "very_large_request",
+      "pick_first_unary"
     };
 
     assertEquals(testCases.length + additionalTestCases.length, TestCases.values().length);

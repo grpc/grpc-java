@@ -9,7 +9,8 @@ dependencies {
             project(':grpc-testing'),
             project(':grpc-testing-proto')
     testRuntime libraries.netty_tcnative,
-            libraries.conscrypt
+            libraries.conscrypt,
+            libraries.netty_epoll
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 

@@ -18,7 +18,7 @@ package io.grpc.internal;
 
 import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -81,7 +81,7 @@ public class OverrideAuthorityNameResolverTest {
     NameResolver overrideResolver =
         factory.newNameResolver(URI.create("dns:///localhost:443"), HELPER);
     assertNotNull(overrideResolver);
-    NameResolver.Listener listener = mock(NameResolver.Listener.class);
+    NameResolver.Observer listener = mock(NameResolver.Observer.class);
 
     overrideResolver.start(listener);
     verify(mockResolver).start(listener);

@@ -18,9 +18,9 @@ package io.grpc.auth;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -188,11 +188,6 @@ public class ClientAuthInterceptorTest {
   private static final class ClientCallRecorder extends ClientCall<String, Integer> {
     private ClientCall.Listener<Integer> responseListener;
     private Metadata headers;
-    private int numMessages;
-    private String cancelMessage;
-    private Throwable cancelCause;
-    private boolean halfClosed;
-    private String sentMessage;
 
     @Override
     public void start(ClientCall.Listener<Integer> responseListener, Metadata headers) {
@@ -202,23 +197,18 @@ public class ClientAuthInterceptorTest {
 
     @Override
     public void request(int numMessages) {
-      this.numMessages = numMessages;
     }
 
     @Override
     public void cancel(String message, Throwable cause) {
-      this.cancelMessage = message;
-      this.cancelCause = cause;
     }
 
     @Override
     public void halfClose() {
-      halfClosed = true;
     }
 
     @Override
     public void sendMessage(String message) {
-      sentMessage = message;
     }
 
   }

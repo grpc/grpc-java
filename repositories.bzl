@@ -19,10 +19,10 @@ def grpc_java_repositories(
         omit_com_google_protobuf_java = False,
         omit_com_google_protobuf_javalite = False,
         omit_com_google_protobuf_nano_protobuf_javanano = False,
-        omit_com_google_re2j = False,
         omit_com_google_truth_truth = False,
         omit_com_squareup_okhttp = False,
         omit_com_squareup_okio = False,
+        omit_io_grpc_grpc_proto = False,
         omit_io_netty_buffer = False,
         omit_io_netty_common = False,
         omit_io_netty_transport = False,
@@ -72,14 +72,14 @@ def grpc_java_repositories(
         com_google_protobuf_javalite()
     if not omit_com_google_protobuf_nano_protobuf_javanano:
         com_google_protobuf_nano_protobuf_javanano()
-    if not omit_com_google_re2j:
-        com_google_re2j()
     if not omit_com_google_truth_truth:
         com_google_truth_truth()
     if not omit_com_squareup_okhttp:
         com_squareup_okhttp()
     if not omit_com_squareup_okio:
         com_squareup_okio()
+    if not omit_io_grpc_grpc_proto:
+        io_grpc_grpc_proto()
     if not omit_io_netty_buffer:
         io_netty_buffer()
     if not omit_io_netty_common:
@@ -239,10 +239,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "8955eb28f9c6db71d013bfe8255e485837d473db8a5786f6a017e40934f304a7",
-        strip_prefix = "protobuf-4b9a5df4e8ba2066794da56598ad2905dc42051e",
-        # This is v3.7.0 with a Bazel compilation failure fix
-        urls = ["https://github.com/google/protobuf/archive/4b9a5df4e8ba2066794da56598ad2905dc42051e.zip"],
+        sha256 = "f976a4cd3f1699b6d20c1e944ca1de6754777918320c719742e1674fcf247b7e",
+        strip_prefix = "protobuf-3.7.1",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.7.1.zip"],
     )
 
 def com_google_protobuf_javalite():
@@ -261,15 +260,6 @@ def com_google_protobuf_nano_protobuf_javanano():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "6d30f1e667a8952e1c90a0a125f0ce0edf84d6b1d51c91d8555c4fb549e3d7a1",
         licenses = ["notice"],  # BSD 2-clause
-    )
-
-def com_google_re2j():
-    jvm_maven_import_external(
-        name = "com_google_re2j",
-        artifact = "com.google.re2j:re2j:1.2",
-        server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "e9dc705fd4c570344b54a7146b2e3a819cdc271a29793f4acc1a93b56a388e59",
-        licenses = ["notice"],  # Go License
     )
 
 def com_google_truth_truth():
@@ -297,6 +287,14 @@ def com_squareup_okio():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "734269c3ebc5090e3b23566db558f421f0b4027277c79ad5d176b8ec168bb850",
         licenses = ["notice"],  # Apache 2.0
+    )
+
+def io_grpc_grpc_proto():
+    http_archive(
+        name = "io_grpc_grpc_proto",
+        sha256 = "873f3fdec7ed052f899aef83fc897926729713d96d7ccdb2df22843dc702ef3a",
+        strip_prefix = "grpc-proto-96ecba6941c67b1da2af598330c60cf9b0336051",
+        urls = ["https://github.com/grpc/grpc-proto/archive/96ecba6941c67b1da2af598330c60cf9b0336051.zip"],
     )
 
 def io_netty_buffer():

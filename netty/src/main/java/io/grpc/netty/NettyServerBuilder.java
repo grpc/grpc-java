@@ -23,14 +23,18 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIMEOUT_NANOS;
 import static io.grpc.internal.GrpcUtil.DEFAULT_SERVER_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.AbstractServerImplBuilder;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
@@ -46,6 +50,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -56,6 +62,8 @@ import javax.net.ssl.SSLException;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CanIgnoreReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
+  private static final Logger logger = Logger.getLogger(NettyServerBuilder.class.getName());
+
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
@@ -67,14 +75,18 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   private static final long MIN_MAX_CONNECTION_IDLE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long MIN_MAX_CONNECTION_AGE_NANO = TimeUnit.SECONDS.toNanos(1L);
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
+  private static final ObjectPool<? extends EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL =
+      SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
+  private static final ObjectPool<? extends EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL =
+      SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
-  private Class<? extends ServerChannel> channelType = NioServerSocketChannel.class;
+  private Class<? extends ServerChannel> channelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
-  @Nullable
-  private EventLoopGroup bossEventLoopGroup;
-  @Nullable
-  private EventLoopGroup workerEventLoopGroup;
+  private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
+      DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
+  private ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool =
+      DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
   private SslContext sslContext;
   private ProtocolNegotiator protocolNegotiator;
   private int maxConcurrentCallsPerConnection = Integer.MAX_VALUE;
@@ -132,7 +144,13 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
   }
 
   /**
-   * Specify the channel type to use, by default we use {@link NioServerSocketChannel}.
+   * Specify the channel type to use, by default we use {@link NioServerSocketChannel} or {@code
+   * EpollServerSocketChannel}.
+   *
+   * <p>You must also provide corresponding {@link EventLoopGroup} using {@link
+   * #workerEventLoopGroup(EventLoopGroup)} and {@link #bossEventLoopGroup(EventLoopGroup)}. For
+   * example, {@link NioServerSocketChannel} must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
    */
   public NettyServerBuilder channelType(Class<? extends ServerChannel> channelType) {
     this.channelType = Preconditions.checkNotNull(channelType, "channelType");
@@ -156,6 +174,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * <p>It's an optional parameter. If the user has not provided one when the server is built, the
    * builder will use the default one which is static.
    *
+   * <p>You must also provide corresponding {@link io.netty.channel.Channel} type using {@link
+   * #channelType(Class)} and {@link #workerEventLoopGroup(EventLoopGroup)}. For example, {@link
+   * NioServerSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup} for both boss
+   * and worker {@link EventLoopGroup}, otherwise your server won't start.
+   *
    * <p>The server won't take ownership of the given EventLoopGroup. It's caller's responsibility
    * to shut it down when it's desired.
    *
@@ -169,7 +192,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * keep the main thread alive until the server has terminated.
    */
   public NettyServerBuilder bossEventLoopGroup(EventLoopGroup group) {
-    this.bossEventLoopGroup = group;
+    if (group != null) {
+      this.bossEventLoopGroupPool = new FixedObjectPool<>(group);
+    } else {
+      this.bossEventLoopGroupPool = DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
+    }
     return this;
   }
 
@@ -178,6 +205,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    *
    * <p>It's an optional parameter. If the user has not provided one when the server is built, the
    * builder will create one.
+   *
+   * <p>You must also provide corresponding {@link io.netty.channel.Channel} type using {@link
+   * #channelType(Class)} and {@link #bossEventLoopGroup(EventLoopGroup)}. For example, {@link
+   * NioServerSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup} for both boss
+   * and worker {@link EventLoopGroup}, otherwise your server won't start.
    *
    * <p>The server won't take ownership of the given EventLoopGroup. It's caller's responsibility
    * to shut it down when it's desired.
@@ -192,7 +224,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * keep the main thread alive until the server has terminated.
    */
   public NettyServerBuilder workerEventLoopGroup(EventLoopGroup group) {
-    this.workerEventLoopGroup = group;
+    if (group != null) {
+      this.workerEventLoopGroupPool = new FixedObjectPool<>(group);
+    } else {
+      this.workerEventLoopGroupPool = DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+    }
     return this;
   }
 
@@ -456,19 +492,60 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       negotiator = sslContext != null ? ProtocolNegotiators.serverTls(sslContext) :
               ProtocolNegotiators.serverPlaintext();
     }
+
+    Class<? extends ServerChannel> resolvedChannelType = channelType;
+    ObjectPool<? extends EventLoopGroup> resolvedBossGroupPool = bossEventLoopGroupPool;
+    ObjectPool<? extends EventLoopGroup> resolvedWorkerGroupPool = workerEventLoopGroupPool;
+
+    if (shouldFallBackToNio()) {
+      // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
+      // Use NIO based channel type and eventloop group for backward compatibility reason
+      logger.log(
+          Level.WARNING,
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or "
+              + "neither should be, otherwise server may not start. Missing values will use Nio "
+              + "(NioServerSocketChannel, NioEventLoopGroup) for backward compatibility. "
+              + "This will cause an Exception in the future.");
+      if (channelType == Utils.DEFAULT_SERVER_CHANNEL_TYPE) {
+        resolvedChannelType = NioServerSocketChannel.class;
+        logger.log(Level.FINE, "One or more EventLoopGroup is provided, but Channel type is "
+            + "missing. Fall back to NioServerSocketChannel.");
+      }
+      if (bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL) {
+        resolvedBossGroupPool = SharedResourcePool.forResource(Utils.NIO_BOSS_EVENT_LOOP_GROUP);
+        logger.log(Level.FINE, "Channel type and/or WorkerEventLoopGroup is provided, but "
+            + "BossEventLoopGroup is missing. Fall back to NioEventLoopGroup.");
+      }
+      if (workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL) {
+        resolvedWorkerGroupPool = SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP);
+        logger.log(Level.FINE, "Channel type and/or BossEventLoopGroup is provided, but "
+            + "BossEventLoopGroup is missing. Fall back to NioEventLoopGroup.");
+      }
+    }
+
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {
       NettyServer transportServer = new NettyServer(
-          listenAddress, channelType, channelOptions, bossEventLoopGroup, workerEventLoopGroup,
-          negotiator, streamTracerFactories, getTransportTracerFactory(),
-          maxConcurrentCallsPerConnection, flowControlWindow,
+          listenAddress, resolvedChannelType, channelOptions, resolvedBossGroupPool,
+          resolvedWorkerGroupPool, negotiator, streamTracerFactories,
+          getTransportTracerFactory(), maxConcurrentCallsPerConnection, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeInNanos, keepAliveTimeoutInNanos,
-          maxConnectionIdleInNanos,
-          maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
+          maxConnectionIdleInNanos, maxConnectionAgeInNanos, maxConnectionAgeGraceInNanos,
           permitKeepAliveWithoutCalls, permitKeepAliveTimeInNanos, getChannelz());
       transportServers.add(transportServer);
     }
     return Collections.unmodifiableList(transportServers);
+  }
+
+  @VisibleForTesting
+  boolean shouldFallBackToNio() {
+    boolean hasNonDefault = channelType != Utils.DEFAULT_SERVER_CHANNEL_TYPE
+        || bossEventLoopGroupPool != DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
+        || workerEventLoopGroupPool != DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+    boolean hasDefault = channelType == Utils.DEFAULT_SERVER_CHANNEL_TYPE
+        || bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
+        || workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+    return hasNonDefault && hasDefault;
   }
 
   @Override

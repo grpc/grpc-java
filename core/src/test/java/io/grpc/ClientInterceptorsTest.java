@@ -24,9 +24,9 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -430,8 +430,6 @@ public class ClientInterceptorsTest {
     private List<Integer> requests = new ArrayList<>();
     private List<String> messages = new ArrayList<>();
     private boolean halfClosed;
-    private Throwable cancelCause;
-    private String cancelMessage;
 
     @Override
     public void start(ClientCall.Listener<Integer> listener, Metadata headers) {
@@ -451,8 +449,6 @@ public class ClientInterceptorsTest {
     @Override
     public void cancel(String message, Throwable cause) {
       checkNotDone();
-      this.cancelMessage = message;
-      this.cancelCause = cause;
     }
 
     @Override

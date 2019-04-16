@@ -32,9 +32,9 @@ import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -58,7 +58,6 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * Netty-based server implementation.
@@ -72,8 +71,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreamsPerConnection;
-  private final boolean usingSharedBossGroup;
-  private final boolean usingSharedWorkerGroup;
+  private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
+  private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
@@ -99,7 +98,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   NettyServer(
       SocketAddress address, Class<? extends ServerChannel> channelType,
       Map<ChannelOption<?>, ?> channelOptions,
-      @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
+      ObjectPool<? extends EventLoopGroup> bossGroupPool,
+      ObjectPool<? extends EventLoopGroup> workerGroupPool,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -113,12 +113,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelType = checkNotNull(channelType, "channelType");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
-    this.bossGroup = bossGroup;
-    this.workerGroup = workerGroup;
+    this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
+    this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.bossGroup = bossGroupPool.getObject();
+    this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.usingSharedBossGroup = bossGroup == null;
-    this.usingSharedWorkerGroup = workerGroup == null;
     this.transportTracerFactory = transportTracerFactory;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
     this.flowControlWindow = flowControlWindow;
@@ -153,9 +153,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
   @Override
   public void start(ServerListener serverListener) throws IOException {
     listener = checkNotNull(serverListener, "serverListener");
-
-    // If using the shared groups, get references to them.
-    allocateSharedGroups();
 
     ServerBootstrap b = new ServerBootstrap();
     b.group(bossGroup, workerGroup);
@@ -290,15 +287,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
     });
   }
 
-  private void allocateSharedGroups() {
-    if (bossGroup == null) {
-      bossGroup = SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
-    }
-    if (workerGroup == null) {
-      workerGroup = SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-    }
-  }
-
   @Override
   public InternalLogId getLogId() {
     return logId;
@@ -316,14 +304,14 @@ class NettyServer implements InternalServer, InternalWithLogId {
     @Override
     protected void deallocate() {
       try {
-        if (usingSharedBossGroup && bossGroup != null) {
-          SharedResourceHolder.release(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP, bossGroup);
+        if (bossGroup != null) {
+          bossGroupPool.returnObject(bossGroup);
         }
       } finally {
         bossGroup = null;
         try {
-          if (usingSharedWorkerGroup && workerGroup != null) {
-            SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, workerGroup);
+          if (workerGroup != null) {
+            workerGroupPool.returnObject(workerGroup);
           }
         } finally {
           workerGroup = null;

@@ -35,9 +35,11 @@ import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AtomicBackoff;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
+import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.KeepAliveManager;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.ObjectPool;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
@@ -52,6 +54,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -63,20 +67,24 @@ import javax.net.ssl.SSLException;
 @CanIgnoreReturnValue
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
+  private static final Logger logger = Logger.getLogger(NettyChannelBuilder.class.getName());
+
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
+
+  private static final ChannelFactory<? extends Channel> DEFAULT_CHANNEL_FACTORY =
+      new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE);
+  private static final ObjectPool<? extends EventLoopGroup> DEFAULT_EVENT_LOOP_GROUP_POOL =
+      SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
   private final Map<ChannelOption<?>, Object> channelOptions =
       new HashMap<>();
 
   private NegotiationType negotiationType = NegotiationType.TLS;
   private OverrideAuthorityChecker authorityChecker;
-  private ChannelFactory<? extends Channel> channelFactory =
-      new ReflectiveChannelFactory<>(NioSocketChannel.class);
-
-  @Nullable
-  private EventLoopGroup eventLoopGroup;
+  private ChannelFactory<? extends Channel> channelFactory = DEFAULT_CHANNEL_FACTORY;
+  private ObjectPool<? extends EventLoopGroup> eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
   private SslContext sslContext;
   private int flowControlWindow = DEFAULT_FLOW_CONTROL_WINDOW;
   private int maxHeaderListSize = GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE;
@@ -140,10 +148,18 @@ public final class NettyChannelBuilder
   }
 
   /**
-   * Specifies the channel type to use, by default we use {@link NioSocketChannel}.
+   * Specifies the channel type to use, by default we use {@code EpollSocketChannel} if available,
+   * otherwise using {@link NioSocketChannel}.
    *
    * <p>You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
    * {@link Channel} implementation has no no-args constructor.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link #eventLoopGroup(EventLoopGroup)}. For example,
+   * {@link NioSocketChannel} must use {@link io.netty.channel.nio.NioEventLoopGroup}, otherwise
+   * your application won't start.
    */
   public NettyChannelBuilder channelType(Class<? extends Channel> channelType) {
     checkNotNull(channelType, "channelType");
@@ -155,6 +171,13 @@ public final class NettyChannelBuilder
    * usually only used if the specific {@code Channel} requires complex logic which requires
    * additional information to create the {@code Channel}. Otherwise, recommend to use {@link
    * #channelType(Class)}.
+   *
+   * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
+   * when the channel is built, the builder will use the default one which is static.
+   *
+   * <p>You must also provide corresponding {@link #eventLoopGroup(EventLoopGroup)}. For example,
+   * {@link NioSocketChannel} based {@link ChannelFactory} must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your application won't start.
    */
   public NettyChannelBuilder channelFactory(ChannelFactory<? extends Channel> channelFactory) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
@@ -186,11 +209,19 @@ public final class NettyChannelBuilder
    * <p>It's an optional parameter. If the user has not provided an EventGroupLoop when the channel
    * is built, the builder will use the default one which is static.
    *
+   * <p>You must also provide corresponding {@link #channelType(Class)} or {@link
+   * #channelFactory(ChannelFactory)} corresponding to the given {@code EventLoopGroup}. For
+   * example, {@link io.netty.channel.nio.NioEventLoopGroup} requires {@link NioSocketChannel}
+   *
    * <p>The channel won't take ownership of the given EventLoopGroup. It's caller's responsibility
    * to shut it down when it's desired.
    */
   public NettyChannelBuilder eventLoopGroup(@Nullable EventLoopGroup eventLoopGroup) {
-    this.eventLoopGroup = eventLoopGroup;
+    if (eventLoopGroup != null) {
+      this.eventLoopGroupPool = new FixedObjectPool<>(eventLoopGroup);
+    } else {
+      this.eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
+    }
     return this;
   }
 
@@ -406,11 +437,45 @@ public final class NettyChannelBuilder
       }
       negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
     }
+
+    // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
+    ObjectPool<? extends EventLoopGroup> resolvedEventLoopGroupPool = eventLoopGroupPool;
+    ChannelFactory<? extends Channel> resolvedChannelFactory = channelFactory;
+    if (shouldFallBackToNio()) {
+      logger.log(
+          Level.WARNING,
+          "Both EventLoopGroup and ChannelType should be provided or neither should be, "
+              + "otherwise client may not start. Not provided values will use Nio "
+              + "(NioSocketChannel, NioEventLoopGroup) for compatibility. This will cause an "
+              + "Exception in the future.");
+
+      if (eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL) {
+        resolvedEventLoopGroupPool =
+            SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP);
+        logger.log(Level.FINE, "Channel type or ChannelFactory is provided, but EventLoopGroup is "
+            + "missing. Fall back to NioEventLoopGroup.");
+      }
+      if (channelFactory == DEFAULT_CHANNEL_FACTORY) {
+        resolvedChannelFactory = new ReflectiveChannelFactory<>(NioSocketChannel.class);
+        logger.log(
+            Level.FINE, "EventLoopGroup is provided, but Channel type or ChannelFactory is missing."
+                + " Fall back to NioSocketChannel.");
+      }
+    }
+
     return new NettyTransportFactory(
-        negotiator, channelFactory, channelOptions,
-        eventLoopGroup, flowControlWindow, maxInboundMessageSize(),
+        negotiator, resolvedChannelFactory, channelOptions,
+        resolvedEventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory.create(), localSocketPicker);
+  }
+
+  @VisibleForTesting
+  boolean shouldFallBackToNio() {
+    return (channelFactory != DEFAULT_CHANNEL_FACTORY
+        && eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL)
+        || (channelFactory == DEFAULT_CHANNEL_FACTORY
+        && eventLoopGroupPool != DEFAULT_EVENT_LOOP_GROUP_POOL);
   }
 
   @Override
@@ -510,8 +575,8 @@ public final class NettyChannelBuilder
     private final ProtocolNegotiator protocolNegotiator;
     private final ChannelFactory<? extends Channel> channelFactory;
     private final Map<ChannelOption<?>, ?> channelOptions;
+    private final ObjectPool<? extends EventLoopGroup> groupPool;
     private final EventLoopGroup group;
-    private final boolean usingSharedGroup;
     private final int flowControlWindow;
     private final int maxMessageSize;
     private final int maxHeaderListSize;
@@ -524,13 +589,16 @@ public final class NettyChannelBuilder
     private boolean closed;
 
     NettyTransportFactory(ProtocolNegotiator protocolNegotiator,
-        ChannelFactory<? extends Channel> channelFactory, Map<ChannelOption<?>, ?> channelOptions,
-        EventLoopGroup group, int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
+        ChannelFactory<? extends Channel> channelFactory,
+        Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
+        int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
+      this.groupPool = groupPool;
+      this.group = groupPool.getObject();
       this.flowControlWindow = flowControlWindow;
       this.maxMessageSize = maxMessageSize;
       this.maxHeaderListSize = maxHeaderListSize;
@@ -540,14 +608,6 @@ public final class NettyChannelBuilder
       this.transportTracer = transportTracer;
       this.localSocketPicker =
           localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
-
-      usingSharedGroup = group == null;
-      if (usingSharedGroup) {
-        // The group was unspecified, using the shared group.
-        this.group = SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-      } else {
-        this.group = group;
-      }
     }
 
     @Override
@@ -598,9 +658,7 @@ public final class NettyChannelBuilder
       closed = true;
 
       protocolNegotiator.close();
-      if (usingSharedGroup) {
-        SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, group);
-      }
+      groupPool.returnObject(group);
     }
   }
 }
