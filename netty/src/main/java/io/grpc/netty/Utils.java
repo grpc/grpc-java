@@ -79,8 +79,8 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
-  private static final Class<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_TYPE;
-  private static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
+  public static final Class<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_TYPE;
+  public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
 
   static {
     // Decide default channel types and EventLoopGroup based on Epoll availability
@@ -266,14 +266,6 @@ class Utils {
     } catch (ClassNotFoundException e) {
       throw new RuntimeException("Cannot load EpollServerSocketChannel", e);
     }
-  }
-
-  public static Class<? extends ServerChannel> defaultServerChannelType() {
-    return DEFAULT_SERVER_CHANNEL_TYPE;
-  }
-
-  public static Class<? extends Channel> defaultClientChannelType() {
-    return DEFAULT_CLIENT_CHANNEL_TYPE;
   }
 
   private static EventLoopGroup createEventLoopGroup(

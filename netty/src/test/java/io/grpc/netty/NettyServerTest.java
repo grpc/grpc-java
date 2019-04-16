@@ -58,7 +58,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.defaultServerChannelType(),
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
         SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
@@ -96,7 +96,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.defaultServerChannelType(),
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
         SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
@@ -134,7 +134,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.defaultServerChannelType(),
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         channelOptions,
         SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
@@ -184,7 +184,7 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        Utils.defaultServerChannelType(),
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
         SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
         SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),

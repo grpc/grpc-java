@@ -50,7 +50,6 @@ import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.util.HashMap;

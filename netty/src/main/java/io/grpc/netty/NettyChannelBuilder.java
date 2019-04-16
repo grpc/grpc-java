@@ -74,7 +74,7 @@ public final class NettyChannelBuilder
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
   private static final ChannelFactory<? extends Channel> DEFAULT_CHANNEL_FACTORY =
-      new ReflectiveChannelFactory<>(Utils.defaultClientChannelType());
+      new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE);
   private static final ObjectPool<? extends EventLoopGroup> DEFAULT_EVENT_LOOP_GROUP_POOL =
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
@@ -444,9 +444,10 @@ public final class NettyChannelBuilder
     if (shouldFallBackToNio()) {
       logger.log(
           Level.WARNING,
-          "Both EventLoopGroup and ChannelType should be provided, otherwise client may not start. "
-            + "Not provided values will use Nio (NioSocketChannel, NioEventLoopGroup) for "
-            + "compatibility. This will cause an Exception in the future.");
+          "Both EventLoopGroup and ChannelType should be provided or neither should be, "
+              + "otherwise client may not start. Not provided values will use Nio "
+              + "(NioSocketChannel, NioEventLoopGroup) for compatibility. This will cause an "
+              + "Exception in the future.");
 
       if (eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL) {
         resolvedEventLoopGroupPool =
@@ -458,7 +459,7 @@ public final class NettyChannelBuilder
         resolvedChannelFactory = new ReflectiveChannelFactory<>(NioSocketChannel.class);
         logger.log(
             Level.FINE, "EventLoopGroup is provided, but Channel type or ChannelFactory is missing."
-              + " Fall back to NioSocketChannel.");
+                + " Fall back to NioSocketChannel.");
       }
     }
 

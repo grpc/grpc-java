@@ -197,7 +197,7 @@ public class UtilsTest {
   public void defaultClientChannelType_whenEpollIsAvailable() {
     assume().that(Utils.isEpollAvailable()).isTrue();
 
-    Class<? extends Channel> clientChannelType = Utils.defaultClientChannelType();
+    Class<? extends Channel> clientChannelType = Utils.DEFAULT_CLIENT_CHANNEL_TYPE;
 
     assertThat(clientChannelType.getName())
         .isEqualTo("io.netty.channel.epoll.EpollSocketChannel");
@@ -207,7 +207,7 @@ public class UtilsTest {
   public void defaultServerChannelType_whenEpollIsAvailable() {
     assume().that(Utils.isEpollAvailable()).isTrue();
 
-    Class<? extends Channel> clientChannelType = Utils.defaultServerChannelType();
+    Class<? extends Channel> clientChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
 
     assertThat(clientChannelType.getName())
         .isEqualTo("io.netty.channel.epoll.EpollServerSocketChannel");

@@ -81,7 +81,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
 
   private final List<SocketAddress> listenAddresses = new ArrayList<>();
-  private Class<? extends ServerChannel> channelType = Utils.defaultServerChannelType();
+  private Class<? extends ServerChannel> channelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
   private final Map<ChannelOption<?>, Object> channelOptions = new HashMap<>();
   private ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool =
       DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
@@ -502,11 +502,11 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
       // Use NIO based channel type and eventloop group for backward compatibility reason
       logger.log(
           Level.WARNING,
-          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided, "
-              + "otherwise server may not start. Missing values will use Nio "
+          "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided or "
+              + "neither should be, otherwise server may not start. Missing values will use Nio "
               + "(NioServerSocketChannel, NioEventLoopGroup) for backward compatibility. "
               + "This will cause an Exception in the future.");
-      if (channelType == Utils.defaultServerChannelType()) {
+      if (channelType == Utils.DEFAULT_SERVER_CHANNEL_TYPE) {
         resolvedChannelType = NioServerSocketChannel.class;
         logger.log(Level.FINE, "One or more EventLoopGroup is provided, but Channel type is "
             + "missing. Fall back to NioServerSocketChannel.");
@@ -539,10 +539,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
 
   @VisibleForTesting
   boolean shouldFallBackToNio() {
-    boolean hasNonDefault = channelType != Utils.defaultServerChannelType()
+    boolean hasNonDefault = channelType != Utils.DEFAULT_SERVER_CHANNEL_TYPE
         || bossEventLoopGroupPool != DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
         || workerEventLoopGroupPool != DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
-    boolean hasDefault = channelType == Utils.defaultServerChannelType()
+    boolean hasDefault = channelType == Utils.DEFAULT_SERVER_CHANNEL_TYPE
         || bossEventLoopGroupPool == DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL
         || workerEventLoopGroupPool == DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
     return hasNonDefault && hasDefault;
