@@ -618,7 +618,7 @@ public class NettyClientTransportTest {
 
     startServer();
     EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
-    int keepAliveTimeMillis = 1234567;
+    int keepAliveTimeMillis = 12345670;
     try {
       NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
           GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
@@ -642,7 +642,7 @@ public class NettyClientTransportTest {
 
     startServer();
     EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
-    int keepAliveTimeMillis = 1234567;
+    int keepAliveTimeMillis = 12345670;
     try {
       NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
           GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */,
