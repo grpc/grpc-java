@@ -64,7 +64,7 @@ final class XdsLrsClient {
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Supplier<Stopwatch> stopwatchSupplier;
-  private final Stopwatch stopwatch;
+  private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
 
@@ -83,7 +83,7 @@ final class XdsLrsClient {
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.stopwatch = stopwatchSupplier.get();
+    this.retryStopwatch = stopwatchSupplier.get();
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -95,7 +95,7 @@ final class XdsLrsClient {
         = LoadReportingServiceGrpc.newStub(channel);
     lrsStream = new LrsStream(stub, stopwatchSupplier.get());
     lrsStream.start();
-    stopwatch.reset().start();
+    retryStopwatch.reset().start();
 
     LoadStatsRequest initRequest =
         LoadStatsRequest.newBuilder()
@@ -157,7 +157,7 @@ final class XdsLrsClient {
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
-    final Stopwatch stopwatch;
+    final Stopwatch reportStopwatch;
     StreamObserver<LoadStatsRequest> lrsRequestWriter;
     boolean initialResponseReceived;
     boolean closed;
@@ -166,12 +166,12 @@ final class XdsLrsClient {
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
-      this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+      reportStopwatch = checkNotNull(stopwatch, "stopwatch");
     }
 
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
-      stopwatch.reset().start();
+      reportStopwatch.reset().start();
     }
 
     @Override
@@ -207,8 +207,8 @@ final class XdsLrsClient {
     }
 
     private void sendLoadReport() {
-      long interval = stopwatch.elapsed(TimeUnit.NANOSECONDS);
-      stopwatch.reset().start();
+      long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
+      reportStopwatch.reset().start();
       // TODO: get load report and send to management server
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
           .setNode(Node.newBuilder()
@@ -272,7 +272,7 @@ final class XdsLrsClient {
         // actual delay may be smaller than the value from the back-off policy, or even negative,
         // depending how much time was spent in the previous RPC.
         delayNanos =
-            lrsRpcRetryPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
+            lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
       if (delayNanos <= 0) {
         startLrsRpc();
