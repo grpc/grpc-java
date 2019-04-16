@@ -136,7 +136,6 @@ final class XdsLrsClient {
 
     @Override
     public void run() {
-      stream.loadReportTimer = null;
       stream.sendLoadReport();
     }
   }
@@ -218,11 +217,12 @@ final class XdsLrsClient {
     }
 
     private void scheduleNextLoadReport() {
+      // Cancel pending load report and reschedule with updated load reporting interval.
+      if (loadReportTimer != null && loadReportTimer.isPending()) {
+        loadReportTimer.cancel();
+        loadReportTimer = null;
+      }
       if (loadReportIntervalNano > 0) {
-        // Cancel pending load report and reschedule with updated load reporting interval.
-        if (loadReportTimer != null && loadReportTimer.isPending()) {
-          loadReportTimer.cancel();
-        }
         loadReportTimer = syncContext.schedule(
             new LoadReportingTask(this), loadReportIntervalNano, TimeUnit.NANOSECONDS,
             timerService);
