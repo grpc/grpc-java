@@ -440,7 +440,7 @@ public abstract class NettyHandlerTestBase<T extends Http2ConnectionHandler> {
     Http2LocalFlowController localFlowController = connection().local().flowController();
     int maxWindow = handler.flowControlPing().maxWindow();
 
-    handler.flowControlPing().setDataSizeSincePing(maxWindow);
+    handler.flowControlPing().setDataSizeAndSincePing(maxWindow);
     long payload = handler.flowControlPing().payload();
     channelRead(pingFrame(true, payload));
 
