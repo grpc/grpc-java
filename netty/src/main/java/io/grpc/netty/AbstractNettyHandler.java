@@ -206,9 +206,14 @@ abstract class AbstractNettyHandler extends GrpcHttp2ConnectionHandler {
       return dataSizeSincePing;
     }
 
-    @VisibleForTesting
-    void setDataSizeSincePing(int dataSize) {
+    private void setDataSizeSincePing(int dataSize) {
       dataSizeSincePing = dataSize;
+    }
+
+    @VisibleForTesting
+    void setDataSizeAndSincePing(int dataSize) {
+      setDataSizeSincePing(dataSize);
+      lastPingTime = System.nanoTime() - TimeUnit.SECONDS.toNanos(1);
     }
   }
 }
