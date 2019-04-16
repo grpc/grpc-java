@@ -618,7 +618,7 @@ public class NettyClientTransportTest {
 
     startServer();
     EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
-    int keepAliveTimeMillis = 12345670;
+    int keepAliveTimeMillis = 1234567;
     try {
       NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
           GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
@@ -629,8 +629,9 @@ public class NettyClientTransportTest {
 
       ChannelOption<Integer> tcpUserTimeoutOption = Utils.maybeGetTcpUserTimeoutOption();
       assertThat(tcpUserTimeoutOption).isNotNull();
-      assertThat(transport.channel().config().getOption(tcpUserTimeoutOption))
-          .isEqualTo(keepAliveTimeMillis);
+      // on some linux based system, the integer value may have error (usually +-1)
+      assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
+          .isWithin(5).of((double) keepAliveTimeMillis);
     } finally {
       epollGroup.shutdownGracefully();
     }
