@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.Duration;
@@ -33,12 +34,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
  */
-@ThreadSafe
 final class XdsLoadReportStore {
 
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
@@ -72,6 +71,7 @@ final class XdsLoadReportStore {
 
   /**
    * Generates a {@link ClusterStats} containing load stats in locality granularity.
+   * This method should be called in a synchronized context.
    */
   ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
@@ -85,6 +85,11 @@ final class XdsLoadReportStore {
               .setTotalSuccessfulRequests(snapshot.callsSucceed)
               .setTotalErrorRequests(snapshot.callsFailed)
               .setTotalRequestsInProgress(snapshot.callsInProgress));
+      // Discard counters for localities that are no longer exposed by the remote balancer and
+      // no RPCs ongoing.
+      if (!entry.getValue().isActive() && snapshot.callsInProgress == 0) {
+        localityLoadCounters.remove(entry.getKey());
+      }
     }
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
@@ -95,21 +100,34 @@ final class XdsLoadReportStore {
   }
 
   /**
-   * Create a {@link ClientLoadCounter} for the provided locality if not present in this {@link
-   * XdsLoadReportStore}. This method needs to be called at locality updates for newly assigned
-   * localities in balancer discovery responses.
+   * Create a {@link ClientLoadCounter} for the provided locality or make it active
+   * if already in this {@link XdsLoadReportStore}. This method needs to be called at
+   * locality updates only for newly assigned localities in balancer discovery responses.
+   * This method should be called in a synchronized context.
    */
-  void addLocality(Locality locality) {
-    localityLoadCounters.putIfAbsent(locality, new ClientLoadCounter());
+  void addLocality(final Locality locality) {
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
+    checkState(counter == null || !counter.isActive(),
+        "An active ClientLoadCounter for locality %s already exists", locality);
+    if (counter == null) {
+      localityLoadCounters.put(locality, new ClientLoadCounter());
+    } else {
+      counter.setActive(true);
+    }
   }
 
   /**
-   * Discard the {@link ClientLoadCounter} for the provided locality if owned by this {@link
-   * XdsLoadReportStore} to avoid map size growing infinitely. To be called at locality updates when
-   * the provided locality is no longer considered in balancer discovery response.s
+   * Deactivate the {@link ClientLoadCounter} for the provided locality in by this
+   * {@link XdsLoadReportStore}. Inactive {@link ClientLoadCounter}s are for localities
+   * no longer exposed by the remote balancer. This method needs to be called at
+   * locality updates only for localities newly removed from balancer discovery responses.
+   * This method should be called in a synchronized context.
    */
-  void removeLocality(Locality locality) {
-    localityLoadCounters.remove(locality);
+  void removeLocality(final Locality locality) {
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
+    checkState(counter != null && counter.isActive(),
+        "No active ClientLoadCounter for locality %s exists", locality);
+    counter.setActive(false);
   }
 
   /**

@@ -24,9 +24,7 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.ThreadSafe;
 
-@ThreadSafe
 final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   private final ClientStreamTracer.Factory delegate;
@@ -62,9 +60,11 @@ final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   static final class ClientLoadCounter {
-    private AtomicLong callsInProgress = new AtomicLong();
-    private AtomicLong callsFinished = new AtomicLong();
-    private AtomicLong callsFailed = new AtomicLong();
+
+    private final AtomicLong callsInProgress = new AtomicLong();
+    private final AtomicLong callsFinished = new AtomicLong();
+    private final AtomicLong callsFailed = new AtomicLong();
+    private boolean active = true;
 
     /**
      * Generate a query count snapshot and reset counts for next snapshot.
@@ -75,6 +75,14 @@ final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
           callsFinished.getAndSet(0) - numFailed,
           callsInProgress.get(),
           numFailed);
+    }
+
+    boolean isActive() {
+      return active;
+    }
+
+    void setActive(boolean value) {
+      active = value;
     }
   }
 
