@@ -48,7 +48,9 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of XDS load reporting service. It should be run in some serialized context.
+ * Client of XDS load reporting service. Methods in this class are expected to be called in
+ * the same synchronized context that {@link XdsLoadBalancer#helper#getSynchronizationContext}
+ * returns.
  */
 @NotThreadSafe
 final class XdsLrsClient {
