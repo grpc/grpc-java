@@ -16,6 +16,8 @@
 
 package io.grpc.alts;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallCredentials;
@@ -33,10 +35,14 @@ import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
+import io.grpc.netty.EpollUtils;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
+import io.netty.channel.ChannelOption;
 import io.netty.handler.ssl.SslContext;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.net.ssl.SSLException;
 
 /**
@@ -46,6 +52,8 @@ import javax.net.ssl.SSLException;
 public final class ComputeEngineChannelBuilder
     extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
 
+  private static final Logger logger =
+      Logger.getLogger(ComputeEngineChannelBuilder.class.getName());
   private final NettyChannelBuilder delegate;
   private GoogleDefaultProtocolNegotiator negotiatorForTest;
 
@@ -71,6 +79,25 @@ public final class ComputeEngineChannelBuilder
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
   public static ComputeEngineChannelBuilder forAddress(String name, int port) {
     return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
+  }
+
+  /**
+   * Sets TCP_USER_TIMEOUT option.
+   *
+   * <p>Note: this option is only available on linux based operating system. Also, netty-epoll
+   * runtime dependency is required. If it doesn't meet those conditions, the option won't be set.
+   *
+   * <p>To check Epoll availability, use {@link EpollUtils#isEpollAvailable()}.
+   */
+  public ComputeEngineChannelBuilder setTcpUserTimeout(int tcpUserTimeoutMillis) {
+    checkArgument(tcpUserTimeoutMillis > 0, "TCP_USER_TIMEOUT should be positive");
+    ChannelOption<Integer> channelOption = EpollUtils.maybeGetTcpUserTimeoutOption();
+    if (channelOption == null) {
+      logger.log(Level.WARNING, "Epoll is not available, TCP_USER_TIMEOUT is not set.");
+      return this;
+    }
+    delegate.withOption(channelOption, tcpUserTimeoutMillis);
+    return this;
   }
 
   @Override
