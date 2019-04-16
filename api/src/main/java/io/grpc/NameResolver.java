@@ -87,7 +87,7 @@ public abstract class NameResolver {
 
           @Override
           public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getServers(), resolutionResult.getAttributes());
+            listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
           }
       });
     }
@@ -276,12 +276,13 @@ public abstract class NameResolver {
     @Deprecated
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
-      onResult(ResolutionResult.newBuilder().setServers(servers).setAttributes(attributes).build());
+      onResult(
+          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
 
     /**
      * Handles updates on resolved addresses and attributes.  If
-     * {@link ResolutionResult#getServers()} is empty, {@link #onError(Status)} will be called.
+     * {@link ResolutionResult#getAddresses()} is empty, {@link #onError(Status)} will be called.
      *
      * @param resolutionResult the resolved server addresses, attributes, and Service Config.
      * @since 1.21.0
@@ -363,17 +364,17 @@ public abstract class NameResolver {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ResolutionResult {
-    private final List<EquivalentAddressGroup> servers;
+    private final List<EquivalentAddressGroup> addresses;
     @ResolutionResultAttr
     private final Attributes attributes;
     @Nullable
     private final ConfigOrError serviceConfig;
 
     ResolutionResult(
-        List<EquivalentAddressGroup> servers,
+        List<EquivalentAddressGroup> addresses,
         @ResolutionResultAttr Attributes attributes,
         ConfigOrError serviceConfig) {
-      this.servers = Collections.unmodifiableList(new ArrayList<>(servers));
+      this.addresses = Collections.unmodifiableList(new ArrayList<>(addresses));
       this.attributes = checkNotNull(attributes, "attributes");
       this.serviceConfig = serviceConfig;
     }
@@ -394,22 +395,22 @@ public abstract class NameResolver {
      */
     public Builder toBuilder() {
       return newBuilder()
-          .setServers(servers)
+          .setAddresses(addresses)
           .setAttributes(attributes)
           .setServiceConfig(serviceConfig);
     }
 
     /**
-     * Gets the servers resolved by name resolution.
+     * Gets the addresses resolved by name resolution.
      *
      * @since 1.21.0
      */
-    public List<EquivalentAddressGroup> getServers() {
-      return servers;
+    public List<EquivalentAddressGroup> getAddresses() {
+      return addresses;
     }
 
     /**
-     * Gets the attributes associated with the servers resolved by name resolution.  If there are
+     * Gets the attributes associated with the addresses resolved by name resolution.  If there are
      * no attributes, {@link Attributes#EMPTY} will be returned.
      *
      * @since 1.21.0
@@ -432,26 +433,32 @@ public abstract class NameResolver {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("servers", servers)
+          .add("addresses", addresses)
           .add("attributes", attributes)
           .add("serviceConfig", serviceConfig)
           .toString();
     }
 
+    /**
+     * Useful for testing.  May be slow to calculate.
+     */
     @Override
     public boolean equals(Object obj) {
       if (!(obj instanceof ResolutionResult)) {
         return false;
       }
       ResolutionResult that = (ResolutionResult) obj;
-      return Objects.equal(this.servers, that.servers)
+      return Objects.equal(this.addresses, that.addresses)
           && Objects.equal(this.attributes, that.attributes)
           && Objects.equal(this.serviceConfig, that.serviceConfig);
     }
 
+    /**
+     * Useful for testing.  May be slow to calculate.
+     */
     @Override
     public int hashCode() {
-      return Objects.hashCode(servers, attributes, serviceConfig);
+      return Objects.hashCode(addresses, attributes, serviceConfig);
     }
 
     /**
@@ -460,7 +467,7 @@ public abstract class NameResolver {
      * @since 1.21.0
      */
     public static final class Builder {
-      private List<EquivalentAddressGroup> servers = Collections.emptyList();
+      private List<EquivalentAddressGroup> addresses = Collections.emptyList();
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
       private ConfigOrError serviceConfig;
@@ -469,17 +476,17 @@ public abstract class NameResolver {
       Builder() {}
 
       /**
-       * Sets the servers resolved by name resolution.  This field is required.
+       * Sets the addresses resolved by name resolution.  This field is required.
        *
        * @since 1.21.0
        */
-      public Builder setServers(List<EquivalentAddressGroup> servers) {
-        this.servers = servers;
+      public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
+        this.addresses = addresses;
         return this;
       }
 
       /**
-       * Sets the attributes for the servers resolved by name resolution.  If unset,
+       * Sets the attributes for the addresses resolved by name resolution.  If unset,
        * {@link Attributes#EMPTY} will be used as a default.
        *
        * @since 1.21.0
@@ -506,35 +513,18 @@ public abstract class NameResolver {
        * @since 1.21.0
        */
       public ResolutionResult build() {
-        return new ResolutionResult(servers, attributes, serviceConfig);
+        return new ResolutionResult(addresses, attributes, serviceConfig);
       }
     }
   }
   
   /**
-   * Gets the attributes associated with the servers resolved by name resolution.  If there are
+   * Gets the attributes associated with the addresses resolved by name resolution.  If there are
    * no attributes, {@link Attributes#EMPTY} will be returned.
    *
    * @since 1.21.0
    */
   public static final class ConfigOrError {
-    private static final class UnknownConfig {
-
-      UnknownConfig() {}
-
-      @Override
-      public String toString() {
-        return "service config is unused";
-      }
-    }
-
-    /**
-     * A sentinel value indicating that service config is not supported.   This can be used to
-     * indicate that parsing of the service config is neither right nor wrong, but doesn't have
-     * any meaning.
-     */
-    public static final ConfigOrError UNKNOWN_CONFIG =
-        ConfigOrError.fromConfig(new UnknownConfig());
 
     /**
      * Returns a {@link ConfigOrError} for the successfully parsed config.

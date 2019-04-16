@@ -25,11 +25,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
@@ -49,7 +44,7 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (subchannel == null) {
       subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()

@@ -1341,7 +1341,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
-          List<EquivalentAddressGroup> servers = resolutionResult.getServers();
+          List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
@@ -1410,7 +1410,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
               helper.lb.handleResolvedAddresses(
                   ResolvedAddresses.newBuilder()
-                      .setServers(servers)
+                      .setAddresses(servers)
                       .setAttributes(effectiveAttrs)
                       .build());
             }

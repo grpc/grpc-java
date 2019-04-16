@@ -2096,7 +2096,7 @@ public class GrpclbLoadBalancerTest {
         @Override
         public void run() {
           balancer.handleResolvedAddresses(
-              ResolvedAddresses.newBuilder().setServers(addrs).setAttributes(attrs).build());
+              ResolvedAddresses.newBuilder().setAddresses(addrs).setAttributes(attrs).build());
         }
       });
   }
