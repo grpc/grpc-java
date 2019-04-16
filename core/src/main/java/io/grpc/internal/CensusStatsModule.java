@@ -41,6 +41,8 @@ import io.opencensus.stats.Measure.MeasureLong;
 import io.opencensus.stats.MeasureMap;
 import io.opencensus.stats.Stats;
 import io.opencensus.stats.StatsRecorder;
+import io.opencensus.tags.InternalUtils;
+import io.opencensus.tags.Tag;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
 import io.opencensus.tags.Tagger;
