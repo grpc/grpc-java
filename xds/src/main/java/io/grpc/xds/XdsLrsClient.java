@@ -105,11 +105,7 @@ final class XdsLrsClient {
                         TRAFFICDIRECTOR_HOSTNAME_FIELD,
                         Value.newBuilder().setStringValue(serviceName).build())))
             .build();
-    try {
-      lrsStream.lrsRequestWriter.onNext(initRequest);
-    } catch (Exception e) {
-      lrsStream.close(e);
-    }
+    lrsStream.lrsRequestWriter.onNext(initRequest);
   }
 
   void shutdownLrsRpc() {
