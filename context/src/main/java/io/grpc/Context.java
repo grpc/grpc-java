@@ -97,7 +97,7 @@ import java.util.logging.Logger;
 @CheckReturnValue
 public class Context {
 
-  private static final Logger log = Logger.getLogger(Context.class.getName());
+  static final Logger log = Logger.getLogger(Context.class.getName());
 
   private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
       new PersistentHashArrayMappedTrie<>();
@@ -628,7 +628,7 @@ public class Context {
    * @see #currentContextExecutor(Executor)
    */
   public Executor fixedContextExecutor(final Executor e) {
-    class FixedContextExecutor implements Executor {
+    final class FixedContextExecutor implements Executor {
       @Override
       public void execute(Runnable r) {
         e.execute(wrap(r));
@@ -646,7 +646,7 @@ public class Context {
    * @see #fixedContextExecutor(Executor)
    */
   public static Executor currentContextExecutor(final Executor e) {
-    class CurrentContextExecutor implements Executor {
+    final class CurrentContextExecutor implements Executor {
       @Override
       public void execute(Runnable r) {
         e.execute(Context.current().wrap(r));
@@ -659,7 +659,7 @@ public class Context {
   /**
    * Lookup the value for a key in the context inheritance chain.
    */
-  private Object lookup(Key<?> key) {
+  Object lookup(Key<?> key) {
     return keyValueEntries.get(key);
   }
 
@@ -864,7 +864,7 @@ public class Context {
     /**
      * @param context the newly cancelled context.
      */
-    public void cancelled(Context context);
+    void cancelled(Context context);
   }
 
   /**
@@ -977,16 +977,16 @@ public class Context {
   /**
    * Stores listener and executor pair.
    */
-  private class ExecutableListener implements Runnable {
+  private final class ExecutableListener implements Runnable {
     private final Executor executor;
-    private final CancellationListener listener;
+    final CancellationListener listener;
 
-    private ExecutableListener(Executor executor, CancellationListener listener) {
+    ExecutableListener(Executor executor, CancellationListener listener) {
       this.executor = executor;
       this.listener = listener;
     }
 
-    private void deliver() {
+    void deliver() {
       try {
         executor.execute(this);
       } catch (Throwable t) {
@@ -1000,7 +1000,7 @@ public class Context {
     }
   }
 
-  private class ParentListener implements CancellationListener {
+  private final class ParentListener implements CancellationListener {
     @Override
     public void cancelled(Context context) {
       if (Context.this instanceof CancellableContext) {
@@ -1013,7 +1013,7 @@ public class Context {
   }
 
   @CanIgnoreReturnValue
-  private static <T> T checkNotNull(T reference, Object errorMessage) {
+  static <T> T checkNotNull(T reference, Object errorMessage) {
     if (reference == null) {
       throw new NullPointerException(String.valueOf(errorMessage));
     }
