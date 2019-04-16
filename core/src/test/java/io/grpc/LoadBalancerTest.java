@@ -153,7 +153,7 @@ public class LoadBalancerTest {
       new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
       fail("Should throw");
     } catch (UnsupportedOperationException e) {
-      // exepcted
+      // expected
     }
   }
 
