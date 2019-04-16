@@ -242,9 +242,11 @@ final class XdsLrsClient {
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
-      checkState(serviceList.size() == 1, "Excessive reporting cluster: %s", serviceList);
-      checkState(serviceList.get(0).equals(serviceName), "Unmatched cluster name: %s with EDS: %s",
-          serviceList.get(0), serviceName);
+      if (serviceList.size() != 1 || !serviceList.get(0).equals(serviceName)) {
+        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): %s with EDS response: %s",
+            serviceList, serviceName);
+        return;
+      }
       scheduleNextLoadReport();
     }
 
