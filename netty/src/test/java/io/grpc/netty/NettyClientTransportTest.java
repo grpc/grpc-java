@@ -631,7 +631,7 @@ public class NettyClientTransportTest {
       assertThat(tcpUserTimeoutOption).isNotNull();
       // on some linux based system, the integer value may have error (usually +-1)
       assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
-          .isWithin(5).of((double) keepAliveTimeMillis);
+          .isWithin(5.0).of((double) keepAliveTimeMillis);
     } finally {
       epollGroup.shutdownGracefully();
     }
