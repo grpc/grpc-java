@@ -185,8 +185,8 @@ public class Context {
     return current;
   }
 
-  ArrayList<ExecutableListener> listeners;
-  CancellationListener parentListener = new ParentListener();
+  private ArrayList<ExecutableListener> listeners;
+  private CancellationListener parentListener = new ParentListener();
   final CancellableContext cancellableAncestor;
   final PersistentHashArrayMappedTrie<Key<?>, Object> keyValueEntries;
   // The number parents between this context and the root context.
