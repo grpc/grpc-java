@@ -32,9 +32,9 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
-import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
@@ -54,7 +54,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -132,47 +131,14 @@ public class XdsLrsClientTest {
   private BackoffPolicy backoffPolicy2;
 
   private static ClusterStats buildClusterStats(long loadReportIntervalNanos) {
-    return ClusterStats.newBuilder().setLoadReportInterval(
-        XdsLrsClient.numToDuration(loadReportIntervalNanos, TimeUnit.NANOSECONDS)).build();
+    return ClusterStats.newBuilder()
+        .setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos)).build();
   }
 
   private static LoadStatsResponse buildLrsResponse(long loadReportIntervalNanos) {
     return LoadStatsResponse.newBuilder()
         .addClusters(SERVICE_AUTHORITY)
-        .setLoadReportingInterval(
-        XdsLrsClient.numToDuration(loadReportIntervalNanos, TimeUnit.NANOSECONDS)).build();
-  }
-
-  @Test
-  public void testUtilDurationConversion() {
-    Random rand = new Random();
-    long numSeconds = rand.nextInt(Integer.MAX_VALUE);
-    int numNanos = rand.nextInt(Integer.MAX_VALUE);
-    Duration duration = Duration.newBuilder().setSeconds(numSeconds).setNanos(numNanos).build();
-
-    long nanos = TimeUnit.SECONDS.toNanos(numSeconds) + numNanos;
-    long convertedNanos = XdsLrsClient.durationToNum(duration, TimeUnit.NANOSECONDS);
-    Duration convertedDuration = XdsLrsClient.numToDuration(nanos, TimeUnit.NANOSECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedNanos, TimeUnit.NANOSECONDS),
-        convertedDuration);
-
-    long micros = TimeUnit.SECONDS.toMicros(numSeconds) + TimeUnit.NANOSECONDS.toMicros(numNanos);
-    long convertedMicros = XdsLrsClient.durationToNum(duration, TimeUnit.MICROSECONDS);
-    convertedDuration = XdsLrsClient.numToDuration(micros, TimeUnit.MICROSECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedMicros, TimeUnit.MICROSECONDS),
-        convertedDuration);
-
-    long millis = TimeUnit.SECONDS.toMillis(numSeconds) + TimeUnit.NANOSECONDS.toMillis(numNanos);
-    long convertedMillis = XdsLrsClient.durationToNum(duration, TimeUnit.MILLISECONDS);
-    convertedDuration = XdsLrsClient.numToDuration(millis, TimeUnit.MILLISECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedMillis, TimeUnit.MILLISECONDS),
-        convertedDuration);
-
-    long seconds = numSeconds + TimeUnit.NANOSECONDS.toSeconds(numNanos);
-    long convertedSeconds = XdsLrsClient.durationToNum(duration, TimeUnit.SECONDS);
-    convertedDuration = XdsLrsClient.numToDuration(seconds, TimeUnit.SECONDS);
-    assertEquals(XdsLrsClient.numToDuration(convertedSeconds, TimeUnit.SECONDS),
-        convertedDuration);
+        .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNanos)).build();
   }
 
   @SuppressWarnings("unchecked")
@@ -223,8 +189,7 @@ public class XdsLrsClientTest {
 
   private void assertNextReport(InOrder inOrder, StreamObserver<LoadStatsRequest> requestObserver,
       ClusterStats expectedStats) {
-    long loadReportIntervalNanos = XdsLrsClient
-        .durationToNum(expectedStats.getLoadReportInterval(), TimeUnit.NANOSECONDS);
+    long loadReportIntervalNanos = Durations.toNanos(expectedStats.getLoadReportInterval());
     assertEquals(0, fakeClock.forwardTime(loadReportIntervalNanos - 1, TimeUnit.NANOSECONDS));
     inOrder.verifyNoMoreInteractions();
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));

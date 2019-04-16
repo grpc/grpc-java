@@ -23,9 +23,9 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
@@ -87,13 +87,6 @@ final class XdsLrsClient {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-  }
-
-  // TODO (chengyuanzhang): consider putting to a util class.
-  @VisibleForTesting
-  static long durationToNum(Duration duration, TimeUnit unit) {
-    return unit.convert(duration.getSeconds() * 1000_000_000L + duration.getNanos(),
-        TimeUnit.NANOSECONDS);
   }
 
   void startLrsRpc() {
@@ -162,15 +155,6 @@ final class XdsLrsClient {
     }
   }
 
-  // TODO (chengyuanzhang): consider putting to a util class.
-  @VisibleForTesting
-  static Duration numToDuration(long duration, TimeUnit unit) {
-    long time = unit.toNanos(duration);
-    long sec = time / 1_000_000_000L;
-    int nanos = (int) (time % 1_000_000_000L);
-    return Duration.newBuilder().setSeconds(sec).setNanos(nanos).build();
-  }
-
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
 
     final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
@@ -232,9 +216,8 @@ final class XdsLrsClient {
                   .putFields(
                       TRAFFICDIRECTOR_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(ClusterStats.newBuilder().setLoadReportInterval(
-              numToDuration(interval, TimeUnit.NANOSECONDS)))
-          .build());
+          .addClusterStats(ClusterStats.newBuilder()
+              .setLoadReportInterval(Durations.fromNanos(interval))).build());
       scheduleNextLoadReport();
     }
 
@@ -259,8 +242,7 @@ final class XdsLrsClient {
       if (!initialResponseReceived) {
         initialResponseReceived = true;
       }
-      loadReportIntervalNano
-          = durationToNum(response.getLoadReportingInterval(), TimeUnit.NANOSECONDS);
+      loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
