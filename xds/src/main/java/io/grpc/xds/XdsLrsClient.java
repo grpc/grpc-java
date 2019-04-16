@@ -96,7 +96,6 @@ final class XdsLrsClient {
     lrsStream = new LrsStream(stub, stopwatchSupplier.get());
     lrsStream.start();
     stopwatch.reset().start();
-    lrsStream.stopwatch.reset().start();
 
     LoadStatsRequest initRequest =
         LoadStatsRequest.newBuilder()
@@ -172,6 +171,7 @@ final class XdsLrsClient {
 
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
+      stopwatch.reset().start();
     }
 
     @Override
