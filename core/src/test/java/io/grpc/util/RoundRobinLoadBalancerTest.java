@@ -209,7 +209,8 @@ public class RoundRobinLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper);
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
+            .build());
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -267,7 +268,8 @@ public class RoundRobinLoadBalancerTest {
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
         STATE_INFO);
@@ -377,7 +379,8 @@ public class RoundRobinLoadBalancerTest {
     Subchannel sc3 = subchannelIterator.next();
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     verify(sc1, times(1)).requestConnection();
     verify(sc2, times(1)).requestConnection();
     verify(sc3, times(1)).requestConnection();
@@ -416,7 +419,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void noStickinessEnabled_withStickyHeader() {
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }

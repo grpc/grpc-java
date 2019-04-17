@@ -233,7 +233,8 @@ public class ManagedChannelImplIdlenessTest {
             .build();
     nameResolverObserverCaptor.getValue().onResult(resolutionResult);
     verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
   }
 
   @Test
