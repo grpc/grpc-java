@@ -559,14 +559,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
-    if (builder.loadBalancerFactory == null) {
-      autoConfiguredLoadBalancerFactory =
-          new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-      this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
-    } else {
-      this.loadBalancerFactory = builder.loadBalancerFactory;
-    }
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
     this.nameResolverHelper =
         new NrHelper(
             builder.getDefaultPort(),
@@ -583,7 +578,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
         "Channel for '" + target + "'");
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
