@@ -154,7 +154,7 @@ public class RoundRobinLoadBalancerTest {
   public void pickAfterResolved() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
     verify(mockHelper, times(3)).createSubchannel(createArgsCaptor.capture());
@@ -209,7 +209,8 @@ public class RoundRobinLoadBalancerTest {
     InOrder inOrder = inOrder(mockHelper);
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(currentServers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder().setAddresses(currentServers).setAttributes(affinity)
+            .build());
 
     inOrder.verify(mockHelper).updateBalancingState(eq(CONNECTING), pickerCaptor.capture());
 
@@ -232,7 +233,7 @@ public class RoundRobinLoadBalancerTest {
             new EquivalentAddressGroup(newAddr));
 ;
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(latestServers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
 
     verify(newSubchannel, times(1)).requestConnection();
     verify(removedSubchannel, times(1)).shutdown();
@@ -252,7 +253,7 @@ public class RoundRobinLoadBalancerTest {
     // test going from non-empty to empty
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(affinity)
             .build());
 
@@ -267,7 +268,8 @@ public class RoundRobinLoadBalancerTest {
   public void pickAfterStateChange() throws Exception {
     InOrder inOrder = inOrder(mockHelper);
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     Subchannel subchannel = loadBalancer.getSubchannels().iterator().next();
     Ref<ConnectivityStateInfo> subchannelStateInfo = subchannel.getAttributes().get(
         STATE_INFO);
@@ -347,7 +349,7 @@ public class RoundRobinLoadBalancerTest {
   public void nameResolutionErrorWithActiveChannels() throws Exception {
     final Subchannel readySubchannel = subchannels.values().iterator().next();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(affinity).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
     loadBalancer.handleNameResolutionError(Status.NOT_FOUND.withDescription("nameResolutionError"));
 
@@ -377,7 +379,8 @@ public class RoundRobinLoadBalancerTest {
     Subchannel sc3 = subchannelIterator.next();
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     verify(sc1, times(1)).requestConnection();
     verify(sc2, times(1)).requestConnection();
     verify(sc3, times(1)).requestConnection();
@@ -416,7 +419,8 @@ public class RoundRobinLoadBalancerTest {
   @Test
   public void noStickinessEnabled_withStickyHeader() {
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(Attributes.EMPTY).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -450,7 +454,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -483,7 +487,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -514,7 +518,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -560,7 +564,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -608,7 +612,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -662,7 +666,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     for (Subchannel subchannel : subchannels.values()) {
       deliverSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
     }
@@ -698,7 +702,7 @@ public class RoundRobinLoadBalancerTest {
     newServers.remove(sc2.getAddresses());
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(newServers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(attributes).build());
 
     verify(sc2, times(1)).shutdown();
 
@@ -719,7 +723,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes1 = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig1).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes1).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
     Map<String, ?> stickinessMap1 = loadBalancer.getStickinessMapForTest();
 
     Map<String, String> serviceConfig2 = new HashMap<>();
@@ -727,7 +731,7 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes2 = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig2).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes2).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes2).build());
     Map<String, ?> stickinessMap2 = loadBalancer.getStickinessMapForTest();
 
     assertNotSame(stickinessMap1, stickinessMap2);
@@ -740,11 +744,11 @@ public class RoundRobinLoadBalancerTest {
     Attributes attributes1 = Attributes.newBuilder()
         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig1).build();
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes1).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
     Map<String, ?> stickinessMap1 = loadBalancer.getStickinessMapForTest();
 
     loadBalancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes1).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes1).build());
     Map<String, ?> stickinessMap2 = loadBalancer.getStickinessMapForTest();
 
     assertSame(stickinessMap1, stickinessMap2);

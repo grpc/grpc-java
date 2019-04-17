@@ -262,7 +262,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -284,7 +284,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -313,7 +313,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
@@ -332,7 +332,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -359,7 +359,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
@@ -380,7 +380,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -406,7 +406,7 @@ public class XdsLoadBalancerTest {
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -427,7 +427,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -453,7 +453,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
@@ -472,7 +472,7 @@ public class XdsLoadBalancerTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 
@@ -494,7 +494,7 @@ public class XdsLoadBalancerTest {
   public void fallback_AdsNotWorkingYetTimerExpired() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
 
@@ -511,7 +511,7 @@ public class XdsLoadBalancerTest {
   public void fallback_AdsWorkingTimerCancelled() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
@@ -525,7 +525,7 @@ public class XdsLoadBalancerTest {
   public void fallback_AdsErrorAndNoActiveSubchannel() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
 
@@ -547,7 +547,7 @@ public class XdsLoadBalancerTest {
   public void fallback_AdsErrorWithActiveSubchannel() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
 
@@ -608,7 +608,7 @@ public class XdsLoadBalancerTest {
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
 

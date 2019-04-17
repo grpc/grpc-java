@@ -133,7 +133,7 @@ public abstract class LoadBalancer {
       List<EquivalentAddressGroup> servers,
       @NameResolver.ResolutionResultAttr Attributes attributes) {
     handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attributes).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
   }
 
   /**
@@ -148,7 +148,8 @@ public abstract class LoadBalancer {
    */
   @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    handleResolvedAddressGroups(resolvedAddresses.getServers(), resolvedAddresses.getAttributes());
+    handleResolvedAddressGroups(
+        resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
   }
 
   /**
@@ -159,7 +160,7 @@ public abstract class LoadBalancer {
    * @since 1.21.0
    */
   public static final class ResolvedAddresses {
-    private final List<EquivalentAddressGroup> servers;
+    private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
     private final Attributes attributes;
     @Nullable
@@ -167,11 +168,11 @@ public abstract class LoadBalancer {
     // Make sure to update toBuilder() below!
 
     private ResolvedAddresses(
-        List<EquivalentAddressGroup> servers,
+        List<EquivalentAddressGroup> addresses,
         @NameResolver.ResolutionResultAttr Attributes attributes,
         Object loadBalancingPolicyConfig) {
-      this.servers =
-          Collections.unmodifiableList(new ArrayList<>(checkNotNull(servers, "servers")));
+      this.addresses =
+          Collections.unmodifiableList(new ArrayList<>(checkNotNull(addresses, "addresses")));
       this.attributes = checkNotNull(attributes, "attributes");
       this.loadBalancingPolicyConfig = loadBalancingPolicyConfig;
     }
@@ -192,7 +193,7 @@ public abstract class LoadBalancer {
      */
     public Builder toBuilder() {
       return newBuilder()
-          .setServers(servers)
+          .setAddresses(addresses)
           .setAttributes(attributes)
           .setLoadBalancingPolicyConfig(loadBalancingPolicyConfig);
     }
@@ -202,8 +203,8 @@ public abstract class LoadBalancer {
      *
      * @since 1.21.0
      */
-    public List<EquivalentAddressGroup> getServers() {
-      return servers;
+    public List<EquivalentAddressGroup> getAddresses() {
+      return addresses;
     }
 
     /**
@@ -232,7 +233,7 @@ public abstract class LoadBalancer {
      * Builder for {@link ResolvedAddresses}.
      */
     public static final class Builder {
-      private List<EquivalentAddressGroup> servers;
+      private List<EquivalentAddressGroup> addresses;
       @NameResolver.ResolutionResultAttr
       private Attributes attributes = Attributes.EMPTY;
       @Nullable
@@ -241,12 +242,12 @@ public abstract class LoadBalancer {
       Builder() {}
 
       /**
-       * Sets the servers.  This field is required.
+       * Sets the addresses.  This field is required.
        *
        * @return this.
        */
-      public Builder setServers(List<EquivalentAddressGroup> servers) {
-        this.servers = servers;
+      public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
+        this.addresses = addresses;
         return this;
       }
 
@@ -275,14 +276,14 @@ public abstract class LoadBalancer {
        * Constructs the {@link ResolvedAddresses}.
        */
       public ResolvedAddresses build() {
-        return new ResolvedAddresses(servers, attributes, loadBalancingPolicyConfig);
+        return new ResolvedAddresses(addresses, attributes, loadBalancingPolicyConfig);
       }
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("servers", servers)
+          .add("addresses", addresses)
           .add("attributes", attributes)
           .add("loadBalancingPolicyConfig", loadBalancingPolicyConfig)
           .toString();
@@ -290,7 +291,7 @@ public abstract class LoadBalancer {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(servers, attributes, loadBalancingPolicyConfig);
+      return Objects.hashCode(addresses, attributes, loadBalancingPolicyConfig);
     }
 
     @Override
@@ -299,7 +300,7 @@ public abstract class LoadBalancer {
         return false;
       }
       ResolvedAddresses that = (ResolvedAddresses) obj;
-      return Objects.equal(this.servers, that.servers)
+      return Objects.equal(this.addresses, that.addresses)
           && Objects.equal(this.attributes, that.attributes)
           && Objects.equal(this.loadBalancingPolicyConfig, that.loadBalancingPolicyConfig);
     }

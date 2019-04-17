@@ -27,6 +27,14 @@ import java.util.Map;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
 public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
+
+  /**
+   * A sentinel value indicating that service config is not supported.   This can be used to
+   * indicate that parsing of the service config is neither right nor wrong, but doesn't have
+   * any meaning.
+   */
+  private static final ConfigOrError UNKNOWN_CONFIG = ConfigOrError.fromConfig(new UnknownConfig());
+
   /**
    * Whether this provider is available for use, taking the current environment into consideration.
    * If {@code false}, {@link #newLoadBalancer} is not safe to be called.
@@ -56,8 +64,7 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
    * {@link Status} representing the failure to parse.  Implementations are expected to not throw
    * exceptions but return a Status representing the failure.  If successful, the load balancing
-   * policy config should be immutable, and implement {@link Object#equals(Object)} and
-   * {@link Object#hashCode()}.
+   * policy config should be immutable.
    *
    * @param rawLoadBalancingPolicyConfig The {@link Map} representation of the load balancing
    *     policy choice.
@@ -66,7 +73,7 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
    * @see https://github.com/grpc/proposal/blob/master/A24-lb-policy-config.md
    */
   public ConfigOrError parseLoadBalancingPolicyConfig(Map<String, ?> rawLoadBalancingPolicyConfig) {
-    return ConfigOrError.UNKNOWN_CONFIG;
+    return UNKNOWN_CONFIG;
   }
 
   @Override
@@ -89,5 +96,15 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
   @Override
   public final int hashCode() {
     return super.hashCode();
+  }
+
+  private static final class UnknownConfig {
+
+    UnknownConfig() {}
+
+    @Override
+    public String toString() {
+      return "service config is unused";
+    }
   }
 }

@@ -190,7 +190,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
             .build());
 
@@ -233,7 +233,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(serviceConfigAttrs)
             .build());
 
@@ -258,7 +258,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(serviceConfigAttrs)
             .build());
 
@@ -267,7 +267,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getServers()).containsExactlyElementsIn(servers).inOrder();
+    assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     Attributes actualAttributes = resultCaptor.getValue().getAttributes();
     assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
         .isEqualTo(Collections.singletonMap("setting1", "high"));
@@ -282,14 +282,14 @@ public class AutoConfiguredLoadBalancerFactoryTest {
             .build();
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(serviceConfigAttrs)
             .build());
 
     resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer, times(2)).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getServers()).containsExactlyElementsIn(servers).inOrder();
+    assertThat(resultCaptor.getValue().getAddresses()).containsExactlyElementsIn(servers).inOrder();
     actualAttributes = resultCaptor.getValue().getAttributes();
     // But the balancer config is changed.
     assertThat(actualAttributes.get(ATTR_LOAD_BALANCING_CONFIG))
@@ -319,14 +319,14 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
             .build());
 
     assertThat(lb.getDelegate()).isSameAs(testLbBalancer);
     verify(testLbBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.singletonList(servers.get(0)))
+            .setAddresses(Collections.singletonList(servers.get(0)))
             .setAttributes(Attributes.EMPTY)
             .build());
   }
@@ -342,7 +342,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb\": { \"setting1\": \"high\" } } ] }");
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
             .build());
@@ -367,7 +367,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         parseConfig("{\"loadBalancingConfig\": [ {\"test_lb2\": { \"setting1\": \"high\" } } ] }");
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(Collections.<EquivalentAddressGroup>emptyList())
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
             .build());
@@ -377,7 +377,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(testLbBalancer2).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getServers()).isEmpty();
+    assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     Attributes actualAttributes = resultCaptor.getValue().getAttributes();
 
     Map<String, ?> lbConfig = actualAttributes.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG);
@@ -747,7 +747,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         .newLoadBalancer(helper);
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
             .build());
 
@@ -757,7 +757,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     serviceConfig.put("loadBalancingPolicy", "round_robin");
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
             .build());
@@ -775,7 +775,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     serviceConfig.put("loadBalancingPolicy", "round_robin");
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.newBuilder()
                 .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, serviceConfig).build())
             .build());
@@ -790,7 +790,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "ok").build()));
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(servers)
+            .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
             .build());
 

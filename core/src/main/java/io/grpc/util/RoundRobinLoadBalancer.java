@@ -33,10 +33,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
@@ -89,7 +85,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer implements SubchannelSta
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
     Set<EquivalentAddressGroup> latestAddrs = stripAttrs(servers);

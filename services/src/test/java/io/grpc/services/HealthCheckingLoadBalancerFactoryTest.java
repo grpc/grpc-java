@@ -250,7 +250,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void typicalWorkflow() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -362,7 +362,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void healthCheckDisabledWhenServiceNotImplemented() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -433,7 +433,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void backoffRetriesWhenServerErroneouslyClosesRpcBeforeAnyResponse() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -506,7 +506,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serverRespondResetsBackoff() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -603,7 +603,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigHasNoHealthCheckingInitiallyButDoesLater() {
     // No service config, thus no health check.
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -625,7 +625,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Service config enables health check
     Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -648,7 +648,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigDisablesHealthCheckWhenRpcActive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -671,7 +671,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // NameResolver gives an update without service config, thus health check will be disabled
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -692,7 +692,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigDisablesHealthCheckWhenRetryPending() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -722,7 +722,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // NameResolver gives an update without service config, thus health check will be disabled
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -746,7 +746,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigDisablesHealthCheckWhenRpcInactive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -769,7 +769,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // NameResolver gives an update without service config, thus health check will be disabled
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(Attributes.EMPTY)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -793,7 +793,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigChangesServiceNameWhenRpcActive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -830,7 +830,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -853,7 +853,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigChangesServiceNameWhenRetryPending() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -898,7 +898,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -925,7 +925,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void serviceConfigChangesServiceNameWhenRpcInactive() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result1 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result1);
@@ -957,7 +957,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
     ResolvedAddresses result2 = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result2);
@@ -1011,7 +1011,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void balancerShutdown() {
     Attributes resolutionAttrs = attrsWithHealthCheckService("TeeService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
@@ -1068,7 +1068,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Verify that HC works
     Attributes resolutionAttrs = attrsWithHealthCheckService("BarService");
     ResolvedAddresses result = ResolvedAddresses.newBuilder()
-        .setServers(resolvedAddressList)
+        .setAddresses(resolvedAddressList)
         .setAttributes(resolutionAttrs)
         .build();
     hcLbEventDelivery.handleResolvedAddresses(result);
