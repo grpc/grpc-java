@@ -11,6 +11,7 @@ buildscript {
 }
 
 def subprojects = [
+    project(':grpc-api'),
     project(':grpc-auth'),
     project(':grpc-core'),
     project(':grpc-context'),

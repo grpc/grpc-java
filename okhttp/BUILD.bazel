@@ -9,7 +9,7 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//core",
+        "//api",
         "//core:internal",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",

@@ -59,6 +59,9 @@ java_library(
     resources = glob(
         ["src/main/resources/**"],
     ),
+    runtime_deps = [
+        "@io_grpc_grpc_java//netty",
+    ],
     deps = [
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
@@ -71,13 +74,10 @@ java_library(
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
-        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
     ],
-    runtime_deps = [
-        "@io_grpc_grpc_java//netty",
-    ]
 )
 
 java_binary(

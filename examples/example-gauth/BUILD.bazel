@@ -7,13 +7,13 @@ java_library(
         ["src/main/java/**/*.java"],
     ),
     deps = [
-        "@io_grpc_grpc_java//core",
-        "@io_grpc_grpc_java//protobuf",
-        "@io_grpc_grpc_java//stub",
-        "@io_grpc_grpc_java//auth",
-        "@com_google_auth_google_auth_library_oauth2_http//jar",
         "@com_google_api_grpc_cloud_pubsub_v1//jar",
         "@com_google_api_grpc_proto_cloud_pubsub_v1//jar",
+        "@com_google_auth_google_auth_library_oauth2_http//jar",
+        "@io_grpc_grpc_java//api",
+        "@io_grpc_grpc_java//auth",
+        "@io_grpc_grpc_java//protobuf",
+        "@io_grpc_grpc_java//stub",
     ],
 )
 
