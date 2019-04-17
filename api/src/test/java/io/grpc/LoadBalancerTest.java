@@ -254,7 +254,7 @@ public class LoadBalancerTest {
         new EquivalentAddressGroup(new SocketAddress(){}));
     balancer.handleResolvedAddressGroups(servers, attrs);
     assertThat(resultCapture.get()).isEqualTo(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attrs).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
   }
 
   @Deprecated
@@ -288,7 +288,7 @@ public class LoadBalancerTest {
         new EquivalentAddressGroup(new SocketAddress(){}),
         new EquivalentAddressGroup(new SocketAddress(){}));
     balancer.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setServers(servers).setAttributes(attrs).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attrs).build());
     assertThat(serversCapture.get()).isEqualTo(servers);
     assertThat(attrsCapture.get()).isEqualTo(attrs);
   }

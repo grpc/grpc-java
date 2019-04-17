@@ -85,7 +85,7 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     Attributes attributes = resolvedAddresses.getAttributes();
     Map<String, ?> newRawLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
@@ -256,7 +256,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       // TODO(carl-mastrangelo): propagate the load balancing config policy
       fallbackBalancer.handleResolvedAddresses(
           ResolvedAddresses.newBuilder()
-              .setServers(fallbackServers)
+              .setAddresses(fallbackServers)
               .setAttributes(fallbackAttributes)
               .build());
 
@@ -278,7 +278,7 @@ final class XdsLoadBalancer extends LoadBalancer {
           // TODO(carl-mastrangelo): propagate the load balancing config policy
           fallbackBalancer.handleResolvedAddresses(
               ResolvedAddresses.newBuilder()
-                  .setServers(fallbackServers)
+                  .setAddresses(fallbackServers)
                   .setAttributes(fallbackAttributes)
                   .build());
         } else {

@@ -606,7 +606,7 @@ public abstract class AbstractManagedChannelImplBuilder
         public void start(Observer observer) {
           observer.onResult(
               ResolutionResult.newBuilder()
-                  .setServers(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
                   .setAttributes(Attributes.EMPTY)
                   .build());
         }

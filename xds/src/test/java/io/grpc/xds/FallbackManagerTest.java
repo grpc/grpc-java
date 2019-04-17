@@ -127,7 +127,7 @@ public class FallbackManagerTest {
 
     verify(fakeLb).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
-            .setServers(eags)
+            .setAddresses(eags)
             .setAttributes(
                 Attributes.newBuilder()
                     .set(

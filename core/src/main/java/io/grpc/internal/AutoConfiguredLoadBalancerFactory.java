@@ -102,7 +102,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     //  Must be run inside ChannelExecutor.
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
       if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
         throw new IllegalArgumentException(
@@ -151,7 +151,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       } else {
         delegate.handleResolvedAddresses(
             ResolvedAddresses.newBuilder()
-                .setServers(selection.serverList)
+                .setAddresses(selection.serverList)
                 .setAttributes(attributes)
                 .build());
       }

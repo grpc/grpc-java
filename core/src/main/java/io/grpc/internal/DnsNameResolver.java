@@ -28,7 +28,6 @@ import com.google.common.base.VerifyException;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
@@ -241,7 +240,7 @@ final class DnsNameResolver extends NameResolver {
         EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
         ResolutionResult resolutionResult =
             ResolutionResult.newBuilder()
-                .setServers(Collections.singletonList(server))
+                .setAddresses(Collections.singletonList(server))
                 .setAttributes(Attributes.EMPTY)
                 .build();
         savedObserver.onResult(resolutionResult);
@@ -308,7 +307,7 @@ final class DnsNameResolver extends NameResolver {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
       ResolutionResult resolutionResult =
-          ResolutionResult.newBuilder().setServers(servers).setAttributes(attrs.build()).build();
+          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
       savedObserver.onResult(resolutionResult);
     }
   }
