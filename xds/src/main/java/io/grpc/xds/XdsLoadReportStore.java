@@ -95,7 +95,7 @@ final class XdsLoadReportStore {
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
       statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
           .setCategory(entry.getKey())
-          .setDroppedCount(entry.getValue().get()));
+          .setDroppedCount(entry.getValue().getAndSet(0)));
     }
     return statsBuilder.build();
   }
