@@ -212,4 +212,11 @@ public class UtilsTest {
     assertThat(clientChannelType.getName())
         .isEqualTo("io.netty.channel.epoll.EpollServerSocketChannel");
   }
+
+  @Test
+  public void maybeGetTcpUserTimeoutOption() {
+    assume().that(Utils.isEpollAvailable()).isTrue();
+
+    assertThat(Utils.maybeGetTcpUserTimeoutOption()).isNotNull();
+  }
 }
