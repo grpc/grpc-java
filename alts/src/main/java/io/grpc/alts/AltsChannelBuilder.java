@@ -41,7 +41,6 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -74,11 +73,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
   }
 
   private AltsChannelBuilder(String target) {
-    delegate =
-        NettyChannelBuilder.forTarget(target)
-            .keepAliveTime(20, TimeUnit.SECONDS)
-            .keepAliveTimeout(10, TimeUnit.SECONDS)
-            .keepAliveWithoutCalls(true);
+    delegate = NettyChannelBuilder.forTarget(target);
     InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
         delegate(), new ProtocolNegotiatorFactory());
   }

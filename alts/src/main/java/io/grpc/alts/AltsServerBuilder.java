@@ -70,13 +70,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
 
   /** Creates a gRPC server builder for the given port. */
   public static AltsServerBuilder forPort(int port) {
-    NettyServerBuilder nettyDelegate =
-        NettyServerBuilder.forAddress(new InetSocketAddress(port))
-            .maxConnectionIdle(1, TimeUnit.HOURS)
-            .keepAliveTime(270, TimeUnit.SECONDS)
-            .keepAliveTimeout(20, TimeUnit.SECONDS)
-            .permitKeepAliveTime(10, TimeUnit.SECONDS)
-            .permitKeepAliveWithoutCalls(true);
+    NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
     return new AltsServerBuilder(nettyDelegate);
   }
 
