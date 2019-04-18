@@ -35,7 +35,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -119,8 +119,8 @@ public class XdsLoadReportStoreTest {
     interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
         .streamClosed(Status.OK);
     ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoArgumentCaptor = ArgumentCaptor
-        .forClass(ClientStreamTracer.StreamInfo.class);
-    ArgumentCaptor<Metadata> metadataArgumentCaptor = ArgumentCaptor.forClass(Metadata.class);
+        .forClass(null);
+    ArgumentCaptor<Metadata> metadataArgumentCaptor = ArgumentCaptor.forClass(null);
     verify(mockFactory).newClientStreamTracer(streamInfoArgumentCaptor.capture(),
         metadataArgumentCaptor.capture());
     assertThat(streamInfoArgumentCaptor.getValue()).isSameAs(STREAM_INFO);
@@ -197,9 +197,9 @@ public class XdsLoadReportStoreTest {
     interceptedPickResult3
         .getStreamTracerFactory()
         .newClientStreamTracer(STREAM_INFO, new Metadata());
-    List<UpstreamLocalityStats> upstreamLocalityStatsList = new ArrayList<>();
-    upstreamLocalityStatsList.add(buildUpstreamLocalityStats(locality1, 0, 0, 0));
-    upstreamLocalityStatsList.add(buildUpstreamLocalityStats(locality2, 0, 0, 1));
+    List<UpstreamLocalityStats> upstreamLocalityStatsList =
+        Arrays.asList(buildUpstreamLocalityStats(locality1, 0, 0, 0),
+            buildUpstreamLocalityStats(locality2, 0, 0, 1));
     expectedLoadReport = buildClusterStats(interval, upstreamLocalityStatsList);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
   }

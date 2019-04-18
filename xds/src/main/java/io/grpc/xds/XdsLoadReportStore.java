@@ -157,9 +157,12 @@ final class XdsLoadReportStore {
    * instructed by the remote balancer.
    */
   void recordDroppedRequest(String category) {
-    AtomicLong counter = dropCounters.putIfAbsent(category, new AtomicLong());
+    AtomicLong counter = dropCounters.get(category);
     if (counter == null) {
-      counter = dropCounters.get(category);
+      counter = dropCounters.putIfAbsent(category, new AtomicLong());
+      if (counter == null) {
+        counter = dropCounters.get(category);
+      }
     }
     counter.getAndIncrement();
   }
