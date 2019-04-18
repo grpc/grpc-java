@@ -248,4 +248,13 @@ public class NettyChannelBuilderTest {
 
     assertFalse(builder.shouldFallBackToNio());
   }
+
+  @Test
+  public void useNioTransport_shouldNotFallBack() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    InternalNettyChannelBuilder.useNioTransport(builder);
+
+    assertFalse(builder.shouldFallBackToNio());
+  }
 }

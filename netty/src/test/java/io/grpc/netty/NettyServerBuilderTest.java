@@ -173,4 +173,11 @@ public class NettyServerBuilderTest {
 
     assertFalse(builder.shouldFallBackToNio());
   }
+
+  @Test
+  public void useNioTransport_shouldNotFallBack() {
+    InternalNettyServerBuilder.useNioTransport(builder);
+
+    assertFalse(builder.shouldFallBackToNio());
+  }
 }

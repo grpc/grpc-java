@@ -218,10 +218,13 @@ public final class NettyChannelBuilder
    */
   public NettyChannelBuilder eventLoopGroup(@Nullable EventLoopGroup eventLoopGroup) {
     if (eventLoopGroup != null) {
-      this.eventLoopGroupPool = new FixedObjectPool<>(eventLoopGroup);
-    } else {
-      this.eventLoopGroupPool = DEFAULT_EVENT_LOOP_GROUP_POOL;
+      return eventLoopGroupPool(new FixedObjectPool<>(eventLoopGroup));
     }
+    return eventLoopGroupPool(DEFAULT_EVENT_LOOP_GROUP_POOL);
+  }
+
+  NettyChannelBuilder eventLoopGroupPool(ObjectPool<? extends EventLoopGroup> eventLoopGroupPool) {
+    this.eventLoopGroupPool = checkNotNull(eventLoopGroupPool, "eventLoopGroupPool");
     return this;
   }
 

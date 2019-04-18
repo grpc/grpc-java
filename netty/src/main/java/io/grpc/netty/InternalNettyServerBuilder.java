@@ -17,6 +17,8 @@
 package io.grpc.netty;
 
 import io.grpc.Internal;
+import io.grpc.internal.SharedResourcePool;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 /**
  * Internal {@link InternalNettyServerBuilder} accessor.  This is intended for usage internal to
@@ -39,6 +41,20 @@ public final class InternalNettyServerBuilder {
 
   public static void setTracingEnabled(NettyServerBuilder builder, boolean value) {
     builder.setTracingEnabled(value);
+  }
+
+  /**
+   * Sets {@link io.grpc.Channel} and {@link io.netty.channel.EventLoopGroup}s to Nio. A major
+   * benefit over using existing setters is gRPC will manage the life cycle of {@link
+   * io.netty.channel.EventLoopGroup}s.
+   */
+  public static void useNioTransport(NettyServerBuilder builder) {
+    builder.channelType(NioServerSocketChannel.class);
+    builder
+        .bossEventLoopGroupPool(SharedResourcePool.forResource(Utils.NIO_BOSS_EVENT_LOOP_GROUP));
+    builder
+        .workerEventLoopGroupPool(
+            SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP));
   }
 
   private InternalNettyServerBuilder() {}
