@@ -21,6 +21,7 @@ echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 # Proto deps
 buildscripts/make_dependencies.sh
 
+./gradlew clean
 ./gradlew publishToMavenLocal
 
 
