@@ -82,12 +82,15 @@ do
     # gogoproto removal can result in four spaces on a line by itself.
     -e '/^    $/d'
   )
-  sed -E -i '' "${commands[@]}" "$f"
+  # Use a temp file to workaround `sed -i` cross-platform compatibility issue.
+  tmpfile="$(mktemp)"
+  sed -E "${commands[@]}" "$f" > "$tmpfile"
 
   # gogoproto removal can leave a comma on the last element in a list.
   # This needs to run separately after all the commands above have finished
   # since it is multi-line and rewrites the output of the above patterns.
-  sed -E -i '' -e '$!N; s#(.*),([[:space:]]*\];)#\1\2#; t' -e 'P; D;' "$f"
+  sed -E -e '$!N; s#(.*),([[:space:]]*\];)#\1\2#; t' -e 'P; D;' "$tmpfile" > "$f"
+  rm "$tmpfile"
 done
 popd
 
