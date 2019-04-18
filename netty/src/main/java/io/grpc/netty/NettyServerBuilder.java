@@ -531,8 +531,9 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
             + "BossEventLoopGroup is missing. Fall back to NioEventLoopGroup.");
       }
     }
-    resolvedChannelType =
-        resolvedChannelType != null ? resolvedChannelType : Utils.DEFAULT_SERVER_CHANNEL_TYPE;
+    if (resolvedChannelType == null) {
+      resolvedChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
+    }
 
     List<NettyServer> transportServers = new ArrayList<>(listenAddresses.size());
     for (SocketAddress listenAddress : listenAddresses) {

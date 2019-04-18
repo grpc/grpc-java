@@ -224,8 +224,7 @@ public final class NettyChannelBuilder
   }
 
   NettyChannelBuilder eventLoopGroupPool(ObjectPool<? extends EventLoopGroup> eventLoopGroupPool) {
-    checkNotNull(eventLoopGroupPool, "eventLoopGroupPool");
-    this.eventLoopGroupPool = eventLoopGroupPool;
+    this.eventLoopGroupPool = checkNotNull(eventLoopGroupPool, "eventLoopGroupPool");
     return this;
   }
 
