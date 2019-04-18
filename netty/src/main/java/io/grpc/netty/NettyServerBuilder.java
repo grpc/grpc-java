@@ -193,10 +193,14 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder bossEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
-      this.bossEventLoopGroupPool = new FixedObjectPool<>(group);
-    } else {
-      this.bossEventLoopGroupPool = DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL;
+      return bossEventLoopGroupPool(new FixedObjectPool<>(group));
     }
+    return bossEventLoopGroupPool(DEFAULT_BOSS_EVENT_LOOP_GROUP_POOL);
+  }
+
+  NettyServerBuilder bossEventLoopGroupPool(
+      ObjectPool<? extends EventLoopGroup> bossEventLoopGroupPool) {
+    this.bossEventLoopGroupPool = checkNotNull(bossEventLoopGroupPool, "bossEventLoopGroupPool");
     return this;
   }
 
@@ -225,10 +229,15 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder workerEventLoopGroup(EventLoopGroup group) {
     if (group != null) {
-      this.workerEventLoopGroupPool = new FixedObjectPool<>(group);
-    } else {
-      this.workerEventLoopGroupPool = DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL;
+      return workerEventLoopGroupPool(new FixedObjectPool<>(group));
     }
+    return workerEventLoopGroupPool(DEFAULT_WORKER_EVENT_LOOP_GROUP_POOL);
+  }
+
+  NettyServerBuilder workerEventLoopGroupPool(
+      ObjectPool<? extends EventLoopGroup> workerEventLoopGroupPool) {
+    this.workerEventLoopGroupPool =
+        checkNotNull(workerEventLoopGroupPool, "workerEventLoopGroupPool");
     return this;
   }
 
