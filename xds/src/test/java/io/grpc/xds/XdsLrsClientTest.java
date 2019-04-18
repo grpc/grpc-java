@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -179,12 +178,12 @@ public class XdsLrsClientTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
         backoffPolicyProvider);
-    lrsClient.startLrsRpc();
+    lrsClient.startLoadReporting();
   }
 
   @After
   public void tearDown() {
-    lrsClient.shutdown();
+    lrsClient.stopLoadReporting();
   }
 
   private void assertNextReport(InOrder inOrder, StreamObserver<LoadStatsRequest> requestObserver,

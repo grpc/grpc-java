@@ -26,6 +26,7 @@ import com.google.common.base.Supplier;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
@@ -34,6 +35,7 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -53,20 +55,20 @@ import javax.annotation.concurrent.NotThreadSafe;
  * returns.
  */
 @NotThreadSafe
-final class XdsLrsClient {
+final class XdsLrsClient implements XdsLoadStatsManager {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
   private final String serviceName;
   private final ManagedChannel channel;
-  private final Helper helper;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
+  // TODO: field for XdsLoadReportStore
 
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
@@ -79,7 +81,6 @@ final class XdsLrsClient {
   XdsLrsClient(ManagedChannel channel, Helper helper, Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.channel = checkNotNull(channel, "channel");
-    this.helper = checkNotNull(helper, "helper");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
@@ -89,7 +90,8 @@ final class XdsLrsClient {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
-  void startLrsRpc() {
+  @Override
+  public void startLoadReporting() {
     checkState(lrsStream == null, "previous lbStream has not been cleared yet");
     LoadReportingServiceGrpc.LoadReportingServiceStub stub
         = LoadReportingServiceGrpc.newStub(channel);
@@ -108,22 +110,44 @@ final class XdsLrsClient {
     lrsStream.lrsRequestWriter.onNext(initRequest);
   }
 
-  void shutdownLrsRpc() {
+  private void shutdownLrsRpc() {
     if (lrsStream != null) {
       lrsStream.close(null);
     }
   }
 
-  void cancelLrsRpcRetryTimer() {
+  private void cancelLrsRpcRetryTimer() {
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
   }
 
-  void shutdown() {
+  @Override
+  public void stopLoadReporting() {
     shutdownLrsRpc();
     cancelLrsRpcRetryTimer();
     // Do not shutdown channel as it is not owned by LrsClient.
+  }
+
+  @Override
+  public void addLocality(Locality locality) {
+    // TODO: call XdsLoadReportStore#addLocality
+  }
+
+  @Override
+  public void removeLocality(Locality locality) {
+    // TODO: call XdsLoadReportStore#removeLocality
+  }
+
+  @Override
+  public void recordDroppedRequest(String category) {
+    // TODO: call XdsLoadReportStore:recordDroppedRequest
+  }
+
+  @Override
+  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
+    // TODO: call XdsLoadReportStore#interceptPickResult
+    return null;
   }
 
   @VisibleForTesting
@@ -145,7 +169,7 @@ final class XdsLrsClient {
 
     @Override
     public void run() {
-      startLrsRpc();
+      startLoadReporting();
     }
   }
 
@@ -273,7 +297,7 @@ final class XdsLrsClient {
             lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
       if (delayNanos <= 0) {
-        startLrsRpc();
+        startLoadReporting();
       } else {
         lrsRpcRetryTimer =
             syncContext.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS,
