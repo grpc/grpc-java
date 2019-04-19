@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -39,9 +40,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -82,7 +85,7 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  public void testUntrackedLocalityNoLoadRecording() {
+  public void loadNotRecordedForUntrackedLocality() {
     PickResult pickResult = PickResult.withSubchannel(fakeSubchannel);
     // XdsClientLoadStore does not record loads for untracked localities.
     PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, TEST_LOCALITY);
@@ -91,7 +94,7 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  public void testInvalidPickResultNotIntercepted() {
+  public void invalidPickResultNotIntercepted() {
     PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
     PickResult emptyResult = PickResult.withNoResult();
     PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
@@ -106,7 +109,7 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  public void testInterceptPreserveOriginStreamTracer() {
+  public void interceptPreservesOriginStreamTracer() {
     loadStore.addLocality(TEST_LOCALITY);
     ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
@@ -129,7 +132,7 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  public void testLoadStatsRecording() {
+  public void loadStatsRecording() {
     Locality locality1 =
         Locality.newBuilder()
             .setRegion("test_region1")
@@ -147,7 +150,7 @@ public class XdsLoadReportStoreTest {
             .newClientStreamTracer(STREAM_INFO, new Metadata());
     Duration interval = Duration.newBuilder().setNanos(342).build();
     ClusterStats expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 1)));
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 1)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // Make another load report should not reset count for calls in progress.
@@ -155,12 +158,12 @@ public class XdsLoadReportStoreTest {
 
     tracer.streamClosed(Status.OK);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 1, 0, 0)));
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 1, 0, 0)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // Make another load report should reset finished calls count for calls finished.
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)));
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // PickResult within the same locality should aggregate to the same counter.
@@ -176,11 +179,11 @@ public class XdsLoadReportStoreTest {
         .newClientStreamTracer(STREAM_INFO, new Metadata())
         .streamClosed(Status.CANCELLED);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 2, 0)));
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 2, 0)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)));
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     Locality locality2 =
@@ -200,12 +203,12 @@ public class XdsLoadReportStoreTest {
     List<UpstreamLocalityStats> upstreamLocalityStatsList =
         Arrays.asList(buildUpstreamLocalityStats(locality1, 0, 0, 0),
             buildUpstreamLocalityStats(locality2, 0, 0, 1));
-    expectedLoadReport = buildClusterStats(interval, upstreamLocalityStatsList);
+    expectedLoadReport = buildClusterStats(interval, upstreamLocalityStatsList, null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
   }
 
   @Test
-  public void testLocalityRemovedContinueRecordingOngoingLoads() {
+  public void loadRecordingForRemovedLocality() {
     loadStore.addLocality(TEST_LOCALITY);
     assertThat(localityLoadCounters).containsKey(TEST_LOCALITY);
     PickResult pickResult = PickResult.withSubchannel(fakeSubchannel);
@@ -216,21 +219,50 @@ public class XdsLoadReportStoreTest {
 
     Duration interval = Duration.newBuilder().setNanos(342).build();
     ClusterStats expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)));
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
     // Remote balancer instructs to remove the locality while client has in-progress calls
     // to backends in the locality, the XdsClientLoadStore continues tracking its load stats.
     loadStore.removeLocality(TEST_LOCALITY);
     assertThat(localityLoadCounters).containsKey(TEST_LOCALITY);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)));
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     tracer.streamClosed(Status.OK);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 1, 0, 0)));
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 1, 0, 0)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
     assertThat(localityLoadCounters).doesNotContainKey(TEST_LOCALITY);
+  }
+
+  @Test
+  public void recordingDroppedRequests() {
+    Random rand = new Random();
+    int numLbDrop = rand.nextInt(1000);
+    int numThrottleDrop = rand.nextInt(1000);
+    for (int i = 0; i < numLbDrop; i++) {
+      loadStore.recordDroppedRequest("lb");
+    }
+    for (int i = 0; i < numThrottleDrop; i++) {
+      loadStore.recordDroppedRequest("throttle");
+    }
+    Duration interval = Duration.newBuilder().setNanos(342).build();
+    ClusterStats expectedLoadReport = buildClusterStats(interval,
+        null,
+        Arrays.asList(
+            DroppedRequests.newBuilder()
+                .setCategory("lb")
+                .setDroppedCount(numLbDrop)
+                .build(),
+            DroppedRequests.newBuilder()
+                .setCategory("throttle")
+                .setDroppedCount(numThrottleDrop)
+                .build()
+        ));
+    assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
+    assertEquals(0, dropCounters.get("lb").get());
+    assertEquals(0, dropCounters.get("throttle").get());
   }
 
   private UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality, long callsSucceed,
@@ -244,18 +276,33 @@ public class XdsLoadReportStoreTest {
   }
 
   private ClusterStats buildClusterStats(Duration interval,
-      List<UpstreamLocalityStats> upstreamLocalityStatsList) {
-    return ClusterStats.newBuilder().setClusterName(SERVICE_NAME)
-        .addAllUpstreamLocalityStats(upstreamLocalityStatsList)
-        .setLoadReportInterval(interval)
-        .build();
+      @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
+      @Nullable List<DroppedRequests> droppedRequestsList) {
+    ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder()
+        .setClusterName(SERVICE_NAME)
+        .setLoadReportInterval(interval);
+    if (upstreamLocalityStatsList != null) {
+      clusterStatsBuilder.addAllUpstreamLocalityStats(upstreamLocalityStatsList);
+    }
+    if (droppedRequestsList != null) {
+      long dropCount = 0;
+      for (DroppedRequests drop : droppedRequestsList) {
+        dropCount += drop.getDroppedCount();
+        clusterStatsBuilder.addDroppedRequests(drop);
+      }
+      clusterStatsBuilder.setTotalDroppedRequests(dropCount);
+    }
+    return clusterStatsBuilder.build();
   }
 
   private void assertClusterStatsEqual(ClusterStats stats1, ClusterStats stats2) {
     assertEquals(stats1.getClusterName(), stats2.getClusterName());
     assertEquals(stats1.getLoadReportInterval(), stats2.getLoadReportInterval());
     assertEquals(stats1.getUpstreamLocalityStatsCount(), stats2.getUpstreamLocalityStatsCount());
+    assertEquals(stats1.getDroppedRequestsCount(), stats2.getDroppedRequestsCount());
     assertEquals(new HashSet<>(stats1.getUpstreamLocalityStatsList()),
         new HashSet<>(stats2.getUpstreamLocalityStatsList()));
+    assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
+        new HashSet<>(stats2.getDroppedRequestsList()));
   }
 }
