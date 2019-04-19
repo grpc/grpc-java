@@ -1,3 +1,5 @@
+load("//:java_grpc_library.bzl", "java_rpc_toolchain")
+
 cc_binary(
     name = "grpc_java_plugin",
     srcs = [
@@ -5,8 +7,47 @@ cc_binary(
         "src/java_plugin/cpp/java_generator.h",
         "src/java_plugin/cpp/java_plugin.cpp",
     ],
-    visibility = ["//visibility:public"],
     deps = [
         "@com_google_protobuf//:protoc_lib",
     ],
+)
+
+java_library(
+    name = "java_grpc_library_deps__do_not_reference",
+    exports = [
+        "//api",
+        "//protobuf",
+        "//stub",
+        "//stub:javax_annotation",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+        "@com_google_protobuf//:protobuf_java",
+    ],
+)
+
+java_library(
+    name = "java_lite_grpc_library_deps__do_not_reference",
+    exports = [
+        "//api",
+        "//protobuf-lite",
+        "//stub",
+        "//stub:javax_annotation",
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_guava_guava//jar",
+    ],
+)
+
+java_rpc_toolchain(
+    name = "java_grpc_library_toolchain",
+    plugin = "//compiler:grpc_java_plugin",
+    runtime = [":java_grpc_library_deps__do_not_reference"],
+    visibility = ["//visibility:public"],
+)
+
+java_rpc_toolchain(
+    name = "java_lite_grpc_library_toolchain",
+    plugin = "//compiler:grpc_java_plugin",
+    plugin_arg = "lite",
+    runtime = [":java_lite_grpc_library_deps__do_not_reference"],
+    visibility = ["//visibility:public"],
 )
