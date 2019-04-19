@@ -129,8 +129,9 @@ public class XdsLrsClientTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
 
-  private static ClusterStats buildClusterStats(long loadReportIntervalNanos) {
+  private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
+        .setClusterName(SERVICE_AUTHORITY)
         .setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos)).build();
   }
 
@@ -177,7 +178,7 @@ public class XdsLrsClientTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
     lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
-        backoffPolicyProvider);
+        backoffPolicyProvider, new XdsLoadReportStore(SERVICE_AUTHORITY));
     lrsClient.startLoadReporting();
   }
 
@@ -200,7 +201,7 @@ public class XdsLrsClientTest {
                 .putFields(
                     XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                     Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
-            .addClusterStats(ClusterStats.newBuilder(expectedStats))
+            .addClusterStats(expectedStats)
             .build()));
   }
 
@@ -228,7 +229,7 @@ public class XdsLrsClientTest {
     responseObserver.onNext(buildLrsResponse(1453));
     assertThat(logs).containsExactly(
         "DEBUG: Got an LRS response: " + buildLrsResponse(1453));
-    assertNextReport(inOrder, requestObserver, buildClusterStats(1453));
+    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1453));
   }
 
   @Test
@@ -243,11 +244,11 @@ public class XdsLrsClientTest {
     responseObserver.onNext(buildLrsResponse(1362));
     assertThat(logs).containsExactly(
         "DEBUG: Got an LRS response: " + buildLrsResponse(1362));
-    assertNextReport(inOrder, requestObserver, buildClusterStats(1362));
+    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1362));
 
     responseObserver.onNext(buildLrsResponse(2183345));
     // Updated load reporting interval becomes effective immediately.
-    assertNextReport(inOrder, requestObserver, buildClusterStats(2183345));
+    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(2183345));
   }
 
   @Test

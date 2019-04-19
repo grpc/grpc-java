@@ -28,7 +28,6 @@ import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
@@ -41,6 +40,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
 import java.util.List;
@@ -68,7 +68,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  // TODO: field for XdsLoadReportStore
+  private final XdsLoadReportStore loadReportStore;
 
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
@@ -78,8 +78,26 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   @Nullable
   private LrsStream lrsStream;
 
-  XdsLrsClient(ManagedChannel channel, Helper helper, Supplier<Stopwatch> stopwatchSupplier,
+  XdsLrsClient(ManagedChannel channel,
+      Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider) {
+    this.channel = checkNotNull(channel, "channel");
+    this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
+    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
+    this.stopwatchSupplier = GrpcUtil.STOPWATCH_SUPPLIER;
+    this.retryStopwatch = stopwatchSupplier.get();
+    this.logger = checkNotNull(helper.getChannelLogger(), "logger");
+    this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.loadReportStore = new XdsLoadReportStore(serviceName);
+  }
+
+  @VisibleForTesting
+  XdsLrsClient(ManagedChannel channel,
+      Helper helper,
+      Supplier<Stopwatch> stopwatchSupplier,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      XdsLoadReportStore loadReportStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -88,6 +106,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.loadReportStore = checkNotNull(loadReportStore, "loadReportStore");
   }
 
   @Override
@@ -130,24 +149,33 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   }
 
   @Override
-  public void addLocality(Locality locality) {
-    // TODO: call XdsLoadReportStore#addLocality
+  public void addLocality(final Locality locality) {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        loadReportStore.addLocality(locality);
+      }
+    });
   }
 
   @Override
-  public void removeLocality(Locality locality) {
-    // TODO: call XdsLoadReportStore#removeLocality
+  public void removeLocality(final Locality locality) {
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        loadReportStore.removeLocality(locality);
+      }
+    });
   }
 
   @Override
   public void recordDroppedRequest(String category) {
-    // TODO: call XdsLoadReportStore:recordDroppedRequest
+    loadReportStore.recordDroppedRequest(category);
   }
 
   @Override
   public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    // TODO: call XdsLoadReportStore#interceptPickResult
-    return null;
+    return loadReportStore.interceptPickResult(pickResult, locality);
   }
 
   @VisibleForTesting
@@ -228,15 +256,14 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     private void sendLoadReport() {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
-      // TODO: get load report and send to management server
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
                       TRAFFICDIRECTOR_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(ClusterStats.newBuilder()
-              .setLoadReportInterval(Durations.fromNanos(interval))).build());
+          .addClusterStats(loadReportStore.generateLoadReport(Durations.fromNanos(interval)))
+          .build());
       scheduleNextLoadReport();
     }
 

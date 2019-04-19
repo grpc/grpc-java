@@ -35,8 +35,8 @@ interface XdsLoadStatsManager {
   void stopLoadReporting();
 
   /**
-   * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker for
-   * the provided locality.
+   * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker
+   * for the provided locality.
    */
   PickResult interceptPickResult(PickResult pickResult, Locality locality);
 
@@ -56,8 +56,8 @@ interface XdsLoadStatsManager {
   void removeLocality(Locality locality);
 
   /**
-   * Records a client-side request drop with the provided category instructed by the remote balancer.
-   * Stats for dropped requests are aggregated in cluster level.
+   * Records a client-side request drop with the provided category instructed by the remote
+   * balancer. Stats for dropped requests are aggregated in cluster level.
    */
   void recordDroppedRequest(String category);
 }
