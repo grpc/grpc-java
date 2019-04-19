@@ -24,7 +24,13 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.concurrent.ThreadSafe;
 
+/**
+ * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
+ * {@link ClientLoadCounter} object.
+ */
+@ThreadSafe
 final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   private final ClientStreamTracer.Factory delegate;
