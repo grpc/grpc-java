@@ -1,3 +1,0 @@
-# examples has its own WORKSPACE. Ignore as part of this root WORKSPACE so that
-# we don't need to repeat dependencies.
-examples/
