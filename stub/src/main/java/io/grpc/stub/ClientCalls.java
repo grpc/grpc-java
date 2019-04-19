@@ -552,9 +552,9 @@ public final class ClientCalls {
     }
 
     private Object waitForNext() {
-      if (threadless == null) {
-        boolean interrupt = false;
-        try {
+      boolean interrupt = false;
+      try {
+        if (threadless == null) {
           while (true) {
             try {
               return buffer.take();
@@ -564,14 +564,7 @@ public final class ClientCalls {
               // Now wait for onClose() to be called, to guarantee BlockingQueue doesn't fill
             }
           }
-        } finally {
-          if (interrupt) {
-            Thread.currentThread().interrupt();
-          }
-        }
-      } else {
-        boolean interrupt = false;
-        try {
+        } else {
           Object next;
           while ((next = buffer.poll()) == null) {
             try {
@@ -583,10 +576,10 @@ public final class ClientCalls {
             }
           }
           return next;
-        } finally {
-          if (interrupt) {
-            Thread.currentThread().interrupt();
-          }
+        }
+      } finally {
+        if (interrupt) {
+          Thread.currentThread().interrupt();
         }
       }
     }
