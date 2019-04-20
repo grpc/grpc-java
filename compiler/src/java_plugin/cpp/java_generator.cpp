@@ -149,22 +149,8 @@ static inline bool ShouldGenerateAsLite(const Descriptor* desc) {
   return false;
 }
 
-static inline string MessageFullJavaName(bool nano, const Descriptor* desc) {
-  string name = google::protobuf::compiler::java::ClassName(desc);
-  if (nano && !ShouldGenerateAsLite(desc)) {
-    // XXX: Add "nano" to the original package
-    // (https://github.com/grpc/grpc-java/issues/900)
-    if (isupper(name[0])) {
-      // No java package specified.
-      return "nano." + name;
-    }
-    for (size_t i = 0; i < name.size(); ++i) {
-      if ((name[i] == '.') && (i < (name.size() - 1)) && isupper(name[i + 1])) {
-        return name.substr(0, i + 1) + "nano." + name.substr(i + 1);
-      }
-    }
-  }
-  return name;
+static inline string MessageFullJavaName(const Descriptor* desc) {
+  return google::protobuf::compiler::java::ClassName(desc);
 }
 
 // TODO(nmittler): Remove once protobuf includes javadoc methods in distribution.
@@ -379,10 +365,8 @@ static void PrintMethodFields(
     (*vars)["arg_in_id"] = to_string(2 * i);
     (*vars)["arg_out_id"] = to_string(2 * i + 1);
     (*vars)["method_name"] = method->name();
-    (*vars)["input_type"] = MessageFullJavaName(flavor == ProtoFlavor::NANO,
-                                                method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(flavor == ProtoFlavor::NANO,
-                                                 method->output_type());
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     (*vars)["method_field_name"] = MethodPropertiesFieldName(method);
     (*vars)["method_new_field_name"] = MethodPropertiesGetterName(method);
     (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
@@ -402,170 +386,53 @@ static void PrintMethodFields(
       }
     }
 
-    if (flavor == ProtoFlavor::NANO) {
-      // TODO(zsurocking): we're creating two NanoFactories for each method right now.
-      // We could instead create static NanoFactories and reuse them if some methods
-      // share the same request or response messages.
-      if (!ShouldGenerateAsLite(method->input_type())) {
-        p->Print(
-            *vars,
-            "private static final int ARG_IN_$method_field_name$ = $arg_in_id$;\n");
-      }
-      if (!ShouldGenerateAsLite(method->output_type())) {
-        p->Print(
-            *vars,
-            "private static final int ARG_OUT_$method_field_name$ = $arg_out_id$;\n");
-      }
-      p->Print(
-          *vars,
-          "private static volatile $MethodDescriptor$<$input_type$,\n"
-          "    $output_type$> $method_new_field_name$;\n"
-          "\n"
-          "public static $MethodDescriptor$<$input_type$,\n"
-          "    $output_type$> $method_method_name$() {\n"
-          "  $MethodDescriptor$<$input_type$, $output_type$> $method_new_field_name$;\n"
-          "  if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-          "    synchronized ($service_class_name$.class) {\n"
-          "      if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-          "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ = \n"
-          "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
-          "            .setType($MethodType$.$method_type$)\n"
-          "            .setFullMethodName(generateFullMethodName(\n"
-          "                \"$Package$$service_name$\", \"$method_name$\"))\n"
-          "            .setSampledToLocalTracing(true)\n");
-
-      (*vars)["ProtoLiteUtils"] = "io.grpc.protobuf.lite.ProtoLiteUtils";
-
-      if (ShouldGenerateAsLite(method->input_type())) {
-        p->Print(
-            *vars,
-            "            .setRequestMarshaller($ProtoLiteUtils$.marshaller(\n"
-            "                $input_type$.getDefaultInstance()))\n");
-      } else {
-        p->Print(
-            *vars,
-            "            .setRequestMarshaller($NanoUtils$.<$input_type$>marshaller(\n"
-            "                new NanoFactory<$input_type$>(ARG_IN_$method_field_name$)))\n");
-      }
-      if (ShouldGenerateAsLite(method->output_type())) {
-        p->Print(
-            *vars,
-            "            .setResponseMarshaller($ProtoLiteUtils$.marshaller(\n"
-            "                $output_type$.getDefaultInstance()))\n");
-      } else {
-        p->Print(
-            *vars,
-            "            .setResponseMarshaller($NanoUtils$.<$output_type$>marshaller(\n"
-            "                new NanoFactory<$output_type$>(ARG_OUT_$method_field_name$)))\n");
-      }
-      p->Print(
-          *vars,
-          "            .build();\n"
-          "      }\n"
-          "    }\n"
-          "  }\n"
-          "  return $method_new_field_name$;\n"
-          "}\n"
-          "\n");
+    if (flavor == ProtoFlavor::LITE) {
+      (*vars)["ProtoUtils"] = "io.grpc.protobuf.lite.ProtoLiteUtils";
     } else {
-      if (flavor == ProtoFlavor::LITE) {
-        (*vars)["ProtoUtils"] = "io.grpc.protobuf.lite.ProtoLiteUtils";
-      } else {
-        (*vars)["ProtoUtils"] = "io.grpc.protobuf.ProtoUtils";
-      }
-      p->Print(
-          *vars,
-          "private static volatile $MethodDescriptor$<$input_type$,\n"
-          "    $output_type$> $method_new_field_name$;\n"
-          "\n"
-          "@$RpcMethod$(\n"
-          "    fullMethodName = SERVICE_NAME + '/' + \"$method_name$\",\n"
-          "    requestType = $input_type$.class,\n"
-          "    responseType = $output_type$.class,\n"
-          "    methodType = $MethodType$.$method_type$)\n"
-          "public static $MethodDescriptor$<$input_type$,\n"
-          "    $output_type$> $method_method_name$() {\n"
-          "  $MethodDescriptor$<$input_type$, $output_type$> $method_new_field_name$;\n"
-          "  if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-          "    synchronized ($service_class_name$.class) {\n"
-          "      if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-          "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ = \n"
-          "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
-          "            .setType($MethodType$.$method_type$)\n"
-          "            .setFullMethodName(generateFullMethodName(\n"
-          "                \"$Package$$service_name$\", \"$method_name$\"))\n"
-          "            .setSampledToLocalTracing(true)\n"
-          "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
-          "                $input_type$.getDefaultInstance()))\n"
-          "            .setResponseMarshaller($ProtoUtils$.marshaller(\n"
-          "                $output_type$.getDefaultInstance()))\n");
-
-      (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
-      if (flavor == ProtoFlavor::NORMAL) {
-        p->Print(
-            *vars,
-          "                .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
-      }
-
-      p->Print(
-          *vars,
-          "                .build();\n");
-      p->Print(*vars,
-          "        }\n"
-          "      }\n"
-          "   }\n"
-          "   return $method_new_field_name$;\n"
-          "}\n"
-          "\n");
+      (*vars)["ProtoUtils"] = "io.grpc.protobuf.ProtoUtils";
     }
-  }
-
-  if (flavor == ProtoFlavor::NANO) {
     p->Print(
         *vars,
-        "private static final class NanoFactory<T extends com.google.protobuf.nano.MessageNano>\n"
-        "    implements io.grpc.protobuf.nano.MessageNanoFactory<T> {\n"
-        "  private final int id;\n"
+        "private static volatile $MethodDescriptor$<$input_type$,\n"
+        "    $output_type$> $method_new_field_name$;\n"
         "\n"
-        "  NanoFactory(int id) {\n"
-        "    this.id = id;\n"
-        "  }\n"
-        "\n"
-        "  @$Override$\n"
-        "  public T newInstance() {\n"
-        "    Object o;\n"
-        "    switch (id) {\n");
-    bool generate_nano = true;
-    for (int i = 0; i < service->method_count(); ++i) {
-      const MethodDescriptor* method = service->method(i);
-      (*vars)["input_type"] = MessageFullJavaName(generate_nano,
-                                                  method->input_type());
-      (*vars)["output_type"] = MessageFullJavaName(generate_nano,
-                                                   method->output_type());
-      (*vars)["method_field_name"] = MethodPropertiesFieldName(method);
-      if (!ShouldGenerateAsLite(method->input_type())) {
-        p->Print(
-            *vars,
-            "    case ARG_IN_$method_field_name$:\n"
-            "      o = new $input_type$();\n"
-            "      break;\n");
-      }
-      if (!ShouldGenerateAsLite(method->output_type())) {
-        p->Print(
-            *vars,
-            "    case ARG_OUT_$method_field_name$:\n"
-            "      o = new $output_type$();\n"
-            "      break;\n");
-      }
+        "@$RpcMethod$(\n"
+        "    fullMethodName = SERVICE_NAME + '/' + \"$method_name$\",\n"
+        "    requestType = $input_type$.class,\n"
+        "    responseType = $output_type$.class,\n"
+        "    methodType = $MethodType$.$method_type$)\n"
+        "public static $MethodDescriptor$<$input_type$,\n"
+        "    $output_type$> $method_method_name$() {\n"
+        "  $MethodDescriptor$<$input_type$, $output_type$> $method_new_field_name$;\n"
+        "  if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
+        "    synchronized ($service_class_name$.class) {\n"
+        "      if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
+        "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ = \n"
+        "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
+        "            .setType($MethodType$.$method_type$)\n"
+        "            .setFullMethodName(generateFullMethodName(\n"
+        "                \"$Package$$service_name$\", \"$method_name$\"))\n"
+        "            .setSampledToLocalTracing(true)\n"
+        "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
+        "                $input_type$.getDefaultInstance()))\n"
+        "            .setResponseMarshaller($ProtoUtils$.marshaller(\n"
+        "                $output_type$.getDefaultInstance()))\n");
+
+    (*vars)["proto_method_descriptor_supplier"] = service->name() + "MethodDescriptorSupplier";
+    if (flavor == ProtoFlavor::NORMAL) {
+      p->Print(
+          *vars,
+        "                .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
     }
+
     p->Print(
-        "    default:\n"
-        "      throw new AssertionError();\n"
-        "    }\n"
-        "    @java.lang.SuppressWarnings(\"unchecked\")\n"
-        "    T t = (T) o;\n"
-        "    return t;\n"
-        "  }\n"
+        *vars,
+        "                .build();\n");
+    p->Print(*vars,
+        "        }\n"
+        "      }\n"
+        "   }\n"
+        "   return $method_new_field_name$;\n"
         "}\n"
         "\n");
   }
@@ -590,14 +457,13 @@ enum CallType {
 
 static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
-                                   Printer* p,
-                                   bool generate_nano);
+                                   Printer* p);
 
 // Prints a client interface or implementation class, or a server interface.
 static void PrintStub(
     const ServiceDescriptor* service,
     std::map<string, string>* vars,
-    Printer* p, StubType type, bool generate_nano) {
+    Printer* p, StubType type) {
   const string service_name = service->name();
   (*vars)["service_name"] = service_name;
   (*vars)["abstract_name"] = service_name + "ImplBase";
@@ -694,10 +560,8 @@ static void PrintStub(
   // RPC methods
   for (int i = 0; i < service->method_count(); ++i) {
     const MethodDescriptor* method = service->method(i);
-    (*vars)["input_type"] = MessageFullJavaName(generate_nano,
-                                                method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(generate_nano,
-                                                 method->output_type());
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     (*vars)["lower_method_name"] = LowerMethodName(method);
     (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
     bool client_streaming = method->client_streaming();
@@ -858,7 +722,7 @@ static void PrintStub(
         *vars,
         "@$Override$ public final $ServerServiceDefinition$ bindService() {\n");
     (*vars)["instance"] = "this";
-    PrintBindServiceMethodBody(service, vars, p, generate_nano);
+    PrintBindServiceMethodBody(service, vars, p);
     p->Print("}\n");
   }
 
@@ -876,8 +740,7 @@ static bool CompareMethodClientStreaming(const MethodDescriptor* method1,
 // on Android.
 static void PrintMethodHandlerClass(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
-                                   Printer* p,
-                                   bool generate_nano) {
+                                   Printer* p) {
   // Sort method ids based on client_streaming() so switch tables are compact.
   std::vector<const MethodDescriptor*> sorted_methods(service->method_count());
   for (int i = 0; i < service->method_count(); ++i) {
@@ -926,10 +789,8 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
     }
     (*vars)["method_id_name"] = MethodIdFieldName(method);
     (*vars)["lower_method_name"] = LowerMethodName(method);
-    (*vars)["input_type"] = MessageFullJavaName(generate_nano,
-                                                method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(generate_nano,
-                                                 method->output_type());
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     p->Print(
         *vars,
         "case $method_id_name$:\n"
@@ -962,10 +823,8 @@ static void PrintMethodHandlerClass(const ServiceDescriptor* service,
     }
     (*vars)["method_id_name"] = MethodIdFieldName(method);
     (*vars)["lower_method_name"] = LowerMethodName(method);
-    (*vars)["input_type"] = MessageFullJavaName(generate_nano,
-                                                method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(generate_nano,
-                                                 method->output_type());
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     p->Print(
         *vars,
         "case $method_id_name$:\n"
@@ -1088,8 +947,7 @@ static void PrintGetServiceDescriptorMethod(const ServiceDescriptor* service,
 
 static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
-                                   Printer* p,
-                                   bool generate_nano) {
+                                   Printer* p) {
   (*vars)["service_name"] = service->name();
   p->Indent();
   p->Print(*vars,
@@ -1101,10 +959,8 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
     const MethodDescriptor* method = service->method(i);
     (*vars)["lower_method_name"] = LowerMethodName(method);
     (*vars)["method_method_name"] = MethodPropertiesGetterName(method);
-    (*vars)["input_type"] = MessageFullJavaName(generate_nano,
-                                                method->input_type());
-    (*vars)["output_type"] = MessageFullJavaName(generate_nano,
-                                                 method->output_type());
+    (*vars)["input_type"] = MessageFullJavaName(method->input_type());
+    (*vars)["output_type"] = MessageFullJavaName(method->output_type());
     (*vars)["method_id_name"] = MethodIdFieldName(method);
     bool client_streaming = method->client_streaming();
     bool server_streaming = method->server_streaming();
@@ -1224,19 +1080,18 @@ static void PrintService(const ServiceDescriptor* service,
   p->Outdent();
   p->Print("}\n\n");
 
-  bool generate_nano = flavor == ProtoFlavor::NANO;
-  PrintStub(service, vars, p, ABSTRACT_CLASS, generate_nano);
-  PrintStub(service, vars, p, ASYNC_CLIENT_IMPL, generate_nano);
-  PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL, generate_nano);
-  PrintStub(service, vars, p, FUTURE_CLIENT_IMPL, generate_nano);
+  PrintStub(service, vars, p, ABSTRACT_CLASS);
+  PrintStub(service, vars, p, ASYNC_CLIENT_IMPL);
+  PrintStub(service, vars, p, BLOCKING_CLIENT_IMPL);
+  PrintStub(service, vars, p, FUTURE_CLIENT_IMPL);
 
-  PrintMethodHandlerClass(service, vars, p, generate_nano);
+  PrintMethodHandlerClass(service, vars, p);
   PrintGetServiceDescriptorMethod(service, vars, p, flavor);
   p->Outdent();
   p->Print("}\n");
 }
 
-void PrintImports(Printer* p, bool generate_nano) {
+void PrintImports(Printer* p) {
   p->Print(
       "import static "
       "io.grpc.MethodDescriptor.generateFullMethodName;\n"
@@ -1266,9 +1121,6 @@ void PrintImports(Printer* p, bool generate_nano) {
       "io.grpc.stub.ServerCalls.asyncUnimplementedStreamingCall;\n"
       "import static "
       "io.grpc.stub.ServerCalls.asyncUnimplementedUnaryCall;\n\n");
-  if (generate_nano) {
-    p->Print("import java.io.IOException;\n\n");
-  }
 }
 
 void GenerateService(const ServiceDescriptor* service,
@@ -1300,7 +1152,6 @@ void GenerateService(const ServiceDescriptor* service,
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
   vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
-  vars["NanoUtils"] = "io.grpc.protobuf.nano.NanoUtils";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
   vars["Iterator"] = "java.util.Iterator";
   vars["Generated"] = "javax.annotation.Generated";
@@ -1308,14 +1159,13 @@ void GenerateService(const ServiceDescriptor* service,
       "com.google.common.util.concurrent.ListenableFuture";
 
   Printer printer(out, '$');
-  string package_name = ServiceJavaPackage(service->file(),
-                                           flavor == ProtoFlavor::NANO);
+  string package_name = ServiceJavaPackage(service->file());
   if (!package_name.empty()) {
     printer.Print(
         "package $package_name$;\n\n",
         "package_name", package_name);
   }
-  PrintImports(&printer, flavor == ProtoFlavor::NANO);
+  PrintImports(&printer);
 
   // Package string is used to fully qualify method names.
   vars["Package"] = service->file()->package();
@@ -1325,19 +1175,13 @@ void GenerateService(const ServiceDescriptor* service,
   PrintService(service, &vars, &printer, flavor, disable_version);
 }
 
-string ServiceJavaPackage(const FileDescriptor* file, bool nano) {
+string ServiceJavaPackage(const FileDescriptor* file) {
   string result = google::protobuf::compiler::java::ClassName(file);
   size_t last_dot_pos = result.find_last_of('.');
   if (last_dot_pos != string::npos) {
     result.resize(last_dot_pos);
   } else {
     result = "";
-  }
-  if (nano) {
-    if (!result.empty()) {
-      result += ".";
-    }
-    result += "nano";
   }
   return result;
 }
