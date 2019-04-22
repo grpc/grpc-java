@@ -125,23 +125,27 @@ final class XdsLrsClient implements XdsLoadStatsManager {
 
   @Override
   public void addLocality(Locality locality) {
+    checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
     loadReportStore.addLocality(locality);
   }
 
   @Override
   public void removeLocality(final Locality locality) {
+    checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
     loadReportStore.removeLocality(locality);
   }
 
   @Override
   public void recordDroppedRequest(String category) {
+    checkState(started, "load reporting must be started first");
     loadReportStore.recordDroppedRequest(category);
   }
 
   @Override
   public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
+    checkState(started, "load reporting must be started first");
     return loadReportStore.interceptPickResult(pickResult, locality);
   }
 

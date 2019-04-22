@@ -34,8 +34,11 @@ import com.google.common.collect.Iterables;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
+import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
+import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
@@ -50,10 +53,16 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.text.MessageFormat;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -125,6 +134,7 @@ public class XdsLrsClientTest {
       .build();
   @Mock
   private BackoffPolicy backoffPolicy1;
+  private ManagedChannel channel;
   private XdsLrsClient lrsClient;
   @Mock
   private BackoffPolicy backoffPolicy2;
@@ -168,7 +178,7 @@ public class XdsLrsClientTest {
         ));
     cleanupRule.register(InProcessServerBuilder.forName("fakeLoadReportingServer").directExecutor()
         .addService(mockLoadReportingService).build().start());
-    ManagedChannel channel = cleanupRule.register(
+    channel = cleanupRule.register(
         InProcessChannelBuilder.forName("fakeLoadReportingServer").directExecutor().build());
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
@@ -195,14 +205,28 @@ public class XdsLrsClientTest {
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));
     // A second load report is scheduled upon the first is sent.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
-    inOrder.verify(requestObserver).onNext(
-        eq(LoadStatsRequest.newBuilder().setNode(Node.newBuilder()
-            .setMetadata(Struct.newBuilder()
-                .putFields(
-                    XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
-                    Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
-            .addClusterStats(expectedStats)
-            .build()));
+    ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
+    inOrder.verify(requestObserver).onNext(reportCaptor.capture());
+    LoadStatsRequest report = reportCaptor.getValue();
+    assertEquals(report.getNode(), Node.newBuilder()
+        .setMetadata(Struct.newBuilder()
+            .putFields(
+                XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
+        .build());
+    assertEquals(1, report.getClusterStatsCount());
+    assertClusterStatsEqual(expectedStats, report.getClusterStats(0));
+  }
+
+  private void assertClusterStatsEqual(ClusterStats stats1, ClusterStats stats2) {
+    assertEquals(stats1.getClusterName(), stats2.getClusterName());
+    assertEquals(stats1.getLoadReportInterval(), stats2.getLoadReportInterval());
+    assertEquals(stats1.getUpstreamLocalityStatsCount(), stats2.getUpstreamLocalityStatsCount());
+    assertEquals(stats1.getDroppedRequestsCount(), stats2.getDroppedRequestsCount());
+    assertEquals(new HashSet<>(stats1.getUpstreamLocalityStatsList()),
+        new HashSet<>(stats2.getUpstreamLocalityStatsList()));
+    assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
+        new HashSet<>(stats2.getDroppedRequestsList()));
   }
 
   @Test
@@ -249,6 +273,85 @@ public class XdsLrsClientTest {
     responseObserver.onNext(buildLrsResponse(2183345));
     // Updated load reporting interval becomes effective immediately.
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(2183345));
+  }
+
+  @Test
+  public void reportRecordedLoadData() {
+    lrsClient.stopLoadReporting();
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    lrsRequestObservers.clear();
+
+    ConcurrentMap<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityCounters =
+        new ConcurrentHashMap<>();
+    ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
+    XdsLoadReportStore loadReportStore =
+        new XdsLoadReportStore(SERVICE_AUTHORITY, localityCounters, dropCounters);
+    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
+        backoffPolicyProvider, loadReportStore);
+    lrsClient.startLoadReporting();
+
+    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    assertThat(lrsRequestObservers).hasSize(1);
+    StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
+    InOrder inOrder = inOrder(requestObserver);
+    inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+
+    Locality locality = Locality.newBuilder()
+        .setRegion("test_region")
+        .setZone("test_zone")
+        .setSubZone("test_subzone")
+        .build();
+    Random rand = new Random();
+    // Integer range is large enough for testing.
+    long callsInProgress1 = rand.nextInt(Integer.MAX_VALUE);
+    long callsFinished1 = rand.nextInt(Integer.MAX_VALUE);
+    long callsFailed1 = callsFinished1 - rand.nextInt((int) callsFinished1);
+    localityCounters.put(locality,
+        new ClientLoadCounter(callsInProgress1, callsFinished1, callsFailed1));
+
+    long numLbDrops = rand.nextLong();
+    long numThrottleDrops = rand.nextLong();
+    dropCounters.put("lb", new AtomicLong(numLbDrops));
+    dropCounters.put("throttle", new AtomicLong(numThrottleDrops));
+
+    responseObserver.onNext(buildLrsResponse(1362));
+    assertThat(logs).containsExactly(
+        "DEBUG: Got an LRS response: " + buildLrsResponse(1362));
+
+    ClusterStats expectedStats = ClusterStats.newBuilder()
+        .setClusterName(SERVICE_AUTHORITY)
+        .setLoadReportInterval(Durations.fromNanos(1362))
+        .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+            .setLocality(locality)
+            .setTotalRequestsInProgress(callsInProgress1)
+            .setTotalSuccessfulRequests(callsFinished1 - callsFailed1)
+            .setTotalErrorRequests(callsFailed1))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("lb")
+            .setDroppedCount(numLbDrops))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("throttle")
+            .setDroppedCount(numThrottleDrops))
+        .build();
+    assertNextReport(inOrder, requestObserver, expectedStats);
+
+    // No client load happens upon next load reporting, only number of in-progress
+    // calls are non-zero.
+    expectedStats = ClusterStats.newBuilder()
+        .setClusterName(SERVICE_AUTHORITY)
+        .setLoadReportInterval(Durations.fromNanos(1362))
+        .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+            .setLocality(locality)
+            .setTotalRequestsInProgress(callsInProgress1))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("lb")
+            .setDroppedCount(0))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("throttle")
+            .setDroppedCount(0))
+        .build();
+    assertNextReport(inOrder, requestObserver, expectedStats);
   }
 
   @Test

@@ -35,10 +35,16 @@ interface XdsLoadStatsManager {
   /**
    * Establishes load reporting communication and negotiates with the remote balancer to report load
    * stats periodically.
+   *
+   * <p>This method should be the first method to be called in the lifecycle of
+   * {@link XdsLoadStatsManager}.
    */
   void startLoadReporting();
 
-  /** Terminates load reporting. */
+  /** Terminates load reporting.
+   * 
+   * <p>No method in {@link XdsLoadStatsManager} should be called after calling this method.
+   */
   void stopLoadReporting();
 
   /**
