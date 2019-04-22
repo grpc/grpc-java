@@ -18,6 +18,7 @@ package io.grpc.stub;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -26,7 +27,11 @@ import static org.junit.Assert.fail;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientInterceptor;
+import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -39,6 +44,8 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.stub.ServerCalls.NoopStreamObserver;
+import io.grpc.stub.ServerCalls.ServerStreamingMethod;
+import io.grpc.stub.ServerCalls.UnaryMethod;
 import io.grpc.stub.ServerCallsTest.IntegerMarshaller;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -62,14 +69,17 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class ClientCallsTest {
-
-  private static final MethodDescriptor<Integer, Integer> STREAMING_METHOD =
+  private static final MethodDescriptor<Integer, Integer> UNARY_METHOD =
       MethodDescriptor.<Integer, Integer>newBuilder()
-          .setType(MethodDescriptor.MethodType.BIDI_STREAMING)
+          .setType(MethodDescriptor.MethodType.UNARY)
           .setFullMethodName("some/method")
           .setRequestMarshaller(new IntegerMarshaller())
           .setResponseMarshaller(new IntegerMarshaller())
           .build();
+  private static final MethodDescriptor<Integer, Integer> SERVER_STREAMING_METHOD =
+      UNARY_METHOD.toBuilder().setType(MethodDescriptor.MethodType.SERVER_STREAMING).build();
+  private static final MethodDescriptor<Integer, Integer> BIDI_STREAMING_METHOD =
+      UNARY_METHOD.toBuilder().setType(MethodDescriptor.MethodType.BIDI_STREAMING).build();
 
   private Server server;
   private ManagedChannel channel;
@@ -128,6 +138,69 @@ public class ClientCallsTest {
       assertSame(status, e.getStatus());
       assertSame(trailers, e.getTrailers());
     }
+  }
+
+  @Test
+  public void blockingUnaryCall2_success() throws Exception {
+    Integer req = 2;
+    final Integer resp = 3;
+
+    class BasicUnaryResponse implements UnaryMethod<Integer, Integer> {
+      Integer request;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        this.request = request;
+        responseObserver.onNext(resp);
+        responseObserver.onCompleted();
+      }
+    }
+
+    BasicUnaryResponse service = new BasicUnaryResponse();
+    server = InProcessServerBuilder.forName("simple-reply").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(UNARY_METHOD, ServerCalls.asyncUnaryCall(service))
+            .build())
+        .build().start();
+    channel = InProcessChannelBuilder.forName("simple-reply").directExecutor().build();
+    Integer actualResponse =
+        ClientCalls.blockingUnaryCall(channel, UNARY_METHOD, CallOptions.DEFAULT, req);
+    assertEquals(resp, actualResponse);
+    assertEquals(req, service.request);
+  }
+
+  @Test
+  public void blockingUnaryCall2_interruptedWaitsForOnClose() throws Exception {
+    Integer req = 2;
+
+    class NoopUnaryMethod implements UnaryMethod<Integer, Integer> {
+      ServerCallStreamObserver<Integer> observer;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        observer = (ServerCallStreamObserver<Integer>) responseObserver;
+      }
+    }
+
+    NoopUnaryMethod methodImpl = new NoopUnaryMethod();
+    server = InProcessServerBuilder.forName("noop").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(UNARY_METHOD, ServerCalls.asyncUnaryCall(methodImpl))
+            .build())
+        .build().start();
+
+    InterruptInterceptor interceptor = new InterruptInterceptor();
+    channel = InProcessChannelBuilder.forName("noop")
+        .directExecutor()
+        .intercept(interceptor)
+        .build();
+    try {
+      ClientCalls.blockingUnaryCall(channel, UNARY_METHOD, CallOptions.DEFAULT, req);
+      fail();
+    } catch (StatusRuntimeException ex) {
+      assertTrue(Thread.interrupted());
+      assertTrue("interrupted", ex.getCause() instanceof InterruptedException);
+    }
+    assertTrue("onCloseCalled", interceptor.onCloseCalled);
+    assertTrue("context not cancelled", methodImpl.observer.isCancelled());
   }
 
   @Test
@@ -372,8 +445,8 @@ public class ClientCallsTest {
   public void inprocessTransportInboundFlowControl() throws Exception {
     final Semaphore semaphore = new Semaphore(0);
     ServerServiceDefinition service = ServerServiceDefinition.builder(
-        new ServiceDescriptor("some", STREAMING_METHOD))
-        .addMethod(STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
+        new ServiceDescriptor("some", BIDI_STREAMING_METHOD))
+        .addMethod(BIDI_STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               int iteration;
 
@@ -404,7 +477,7 @@ public class ClientCallsTest {
     server = InProcessServerBuilder.forName("go-with-the-flow" + tag).directExecutor()
         .addService(service).build().start();
     channel = InProcessChannelBuilder.forName("go-with-the-flow" + tag).directExecutor().build();
-    final ClientCall<Integer, Integer> clientCall = channel.newCall(STREAMING_METHOD,
+    final ClientCall<Integer, Integer> clientCall = channel.newCall(BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
     final CountDownLatch latch = new CountDownLatch(1);
     final List<Object> receivedMessages = new ArrayList<>(6);
@@ -453,8 +526,8 @@ public class ClientCallsTest {
     final SettableFuture<ServerCallStreamObserver<Integer>> observerFuture
         = SettableFuture.create();
     ServerServiceDefinition service = ServerServiceDefinition.builder(
-        new ServiceDescriptor("some", STREAMING_METHOD))
-        .addMethod(STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
+        new ServiceDescriptor("some", BIDI_STREAMING_METHOD))
+        .addMethod(BIDI_STREAMING_METHOD, ServerCalls.asyncBidiStreamingCall(
             new ServerCalls.BidiStreamingMethod<Integer, Integer>() {
               @Override
               public StreamObserver<Integer> invoke(StreamObserver<Integer> responseObserver) {
@@ -485,7 +558,7 @@ public class ClientCallsTest {
     server = InProcessServerBuilder.forName("go-with-the-flow" + tag).directExecutor()
         .addService(service).build().start();
     channel = InProcessChannelBuilder.forName("go-with-the-flow" + tag).directExecutor().build();
-    final ClientCall<Integer, Integer> clientCall = channel.newCall(STREAMING_METHOD,
+    final ClientCall<Integer, Integer> clientCall = channel.newCall(BIDI_STREAMING_METHOD,
         CallOptions.DEFAULT);
 
     final SettableFuture<Void> future = SettableFuture.create();
@@ -562,6 +635,138 @@ public class ClientCallsTest {
       assertEquals(Status.INTERNAL, status);
       Metadata metadata = Status.trailersFromThrowable(e);
       assertSame(trailers, metadata);
+    }
+  }
+
+  @Test
+  public void blockingServerStreamingCall_interruptedWaitsForOnClose() throws Exception {
+    Integer req = 2;
+
+    class NoopServerStreamingMethod implements ServerStreamingMethod<Integer, Integer> {
+      ServerCallStreamObserver<Integer> observer;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        observer = (ServerCallStreamObserver<Integer>) responseObserver;
+      }
+    }
+
+    NoopServerStreamingMethod methodImpl = new NoopServerStreamingMethod();
+    server = InProcessServerBuilder.forName("noop").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(SERVER_STREAMING_METHOD, ServerCalls.asyncServerStreamingCall(methodImpl))
+            .build())
+        .build().start();
+
+    InterruptInterceptor interceptor = new InterruptInterceptor();
+    channel = InProcessChannelBuilder.forName("noop")
+        .directExecutor()
+        .intercept(interceptor)
+        .build();
+    Iterator<Integer> iter = ClientCalls.blockingServerStreamingCall(
+        channel.newCall(SERVER_STREAMING_METHOD, CallOptions.DEFAULT), req);
+    try {
+      iter.next();
+      fail();
+    } catch (StatusRuntimeException ex) {
+      assertTrue(Thread.interrupted());
+      assertTrue("interrupted", ex.getCause() instanceof InterruptedException);
+    }
+    assertTrue("onCloseCalled", interceptor.onCloseCalled);
+    assertTrue("context not cancelled", methodImpl.observer.isCancelled());
+  }
+
+  @Test
+  public void blockingServerStreamingCall2_success() throws Exception {
+    Integer req = 2;
+    final Integer resp1 = 3;
+    final Integer resp2 = 4;
+
+    class BasicServerStreamingResponse implements ServerStreamingMethod<Integer, Integer> {
+      Integer request;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        this.request = request;
+        responseObserver.onNext(resp1);
+        responseObserver.onNext(resp2);
+        responseObserver.onCompleted();
+      }
+    }
+
+    BasicServerStreamingResponse service = new BasicServerStreamingResponse();
+    server = InProcessServerBuilder.forName("simple-reply").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(SERVER_STREAMING_METHOD, ServerCalls.asyncServerStreamingCall(service))
+            .build())
+        .build().start();
+    channel = InProcessChannelBuilder.forName("simple-reply").directExecutor().build();
+    Iterator<Integer> iter = ClientCalls.blockingServerStreamingCall(
+            channel, SERVER_STREAMING_METHOD, CallOptions.DEFAULT, req);
+    assertEquals(resp1, iter.next());
+    assertTrue(iter.hasNext());
+    assertEquals(resp2, iter.next());
+    assertFalse(iter.hasNext());
+    assertEquals(req, service.request);
+  }
+
+  @Test
+  public void blockingServerStreamingCall2_interruptedWaitsForOnClose() throws Exception {
+    Integer req = 2;
+
+    class NoopServerStreamingMethod implements ServerStreamingMethod<Integer, Integer> {
+      ServerCallStreamObserver<Integer> observer;
+
+      @Override public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+        observer = (ServerCallStreamObserver<Integer>) responseObserver;
+      }
+    }
+
+    NoopServerStreamingMethod methodImpl = new NoopServerStreamingMethod();
+    server = InProcessServerBuilder.forName("noop").directExecutor()
+        .addService(ServerServiceDefinition.builder("some")
+            .addMethod(SERVER_STREAMING_METHOD, ServerCalls.asyncServerStreamingCall(methodImpl))
+            .build())
+        .build().start();
+
+    InterruptInterceptor interceptor = new InterruptInterceptor();
+    channel = InProcessChannelBuilder.forName("noop")
+        .directExecutor()
+        .intercept(interceptor)
+        .build();
+    Iterator<Integer> iter = ClientCalls.blockingServerStreamingCall(
+        channel, SERVER_STREAMING_METHOD, CallOptions.DEFAULT, req);
+    try {
+      iter.next();
+      fail();
+    } catch (StatusRuntimeException ex) {
+      assertTrue(Thread.interrupted());
+      assertTrue("interrupted", ex.getCause() instanceof InterruptedException);
+    }
+    assertTrue("onCloseCalled", interceptor.onCloseCalled);
+    assertTrue("context not cancelled", methodImpl.observer.isCancelled());
+  }
+
+  // Used for blocking tests to check interrupt behavior and make sure onClose is still called.
+  class InterruptInterceptor implements ClientInterceptor {
+    boolean onCloseCalled;
+
+    @Override
+    public <ReqT,RespT> ClientCall<ReqT, RespT> interceptCall(
+        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+      return new SimpleForwardingClientCall<ReqT, RespT>(next.newCall(method, callOptions)) {
+        @Override public void start(ClientCall.Listener<RespT> listener, Metadata headers) {
+          super.start(new SimpleForwardingClientCallListener<RespT>(listener) {
+            @Override public void onClose(Status status, Metadata trailers) {
+              onCloseCalled = true;
+              super.onClose(status, trailers);
+            }
+          }, headers);
+        }
+
+        @Override public void halfClose() {
+          Thread.currentThread().interrupt();
+          super.halfClose();
+        }
+      };
     }
   }
 }
