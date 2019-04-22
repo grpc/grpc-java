@@ -69,6 +69,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final XdsLoadReportStore loadReportStore;
+  private boolean started;
 
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
@@ -81,15 +82,8 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   XdsLrsClient(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    this.channel = checkNotNull(channel, "channel");
-    this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.stopwatchSupplier = GrpcUtil.STOPWATCH_SUPPLIER;
-    this.retryStopwatch = stopwatchSupplier.get();
-    this.logger = checkNotNull(helper.getChannelLogger(), "logger");
-    this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.loadReportStore = new XdsLoadReportStore(serviceName);
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
+        new XdsLoadReportStore(checkNotNull(helper, "helper").getAuthority()));
   }
 
   @VisibleForTesting
@@ -107,65 +101,38 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.loadReportStore = checkNotNull(loadReportStore, "loadReportStore");
+    started = false;
   }
 
   @Override
   public void startLoadReporting() {
-    checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    LoadReportingServiceGrpc.LoadReportingServiceStub stub
-        = LoadReportingServiceGrpc.newStub(channel);
-    lrsStream = new LrsStream(stub, stopwatchSupplier.get());
-    lrsStream.start();
-    retryStopwatch.reset().start();
-
-    LoadStatsRequest initRequest =
-        LoadStatsRequest.newBuilder()
-            .setNode(Node.newBuilder()
-                .setMetadata(Struct.newBuilder()
-                    .putFields(
-                        TRAFFICDIRECTOR_HOSTNAME_FIELD,
-                        Value.newBuilder().setStringValue(serviceName).build())))
-            .build();
-    lrsStream.lrsRequestWriter.onNext(initRequest);
-  }
-
-  private void shutdownLrsRpc() {
-    if (lrsStream != null) {
-      lrsStream.close(null);
-    }
-  }
-
-  private void cancelLrsRpcRetryTimer() {
-    if (lrsRpcRetryTimer != null) {
-      lrsRpcRetryTimer.cancel();
-    }
+    checkState(!started, "load reporting has already started");
+    started = true;
+    startLrsRpc();
   }
 
   @Override
   public void stopLoadReporting() {
-    shutdownLrsRpc();
-    cancelLrsRpcRetryTimer();
+    if (lrsRpcRetryTimer != null) {
+      lrsRpcRetryTimer.cancel();
+    }
+    if (lrsStream != null) {
+      lrsStream.close(null);
+    }
+    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
   @Override
-  public void addLocality(final Locality locality) {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        loadReportStore.addLocality(locality);
-      }
-    });
+  public void addLocality(Locality locality) {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    loadReportStore.addLocality(locality);
   }
 
   @Override
   public void removeLocality(final Locality locality) {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        loadReportStore.removeLocality(locality);
-      }
-    });
+    syncContext.throwIfNotInThisSynchronizationContext();
+    loadReportStore.removeLocality(locality);
   }
 
   @Override
@@ -197,8 +164,17 @@ final class XdsLrsClient implements XdsLoadStatsManager {
 
     @Override
     public void run() {
-      startLoadReporting();
+      startLrsRpc();
     }
+  }
+
+  private void startLrsRpc() {
+    checkState(lrsStream == null, "previous lbStream has not been cleared yet");
+    LoadReportingServiceGrpc.LoadReportingServiceStub stub
+        = LoadReportingServiceGrpc.newStub(channel);
+    lrsStream = new LrsStream(stub, stopwatchSupplier.get());
+    retryStopwatch.reset().start();
+    lrsStream.start();
   }
 
   private class LrsStream implements StreamObserver<LoadStatsResponse> {
@@ -219,6 +195,15 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     void start() {
       lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
       reportStopwatch.reset().start();
+      LoadStatsRequest initRequest =
+          LoadStatsRequest.newBuilder()
+              .setNode(Node.newBuilder()
+                  .setMetadata(Struct.newBuilder()
+                      .putFields(
+                          TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                          Value.newBuilder().setStringValue(serviceName).build())))
+              .build();
+      lrsRequestWriter.onNext(initRequest);
     }
 
     @Override
@@ -324,7 +309,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
             lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
       if (delayNanos <= 0) {
-        startLoadReporting();
+        startLrsRpc();
       } else {
         lrsRpcRetryTimer =
             syncContext.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS,
