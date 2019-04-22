@@ -16,14 +16,7 @@
 
 package io.grpc;
 
-import com.google.common.annotations.VisibleForTesting;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * Provider of name resolvers for name agnostic consumption.
@@ -34,8 +27,6 @@ import javax.annotation.Nullable;
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4159")
 public abstract class NameResolverProvider extends NameResolver.Factory {
-
-  private static final Logger logger = Logger.getLogger(NameResolverProvider.class.getName());
 
   /**
    * The port number used in case the target or the underlying naming system doesn't provide a
@@ -48,36 +39,24 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
   public static final Attributes.Key<Integer> PARAMS_DEFAULT_PORT =
       NameResolver.Factory.PARAMS_DEFAULT_PORT;
 
-  @VisibleForTesting
-  static final Iterable<Class<?>> HARDCODED_CLASSES = getHardCodedClasses();
-
-  private static final List<NameResolverProvider> providers = ServiceProviders.loadAll(
-      NameResolverProvider.class,
-      HARDCODED_CLASSES,
-      NameResolverProvider.class.getClassLoader(),
-      new NameResolverPriorityAccessor());
-
-  private static final NameResolver.Factory factory = new NameResolverFactory(providers);
-
   /**
    * Returns non-{@code null} ClassLoader-wide providers, in preference order.
    *
    * @since 1.0.0
+   * @deprecated Has no replacement
    */
+  @Deprecated
   public static List<NameResolverProvider> providers() {
-    return providers;
+    return NameResolverRegistry.getDefaultRegistry().providers();
   }
 
   /**
    * @since 1.0.0
+   * @deprecated Use NameResolverRegistry.getDefaultRegistry().asFactory()
    */
+  @Deprecated
   public static NameResolver.Factory asFactory() {
-    return factory;
-  }
-
-  @VisibleForTesting
-  static NameResolver.Factory asFactory(List<NameResolverProvider> providers) {
-    return new NameResolverFactory(providers);
+    return NameResolverRegistry.getDefaultRegistry().asFactory();
   }
 
   /**
@@ -97,69 +76,4 @@ public abstract class NameResolverProvider extends NameResolver.Factory {
    * @since 1.0.0
    */
   protected abstract int priority();
-
-  private static final class NameResolverFactory extends NameResolver.Factory {
-    private final List<NameResolverProvider> providers;
-
-    NameResolverFactory(List<NameResolverProvider> providers) {
-      this.providers = Collections.unmodifiableList(new ArrayList<>(providers));
-    }
-
-    @Override
-    @Nullable
-    public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-      checkForProviders();
-      for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, helper);
-        if (resolver != null) {
-          return resolver;
-        }
-      }
-      return null;
-    }
-
-    @Override
-    public String getDefaultScheme() {
-      checkForProviders();
-      return providers.get(0).getDefaultScheme();
-    }
-
-    private void checkForProviders() {
-      if (providers.isEmpty()) {
-        String msg = "No NameResolverProviders found via ServiceLoader, including for DNS. "
-            + "This is probably due to a broken build. If using ProGuard, check your configuration";
-        throw new RuntimeException(msg);
-      }
-    }
-  }
-
-  @VisibleForTesting
-  static final List<Class<?>> getHardCodedClasses() {
-    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
-    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
-    // https://sourceforge.net/p/proguard/bugs/418/
-    try {
-      return Collections.<Class<?>>singletonList(
-          Class.forName("io.grpc.internal.DnsNameResolverProvider"));
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
-    }
-    return Collections.emptyList();
-  }
-
-  private static final class NameResolverPriorityAccessor
-      implements ServiceProviders.PriorityAccessor<NameResolverProvider> {
-
-    NameResolverPriorityAccessor() {}
-
-    @Override
-    public boolean isAvailable(NameResolverProvider provider) {
-      return provider.isAvailable();
-    }
-
-    @Override
-    public int getPriority(NameResolverProvider provider) {
-      return provider.priority();
-    }
-  }
 }
