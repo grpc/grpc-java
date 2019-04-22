@@ -18,11 +18,18 @@ package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.grpc.LoadBalancer.PickResult;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * An {@link XdsLoadStatsManager} is in charge of recording client side load stats, collecting
  * backend cost metrics and sending load reports to the remote balancer.
+ *
+ * <p>Only {@link XdsLoadStatsManager#interceptPickResult} and
+ * {@link XdsLoadStatsManager#recordDroppedRequest} are thread-safe. All the other methods must
+ * be called from the same synchronized context returned by
+ * {@link XdsLoadBalancer#helper#getSynchronizationContext}.
  */
+@NotThreadSafe
 interface XdsLoadStatsManager {
 
   /**
