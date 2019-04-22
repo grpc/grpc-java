@@ -343,7 +343,7 @@ public final class PerfMark {
     return AUTO_DO_NOTHING;
   }
 
-  public static final PerfMarkTask AUTO_DO_NOTHING = new PerfMarkTask() {
+  static final PerfMarkTask AUTO_DO_NOTHING = new PerfMarkTask() {
     @Override
     public void close() {}
   };
