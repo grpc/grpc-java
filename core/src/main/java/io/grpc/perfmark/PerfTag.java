@@ -39,7 +39,7 @@ public final class PerfTag {
   private static final long NULL_NUMERIC_TAG = 0;
   private static final String NULL_STRING_TAG = "";
 
-  private static final PerfTag NULL_PERF_TAG = TagFactory.create(NULL_NUMERIC_TAG, NULL_STRING_TAG);
+  private static final PerfTag NULL_TAG = TagFactory.create(NULL_NUMERIC_TAG, NULL_STRING_TAG);
 
   /**
    * If PerfMark instrumentation is not enabled, returns a Tag with numericTag = 0L. Replacement
@@ -48,7 +48,7 @@ public final class PerfTag {
   public static PerfTag create(
       @SuppressWarnings("unused") long numericTag, @SuppressWarnings("unused") String stringTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_PERF_TAG;
+    return NULL_TAG;
   }
 
   /**
@@ -57,7 +57,7 @@ public final class PerfTag {
    */
   public static PerfTag create(@SuppressWarnings("unused") String stringTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_PERF_TAG;
+    return NULL_TAG;
   }
 
   /**
@@ -66,14 +66,14 @@ public final class PerfTag {
    */
   public static PerfTag create(@SuppressWarnings("unused") long numericTag) {
     // Warning suppression is safe as this method returns by default the NULL_TAG
-    return NULL_PERF_TAG;
+    return NULL_TAG;
   }
 
   /**
    * Returns the null tag.
    */
   public static PerfTag create() {
-    return NULL_PERF_TAG;
+    return NULL_TAG;
   }
 
   /**
