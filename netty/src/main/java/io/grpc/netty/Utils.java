@@ -262,7 +262,6 @@ class Utils {
     }
   }
 
-
   // Must call when epoll is available
   private static Class<? extends ServerChannel> epollServerChannelType() {
     try {
