@@ -81,7 +81,7 @@ public final class NameResolverRegistry {
   }
 
   private synchronized void refreshProviders() {
-    List<NameResolverProvider> providers = new ArrayList<NameResolverProvider>(allProviders);
+    List<NameResolverProvider> providers = new ArrayList<>(allProviders);
     // Sort descending based on priority.
     // sort() must be stable, as we prefer first-registered providers
     Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {

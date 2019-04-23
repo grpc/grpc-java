@@ -48,7 +48,7 @@ public class NameResolverRegistryTest {
       reg.register(new BaseProvider(false, 5));
       fail("Should throw");
     } catch (IllegalArgumentException e) {
-      assertThat(e.getMessage()).contains("isAvailable() returned false");
+      assertThat(e).hasMessageThat().contains("isAvailable() returned false");
     }
     assertThat(reg.providers()).isEmpty();
   }
