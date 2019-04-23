@@ -119,7 +119,6 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     if (lrsStream != null) {
       lrsStream.close(null);
     }
-    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
