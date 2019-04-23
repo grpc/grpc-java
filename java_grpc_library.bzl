@@ -166,24 +166,21 @@ def java_grpc_library(
         deps,
         flavor = None,
         **kwargs):
-    """Generates and compiles gRPC Java sources for services defined in a proto
-    file. This rule is compatible with proto_library with java_api_version,
-    java_proto_library, and java_lite_proto_library.
+    """Generates gRPC Java code for services in a `proto_library`.
 
-    Do note that this rule only scans through the proto file for RPC services. It
-    does not generate Java classes for proto messages. You will need a separate
-    proto_library with java_api_version, java_proto_library, or
+    This rule only generates code for services; it does not generate code for
+    messages. You will need a separate java_proto_library or
     java_lite_proto_library rule.
 
     Args:
-      name: (str) A unique name for this rule. Required.
-      srcs: (list) a single proto_library target that contains the schema of the
-          service. Required.
-      deps: (list) a single java_proto_library target for the proto_library in
-          srcs.  Required.
+      name: A unique name for this rule.
+      srcs: (List of `labels`) a single proto_library target that contains the
+        schema of the service.
+      deps: (List of `labels`) a single java_proto_library or
+        java_lite_proto_library target for the proto_library in srcs.
       flavor: (str) "normal" (default) for normal proto runtime. "lite"
-          for the lite runtime.
-      **kwargs: Passed through to generated targets
+        for the lite runtime.
+      **kwargs: Other common attributes
     """
 
     if len(deps) > 1:
