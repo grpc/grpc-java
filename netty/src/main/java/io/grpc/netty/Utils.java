@@ -73,9 +73,9 @@ class Utils {
   public static final AsciiString TE_TRAILERS = AsciiString.of(GrpcUtil.TE_TRAILERS);
   public static final AsciiString USER_AGENT = AsciiString.of(GrpcUtil.USER_AGENT_KEY.name());
   public static final Resource<EventLoopGroup> NIO_BOSS_EVENT_LOOP_GROUP
-      = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", NioEventLoopGroup.class);
+      = new DefaultEventLoopGroupResource(1, "grpc-nio-boss-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> NIO_WORKER_EVENT_LOOP_GROUP
-      = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", NioEventLoopGroup.class);
+      = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
@@ -87,11 +87,12 @@ class Utils {
     if (isEpollAvailable()) {
       DEFAULT_SERVER_CHANNEL_TYPE = epollServerChannelType();
       DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
-      Class<? extends EventLoopGroup> eventLoopGroupType = epollEventLoopGroupType();
+      // Verifies if the EpollEventLoopGroup is available.
+      Class<? extends EventLoopGroup> unused = epollEventLoopGroupType();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", eventLoopGroupType);
+        = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
       DEFAULT_WORKER_EVENT_LOOP_GROUP
-        = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", eventLoopGroupType);
+        = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
     } else {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
       DEFAULT_SERVER_CHANNEL_TYPE = NioServerSocketChannel.class;
@@ -268,16 +269,15 @@ class Utils {
     }
   }
 
-  private static EventLoopGroup createEventLoopGroup(
-      Class<? extends EventLoopGroup> eventLoopGroupType,
+  private static EventLoopGroup createEpollEventLoopGroup(
       int parallelism,
       ThreadFactory threadFactory) {
     try {
-      return eventLoopGroupType
+      return epollEventLoopGroupType()
           .getConstructor(Integer.TYPE, ThreadFactory.class)
           .newInstance(parallelism, threadFactory);
     } catch (Exception e) {
-      throw new RuntimeException("Cannot create EventLoopGroup for " + eventLoopGroupType, e);
+      throw new RuntimeException("Cannot create Epoll EventLoopGroup", e);
     }
   }
 
@@ -309,10 +309,10 @@ class Utils {
   private static final class DefaultEventLoopGroupResource implements Resource<EventLoopGroup> {
     private final String name;
     private final int numEventLoops;
-    private final Class<? extends EventLoopGroup> eventLoopGroupType;
+    private final EventLoopGroupType eventLoopGroupType;
 
     DefaultEventLoopGroupResource(
-        int numEventLoops, String name, Class<? extends EventLoopGroup> eventLoopGroupType) {
+        int numEventLoops, String name, EventLoopGroupType eventLoopGroupType) {
       this.name = name;
       this.numEventLoops = numEventLoops;
       this.eventLoopGroupType = eventLoopGroupType;
@@ -322,7 +322,14 @@ class Utils {
     public EventLoopGroup create() {
       // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
       ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
-      return createEventLoopGroup(eventLoopGroupType, numEventLoops, threadFactory);
+      switch (eventLoopGroupType) {
+        case NIO:
+          return new NioEventLoopGroup(numEventLoops, threadFactory);
+        case EPOLL:
+          return createEpollEventLoopGroup(numEventLoops, threadFactory);
+        default:
+          throw new AssertionError("Unknown/Unsupported EventLoopGroupType: " + eventLoopGroupType);
+      }
     }
 
     @Override
@@ -373,6 +380,11 @@ class Utils {
       }
     }
     return b.build();
+  }
+
+  private enum EventLoopGroupType {
+    NIO,
+    EPOLL
   }
 
   private Utils() {
