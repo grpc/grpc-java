@@ -52,8 +52,8 @@ public class LoadBalancerTest {
   @Test
   public void pickResult_withSubchannel() {
     PickResult result = PickResult.withSubchannel(subchannel);
-    assertThat(result.getSubchannel()).isSameAs(subchannel);
-    assertThat(result.getStatus()).isSameAs(Status.OK);
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
   }
@@ -61,9 +61,9 @@ public class LoadBalancerTest {
   @Test
   public void pickResult_withSubchannelAndTracer() {
     PickResult result = PickResult.withSubchannel(subchannel, tracerFactory);
-    assertThat(result.getSubchannel()).isSameAs(subchannel);
-    assertThat(result.getStatus()).isSameAs(Status.OK);
-    assertThat(result.getStreamTracerFactory()).isSameAs(tracerFactory);
+    assertThat(result.getSubchannel()).isSameInstanceAs(subchannel);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
+    assertThat(result.getStreamTracerFactory()).isSameInstanceAs(tracerFactory);
     assertThat(result.isDrop()).isFalse();
   }
 
@@ -71,7 +71,7 @@ public class LoadBalancerTest {
   public void pickResult_withNoResult() {
     PickResult result = PickResult.withNoResult();
     assertThat(result.getSubchannel()).isNull();
-    assertThat(result.getStatus()).isSameAs(Status.OK);
+    assertThat(result.getStatus()).isSameInstanceAs(Status.OK);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
   }
@@ -80,7 +80,7 @@ public class LoadBalancerTest {
   public void pickResult_withError() {
     PickResult result = PickResult.withError(status);
     assertThat(result.getSubchannel()).isNull();
-    assertThat(result.getStatus()).isSameAs(status);
+    assertThat(result.getStatus()).isSameInstanceAs(status);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isFalse();
   }
@@ -89,7 +89,7 @@ public class LoadBalancerTest {
   public void pickResult_withDrop() {
     PickResult result = PickResult.withDrop(status);
     assertThat(result.getSubchannel()).isNull();
-    assertThat(result.getStatus()).isSameAs(status);
+    assertThat(result.getStatus()).isSameInstanceAs(status);
     assertThat(result.getStreamTracerFactory()).isNull();
     assertThat(result.isDrop()).isTrue();
   }
@@ -134,15 +134,15 @@ public class LoadBalancerTest {
       @Override
       public Subchannel createSubchannel(List<EquivalentAddressGroup> addrsIn, Attributes attrsIn) {
         assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameAs(eag);
-        assertThat(attrsIn).isSameAs(attrs);
+        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
+        assertThat(attrsIn).isSameInstanceAs(attrs);
         ran = true;
         return subchannel;
       }
     }
 
     OverrideCreateSubchannel helper = new OverrideCreateSubchannel();
-    assertThat(helper.createSubchannel(eag, attrs)).isSameAs(subchannel);
+    assertThat(helper.createSubchannel(eag, attrs)).isSameInstanceAs(subchannel);
     assertThat(helper.ran).isTrue();
   }
 
@@ -179,9 +179,9 @@ public class LoadBalancerTest {
       @Override
       public void updateSubchannelAddresses(
           Subchannel subchannelIn, List<EquivalentAddressGroup> addrsIn) {
-        assertThat(subchannelIn).isSameAs(emptySubchannel);
+        assertThat(subchannelIn).isSameInstanceAs(emptySubchannel);
         assertThat(addrsIn).hasSize(1);
-        assertThat(addrsIn.get(0)).isSameAs(eag);
+        assertThat(addrsIn.get(0)).isSameInstanceAs(eag);
         ran = true;
       }
     }

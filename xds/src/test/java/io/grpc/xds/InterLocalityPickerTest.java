@@ -131,23 +131,23 @@ public class InterLocalityPickerTest {
         fakeRandom);
 
     fakeRandom.nextInt = 0;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 1;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 14;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 15;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(25);
 
     fakeRandom.nextInt = 24;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(25);
   }
 
@@ -167,19 +167,19 @@ public class InterLocalityPickerTest {
         fakeRandom);
 
     fakeRandom.nextInt = 0;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult0);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult0);
     assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 1;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult1);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 2;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult2);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult2);
     assertThat(fakeRandom.bound).isEqualTo(4);
 
     fakeRandom.nextInt = 3;
-    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameAs(pickResult3);
+    assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(4);
   }
 }

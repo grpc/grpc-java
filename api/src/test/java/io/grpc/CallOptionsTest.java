@@ -81,13 +81,13 @@ public class CallOptionsTest {
 
   @Test
   public void allWiths() {
-    assertThat(allSet.getAuthority()).isSameAs(sampleAuthority);
-    assertThat(allSet.getDeadline()).isSameAs(sampleDeadline);
-    assertThat(allSet.getCredentials()).isSameAs(sampleCreds);
-    assertThat(allSet.getCompressor()).isSameAs(sampleCompressor);
-    assertThat(allSet.getExecutor()).isSameAs(directExecutor());
-    assertThat(allSet.getOption(OPTION_1)).isSameAs("value1");
-    assertThat(allSet.getOption(OPTION_2)).isSameAs("value2");
+    assertThat(allSet.getAuthority()).isSameInstanceAs(sampleAuthority);
+    assertThat(allSet.getDeadline()).isSameInstanceAs(sampleDeadline);
+    assertThat(allSet.getCredentials()).isSameInstanceAs(sampleCreds);
+    assertThat(allSet.getCompressor()).isSameInstanceAs(sampleCompressor);
+    assertThat(allSet.getExecutor()).isSameInstanceAs(directExecutor());
+    assertThat(allSet.getOption(OPTION_1)).isSameInstanceAs("value1");
+    assertThat(allSet.getOption(OPTION_2)).isSameInstanceAs("value2");
     assertThat(allSet.isWaitForReady()).isTrue();
   }
 
@@ -111,10 +111,10 @@ public class CallOptionsTest {
     Deadline deadline = Deadline.after(10, SECONDS);
     CallOptions options1 = CallOptions.DEFAULT.withDeadline(deadline);
     assertThat(CallOptions.DEFAULT.getDeadline()).isNull();
-    assertThat(deadline).isSameAs(options1.getDeadline());
+    assertThat(deadline).isSameInstanceAs(options1.getDeadline());
 
     CallOptions options2 = options1.withDeadline(null);
-    assertThat(deadline).isSameAs(options1.getDeadline());
+    assertThat(deadline).isSameInstanceAs(options1.getDeadline());
     assertThat(options2.getDeadline()).isNull();
   }
 
@@ -123,10 +123,10 @@ public class CallOptionsTest {
     Executor executor = directExecutor();
     CallOptions options1 = CallOptions.DEFAULT.withExecutor(executor);
     assertThat(CallOptions.DEFAULT.getExecutor()).isNull();
-    assertThat(executor).isSameAs(options1.getExecutor());
+    assertThat(executor).isSameInstanceAs(options1.getExecutor());
 
     CallOptions options2 = options1.withExecutor(null);
-    assertThat(executor).isSameAs(options1.getExecutor());
+    assertThat(executor).isSameInstanceAs(options1.getExecutor());
     assertThat(options2.getExecutor()).isNull();
   }
 

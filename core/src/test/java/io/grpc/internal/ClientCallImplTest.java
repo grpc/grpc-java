@@ -200,7 +200,7 @@ public class ClientCallImplTest {
         ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 
@@ -236,7 +236,7 @@ public class ClientCallImplTest {
         ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 
@@ -272,7 +272,7 @@ public class ClientCallImplTest {
         ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 

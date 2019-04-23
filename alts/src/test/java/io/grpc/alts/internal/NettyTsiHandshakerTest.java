@@ -146,7 +146,7 @@ public class NettyTsiHandshakerTest {
       actualMethods.add(m.getName());
     }
 
-    assertThat(actualMethods).containsAllIn(expectedMethods);
+    assertThat(actualMethods).containsAtLeastElementsIn(expectedMethods);
   }
 
   static void doHandshake(
