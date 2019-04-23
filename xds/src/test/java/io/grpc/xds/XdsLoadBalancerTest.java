@@ -290,7 +290,7 @@ public class XdsLoadBalancerTest {
 
     XdsLbState xdsLbState2 = lb.getXdsLbStateForTest();
     assertThat(xdsLbState2.childPolicy).isNull();
-    assertThat(xdsLbState2).isSameAs(xdsLbState1);
+    assertThat(xdsLbState2).isSameInstanceAs(xdsLbState1);
 
     // verify oobChannel is unchanged
     verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());

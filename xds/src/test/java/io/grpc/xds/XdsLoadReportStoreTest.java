@@ -126,8 +126,8 @@ public class XdsLoadReportStoreTest {
     ArgumentCaptor<Metadata> metadataArgumentCaptor = ArgumentCaptor.forClass(null);
     verify(mockFactory).newClientStreamTracer(streamInfoArgumentCaptor.capture(),
         metadataArgumentCaptor.capture());
-    assertThat(streamInfoArgumentCaptor.getValue()).isSameAs(STREAM_INFO);
-    assertThat(metadataArgumentCaptor.getValue()).isSameAs(metadata);
+    assertThat(streamInfoArgumentCaptor.getValue()).isSameInstanceAs(STREAM_INFO);
+    assertThat(metadataArgumentCaptor.getValue()).isSameInstanceAs(metadata);
     verify(mockTracer).streamClosed(Status.OK);
   }
 
@@ -142,7 +142,7 @@ public class XdsLoadReportStoreTest {
     loadStore.addLocality(locality1);
     PickResult pickResult1 = PickResult.withSubchannel(fakeSubchannel);
     PickResult interceptedPickResult1 = loadStore.interceptPickResult(pickResult1, locality1);
-    assertThat(interceptedPickResult1.getSubchannel()).isSameAs(fakeSubchannel);
+    assertThat(interceptedPickResult1.getSubchannel()).isSameInstanceAs(fakeSubchannel);
     assertThat(localityLoadCounters).containsKey(locality1);
     ClientStreamTracer tracer =
         interceptedPickResult1

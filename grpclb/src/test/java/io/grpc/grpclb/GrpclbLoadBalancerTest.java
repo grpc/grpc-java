@@ -444,7 +444,7 @@ public class GrpclbLoadBalancerTest {
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
 
     verify(subchannel, never()).requestConnection();
-    assertThat(picker.pickSubchannel(args)).isSameAs(PickResult.withNoResult());
+    assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
     verify(subchannel).requestConnection();
   }
 
@@ -463,13 +463,13 @@ public class GrpclbLoadBalancerTest {
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
 
     verify(subchannel, never()).requestConnection();
-    assertThat(picker.pickSubchannel(args)).isSameAs(PickResult.withNoResult());
+    assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
     verify(subchannel).requestConnection();
 
-    assertThat(picker.pickSubchannel(args)).isSameAs(DROP_PICK_RESULT);
+    assertThat(picker.pickSubchannel(args)).isSameInstanceAs(DROP_PICK_RESULT);
 
     verify(subchannel).requestConnection();
-    assertThat(picker.pickSubchannel(args)).isSameAs(PickResult.withNoResult());
+    assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
     verify(subchannel, times(2)).requestConnection();
   }
 
@@ -1820,7 +1820,7 @@ public class GrpclbLoadBalancerTest {
     // ... until it's selected
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
     PickResult pick = picker5.pickSubchannel(args);
-    assertThat(pick).isSameAs(PickResult.withNoResult());
+    assertThat(pick).isSameInstanceAs(PickResult.withNoResult());
     verify(subchannel).requestConnection();
 
     // ... or requested by application

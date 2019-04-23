@@ -96,8 +96,8 @@ public class NameResolverRegistryTest {
         new BaseProvider(true, 5) {
           @Override
           public NameResolver newNameResolver(URI passedUri, NameResolver.Helper passedHelper) {
-            assertThat(passedUri).isSameAs(uri);
-            assertThat(passedHelper).isSameAs(helper);
+            assertThat(passedUri).isSameInstanceAs(uri);
+            assertThat(passedHelper).isSameInstanceAs(helper);
             return null;
           }
         });
@@ -141,7 +141,7 @@ public class NameResolverRegistryTest {
             throw new AssertionError();
           }
         });
-    assertThat(registry.asFactory().newNameResolver(uri, helper)).isSameAs(nr);
+    assertThat(registry.asFactory().newNameResolver(uri, helper)).isSameInstanceAs(nr);
   }
 
   @Test

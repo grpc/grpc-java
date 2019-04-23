@@ -70,7 +70,7 @@ public class TokenAttachingTracerFactoryTest {
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameAs(fakeTracer);
+    assertThat(tracer).isSameInstanceAs(fakeTracer);
     assertThat(headers.getAll(GrpclbConstants.TOKEN_METADATA_KEY)).containsExactly("token0001");
   }
 
@@ -96,7 +96,7 @@ public class TokenAttachingTracerFactoryTest {
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameAs(fakeTracer);
+    assertThat(tracer).isSameInstanceAs(fakeTracer);
     assertThat(headers.get(GrpclbConstants.TOKEN_METADATA_KEY)).isNull();
   }
 

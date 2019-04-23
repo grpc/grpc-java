@@ -268,7 +268,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
       // We don't wrap Subchannels, thus origLb gets the original Subchannels.
-      assertThat(createSubchannel(i, attrs)).isSameAs(subchannels[i]);
+      assertThat(createSubchannel(i, attrs)).isSameInstanceAs(subchannels[i]);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -442,7 +442,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     FakeSubchannel subchannel = (FakeSubchannel) createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     SubchannelStateListener mockListener = mockStateListeners[0];
     InOrder inOrder = inOrder(mockListener, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
@@ -516,7 +516,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     SubchannelStateListener mockStateListener = mockStateListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder =
         inOrder(mockStateListener, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
@@ -657,7 +657,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -701,7 +701,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -755,7 +755,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
     // Underlying subchannel is not READY initially
@@ -803,7 +803,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     SubchannelStateListener mockListener = mockStateListeners[0];
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockListener);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -863,7 +863,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     SubchannelStateListener mockListener = mockStateListeners[0];
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockListener);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -935,7 +935,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     SubchannelStateListener mockListener = mockStateListeners[0];
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
     InOrder inOrder = inOrder(origLb, mockListener);
     HealthImpl healthImpl = healthImpls[0];
 
@@ -1021,7 +1021,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
     SubchannelStateListener mockListener = mockStateListeners[0];
-    assertThat(subchannel).isSameAs(subchannels[0]);
+    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
 
     // Trigger the health check
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));

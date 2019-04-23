@@ -132,7 +132,7 @@ public class CachedSubchannelPoolTest {
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
     assertThat(subchannel2).isNotNull();
-    assertThat(subchannel2).isNotSameAs(subchannel1);
+    assertThat(subchannel2).isNotSameInstanceAs(subchannel1);
     verify(helper).createSubchannel(argsWith(EAG2, "2"));
 
     pool.returnSubchannel(subchannel1);
@@ -162,7 +162,7 @@ public class CachedSubchannelPoolTest {
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
     assertThat(subchannel2).isNotNull();
-    assertThat(subchannel2).isNotSameAs(subchannel1);
+    assertThat(subchannel2).isNotSameInstanceAs(subchannel1);
     verify(helper).createSubchannel(argsWith(EAG2, "2"));
 
     pool.returnSubchannel(subchannel1);
@@ -172,7 +172,7 @@ public class CachedSubchannelPoolTest {
 
     // This will cancel the shutdown timer for subchannel1
     Subchannel subchannel1a = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
-    assertThat(subchannel1a).isSameAs(subchannel1);
+    assertThat(subchannel1a).isSameInstanceAs(subchannel1);
 
     pool.returnSubchannel(subchannel2);
 
@@ -184,7 +184,7 @@ public class CachedSubchannelPoolTest {
 
     // pool will create a new channel for EAG2 when requested
     Subchannel subchannel2a = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
-    assertThat(subchannel2a).isNotSameAs(subchannel2);
+    assertThat(subchannel2a).isNotSameInstanceAs(subchannel2);
     verify(helper, times(2)).createSubchannel(argsWith(EAG2, "2"));
 
     // subchannel1 expires SHUTDOWN_TIMEOUT_MS after being returned
@@ -222,11 +222,13 @@ public class CachedSubchannelPoolTest {
     SubchannelStateListener mockListener2 = mock(SubchannelStateListener.class);
 
     // Saved state is populated to new mockListeners
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1)).isSameAs(subchannel1);
+    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1))
+        .isSameInstanceAs(subchannel1);
     verify(mockListener1).onSubchannelState(same(subchannel1), same(anotherFailureState));
     verifyNoMoreInteractions(mockListener1);
 
-    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener2)).isSameAs(subchannel2);
+    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener2))
+        .isSameInstanceAs(subchannel2);
     verify(mockListener2).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
     verifyNoMoreInteractions(mockListener2);
 
@@ -278,7 +280,7 @@ public class CachedSubchannelPoolTest {
             .setAddresses(EAG1).setStateListener(mockListener)
             .build());
     Subchannel subchannel1c = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
-    assertThat(subchannel1).isNotSameAs(subchannel1c);
+    assertThat(subchannel1).isNotSameInstanceAs(subchannel1c);
     try {
       pool.returnSubchannel(subchannel1);
       fail("Should throw");
