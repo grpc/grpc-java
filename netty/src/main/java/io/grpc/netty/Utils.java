@@ -257,8 +257,10 @@ class Utils {
       return Class
           .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class)
           .getConstructor(Integer.TYPE, ThreadFactory.class);
-    } catch (ClassNotFoundException | NoSuchMethodException e) {
+    } catch (ClassNotFoundException e) {
       throw new RuntimeException("Cannot load EpollEventLoopGroup", e);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException("EpollEventLoopGroup constructor not found", e);
     }
   }
 
