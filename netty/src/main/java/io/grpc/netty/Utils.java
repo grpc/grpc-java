@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.CONTENT_TYPE_KEY;
 import static io.grpc.internal.TransportFrameUtil.toHttp2Headers;
 import static io.grpc.internal.TransportFrameUtil.toRawSerializedHeaders;
@@ -46,6 +47,7 @@ import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -82,13 +84,15 @@ class Utils {
   public static final Class<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_TYPE;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
 
+  @Nullable
+  private static final Constructor<? extends EventLoopGroup> EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR;
+
   static {
     // Decide default channel types and EventLoopGroup based on Epoll availability
     if (isEpollAvailable()) {
       DEFAULT_SERVER_CHANNEL_TYPE = epollServerChannelType();
       DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
-      // Verifies if the EpollEventLoopGroup is available.
-      Class<? extends EventLoopGroup> unused = epollEventLoopGroupType();
+      EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
         = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
       DEFAULT_WORKER_EVENT_LOOP_GROUP
@@ -99,6 +103,7 @@ class Utils {
       DEFAULT_CLIENT_CHANNEL_TYPE = NioSocketChannel.class;
       DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
+      EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = null;
     }
   }
 
@@ -247,14 +252,16 @@ class Utils {
   }
 
   // Must call when epoll is available
-  private static Class<? extends EventLoopGroup> epollEventLoopGroupType() {
+  private static Constructor<? extends EventLoopGroup> epollEventLoopGroupConstructor() {
     try {
       return Class
-          .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class);
-    } catch (ClassNotFoundException e) {
+          .forName("io.netty.channel.epoll.EpollEventLoopGroup").asSubclass(EventLoopGroup.class)
+          .getConstructor(Integer.TYPE, ThreadFactory.class);
+    } catch (ClassNotFoundException | NoSuchMethodException e) {
       throw new RuntimeException("Cannot load EpollEventLoopGroup", e);
     }
   }
+
 
   // Must call when epoll is available
   private static Class<? extends ServerChannel> epollServerChannelType() {
@@ -272,9 +279,10 @@ class Utils {
   private static EventLoopGroup createEpollEventLoopGroup(
       int parallelism,
       ThreadFactory threadFactory) {
+    checkState(EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR != null, "Epoll is not available");
+
     try {
-      return epollEventLoopGroupType()
-          .getConstructor(Integer.TYPE, ThreadFactory.class)
+      return EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR
           .newInstance(parallelism, threadFactory);
     } catch (Exception e) {
       throw new RuntimeException("Cannot create Epoll EventLoopGroup", e);
