@@ -47,11 +47,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /** Unit tests for {@link XdsLoadReportStore}. */
+@RunWith(JUnit4.class)
 public class XdsLoadReportStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
