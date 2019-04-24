@@ -207,6 +207,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
                           Value.newBuilder().setStringValue(serviceName).build())))
               .build();
       lrsRequestWriter.onNext(initRequest);
+      logger.log(ChannelLogLevel.DEBUG, "Initial LRS request sent: {0}", initRequest);
     }
 
     @Override
@@ -272,17 +273,19 @@ final class XdsLrsClient implements XdsLoadStatsManager {
       if (closed) {
         return;
       }
-      logger.log(ChannelLogLevel.DEBUG, "Got an LRS response: {0}", response);
 
       if (!initialResponseReceived) {
+        logger.log(ChannelLogLevel.DEBUG, "Received LRS initial response: {0}", response);
         initialResponseReceived = true;
+      } else {
+        logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
       if (serviceList.size() != 1 || !serviceList.get(0).equals(serviceName)) {
-        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): %s with EDS response: %s",
+        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): {0} with EDS response: {1}",
             serviceList, serviceName);
         return;
       }
@@ -311,6 +314,8 @@ final class XdsLrsClient implements XdsLoadStatsManager {
         delayNanos =
             lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
+      logger.log(ChannelLogLevel.DEBUG, "LRS stream closed, backoff in {0} second(s)",
+          TimeUnit.NANOSECONDS.toSeconds(delayNanos <= 0 ? 0 : delayNanos));
       if (delayNanos <= 0) {
         startLrsRpc();
       } else {

@@ -55,7 +55,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.text.MessageFormat;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Random;
@@ -67,6 +66,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
@@ -76,6 +77,7 @@ import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link XdsLrsClient}. */
+@RunWith(JUnit4.class)
 public class XdsLrsClientTest {
 
   private static final String SERVICE_AUTHORITY = "api.google.com";
@@ -102,7 +104,7 @@ public class XdsLrsClientTest {
           throw new AssertionError(e);
         }
       });
-  private final ArrayList<String> logs = new ArrayList<>();
+  private final LinkedList<String> logs = new LinkedList<>();
   private final ChannelLogger channelLogger = new ChannelLogger() {
     @Override
     public void log(ChannelLogLevel level, String msg) {
@@ -185,8 +187,11 @@ public class XdsLrsClientTest {
     when(helper.getChannelLogger()).thenReturn(channelLogger);
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
     when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
-    when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
-    when(backoffPolicy2.nextBackoffNanos()).thenReturn(10L, 100L);
+    when(backoffPolicy1.nextBackoffNanos())
+        .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
+    when(backoffPolicy2.nextBackoffNanos())
+        .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
+    logs.clear();
     lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
         backoffPolicyProvider, new XdsLoadReportStore(SERVICE_AUTHORITY));
     lrsClient.startLoadReporting();
@@ -249,10 +254,12 @@ public class XdsLrsClientTest {
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
     InOrder inOrder = inOrder(requestObserver);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
 
     responseObserver.onNext(buildLrsResponse(1453));
     assertThat(logs).containsExactly(
-        "DEBUG: Got an LRS response: " + buildLrsResponse(1453));
+        "DEBUG: Received LRS initial response: " + buildLrsResponse(1453));
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1453));
   }
 
@@ -264,13 +271,18 @@ public class XdsLrsClientTest {
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
     InOrder inOrder = inOrder(requestObserver);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
 
     responseObserver.onNext(buildLrsResponse(1362));
     assertThat(logs).containsExactly(
-        "DEBUG: Got an LRS response: " + buildLrsResponse(1362));
+        "DEBUG: Received LRS initial response: " + buildLrsResponse(1362));
+    logs.poll();
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1362));
 
     responseObserver.onNext(buildLrsResponse(2183345));
+    assertThat(logs).containsExactly(
+        "DEBUG: Received an LRS response: " + buildLrsResponse(2183345));
     // Updated load reporting interval becomes effective immediately.
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(2183345));
   }
@@ -316,8 +328,6 @@ public class XdsLrsClientTest {
     dropCounters.put("throttle", new AtomicLong(numThrottleDrops));
 
     responseObserver.onNext(buildLrsResponse(1362));
-    assertThat(logs).containsExactly(
-        "DEBUG: Got an LRS response: " + buildLrsResponse(1362));
 
     ClusterStats expectedStats = ClusterStats.newBuilder()
         .setClusterName(SERVICE_AUTHORITY)
@@ -365,18 +375,22 @@ public class XdsLrsClientTest {
 
     // First balancer RPC
     verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer closes it immediately (erroneously)
     responseObserver.onCompleted();
 
-    // Will start backoff sequence 1 (10ns)
+    // Will start backoff sequence 1 (1s)
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 1 second(s)");
+    logs.poll();
     assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Fast-forward to a moment before the retry
-    fakeClock.forwardNanos(9);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) - 1);
     verifyNoMoreInteractions(mockLoadReportingService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -385,17 +399,21 @@ public class XdsLrsClientTest {
     assertEquals(1, lrsRequestObservers.size());
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer closes it with an error.
     responseObserver.onError(Status.UNAVAILABLE.asException());
-    // Will continue the backoff sequence 1 (100ns)
+    // Will continue the backoff sequence 1 (10s)
     verifyNoMoreInteractions(backoffPolicyProvider);
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 10 second(s)");
+    logs.poll();
     assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Fast-forward to a moment before the retry
-    fakeClock.forwardNanos(100 - 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(10) - 1);
     verifyNoMoreInteractions(mockLoadReportingService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -404,10 +422,15 @@ public class XdsLrsClientTest {
     assertEquals(1, lrsRequestObservers.size());
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer sends initial response.
     responseObserver.onNext(buildLrsResponse(0));
+    assertThat(logs).containsExactly(
+        "DEBUG: Received LRS initial response: " + buildLrsResponse(0));
+    logs.poll();
 
     // Then breaks the RPC
     responseObserver.onError(Status.UNAVAILABLE.asException());
@@ -415,6 +438,9 @@ public class XdsLrsClientTest {
     // Will reset the retry sequence and retry immediately, because balancer has responded.
     inOrder.verify(backoffPolicyProvider).get();
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 0 second(s)",
+        "DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.clear();
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertEquals(1, lrsRequestObservers.size());
     requestObserver = lrsRequestObservers.poll();
@@ -424,12 +450,15 @@ public class XdsLrsClientTest {
     fakeClock.forwardNanos(4);
     responseObserver.onError(Status.UNAVAILABLE.asException());
 
-    // Will be on the first retry (10ns) of backoff sequence 2.
+    // Will be on the first retry (1s) of backoff sequence 2.
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    // The logged backoff time will be 0 seconds as it is in granularity of seconds.
+    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 0 second(s)");
+    logs.poll();
     assertEquals(1, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Fast-forward to a moment before the retry, the time spent in the last try is deducted.
-    fakeClock.forwardNanos(10 - 4 - 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) - 4 - 1);
     verifyNoMoreInteractions(mockLoadReportingService);
     // Then time for retry
     fakeClock.forwardNanos(1);
@@ -437,6 +466,7 @@ public class XdsLrsClientTest {
     assertEquals(1, lrsRequestObservers.size());
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Wrapping up
