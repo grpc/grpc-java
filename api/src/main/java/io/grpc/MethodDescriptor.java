@@ -262,7 +262,7 @@ public final class MethodDescriptor<ReqT, RespT> {
    * @since 1.21.0
    */
   @Nullable
-  @ExperimentalApi("FIXME")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
   public String getServiceName() {
     return serviceName;
   }
