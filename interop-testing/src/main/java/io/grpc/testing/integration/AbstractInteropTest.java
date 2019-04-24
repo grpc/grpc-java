@@ -1228,7 +1228,6 @@ public abstract class AbstractInteropTest {
       fail();
     } catch (StatusRuntimeException ex) {
       Status s = ex.getStatus();
-
       assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
       assertThat(Throwables.getStackTraceAsString(ex)).contains("exceeds maximum");
     }
