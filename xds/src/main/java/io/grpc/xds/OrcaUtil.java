@@ -16,6 +16,9 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
@@ -26,6 +29,7 @@ import io.grpc.Metadata;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.util.ForwardingClientStreamTracer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -46,27 +50,27 @@ public final class OrcaUtil {
 
   /**
    * Creates a new {@link ClientStreamTracer.Factory} with provided {@link OrcaReportListener}
-   * installed to receive callback when an per-request ORCA report is received.
+   * installed to receive callback when a per-request ORCA report is received.
    *
-   * @param listener contains the callback to be invoked when an per-request ORCA report is
+   * @param listener contains the callback to be invoked when a per-request ORCA report is
    *     received.
    */
   public static ClientStreamTracer.Factory newOrcaClientStreamTracerFactory(
       OrcaReportListener listener) {
-    return newOrcaClientStreamTracerFacotry(NOOP_CLIENT_STREAM_TRACER_FACTORY, listener);
+    return newOrcaClientStreamTracerFactory(NOOP_CLIENT_STREAM_TRACER_FACTORY, listener);
   }
 
   /**
    * Creates a new {@link ClientStreamTracer.Factory} with provided {@link OrcaReportListener}
-   * installed to receive callback when an per-request ORCA report is received.
+   * installed to receive callback when a per-request ORCA report is received.
    *
    * @param delegate the delegate factory to produce other client stream tracing.
-   * @param listener contains the callback to be invoked when an per-request ORCA report is
+   * @param listener contains the callback to be invoked when a per-request ORCA report is
    *     received.
    */
-  public static ClientStreamTracer.Factory newOrcaClientStreamTracerFacotry(
+  public static ClientStreamTracer.Factory newOrcaClientStreamTracerFactory(
       ClientStreamTracer.Factory delegate, OrcaReportListener listener) {
-    return new OrcaClientStreamTracerFactory(delegate, listener);
+    return new OrcaReportingTracerFactory(delegate, listener);
   }
 
   /**
@@ -104,22 +108,25 @@ public final class OrcaUtil {
     void onLoadReport(OrcaLoadReport report);
   }
 
-  private static final class OrcaClientStreamTracerFactory extends ClientStreamTracer.Factory {
+  @VisibleForTesting
+  static final class OrcaReportingTracerFactory extends ClientStreamTracer.Factory {
 
-    private static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =
+    @VisibleForTesting
+    static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =
         CallOptions.Key.create("internal-orca-report-broker");
-    private static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
+    @VisibleForTesting
+    static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
         Metadata.Key.of(
-            "X-Endpoint-Load-Metrics-Bin",
+            "x-endpoint-load-metrics-bin",
             ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
 
     private final ClientStreamTracer.Factory delegate;
     private final OrcaReportListener listener;
 
-    OrcaClientStreamTracerFactory(
+    OrcaReportingTracerFactory(
         ClientStreamTracer.Factory delegate, OrcaReportListener listener) {
-      this.delegate = delegate;
-      this.listener = listener;
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.listener = checkNotNull(listener, "listener");
     }
 
     @Override
@@ -148,6 +155,7 @@ public final class OrcaUtil {
       if (augmented) {
         final ClientStreamTracer currTracer = tracer;
         final OrcaReportBroker currBroker = broker;
+        // The actual tracer that performs ORCA report deserialization.
         tracer = new ForwardingClientStreamTracer() {
           @Override
           protected ClientStreamTracer delegate() {
@@ -172,12 +180,18 @@ public final class OrcaUtil {
    * An {@link OrcaReportBroker} instance holds registered {@link OrcaReportListener}s and invoke
    * all of them when an {@link OrcaLoadReport} is received.
    */
-  private static final class OrcaReportBroker {
+  @VisibleForTesting
+  static final class OrcaReportBroker {
 
     private final List<OrcaReportListener> listeners = new ArrayList<>();
 
     void addListener(OrcaReportListener listener) {
       listeners.add(listener);
+    }
+
+    @VisibleForTesting
+    List<OrcaReportListener> getListeners() {
+      return Collections.unmodifiableList(listeners);
     }
 
     void onReport(OrcaLoadReport report) {
