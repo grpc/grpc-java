@@ -225,6 +225,49 @@ public class LoadBalancerTest {
     }.getAddresses();
   }
 
+  @Test
+  public void createSubchannelArgs_option_keyOps() {
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    String testValue = "test-value";
+    CreateSubchannelArgs.Key<String> testWithDefaultKey = CreateSubchannelArgs.Key
+        .createWithDefault("test-key", testValue);
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .build();
+    assertThat(args.getOption(testKey)).isNull();
+    assertThat(args.getOption(testWithDefaultKey)).isSameInstanceAs(testValue);
+  }
+
+  @Test
+  public void createSubchannelArgs_option_addGet() {
+    String testValue = "test-value";
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey, testValue)
+        .build();
+    assertThat(args.getOption(testKey)).isEqualTo(testValue);
+  }
+
+  @Test
+  public void createSubchannelArgs_option_lastOneWins() {
+    String testValue1 = "test-value-1";
+    String testValue2 = "test-value-2";
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey, testValue1)
+        .addOption(testKey, testValue2)
+        .build();
+    assertThat(args.getOption(testKey)).isEqualTo(testValue2);
+  }
+
   @Deprecated
   @Test
   public void handleResolvedAddressGroups_delegatesToHandleResolvedAddresses() {
