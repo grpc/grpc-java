@@ -195,7 +195,7 @@ final class ServiceConfigInterceptor implements ClientInterceptor {
       info = mcsc.getServiceMethodMap().get(method.getFullMethodName());
     }
     if (info == null && mcsc != null) {
-      String serviceName = MethodDescriptor.extractFullServiceName(method.getFullMethodName());
+      String serviceName = method.getServiceName();
       info = mcsc.getServiceMap().get(serviceName);
     }
     return info;
