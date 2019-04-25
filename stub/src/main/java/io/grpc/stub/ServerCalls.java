@@ -129,7 +129,7 @@ public final class ServerCalls {
       private final ServerCall<ReqT, RespT> call;
       private final ServerCallStreamObserverImpl<ReqT, RespT> responseObserver;
       private boolean canInvoke = true;
-      private boolean messageReceived = false;
+      private boolean messageReceived;
       private ReqT request;
 
       // Non private to avoid synthetic class
