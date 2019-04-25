@@ -55,8 +55,8 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.text.MessageFormat;
+import java.util.ArrayDeque;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -104,7 +104,7 @@ public class XdsLrsClientTest {
           throw new AssertionError(e);
         }
       });
-  private final LinkedList<String> logs = new LinkedList<>();
+  private final ArrayDeque<String> logs = new ArrayDeque<>();
   private final ChannelLogger channelLogger = new ChannelLogger() {
     @Override
     public void log(ChannelLogLevel level, String msg) {
@@ -117,9 +117,9 @@ public class XdsLrsClientTest {
     }
   };
   private LoadReportingServiceGrpc.LoadReportingServiceImplBase mockLoadReportingService;
-  private FakeClock fakeClock = new FakeClock();
-  private final LinkedList<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
-      new LinkedList<>();
+  private final FakeClock fakeClock = new FakeClock();
+  private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
+      new ArrayDeque<>();
   @Captor
   private ArgumentCaptor<StreamObserver<LoadStatsResponse>> lrsResponseObserverCaptor;
 
@@ -370,7 +370,7 @@ public class XdsLrsClientTest {
         backoffPolicy2);
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
     // First balancer RPC
@@ -396,7 +396,7 @@ public class XdsLrsClientTest {
     fakeClock.forwardNanos(1);
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     responseObserver = lrsResponseObserverCaptor.getValue();
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
@@ -419,7 +419,7 @@ public class XdsLrsClientTest {
     fakeClock.forwardNanos(1);
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     responseObserver = lrsResponseObserverCaptor.getValue();
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
@@ -442,7 +442,7 @@ public class XdsLrsClientTest {
         "DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.clear();
     responseObserver = lrsResponseObserverCaptor.getValue();
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
 
@@ -463,7 +463,7 @@ public class XdsLrsClientTest {
     // Then time for retry
     fakeClock.forwardNanos(1);
     inOrder.verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
     verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
@@ -479,7 +479,7 @@ public class XdsLrsClientTest {
   public void raceBetweenLoadReportingAndLbStreamClosure() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
-    assertEquals(1, lrsRequestObservers.size());
+    assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
     InOrder inOrder = inOrder(requestObserver);
 
