@@ -32,7 +32,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import io.grpc.Attributes;
-import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -41,7 +40,6 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.grpclb.CachedSubchannelPool.ShutdownSubchannelTask;
 import io.grpc.internal.FakeClock;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -67,19 +65,8 @@ public class CachedSubchannelPoolTest {
   private static final Attributes.Key<String> ATTR_KEY = Attributes.Key.create("test-attr");
   private static final Attributes ATTRS1 = Attributes.newBuilder().set(ATTR_KEY, "1").build();
   private static final Attributes ATTRS2 = Attributes.newBuilder().set(ATTR_KEY, "2").build();
-  private static final ConnectivityStateInfo READY_STATE =
-      ConnectivityStateInfo.forNonError(ConnectivityState.READY);
   private static final ConnectivityStateInfo TRANSIENT_FAILURE_STATE =
       ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("Simulated"));
-  private static final FakeClock.TaskFilter SHUTDOWN_TASK_FILTER =
-      new FakeClock.TaskFilter() {
-        @Override
-        public boolean shouldAccept(Runnable command) {
-          // The task is wrapped by SynchronizationContext, so we can't compare the type
-          // directly.
-          return command.toString().contains(ShutdownSubchannelTask.class.getSimpleName());
-        }
-      };
 
   private final Helper helper = mock(Helper.class);
   private final SubchannelStateListener mockListener = mock(SubchannelStateListener.class);
@@ -238,7 +225,7 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void takeTwice_willThrow() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel unused = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
     try {
       pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
       fail("Should throw");
