@@ -129,6 +129,7 @@ public final class ServerCalls {
       private final ServerCall<ReqT, RespT> call;
       private final ServerCallStreamObserverImpl<ReqT, RespT> responseObserver;
       private boolean canInvoke = true;
+      private boolean messageReceived = false;
       private ReqT request;
 
       // Non private to avoid synthetic class
@@ -153,6 +154,7 @@ public final class ServerCalls {
         // We delay calling method.invoke() until onHalfClose() to make sure the client
         // half-closes.
         this.request = request;
+        this.messageReceived = true;
       }
 
       @Override
@@ -160,7 +162,7 @@ public final class ServerCalls {
         if (!canInvoke) {
           return;
         }
-        if (request == null) {
+        if (!messageReceived) {
           // Safe to close the call, because the application has not yet been invoked
           call.close(
               Status.INTERNAL.withDescription(MISSING_REQUEST),
@@ -169,6 +171,7 @@ public final class ServerCalls {
         }
 
         method.invoke(request, responseObserver);
+        request = null;
         responseObserver.freeze();
         if (call.isReady()) {
           // Since we are calling invoke in halfClose we have missed the onReady
