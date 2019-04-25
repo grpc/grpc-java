@@ -370,7 +370,7 @@ public final class CallOptions {
    * calls and 'wait for ready' is the opposite to it.
    */
   public boolean isWaitForReady() {
-    return waitForReady;
+    return Boolean.TRUE.equals(waitForReady);
   }
 
   Boolean getWaitForReady() {
