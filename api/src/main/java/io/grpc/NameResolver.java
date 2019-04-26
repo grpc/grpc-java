@@ -129,6 +129,7 @@ public abstract class NameResolver {
    *
    * @since 1.0.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Factory {
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
@@ -268,6 +269,7 @@ public abstract class NameResolver {
    *
    * @since 1.21.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Observer implements Listener {
     /**
      * @deprecated This will be removed in 1.21.0
@@ -314,6 +316,7 @@ public abstract class NameResolver {
    *
    * @since 1.19.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Helper {
     /**
      * The port number used in case the target or the underlying naming system doesn't provide a
@@ -466,6 +469,7 @@ public abstract class NameResolver {
      *
      * @since 1.21.0
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
     public static final class Builder {
       private List<EquivalentAddressGroup> addresses = Collections.emptyList();
       private Attributes attributes = Attributes.EMPTY;
@@ -524,6 +528,7 @@ public abstract class NameResolver {
    *
    * @since 1.21.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class ConfigOrError {
 
     /**

@@ -159,6 +159,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
@@ -232,6 +233,7 @@ public abstract class LoadBalancer {
     /**
      * Builder for {@link ResolvedAddresses}.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
       private List<EquivalentAddressGroup> addresses;
       @NameResolver.ResolutionResultAttr
@@ -663,6 +665,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public static final class CreateSubchannelArgs {
     private final List<EquivalentAddressGroup> addrs;
     private final Attributes attrs;
@@ -739,6 +742,7 @@ public abstract class LoadBalancer {
           && Objects.equal(stateListener, that.stateListener);
     }
 
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
