@@ -169,6 +169,7 @@ public final class ServerCalls {
         }
 
         method.invoke(request, responseObserver);
+        request = null;
         responseObserver.freeze();
         if (call.isReady()) {
           // Since we are calling invoke in halfClose we have missed the onReady
