@@ -670,12 +670,14 @@ public abstract class LoadBalancer {
     private final List<EquivalentAddressGroup> addrs;
     private final Attributes attrs;
     private final SubchannelStateListener stateListener;
+    private final Object[][] customOptions;
 
     private CreateSubchannelArgs(
-        List<EquivalentAddressGroup> addrs, Attributes attrs,
+        List<EquivalentAddressGroup> addrs, Attributes attrs, Object[][] customOptions,
         SubchannelStateListener stateListener) {
       this.addrs = checkNotNull(addrs, "addresses are not set");
       this.attrs = checkNotNull(attrs, "attrs");
+      this.customOptions = checkNotNull(customOptions, "customOptions");
       this.stateListener = checkNotNull(stateListener, "SubchannelStateListener is not set");
     }
 
@@ -691,6 +693,22 @@ public abstract class LoadBalancer {
      */
     public Attributes getAttributes() {
       return attrs;
+    }
+
+    /**
+     * Get the value for a custom option or its inherent default.
+     *
+     * @param key Key identifying option
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getOption(Key<T> key) {
+      Preconditions.checkNotNull(key, "key");
+      for (int i = 0; i < customOptions.length; i++) {
+        if (key.equals(customOptions[i][0])) {
+          return (T) customOptions[i][1];
+        }
+      }
+      return key.defaultValue;
     }
 
     /**
@@ -744,11 +762,43 @@ public abstract class LoadBalancer {
 
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
       private SubchannelStateListener stateListener;
+      private Object[][] customOptions = new Object[0][2];
 
       Builder() {
+      }
+
+      /**
+       * Add a custom option. Any existing value for the key is overwritten.
+       *
+       * <p>This is an <strong>optional</strong> property.
+       *
+       * @param key the option key
+       * @param value the option value
+       */
+      public <T> Builder addOption(Key<T> key, T value) {
+        Preconditions.checkNotNull(key, "key");
+        Preconditions.checkNotNull(value, "value");
+
+        int existingIdx = -1;
+        for (int i = 0; i < customOptions.length; i++) {
+          if (key.equals(customOptions[i][0])) {
+            existingIdx = i;
+            break;
+          }
+        }
+
+        if (existingIdx == -1) {
+          Object[][] newCustomOptions = new Object[customOptions.length + 1][2];
+          System.arraycopy(customOptions, 0, newCustomOptions, 0, customOptions.length);
+          customOptions = newCustomOptions;
+          existingIdx = customOptions.length - 1;
+        }
+        customOptions[existingIdx] = new Object[]{key, value};
+        return this;
       }
 
       /**
@@ -773,7 +823,7 @@ public abstract class LoadBalancer {
         this.addrs = Collections.unmodifiableList(new ArrayList<>(addrs));
         return this;
       }
-      
+
       /**
        * Attributes provided here will be included in {@link Subchannel#getAttributes}.
        *
@@ -800,7 +850,60 @@ public abstract class LoadBalancer {
        * Creates a new args object.
        */
       public CreateSubchannelArgs build() {
-        return new CreateSubchannelArgs(addrs, attrs, stateListener);
+        return new CreateSubchannelArgs(addrs, attrs, customOptions, stateListener);
+      }
+    }
+
+    /**
+     * Key for a key-value pair. Uses reference equality.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+    public static final class Key<T> {
+
+      private final String debugString;
+      private final T defaultValue;
+
+      private Key(String debugString, T defaultValue) {
+        this.debugString = debugString;
+        this.defaultValue = defaultValue;
+      }
+
+      /**
+       * Factory method for creating instances of {@link Key}. The default value of the key is
+       * {@code null}.
+       *
+       * @param debugString a debug string that describes this key.
+       * @param <T> Key type
+       * @return Key object
+       */
+      public static <T> Key<T> create(String debugString) {
+        Preconditions.checkNotNull(debugString, "debugString");
+        return new Key<>(debugString, /*defaultValue=*/ null);
+      }
+
+      /**
+       * Factory method for creating instances of {@link Key}.
+       *
+       * @param debugString a debug string that describes this key.
+       * @param defaultValue default value to return when value for key not set
+       * @param <T> Key type
+       * @return Key object
+       */
+      public static <T> Key<T> createWithDefault(String debugString, T defaultValue) {
+        Preconditions.checkNotNull(debugString, "debugString");
+        return new Key<>(debugString, defaultValue);
+      }
+
+      /**
+       * Returns the user supplied default value for this key.
+       */
+      public T getDefault() {
+        return defaultValue;
+      }
+
+      @Override
+      public String toString() {
+        return debugString;
       }
     }
   }
