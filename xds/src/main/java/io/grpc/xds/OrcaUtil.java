@@ -16,22 +16,48 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Stopwatch;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
+import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
+import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
+import io.grpc.Channel;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientCall;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
+import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
+import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.protobuf.ProtoUtils;
 import io.grpc.util.ForwardingClientStreamTracer;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.Nullable;
 
 /**
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
@@ -81,12 +107,15 @@ public final class OrcaUtil {
    *     backends.
    * @param listener contains the callback to be invoked when an out-of-band ORCA report is
    *     received.
+   * @param backoffPolicyProvider the provider of backoff policy used to backoff failure of ORCA
+   *     service streaming.
    * @param maxReportInterval the maximum expected interval of receiving periodical ORCA reports.
    * @param unit time unit of {@code maxReportInterval} value.
    */
   public static LoadBalancer.Helper newOrcaReportingHelper(
       LoadBalancer.Helper delegate,
       OrcaReportListener listener,
+      BackoffPolicy.Provider backoffPolicyProvider,
       long maxReportInterval,
       TimeUnit unit) {
     // TODO(chengyuanzhang): create a LoadReportingHelper that intercepts createSubChannel() method.
@@ -199,5 +228,179 @@ public final class OrcaUtil {
         listener.onLoadReport(report);
       }
     }
+  }
+
+
+  /**
+   * An {@link OrcaReportingHelper} wraps a delegated {@link LoadBalancer.Helper} with additional
+   * functionality to manages ORCA reporting processes to all the backends of the service.
+   */
+  private static final class OrcaReportingHelper extends ForwardingLoadBalancerHelper {
+    private final LoadBalancer.Helper delegate;
+    private final OrcaReportListener listener;
+    private final SynchronizationContext syncContext;
+    private final BackoffPolicy.Provider backoffPolicyProvider;
+    private final Set<OrcaReportingState> orcaReportingStates = new HashSet<>();
+
+    OrcaReportingHelper(LoadBalancer.Helper delegate,
+        OrcaReportListener listener,
+        BackoffPolicy.Provider backoffPolicyProvider) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.listener = checkNotNull(listener, "listener");
+      this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+      syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
+    }
+
+    @Override
+    protected Helper delegate() {
+      return delegate;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      return super.createSubchannel(args);
+    }
+  }
+
+  /**
+   * An {@link OrcaReportingState} is the client of {@link OpenRcaServiceGrpc} for a single backend.
+   */
+  private static final class OrcaReportingState implements SubchannelStateListener {
+    private final Runnable retryTask = new Runnable() {
+      @Override
+      public void run() {
+        startRpc();
+      }
+    };
+
+    private final SubchannelStateListener stateListener;
+    private final SynchronizationContext syncContext;
+    private final ScheduledExecutorService timeService;
+
+    private Subchannel subchannel;
+    private ChannelLogger subchannelLogger;
+    private String serviceName;
+    private BackoffPolicy backoffPolicy;
+
+    @Nullable
+    private OrcaReportingStream activeRpc;
+    @Nullable
+    private ScheduledHandle retryTimer;
+
+    OrcaReportingState(SubchannelStateListener stateListener,
+        SynchronizationContext syncContext,
+        ScheduledExecutorService timeService) {
+      this.stateListener = checkNotNull(stateListener, "stateListener");
+      this.syncContext = checkNotNull(syncContext, "syncContext");
+      this.timeService = checkNotNull(timeService, "timeService");
+    }
+
+    void init(Subchannel subchannel) {
+      checkState(this.subchannel == null, "init() already called");
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
+    }
+
+    void setServiceName(@Nullable String serviceName) {
+      if (Objects.equals(serviceName, this.serviceName)) {
+        return;
+      }
+      this.serviceName = serviceName;
+
+    }
+
+    @Override
+    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+      checkArgument(subchannel == this.subchannel, "Subchannel mismatch: %s vs %s", subchannel, this.subchannel);
+
+    }
+
+    private void adjustOrcaReporting() {
+
+    }
+
+    private void startRpc() {
+
+    }
+
+    private void stopRpc() {
+
+    }
+
+    /**
+     * An {@link OrcaReportingStream} represents the ORCA service connection between the client
+     * and a single backend.
+     */
+    private class OrcaReportingStream extends ClientCall.Listener<OrcaLoadReport> {
+      private final ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call;
+      private final String callServiceName;
+      private final Stopwatch stopwatch;
+      private boolean callHasResponded;
+
+      OrcaReportingStream(String serviceName, Channel channel, Stopwatch stopwatch) {
+        this.callServiceName = checkNotNull(serviceName, "serviceName");
+        // FIXME: is this really the most appropriate time to start the stopwatch?
+        this.stopwatch = checkNotNull(stopwatch, "stopwatch").reset().start();
+        call = checkNotNull(channel, "channel").newCall(OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
+      }
+
+      void start() {
+        call.start(this, new Metadata());
+        // TODO: set report interval and request cost names in the request message.
+        call.sendMessage(OrcaLoadReportRequest.newBuilder().build());
+        call.halfClose();
+        call.request(1);
+      }
+
+      void cancel(String msg) {
+        call.cancel(msg, null);
+      }
+
+      @Override
+      public void onMessage(OrcaLoadReport message) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+
+          }
+        });
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+
+          }
+        });
+      }
+
+      void handleResponse(OrcaLoadReport reponse) {
+        callHasResponded = true;
+
+        // TODO: invoke registered listeners
+        call.request(1);
+      }
+
+      void handleStreamClosed(Status status) {
+
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("serviceName", callServiceName)
+            .add("callStarted", call != null)
+            .toString();
+      }
+
+
+    }
+
+
+
+
   }
 }

@@ -17,11 +17,11 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,7 +29,6 @@ import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.xds.OrcaUtil.OrcaReportBroker;
 import io.grpc.xds.OrcaUtil.OrcaReportListener;
@@ -39,9 +38,11 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 
-/** Unit tests for {@link OrcaUtil}. */
+/**
+ * Unit tests for {@link OrcaUtil}'s methods for per-request ORCA reporting.
+ */
 @RunWith(JUnit4.class)
-public class OrcaUtilTest {
+public class OrcaUtilPerRequestReportingTest {
 
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       new ClientStreamTracer.StreamInfo() {
@@ -110,28 +111,20 @@ public class OrcaUtilTest {
    */
   @Test
   public void twoLevelPoliciesPerRequestListeners() {
-    // Wrap the child factory for the sake of spy.
     OrcaReportListener childListener = mock(OrcaReportListener.class);
-    final ClientStreamTracer.Factory childFactory =
-        OrcaUtil.newOrcaClientStreamTracerFactory(childListener);
-    ClientStreamTracer.Factory forwardingChildFactory =
-        new ClientStreamTracer.Factory() {
-          @Override
-          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-            return childFactory.newClientStreamTracer(info, headers);
-          }
-        };
-    ClientStreamTracer.Factory spyChildFactory = spy(forwardingChildFactory);
+    ClientStreamTracer.Factory childFactory =
+        mock(ClientStreamTracer.Factory.class,
+            delegatesTo(OrcaUtil.newOrcaClientStreamTracerFactory(childListener)));
 
     OrcaReportListener parentListener = mock(OrcaReportListener.class);
     ClientStreamTracer.Factory parentFactory =
-        OrcaUtil.newOrcaClientStreamTracerFactory(spyChildFactory, parentListener);
+        OrcaUtil.newOrcaClientStreamTracerFactory(childFactory, parentListener);
     // Parent factory will augment the StreamInfo with a broker added and pass it to the child
     // factory.
     ClientStreamTracer parentTracer =
         parentFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
     ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
-    verify(spyChildFactory).newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
+    verify(childFactory).newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
     ClientStreamTracer.StreamInfo childStreamInfo = streamInfoCaptor.getValue();
     assertThat(childStreamInfo).isNotEqualTo(STREAM_INFO);
     OrcaReportBroker broker =
