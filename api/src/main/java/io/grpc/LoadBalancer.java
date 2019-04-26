@@ -853,6 +853,7 @@ public abstract class LoadBalancer {
     /**
      * Key for a key-value pair. Uses reference equality.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Key<T> {
 
       private final String debugString;
