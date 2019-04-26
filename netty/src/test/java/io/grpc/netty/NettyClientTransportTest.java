@@ -482,8 +482,8 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(NioSocketChannel.class),
-        group);
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
 
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -496,7 +496,8 @@ public class NettyClientTransportTest {
     startServer();
     NettyClientTransport transport = newTransport(newNegotiator(),
         DEFAULT_MAX_MESSAGE_SIZE, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, "testUserAgent", true,
-        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(LocalChannel.class), group);
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(LocalChannel.class), group);
 
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -618,11 +619,13 @@ public class NettyClientTransportTest {
 
     startServer();
     EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
-    int keepAliveTimeMillis = 1234567;
+    int keepAliveTimeMillis = 12345670;
+    int keepAliveTimeoutMillis = 1234567;
     try {
       NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
           GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, true /* keep alive */,
           TimeUnit.MILLISECONDS.toNanos(keepAliveTimeMillis),
+          TimeUnit.MILLISECONDS.toNanos(keepAliveTimeoutMillis),
           new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup);
 
       callMeMaybe(transport.start(clientTransportListener));
@@ -631,7 +634,7 @@ public class NettyClientTransportTest {
       assertThat(tcpUserTimeoutOption).isNotNull();
       // on some linux based system, the integer value may have error (usually +-1)
       assertThat((double) transport.channel().config().getOption(tcpUserTimeoutOption))
-          .isWithin(5.0).of((double) keepAliveTimeMillis);
+          .isWithin(5.0).of((double) keepAliveTimeoutMillis);
     } finally {
       epollGroup.shutdownGracefully();
     }
@@ -645,9 +648,10 @@ public class NettyClientTransportTest {
     EventLoopGroup epollGroup = Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP.create();
     int keepAliveTimeMillis = 12345670;
     try {
+      long keepAliveTimeNanos = TimeUnit.MILLISECONDS.toNanos(keepAliveTimeMillis);
       NettyClientTransport transport = newTransport(newNegotiator(), DEFAULT_MAX_MESSAGE_SIZE,
           GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, null /* user agent */, false /* keep alive */,
-          TimeUnit.MILLISECONDS.toNanos(keepAliveTimeMillis),
+          keepAliveTimeNanos, keepAliveTimeNanos,
           new ReflectiveChannelFactory<>(Utils.DEFAULT_CLIENT_CHANNEL_TYPE), epollGroup);
 
       callMeMaybe(transport.start(clientTransportListener));
@@ -683,14 +687,14 @@ public class NettyClientTransportTest {
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive) {
     return newTransport(negotiator, maxMsgSize, maxHeaderListSize, userAgent, enableKeepAlive,
-        TimeUnit.SECONDS.toNanos(10L), new ReflectiveChannelFactory<>(NioSocketChannel.class),
-        group);
+        TimeUnit.SECONDS.toNanos(10L), TimeUnit.SECONDS.toNanos(1L),
+        new ReflectiveChannelFactory<>(NioSocketChannel.class), group);
   }
 
   private NettyClientTransport newTransport(ProtocolNegotiator negotiator, int maxMsgSize,
       int maxHeaderListSize, String userAgent, boolean enableKeepAlive, long keepAliveTimeNano,
-      ChannelFactory<? extends Channel> channelFactory, EventLoopGroup group) {
-    long keepAliveTimeoutNano = TimeUnit.SECONDS.toNanos(1L);
+      long keepAliveTimeoutNano, ChannelFactory<? extends Channel> channelFactory,
+      EventLoopGroup group) {
     if (!enableKeepAlive) {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
