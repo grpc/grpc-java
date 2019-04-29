@@ -41,8 +41,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Compressor;
@@ -92,17 +90,7 @@ public class RetriableStreamTest {
   private static final double BACKOFF_MULTIPLIER = 2D;
   private static final double FAKE_RANDOM = .5D;
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.EMPTY;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   static {
     RetriableStream.setRandom(
