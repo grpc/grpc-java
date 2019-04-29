@@ -30,7 +30,6 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
-import io.grpc.xds.OrcaUtil.OrcaReportBroker;
 import io.grpc.xds.OrcaUtil.OrcaReportListener;
 import io.grpc.xds.OrcaUtil.OrcaReportingTracerFactory;
 import org.junit.Test;
@@ -64,7 +63,7 @@ public class OrcaUtilPerRequestReportingTest {
   @Test
   public void singlePolicyPerRequestListener() {
     OrcaReportListener mockListener = mock(OrcaReportListener.class);
-    // Use a mocked noop stream tracer factory.
+    // Use a mocked noop stream tracer factory as the original stream tracer factory.
     ClientStreamTracer.Factory fakeDelegateFactory = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer fakeTracer = mock(ClientStreamTracer.class);
     doNothing().when(fakeTracer).inboundTrailers(any(Metadata.class));
@@ -83,12 +82,6 @@ public class OrcaUtilPerRequestReportingTest {
         .newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
     ClientStreamTracer.StreamInfo capturedInfo = streamInfoCaptor.getValue();
     assertThat(capturedInfo).isNotEqualTo(STREAM_INFO);
-    OrcaReportBroker broker =
-        capturedInfo
-            .getCallOptions()
-            .getOption(OrcaReportingTracerFactory.ORCA_REPORT_BROKER_KEY);
-    assertThat(broker).isNotNull();
-    assertThat(broker.getListeners()).containsExactly(mockListener);
 
     // When the trailer does not contain ORCA report, listener callback will not be invoked.
     Metadata trailer = new Metadata();
@@ -127,11 +120,6 @@ public class OrcaUtilPerRequestReportingTest {
     verify(childFactory).newClientStreamTracer(streamInfoCaptor.capture(), any(Metadata.class));
     ClientStreamTracer.StreamInfo childStreamInfo = streamInfoCaptor.getValue();
     assertThat(childStreamInfo).isNotEqualTo(STREAM_INFO);
-    OrcaReportBroker broker =
-        childStreamInfo
-            .getCallOptions()
-            .getOption(OrcaReportingTracerFactory.ORCA_REPORT_BROKER_KEY);
-    assertThat(broker.getListeners()).containsExactly(parentListener, childListener);
 
     // When the trailer does not contain ORCA report, no listener callback will be invoked.
     Metadata trailer = new Metadata();

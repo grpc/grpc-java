@@ -228,18 +228,12 @@ public final class OrcaUtil {
    * An {@link OrcaReportBroker} instance holds registered {@link OrcaReportListener}s and invoke
    * all of them when an {@link OrcaLoadReport} is received.
    */
-  @VisibleForTesting
-  static final class OrcaReportBroker {
+  private static final class OrcaReportBroker {
 
     private final List<OrcaReportListener> listeners = new ArrayList<>();
 
     void addListener(OrcaReportListener listener) {
       listeners.add(listener);
-    }
-
-    @VisibleForTesting
-    List<OrcaReportListener> getListeners() {
-      return Collections.unmodifiableList(listeners);
     }
 
     void onReport(OrcaLoadReport report) {
@@ -300,7 +294,7 @@ public final class OrcaUtil {
         augmented = true;
       }
       orcaState.broker.addListener(listener);
-      orcaState.setOrcaRequestConfig(orcaConfig);
+      orcaState.setOrcaReportingConfig(orcaConfig);
       Subchannel subchannel;
       if (augmented) {
         subchannel = super.createSubchannel(args.toBuilder().setStateListener(orcaState).build());
@@ -361,7 +355,7 @@ public final class OrcaUtil {
         this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       }
 
-      void setOrcaRequestConfig(OrcaReportingConfig config) {
+      void setOrcaReportingConfig(OrcaReportingConfig config) {
         boolean reconfigured = false;
         // The overall config is the superset of existing config and new config requested by some
         // load balancing policy.
@@ -374,6 +368,8 @@ public final class OrcaUtil {
               && !overallConfig.costNames.containsAll(config.costNames)) {
             overallConfig.costNames.addAll(config.costNames);
             reconfigured = true;
+          } else {
+            overallConfig.costNames.clear();
           }
         } else {
           overallConfig = config;
@@ -414,6 +410,8 @@ public final class OrcaUtil {
       void startRpc() {
         checkState(orcaRpc == null, "previous orca reporting RPC has not been cleaned up");
         checkState(subchannel != null, "init() not called");
+        subchannelLogger.log(
+            ChannelLogLevel.DEBUG, "Starting ORCA reporting for {0}", subchannel.getAllAddresses());
         orcaRpc = new OrcaReportingStream(subchannel.asChannel(), stopwatchSupplier.get());
         orcaRpc.start();
       }
@@ -499,11 +497,11 @@ public final class OrcaUtil {
         }
 
         void handleStreamClosed(Status status) {
-          if (Objects.equal(status.getCode(), Code.UNAUTHENTICATED)) {
+          if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
             disabled = true;
             logger
                 .log(Level.WARNING, "Backend {0} OpenRcaService is disabled. Server returned: {1}",
-                    new Object[]{subchannel.getAddresses(), status});
+                    new Object[]{subchannel.getAllAddresses(), status});
             subchannelLogger.log(ChannelLogLevel.WARNING, "OpenRcaService disabled: {0}", status);
             return;
           }
