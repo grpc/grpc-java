@@ -23,6 +23,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -738,6 +739,7 @@ public abstract class LoadBalancer {
           .add("addrs", addrs)
           .add("attrs", attrs)
           .add("listener", stateListener)
+          .add("customOptions", Arrays.deepToString(customOptions))
           .toString();
     }
 
