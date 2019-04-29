@@ -269,6 +269,103 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void createSubchannelArgs_build() {
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey, "test-value")
+        .build();
+    assertThat(args.toBuilder().addOption(testKey, "test-value-2").build()).isNotEqualTo(args);
+    assertThat(args.toBuilder().build()).isEqualTo(args);
+  }
+
+  @Test
+  public void createSubchannelArgs_equality() {
+    // Custom option's equality are based on identity-based key and value.
+    CreateSubchannelArgs.Key<Object> testKey1 = CreateSubchannelArgs.Key.create("test-key1");
+    CreateSubchannelArgs.Key<Object> testKey2 = CreateSubchannelArgs.Key.create("test-key2");
+    Object testValue1 = new Object();
+    Object testValue2 = new Object();
+    CreateSubchannelArgs args1 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(CreateSubchannelArgs.Key.create("test-key"), testValue1)
+        .build();
+    CreateSubchannelArgs args2 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(CreateSubchannelArgs.Key.create("test-key"), testValue1)
+        .build();
+    assertThat(args1).isNotEqualTo(args2);
+
+    args1 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, new Object())
+        .build();
+    args2 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, new Object())
+        .build();
+    assertThat(args1).isNotEqualTo(args2);
+
+    args1 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, testValue1)
+        .build();
+    args2 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, testValue1)
+        .build();
+    assertThat(args1).isEqualTo(args2);
+
+    // Order of custom options does not matter.
+    args1 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, testValue1)
+        .addOption(testKey2, testValue2)
+        .build();
+    args2 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey2, testValue2)
+        .addOption(testKey1, testValue1)
+        .build();
+    assertThat(args1).isEqualTo(args2);
+
+    // But key-value mapping does matter.
+    args1 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, testValue1)
+        .addOption(testKey2, testValue2)
+        .build();
+    args2 = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey1, testValue2)
+        .addOption(testKey2, testValue1)
+        .build();
+    assertThat(args1).isNotEqualTo(args2);
+  }
+
+  @Test
   public void createSubchannelArgs_toString() {
     CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
