@@ -19,6 +19,8 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.MoreExecutors;
+import io.grpc.SynchronizationContext;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
@@ -53,6 +55,60 @@ public final class SerializingExecutor implements Executor, Runnable {
       helper = new SynchronizedAtomicHelper();
     }
     return helper;
+  }
+
+  private static final Class<? extends Executor> threadlessExecutorClass;
+  private static final Class<? extends Executor> guavaSeqExecutorClass;
+
+  static {
+    boolean wrapSerialized = Boolean.getBoolean("grpc.wrapSerialized");
+    if (wrapSerialized) {
+      threadlessExecutorClass = null;
+      guavaSeqExecutorClass = null;
+    } else {
+      // Use reflection to maintain compatibility with Guava versions < 23.1
+      Class<? extends Executor> seqExecutorClass =
+          lookupExecutorClass("com.google.common.util.concurrent.SequentialExecutor");
+      if (seqExecutorClass == null) {
+        // The class had a different name prior to version 23.3
+        seqExecutorClass =
+            lookupExecutorClass("com.google.common.util.concurrent.SerializingExecutor");
+      }
+      guavaSeqExecutorClass = seqExecutorClass;
+
+      // Requires stub module
+      threadlessExecutorClass = lookupExecutorClass("io.grpc.stub.ClientCalls$ThreadlessExecutor");
+    }
+  }
+
+  // returns null if not found or not loadable
+  private static Class<? extends Executor> lookupExecutorClass(String name) {
+    try {
+      return Class.forName(name).asSubclass(Executor.class);
+    } catch (Exception e) {
+      return null;
+    }
+  }
+
+  /**
+   * Returns an {@link Executor} guaranteed to execute tasks in a serialized and FIFO manner,
+   * backed by the provided executor. The returned Executor is not guaranteed to be thread-safe.
+   */
+  static Executor makeSerializing(Executor executor) {
+    // If we know that the executor is a direct executor or already has the serializing properties,
+    // we don't need to wrap it with a SerializingExecutor. This is purely for performance reasons.
+    // See https://github.com/grpc/grpc-java/issues/368
+    if (executor == MoreExecutors.directExecutor()) {
+      return new SerializeReentrantCallsDirectExecutor();
+    }
+    if (executor instanceof SynchronizationContext) {
+      return executor;
+    }
+    Class<? extends Executor> executorClass = executor.getClass();
+    if (executorClass == threadlessExecutorClass || executorClass == guavaSeqExecutorClass) {
+      return executor;
+    }
+    return new SerializingExecutor(executor);
   }
 
   private static final int STOPPED = 0;
