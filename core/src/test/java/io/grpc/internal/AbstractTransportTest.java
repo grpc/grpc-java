@@ -765,7 +765,7 @@ public abstract class AbstractTransportTest {
 
     // This attribute is available right after transport is started
     assertThat(((ConnectionClientTransport) client).getAttributes()
-        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameInstanceAs(EAG_ATTRS);
 
     MockServerTransportListener serverTransportListener
         = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -785,9 +785,9 @@ public abstract class AbstractTransportTest {
     clientInOrder.verify(clientStreamTracerFactory).newClientStreamTracer(
         streamInfoCaptor.capture(), same(clientHeaders));
     ClientStreamTracer.StreamInfo streamInfo = streamInfoCaptor.getValue();
-    assertThat(streamInfo.getTransportAttrs()).isSameAs(
+    assertThat(streamInfo.getTransportAttrs()).isSameInstanceAs(
         ((ConnectionClientTransport) client).getAttributes());
-    assertThat(streamInfo.getCallOptions()).isSameAs(callOptions);
+    assertThat(streamInfo.getCallOptions()).isSameInstanceAs(callOptions);
 
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
@@ -813,7 +813,7 @@ public abstract class AbstractTransportTest {
 
     // This attribute is still available when the transport is connected
     assertThat(((ConnectionClientTransport) client).getAttributes()
-        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameAs(EAG_ATTRS);
+        .get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS)).isSameInstanceAs(EAG_ATTRS);
 
     serverStream.request(1);
     assertTrue(clientStreamListener.awaitOnReadyAndDrain(TIMEOUT_MS, TimeUnit.MILLISECONDS));

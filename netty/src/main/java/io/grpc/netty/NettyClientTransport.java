@@ -225,7 +225,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     if (keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED) {
       ChannelOption<Integer> tcpUserTimeout = Utils.maybeGetTcpUserTimeoutOption();
       if (tcpUserTimeout != null) {
-        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeNanos));
+        b.option(tcpUserTimeout, (int) TimeUnit.NANOSECONDS.toMillis(keepAliveTimeoutNanos));
       }
     }
     for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {

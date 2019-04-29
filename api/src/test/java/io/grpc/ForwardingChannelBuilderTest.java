@@ -83,7 +83,7 @@ public class ForwardingChannelBuilderTest {
 
       Object returnedValue = method.invoke(testChannelBuilder, args);
 
-      assertThat(returnedValue).isSameAs(testChannelBuilder);
+      assertThat(returnedValue).isSameInstanceAs(testChannelBuilder);
     }
   }
 
@@ -92,6 +92,6 @@ public class ForwardingChannelBuilderTest {
     ManagedChannel mockChannel = mock(ManagedChannel.class);
     doReturn(mockChannel).when(mockDelegate).build();
 
-    assertThat(testChannelBuilder.build()).isSameAs(mockChannel);
+    assertThat(testChannelBuilder.build()).isSameInstanceAs(mockChannel);
   }
 }

@@ -163,7 +163,7 @@ public class RoundRobinLoadBalancerTest {
       capturedAddrs.add(arg.getAddresses());
     }
 
-    assertThat(capturedAddrs).containsAllIn(subchannels.keySet());
+    assertThat(capturedAddrs).containsAtLeastElementsIn(subchannels.keySet());
     for (Subchannel subchannel : subchannels.values()) {
       verify(subchannel).requestConnection();
       verify(subchannel, never()).shutdown();

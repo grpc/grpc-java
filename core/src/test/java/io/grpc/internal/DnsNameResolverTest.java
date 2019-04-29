@@ -1072,7 +1072,7 @@ public class DnsNameResolverTest {
 
   private static void assertAnswerMatches(
       List<InetAddress> addrs, int port, ResolutionResult resolutionResult) {
-    assertEquals(addrs.size(), resolutionResult.getAddresses().size());
+    assertThat(resolutionResult.getAddresses()).hasSize(addrs.size());
     for (int i = 0; i < addrs.size(); i++) {
       EquivalentAddressGroup addrGroup = resolutionResult.getAddresses().get(i);
       InetSocketAddress socketAddr =

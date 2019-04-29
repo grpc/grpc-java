@@ -84,16 +84,16 @@ public class LoadBalancerRegistryTest {
     }
 
     assertThat(reg.providers()).hasSize(3);
-    assertThat(reg.getProvider("cool")).isSameAs(providers[1]);
-    assertThat(reg.getProvider("great")).isSameAs(providers[2]);
-    assertThat(reg.getProvider("excellent")).isSameAs(providers[4]);
+    assertThat(reg.getProvider("cool")).isSameInstanceAs(providers[1]);
+    assertThat(reg.getProvider("great")).isSameInstanceAs(providers[2]);
+    assertThat(reg.getProvider("excellent")).isSameInstanceAs(providers[4]);
 
     reg.deregister(providers[1]);
-    assertThat(reg.getProvider("cool")).isSameAs(providers[0]);
+    assertThat(reg.getProvider("cool")).isSameInstanceAs(providers[0]);
     reg.deregister(providers[2]);
-    assertThat(reg.getProvider("great")).isSameAs(providers[3]);
+    assertThat(reg.getProvider("great")).isSameInstanceAs(providers[3]);
     reg.deregister(providers[4]);
-    assertThat(reg.getProvider("excellent")).isSameAs(providers[5]);
+    assertThat(reg.getProvider("excellent")).isSameInstanceAs(providers[5]);
   }
 
   private static class FakeProvider extends LoadBalancerProvider {

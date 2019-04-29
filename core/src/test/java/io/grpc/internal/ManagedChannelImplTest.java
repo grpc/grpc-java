@@ -1576,7 +1576,7 @@ public class ManagedChannelImplTest {
     verify(mockTransport).newStream(same(method), same(headers), callOptionsCaptor.capture());
 
     CallOptions capturedCallOption = callOptionsCaptor.getValue();
-    assertThat(capturedCallOption.getDeadline()).isSameAs(callOptions.getDeadline());
+    assertThat(capturedCallOption.getDeadline()).isSameInstanceAs(callOptions.getDeadline());
     assertThat(capturedCallOption.getOption(GrpcUtil.CALL_OPTIONS_RPC_OWNED_BY_BALANCER)).isTrue();
   }
 
@@ -3432,7 +3432,7 @@ public class ManagedChannelImplTest {
     NameResolver.Helper helper = capturedHelper.get();
     assertThat(helper).isNotNull();
     assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameAs(neverProxy);
+    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
   }
 
   @Test
@@ -3476,7 +3476,7 @@ public class ManagedChannelImplTest {
     Attributes attrs = capturedParams.get();
     assertThat(attrs).isNotNull();
     assertThat(attrs.get(NameResolver.Factory.PARAMS_DEFAULT_PORT)).isEqualTo(DEFAULT_PORT);
-    assertThat(attrs.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR)).isSameAs(neverProxy);
+    assertThat(attrs.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR)).isSameInstanceAs(neverProxy);
   }
 
   @Test
@@ -3534,8 +3534,8 @@ public class ManagedChannelImplTest {
     NameResolver.Helper helper = capturedHelper.get();
     assertThat(helper).isNotNull();
     assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameAs(neverProxy);
-    assertThat(helper.getSynchronizationContext()).isSameAs(channel.syncContext);
+    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
+    assertThat(helper.getSynchronizationContext()).isSameInstanceAs(channel.syncContext);
   }
 
   @Test
