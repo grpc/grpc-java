@@ -19,10 +19,15 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static io.grpc.ConnectivityState.IDLE;
+import static io.grpc.ConnectivityState.READY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
+import com.google.protobuf.util.Durations;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
 import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
@@ -40,9 +45,9 @@ import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
-import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
@@ -50,13 +55,15 @@ import io.grpc.protobuf.ProtoUtils;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -65,6 +72,7 @@ import javax.annotation.Nullable;
  */
 public final class OrcaUtil {
 
+  private static final Logger logger = Logger.getLogger(OrcaUtil.class.getName());
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
       new ClientStreamTracer.Factory() {
@@ -103,24 +111,26 @@ public final class OrcaUtil {
    * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaReportListener} installed to
    * receive callback when an out-of-band ORCA report is received.
    *
+   * <p>Note the original {@code LoadBalancer} must call returned helper's
+   * {@code Helper.createSubchannel()} from its SynchronizationContext, or it will throw.
+   *
    * @param delegate the delegate helper that provides essentials for establishing subchannels to
    *     backends.
    * @param listener contains the callback to be invoked when an out-of-band ORCA report is
    *     received.
    * @param backoffPolicyProvider the provider of backoff policy used to backoff failure of ORCA
    *     service streaming.
-   * @param maxReportInterval the maximum expected interval of receiving periodical ORCA reports.
-   * @param unit time unit of {@code maxReportInterval} value.
+   * @param stopwatchSupplier supplies stopwatch utility.
+   * @param reportingConfig configuration for receiving out-of-band ORCA reports.
    */
   public static LoadBalancer.Helper newOrcaReportingHelper(
       LoadBalancer.Helper delegate,
       OrcaReportListener listener,
       BackoffPolicy.Provider backoffPolicyProvider,
-      long maxReportInterval,
-      TimeUnit unit) {
-    // TODO(chengyuanzhang): create a LoadReportingHelper that intercepts createSubChannel() method.
-    // This requires OOB ORCA service impl to be done first in order to create an OrcaClient.
-    return null;
+      Supplier<Stopwatch> stopwatchSupplier,
+      OrcaReportingConfig reportingConfig) {
+    return new OrcaReportingHelper(delegate, listener, backoffPolicyProvider, stopwatchSupplier,
+        reportingConfig);
   }
 
   /**
@@ -133,10 +143,19 @@ public final class OrcaUtil {
 
     /**
      * Invoked when an ORCA report is received.
+     *
+     * <p>For out-of-band reporting, the actual reporting might be more frequently and the reports
+     * might contain more entries of named cost metrics than configured due to other load balancing
+     * polices requesting for more frequent and detailed reports.
      */
     void onLoadReport(OrcaLoadReport report);
   }
 
+  /**
+   * An {@link OrcaReportingTracerFactory} wraps a delegated {@link ClientStreamTracer.Factory} with
+   * additional functionality to produce {@link ClientStreamTracer} instances that extract
+   * per-request ORCA reports and push to registered listeners for calls they trace.
+   */
   @VisibleForTesting
   static final class OrcaReportingTracerFactory extends ClientStreamTracer.Factory {
 
@@ -230,24 +249,32 @@ public final class OrcaUtil {
     }
   }
 
-
   /**
    * An {@link OrcaReportingHelper} wraps a delegated {@link LoadBalancer.Helper} with additional
-   * functionality to manages ORCA reporting processes to all the backends of the service.
+   * functionality to manage RPCs for out-of-band ORCA reporting for each backend it establishes
+   * connection to.
    */
   private static final class OrcaReportingHelper extends ForwardingLoadBalancerHelper {
+
+    private static final CreateSubchannelArgs.Key<OrcaReportingState> ORCA_REPORTING_STATE_KEY =
+        CreateSubchannelArgs.Key.create("internal-orca-reporting-state");
     private final LoadBalancer.Helper delegate;
     private final OrcaReportListener listener;
     private final SynchronizationContext syncContext;
     private final BackoffPolicy.Provider backoffPolicyProvider;
-    private final Set<OrcaReportingState> orcaReportingStates = new HashSet<>();
+    private final Supplier<Stopwatch> stopwatchSupplier;
+    private final OrcaReportingConfig orcaConfig;
 
     OrcaReportingHelper(LoadBalancer.Helper delegate,
         OrcaReportListener listener,
-        BackoffPolicy.Provider backoffPolicyProvider) {
+        BackoffPolicy.Provider backoffPolicyProvider,
+        Supplier<Stopwatch> stopwatchSupplier,
+        OrcaReportingConfig orcaConfig) {
       this.delegate = checkNotNull(delegate, "delegate");
       this.listener = checkNotNull(listener, "listener");
       this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+      this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+      this.orcaConfig = checkNotNull(orcaConfig, "orcaConfig");
       syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
     }
 
@@ -259,148 +286,379 @@ public final class OrcaUtil {
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       syncContext.throwIfNotInThisSynchronizationContext();
-      return super.createSubchannel(args);
-    }
-  }
-
-  /**
-   * An {@link OrcaReportingState} is the client of {@link OpenRcaServiceGrpc} for a single backend.
-   */
-  private static final class OrcaReportingState implements SubchannelStateListener {
-    private final Runnable retryTask = new Runnable() {
-      @Override
-      public void run() {
-        startRpc();
+      OrcaReportingState orcaState = args.getOption(ORCA_REPORTING_STATE_KEY);
+      boolean augmented = false;
+      if (orcaState == null) {
+        // Only the root load balanceing policy instantiate an OrcaReportingState instance to
+        // request for ORCA report from the backend that the delegated helper is trying to
+        // create subchannel to.
+        orcaState = new OrcaReportingState(new OrcaReportBroker(),
+            args.getStateListener(),
+            syncContext,
+            delegate().getScheduledExecutorService());
+        args = args.toBuilder().addOption(ORCA_REPORTING_STATE_KEY, orcaState).build();
+        augmented = true;
       }
-    };
-
-    private final SubchannelStateListener stateListener;
-    private final SynchronizationContext syncContext;
-    private final ScheduledExecutorService timeService;
-
-    private Subchannel subchannel;
-    private ChannelLogger subchannelLogger;
-    private String serviceName;
-    private BackoffPolicy backoffPolicy;
-
-    @Nullable
-    private OrcaReportingStream activeRpc;
-    @Nullable
-    private ScheduledHandle retryTimer;
-
-    OrcaReportingState(SubchannelStateListener stateListener,
-        SynchronizationContext syncContext,
-        ScheduledExecutorService timeService) {
-      this.stateListener = checkNotNull(stateListener, "stateListener");
-      this.syncContext = checkNotNull(syncContext, "syncContext");
-      this.timeService = checkNotNull(timeService, "timeService");
-    }
-
-    void init(Subchannel subchannel) {
-      checkState(this.subchannel == null, "init() already called");
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
-    }
-
-    void setServiceName(@Nullable String serviceName) {
-      if (Objects.equals(serviceName, this.serviceName)) {
-        return;
+      orcaState.broker.addListener(listener);
+      orcaState.setOrcaRequestConfig(orcaConfig);
+      Subchannel subchannel;
+      if (augmented) {
+        subchannel = super.createSubchannel(args.toBuilder().setStateListener(orcaState).build());
+        orcaState.init(subchannel);
+      } else {
+        subchannel = super.createSubchannel(args);
       }
-      this.serviceName = serviceName;
-
-    }
-
-    @Override
-    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      checkArgument(subchannel == this.subchannel, "Subchannel mismatch: %s vs %s", subchannel, this.subchannel);
-
-    }
-
-    private void adjustOrcaReporting() {
-
-    }
-
-    private void startRpc() {
-
-    }
-
-    private void stopRpc() {
-
+      return subchannel;
     }
 
     /**
-     * An {@link OrcaReportingStream} represents the ORCA service connection between the client
-     * and a single backend.
+     * An {@link OrcaReportingState} is a client of ORCA service running on a single backend.
+     *
+     * <p>All methods are run from {@code syncContext}.
      */
-    private class OrcaReportingStream extends ClientCall.Listener<OrcaLoadReport> {
-      private final ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call;
-      private final String callServiceName;
-      private final Stopwatch stopwatch;
-      private boolean callHasResponded;
+    private final class OrcaReportingState implements SubchannelStateListener {
 
-      OrcaReportingStream(String serviceName, Channel channel, Stopwatch stopwatch) {
-        this.callServiceName = checkNotNull(serviceName, "serviceName");
-        // FIXME: is this really the most appropriate time to start the stopwatch?
-        this.stopwatch = checkNotNull(stopwatch, "stopwatch").reset().start();
-        call = checkNotNull(channel, "channel").newCall(OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
+      private final SubchannelStateListener stateListener;
+      private final SynchronizationContext syncContext;
+      private final ScheduledExecutorService timeService;
+      private final OrcaReportBroker broker;
+      @Nullable
+      private Subchannel subchannel;
+      @Nullable
+      private ChannelLogger subchannelLogger;
+      @Nullable
+      private BackoffPolicy backoffPolicy;
+      @Nullable
+      private OrcaReportingStream orcaRpc;
+      private final Runnable retryTask = new Runnable() {
+        @Override
+        public void run() {
+          startRpc();
+        }
+      };
+      @Nullable
+      private ScheduledHandle retryTimer;
+      @Nullable
+      private OrcaReportingConfig overallConfig;
+      private ConnectivityStateInfo state = ConnectivityStateInfo.forNonError(IDLE);
+      // True if server returned UNIMPLEMENTED.
+      private boolean disabled;
+
+      OrcaReportingState(
+          OrcaReportBroker broker,
+          SubchannelStateListener stateListener,
+          SynchronizationContext syncContext,
+          ScheduledExecutorService timeService) {
+        this.broker = checkNotNull(broker, "broker");
+        this.stateListener = checkNotNull(stateListener, "stateListener");
+        this.syncContext = checkNotNull(syncContext, "syncContext");
+        this.timeService = checkNotNull(timeService, "timeService");
       }
 
-      void start() {
-        call.start(this, new Metadata());
-        // TODO: set report interval and request cost names in the request message.
-        call.sendMessage(OrcaLoadReportRequest.newBuilder().build());
-        call.halfClose();
-        call.request(1);
+      void init(Subchannel subchannel) {
+        checkState(this.subchannel == null, "init() already called");
+        this.subchannel = checkNotNull(subchannel, "subchannel");
+        this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       }
 
-      void cancel(String msg) {
-        call.cancel(msg, null);
+      void setOrcaRequestConfig(OrcaReportingConfig config) {
+        boolean reconfigured = false;
+        // The overall config is the superset of existing config and new config requested by some
+        // load balancing policy.
+        if (overallConfig != null) {
+          if (config.reportIntervalNanos < overallConfig.reportIntervalNanos) {
+            overallConfig.reportIntervalNanos = config.reportIntervalNanos;
+            reconfigured = true;
+          }
+          if (!overallConfig.costNames.isEmpty()
+              && !overallConfig.costNames.containsAll(config.costNames)) {
+            overallConfig.costNames.addAll(config.costNames);
+            reconfigured = true;
+          }
+        } else {
+          overallConfig = config;
+          reconfigured = true;
+        }
+        if (reconfigured) {
+          stopRpc("ORCA reporting reconfigured");
+          adjustOrcaReporting();
+        }
       }
 
       @Override
-      public void onMessage(OrcaLoadReport message) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
+      public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+        checkArgument(subchannel == this.subchannel, "Subchannel mismatch: %s vs %s", subchannel,
+            this.subchannel);
+        if (Objects.equal(state.getState(), READY) && !Objects.equal(newState.getState(), READY)) {
+          // A connection was lost.  We will reset disabled flag because ORCA service
+          // may be available on the new connection.
+          disabled = false;
+        }
+        state = newState;
+        adjustOrcaReporting();
+        // Propagate subchannel state update to downstream listeners.
+        stateListener.onSubchannelState(subchannel, newState);
+      }
 
+      void adjustOrcaReporting() {
+        if (!disabled && orcaConfig != null && Objects.equal(state.getState(), READY)) {
+          if (orcaRpc == null && !isRetryTimerPending()) {
+            startRpc();
           }
-        });
+        } else {
+          stopRpc("Client stops ORCA reporting");
+          backoffPolicy = null;
+        }
       }
 
-      @Override
-      public void onClose(Status status, Metadata trailers) {
-        syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-
-          }
-        });
+      void startRpc() {
+        checkState(orcaRpc == null, "previous orca reporting RPC has not been cleaned up");
+        checkState(subchannel != null, "init() not called");
+        orcaRpc = new OrcaReportingStream(subchannel.asChannel(), stopwatchSupplier.get());
+        orcaRpc.start();
       }
 
-      void handleResponse(OrcaLoadReport reponse) {
-        callHasResponded = true;
-
-        // TODO: invoke registered listeners
-        call.request(1);
+      void stopRpc(String msg) {
+        if (orcaRpc != null) {
+          orcaRpc.cancel(msg);
+          orcaRpc = null;
+        }
+        if (retryTimer != null) {
+          retryTimer.cancel();
+          retryTimer = null;
+        }
       }
 
-      void handleStreamClosed(Status status) {
-
+      boolean isRetryTimerPending() {
+        return retryTimer != null && retryTimer.isPending();
       }
 
       @Override
       public String toString() {
         return MoreObjects.toStringHelper(this)
-            .add("serviceName", callServiceName)
-            .add("callStarted", call != null)
+            .add("disabled", disabled)
+            .add("orcaRpc", orcaRpc)
+            .add("connectivityState", state)
             .toString();
       }
 
+      private class OrcaReportingStream extends ClientCall.Listener<OrcaLoadReport> {
 
+        private final ClientCall<OrcaLoadReportRequest, OrcaLoadReport> call;
+        private final Stopwatch stopwatch;
+        private boolean callHasResponded;
+
+        OrcaReportingStream(Channel channel, Stopwatch stopwatch) {
+          call = checkNotNull(channel, "channel")
+              .newCall(OpenRcaServiceGrpc.getStreamCoreMetricsMethod(), CallOptions.DEFAULT);
+          this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+        }
+
+        void start() {
+          stopwatch.reset().start();
+          call.start(this, new Metadata());
+          call.sendMessage(OrcaLoadReportRequest.newBuilder()
+              .setReportInterval(Durations.fromNanos(orcaConfig.getReportIntervalNanos()))
+              .addAllRequestCostNames(orcaConfig.getCostNames())
+              .build());
+          call.halfClose();
+          call.request(1);
+        }
+
+        @Override
+        public void onMessage(final OrcaLoadReport response) {
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              if (orcaRpc == OrcaReportingStream.this) {
+                handleResponse(response);
+              }
+            }
+          });
+        }
+
+        @Override
+        public void onClose(final Status status, Metadata trailers) {
+          syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              if (orcaRpc == OrcaReportingStream.this) {
+                orcaRpc = null;
+                handleStreamClosed(status);
+              }
+            }
+          });
+        }
+
+        void handleResponse(OrcaLoadReport response) {
+          callHasResponded = true;
+          backoffPolicy = null;
+          subchannelLogger.log(ChannelLogLevel.DEBUG, "Received an ORCA report: {0}", response);
+          broker.onReport(response);
+          call.request(1);
+        }
+
+        void handleStreamClosed(Status status) {
+          if (Objects.equal(status.getCode(), Code.UNAUTHENTICATED)) {
+            disabled = true;
+            logger
+                .log(Level.WARNING, "Backend {0} OpenRcaService is disabled. Server returned: {1}",
+                    new Object[]{subchannel.getAddresses(), status});
+            subchannelLogger.log(ChannelLogLevel.WARNING, "OpenRcaService disabled: {0}", status);
+            return;
+          }
+          long delayNanos = 0;
+          // Backoff only when no response has been received.
+          if (!callHasResponded) {
+            if (backoffPolicy == null) {
+              backoffPolicy = backoffPolicyProvider.get();
+            }
+            delayNanos = backoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
+          }
+          subchannelLogger.log(
+              ChannelLogLevel.DEBUG,
+              "ORCA reporting stream closed with {0}, backoff in {1} ns", status,
+              delayNanos <= 0 ? 0 : delayNanos);
+          if (delayNanos <= 0) {
+            startRpc();
+          } else {
+            checkState(!isRetryTimerPending(), "Retry double scheduled");
+            retryTimer = syncContext
+                .schedule(retryTask, delayNanos, TimeUnit.NANOSECONDS, timeService);
+          }
+        }
+
+        void cancel(String msg) {
+          call.cancel(msg, null);
+        }
+
+        @Override
+        public String toString() {
+          return MoreObjects.toStringHelper(this)
+              .add("callStarted", call != null)
+              .add("callHasResponded", callHasResponded)
+              .toString();
+        }
+      }
+    }
+  }
+
+  /**
+   * Configuration for out-of-band ORCA reporting service RPC.
+   */
+  public static final class OrcaReportingConfig {
+
+    private long reportIntervalNanos;
+    private Set<String> costNames;
+
+    private OrcaReportingConfig(long reportIntervalNanos, Set<String> costNames) {
+      this.reportIntervalNanos = reportIntervalNanos;
+      this.costNames = checkNotNull(costNames, "costNames");
     }
 
+    /**
+     * Creates a new builder.
+     */
+    public static Builder newBuilder() {
+      return new Builder();
+    }
 
+    /**
+     * Returns the configured maximum interval of receiving out-of-band ORCA reports.
+     */
+    public long getReportIntervalNanos() {
+      return reportIntervalNanos;
+    }
 
+    /**
+     * Returns the set of configured cost metric names to be reported in ORCA report. If this is
+     * empty, all known requests costs tracked by the load reporting agent will be returned.
+     */
+    public Set<String> getCostNames() {
+      return Collections.unmodifiableSet(costNames);
+    }
 
+    /**
+     * Returns a builder with the same initial values as this object.
+     */
+    public Builder toBuilder() {
+      return newBuilder()
+          .setReportInterval(reportIntervalNanos, TimeUnit.NANOSECONDS)
+          .addCostNames(costNames);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("reportIntervalNanos", reportIntervalNanos)
+          .add("costNames", costNames)
+          .toString();
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(reportIntervalNanos, costNames);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (obj instanceof OrcaReportingConfig) {
+        OrcaReportingConfig other = (OrcaReportingConfig) obj;
+        return reportIntervalNanos == other.reportIntervalNanos
+            && costNames.equals(other.costNames);
+      }
+      return false;
+    }
+
+    public static final class Builder {
+
+      private long reportIntervalNanos;
+      private Set<String> costNames = new HashSet<>();
+
+      Builder() {
+      }
+
+      /**
+       * Sets the maximum expected interval of receiving out-of-band ORCA report. The actual
+       * reporting interval might be smaller if there are other load balancing policies requesting
+       * for more frequent cost metric report.
+       *
+       * @param reportInterval the maximum expected interval of receiving periodical ORCA reports.
+       * @param unit time unit of {@code reportInterval} value.
+       */
+      public Builder setReportInterval(long reportInterval, TimeUnit unit) {
+        reportIntervalNanos = unit.toNanos(reportInterval);
+        return this;
+      }
+
+      /**
+       * Adds a custom named backend metric to be reported. This provides an opportunity for the
+       * client to selectively obtain a subset of tracked costs.
+       *
+       * @param costName name for custom metric to be reported.
+       */
+      public Builder addCostName(String costName) {
+        costNames.add(costName);
+        return this;
+      }
+
+      /**
+       * Adds a set of custom named backend metric to be reported. This provides an opportunity for
+       * the client to selectively obtain a subset of tracked costs.
+       *
+       * @param costNames collection of names for custom metric to be reported.
+       */
+      public Builder addCostNames(Collection<String> costNames) {
+        this.costNames.addAll(costNames);
+        return this;
+      }
+
+      /**
+       * Creates a new {@link OrcaReportingConfig} object.
+       */
+      public OrcaReportingConfig build() {
+        return new OrcaReportingConfig(reportIntervalNanos, costNames);
+      }
+    }
   }
 }
