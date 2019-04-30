@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import javax.annotation.Nullable;
 
 /**
@@ -31,11 +30,12 @@ import javax.annotation.Nullable;
 final class ServiceConfigState {
   @Nullable private final ManagedChannelServiceConfig defaultServiceConfig;
   private final boolean lookUpServiceConfig;
-  private final SynchronizationContext syncCtx;
 
   // mutable state
   @Nullable private ManagedChannelServiceConfig currentServiceConfig;
   @Nullable private Status currentError;
+  // Has there been at least one successful update?
+  private boolean updated;
 
   /**
    * @param defaultServiceConfig The initial service config, or {@code null} if absent.
@@ -44,11 +44,9 @@ final class ServiceConfigState {
    */
   ServiceConfigState(
       @Nullable ManagedChannelServiceConfig defaultServiceConfig,
-      boolean lookUpServiceConfig,
-      SynchronizationContext syncCtx) {
+      boolean lookUpServiceConfig) {
     this.defaultServiceConfig = defaultServiceConfig;
     this.lookUpServiceConfig = lookUpServiceConfig;
-    this.syncCtx = checkNotNull(syncCtx, "syncCtx");
     if (!lookUpServiceConfig) {
       this.currentServiceConfig = defaultServiceConfig;
     }
@@ -63,17 +61,13 @@ final class ServiceConfigState {
    *   <li>There is a valid default service config and a service config error from the name
    *       resolver
    *   <li>No service config from the name resolver, and no intent to lookup a service config.
+   * </ul>
    *
-   * In the final case, the default service config may be present or absent, and will be the
+   * <p>In the final case, the default service config may be present or absent, and will be the
    * current service config.
    */
-  boolean waitOnServiceConfig() {
-    syncCtx.throwIfNotInThisSynchronizationContext();
-    if (currentServiceConfig != null || currentError != null) {
-      return false;
-    } else {
-      return expectUpdates();
-    }
+  boolean shouldWaitOnServiceConfig() {
+    return !(updated || !expectUpdates());
   }
 
   /**
@@ -82,7 +76,7 @@ final class ServiceConfigState {
    * @throws IllegalStateException if the service config has not yet been updated.
    */
   @Nullable ManagedChannelServiceConfig getCurrentServiceConfig() {
-    checkState(!waitOnServiceConfig(), "still waiting on service config");
+    checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
     return currentServiceConfig;
   }
 
@@ -92,7 +86,7 @@ final class ServiceConfigState {
    * @throws IllegalStateException if the service config has not yet been updated.
    */
   @Nullable Status getCurrentError() {
-    checkState(!waitOnServiceConfig(), "still waiting on service config");
+    checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
     return currentError;
   }
 
@@ -102,17 +96,16 @@ final class ServiceConfigState {
   boolean update(Status error) {
     checkNotNull(error, "error");
     checkArgument(!error.isOk(), "can't use OK error");
-    syncCtx.throwIfNotInThisSynchronizationContext();
     checkState(expectUpdates(), "unexpected service config update");
-
+    boolean firstUpdate = !updated;
+    updated = true;
+    if ((firstUpdate && defaultServiceConfig == null) || currentError != null) {
+      assert currentServiceConfig == null;
+      currentError = error;
+      return true;
+    }
     if (currentServiceConfig == null) {
-      if (defaultServiceConfig != null) {
-        currentServiceConfig = defaultServiceConfig;
-        return false;
-      } else {
-        currentError = error;
-        return true;
-      }
+      currentServiceConfig = defaultServiceConfig;
     }
     return false;
   }
@@ -121,8 +114,8 @@ final class ServiceConfigState {
    * Returns {@code} if the update was successfully applied, else {@code false}.
    */
   void update(@Nullable ManagedChannelServiceConfig newServiceConfig) {
-    syncCtx.throwIfNotInThisSynchronizationContext();
     checkState(expectUpdates(), "unexpected service config update");
+    updated = true;
     if (newServiceConfig != null) {
       currentServiceConfig = newServiceConfig;
     } else {

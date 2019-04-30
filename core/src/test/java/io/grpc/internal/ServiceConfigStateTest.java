@@ -16,20 +16,17 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
-import com.google.common.base.Throwables;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
-import java.lang.Thread.UncaughtExceptionHandler;
 import java.util.Collections;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -38,8 +35,6 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class ServiceConfigStateTest {
-
-  @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final ManagedChannelServiceConfig config1 = new ManagedChannelServiceConfig(
       Collections.<String, MethodInfo>emptyMap(),
@@ -51,245 +46,446 @@ public class ServiceConfigStateTest {
       Collections.<String, MethodInfo>emptyMap(),
       null,
       null);
-  private final SynchronizationContext syncCtx = new SynchronizationContext(
-      new UncaughtExceptionHandler() {
-
-    @Override
-    public void uncaughtException(Thread t, Throwable e) {
-      Throwables.throwIfUnchecked(e);
-      throw new RuntimeException(e);
-    }
-  });
+  private final ManagedChannelServiceConfig noConfig = null;
+  private final Status error1 = Status.UNKNOWN.withDescription("bang");
+  private final Status error2 = Status.INTERNAL.withDescription("boom");
 
   @Test
-  public void expectUpdates() {
-    boolean lookupServiceConfig = true;
-    ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void noLookup_default() {
+    ServiceConfigState scs = new ServiceConfigState(config1, false);
+
+    assertFalse(scs.expectUpdates());
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void noLookup_default_allUpdatesFail() {
+    ServiceConfigState scs = new ServiceConfigState(config1, false);
+
+    try {
+      scs.update(error1);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    try {
+      scs.update(config2);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    try {
+      scs.update(noConfig);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void noLookup_noDefault() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, false);
+
+    assertFalse(scs.expectUpdates());
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void noLookup_noDefault_allUpdatesFail() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, false);
+
+    try {
+      scs.update(error1);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    try {
+      scs.update(config2);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    try {
+      scs.update(noConfig);
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("unexpected service config update");
+    }
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_noDefault() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
     assertTrue(scs.expectUpdates());
+    assertTrue(scs.shouldWaitOnServiceConfig());
+    try {
+      scs.getCurrentServiceConfig();
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("still waiting on service config");
+    }
+    try {
+      scs.getCurrentError();
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("still waiting on service config");
+    }
   }
 
   @Test
-  public void expectUpdates_noUpdatesWithDefault() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onError_onError() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    assertFalse(scs.expectUpdates());
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertSame(config1, scs.getCurrentServiceConfig());
-      }
-    });
+    assertTrue(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertSame(error1, scs.getCurrentError());
+
+    assertTrue(scs.update(error2));
+    assertNull(scs.getCurrentServiceConfig());
+    assertSame(error2, scs.getCurrentError());
   }
 
   @Test
-  public void expectUpdates_noUpdatesWithoutDefault() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onError_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    assertFalse(scs.expectUpdates());
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertNull(scs.getCurrentServiceConfig());
-      }
-    });
+    assertTrue(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertSame(error1, scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+    assertFalse(scs.update(error2)); //ignores future errors
   }
 
   @Test
-  public void failsOnNullSync() {
-    boolean lookupServiceConfig = true;
-    thrown.expect(NullPointerException.class);
-    thrown.expectMessage("syncCtx");
+  public void lookup_noDefault_onError_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, null);
+    scs.update(error1);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertSame(error1, scs.getCurrentError());
+
+    scs.update(config1);
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+    assertFalse(scs.update(error2)); //ignores future errors
   }
 
   @Test
-  public void waitOnServiceConfig_waitsNoDefault() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertTrue(scs.waitOnServiceConfig());
-      }
-    });
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void waitOnServiceConfig_waitsWithDefault() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onAbsent_onError() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertTrue(scs.waitOnServiceConfig());
-      }
-    });
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    assertFalse(scs.update(error1));
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void waitOnServiceConfig_noWaitWithDefault() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onAbsent_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertFalse(scs.waitOnServiceConfig());
-        assertSame(config1, scs.getCurrentServiceConfig());
-      }
-    });
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void waitOnServiceConfig_noWaitWithNoDefault() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onAbsent_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertFalse(scs.waitOnServiceConfig());
-        assertNull(scs.getCurrentServiceConfig());
-      }
-    });
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(config1);
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void getCurrentServiceConfig_failsOnUnresolvedConfig() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("still waiting");
+  public void lookup_noDefault_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        scs.getCurrentServiceConfig();
-      }
-    });
+    scs.update(config1);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void getCurrentServiceConfig_defaultWithErrorWorks() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onPresent_onError() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertFalse(scs.update(Status.INTERNAL.withDescription("bang")));
-        assertSame(config1, scs.getCurrentServiceConfig());
-      }
-    });
+    scs.update(config1);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    assertFalse(scs.update(error1));
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void getCurrentServiceConfig_errorThenSuccess() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onPresent_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertFalse(scs.update(Status.INTERNAL.withDescription("bang")));
-        scs.update(config2);
-        assertSame(config2, scs.getCurrentServiceConfig());
-      }
-    });
+    scs.update(config1);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertNull(scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 
   @Test
-  public void getCurrentServiceConfig_successThenError() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+  public void lookup_noDefault_onPresent_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(noConfig, true);
 
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        scs.update(config2);
-        assertFalse(scs.update(Status.INTERNAL.withDescription("bang")));
-        assertSame(config2, scs.getCurrentServiceConfig());
-      }
-    });
-  }
-
-  @Test
-  public void getCurrentServiceConfig_noDefaultWithError() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
-
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        Status s = Status.INTERNAL.withDescription("bang");
-        assertTrue(scs.update(s));
-        assertSame(s, scs.getCurrentError());
-        assertNull(scs.getCurrentServiceConfig());
-      }
-    });
-  }
-
-  @Test
-  public void update_errorsOverwrite() {
-    boolean lookupServiceConfig = true;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
-
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        assertTrue(scs.update(Status.INTERNAL.withDescription("boom")));
-
-        Status s = Status.INTERNAL.withDescription("bang");
-        assertTrue(scs.update(s));
-        assertSame(s, scs.getCurrentError());
-        assertNull(scs.getCurrentServiceConfig());
-      }
-    });
-  }
-
-  @Test
-  public void update_failsOnUnexpectedError() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("unexpected service config update");
-
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        scs.update(Status.INTERNAL.withDescription("boom"));
-      }
-    });
-  }
-
-  @Test
-  public void update_failsOnUnexpectedSuccess() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("unexpected service config update");
-
-    syncCtx.execute(new Runnable() {
-      @Override
-      public void run() {
-        scs.update(config2);
-      }
-    });
-  }
-
-  @Test
-  public void update_failsOnOutsideOfSync() {
-    boolean lookupServiceConfig = false;
-    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
-    thrown.expect(IllegalStateException.class);
-    thrown.expectMessage("Not called from the SynchronizationContext");
+    scs.update(config1);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
 
     scs.update(config2);
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    assertTrue(scs.expectUpdates());
+    assertTrue(scs.shouldWaitOnServiceConfig());
+    try {
+      scs.getCurrentServiceConfig();
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("still waiting on service config");
+    }
+    try {
+      scs.getCurrentError();
+      fail();
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().contains("still waiting on service config");
+    }
+  }
+
+  @Test
+  public void lookup_default_onError() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    assertFalse(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onError_onError() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    assertFalse(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    assertFalse(scs.update(error1));
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onError_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    assertFalse(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onError_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    assertFalse(scs.update(error1));
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(config2);
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onAbsent_onError() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    assertFalse(scs.update(error1));
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onAbsent_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onAbsent_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(noConfig);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(config2);
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(config2);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onPresent_onError() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(config2);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    assertFalse(scs.update(error1));
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onPresent_onAbsent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+
+    scs.update(config2);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(noConfig);
+    assertSame(config1, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+  }
+
+  @Test
+  public void lookup_default_onPresent_onPresent() {
+    ServiceConfigState scs = new ServiceConfigState(config1, true);
+    ManagedChannelServiceConfig config3 = new ManagedChannelServiceConfig(
+        Collections.<String, MethodInfo>emptyMap(),
+        Collections.<String, MethodInfo>emptyMap(),
+        null,
+        null);
+
+    scs.update(config2);
+    assertFalse(scs.shouldWaitOnServiceConfig());
+    assertSame(config2, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
+
+    scs.update(config3);
+    assertSame(config3, scs.getCurrentServiceConfig());
+    assertNull(scs.getCurrentError());
   }
 }
