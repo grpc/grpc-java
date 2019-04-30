@@ -120,12 +120,14 @@ final class ServiceConfigState {
   /**
    * Returns {@code} if the update was successfully applied, else {@code false}.
    */
-  void update(ManagedChannelServiceConfig newServiceConfig) {
-    checkNotNull(newServiceConfig, "newServiceConfig");
+  void update(@Nullable ManagedChannelServiceConfig newServiceConfig) {
     syncCtx.throwIfNotInThisSynchronizationContext();
     checkState(expectUpdates(), "unexpected service config update");
-
-    currentServiceConfig = newServiceConfig;
+    if (newServiceConfig != null) {
+      currentServiceConfig = newServiceConfig;
+    } else {
+      currentServiceConfig = defaultServiceConfig;
+    }
     currentError = null;
   }
 

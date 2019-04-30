@@ -70,11 +70,31 @@ public class ServiceConfigStateTest {
   }
 
   @Test
-  public void expectUpdates_noUpdates() {
+  public void expectUpdates_noUpdatesWithDefault() {
     boolean lookupServiceConfig = false;
-    ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
+    final ServiceConfigState scs = new ServiceConfigState(config1, lookupServiceConfig, syncCtx);
 
     assertFalse(scs.expectUpdates());
+    syncCtx.execute(new Runnable() {
+      @Override
+      public void run() {
+        assertSame(config1, scs.getCurrentServiceConfig());
+      }
+    });
+  }
+
+  @Test
+  public void expectUpdates_noUpdatesWithoutDefault() {
+    boolean lookupServiceConfig = false;
+    final ServiceConfigState scs = new ServiceConfigState(null, lookupServiceConfig, syncCtx);
+
+    assertFalse(scs.expectUpdates());
+    syncCtx.execute(new Runnable() {
+      @Override
+      public void run() {
+        assertNull(scs.getCurrentServiceConfig());
+      }
+    });
   }
 
   @Test
