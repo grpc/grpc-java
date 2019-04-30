@@ -269,6 +269,23 @@ public class LoadBalancerTest {
   }
 
   @Test
+  public void createSubchannelArgs_build() {
+    CreateSubchannelArgs.Key<Object> testKey = CreateSubchannelArgs.Key.create("test-key");
+    Object testValue = new Object();
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .setStateListener(subchannelStateListener)
+        .addOption(testKey, testValue)
+        .build();
+    CreateSubchannelArgs rebuildedArgs = args.toBuilder().build();
+    assertThat(rebuildedArgs.getAddresses()).containsExactly(eag);
+    assertThat(rebuildedArgs.getAttributes()).isSameInstanceAs(attrs);
+    assertThat(rebuildedArgs.getStateListener()).isSameInstanceAs(subchannelStateListener);
+    assertThat(rebuildedArgs.getOption(testKey)).isSameInstanceAs(testValue);
+  }
+
+  @Test
   public void createSubchannelArgs_toString() {
     CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
