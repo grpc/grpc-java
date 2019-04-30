@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -745,44 +744,6 @@ public abstract class LoadBalancer {
           .toString();
     }
 
-    @Override
-    public int hashCode() {
-      Map<Object, Object> map = new HashMap<>();
-      for (Object[] pair : customOptions) {
-        map.put(pair[0], pair[1]);
-      }
-      return Objects.hashCode(addrs, attrs, stateListener, map);
-    }
-
-    /**
-     * Returns true if the {@code List<EquivalentAddressGroup>}, {@link Attributes},
-     * {@link SubchannelStateListener} all match and two instances contain the same set of
-     * custom options.
-     */
-    @Override
-    public boolean equals(Object other) {
-      if (!(other instanceof CreateSubchannelArgs)) {
-        return false;
-      }
-      CreateSubchannelArgs that = (CreateSubchannelArgs) other;
-      if (customOptions.length != that.customOptions.length) {
-        return false;
-      }
-      if (customOptions.length > 0) {
-        Map<Object, Object> thisOptionMap = new HashMap<>();
-        Map<Object, Object> thatOptionMap = new HashMap<>();
-        for (int i = 0; i < customOptions.length; i++) {
-          thisOptionMap.put(customOptions[i][0], customOptions[i][1]);
-          thatOptionMap.put(that.customOptions[i][0], that.customOptions[i][1]);
-        }
-        if (!thisOptionMap.equals(thatOptionMap)) {
-          return false;
-        }
-      }
-      return Objects.equal(addrs, that.addrs) && Objects.equal(attrs, that.attrs)
-          && Objects.equal(stateListener, that.stateListener);
-    }
-
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
 
@@ -796,7 +757,7 @@ public abstract class LoadBalancer {
 
       private <T> Builder copyCustomOptions(Object[][] options) {
         customOptions = new Object[options.length][2];
-        System.arraycopy(customOptions, 0, options, 0, options.length);
+        System.arraycopy(options, 0, customOptions, 0, options.length);
         return this;
       }
 
