@@ -42,12 +42,8 @@ os:
   - linux
 
 jdk:
-  - oraclejdk8
+  - openjdk8
   - openjdk11
-addons:
-  apt:
-    packages:
-      - oracle-java8-installer
 
 notifications:
   email: false
