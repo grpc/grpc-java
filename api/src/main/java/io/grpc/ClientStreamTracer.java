@@ -121,6 +121,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
     /**
      * Converts this StreamInfo into a new Builder.
+     *
+     * @since 1.21.0
      */
     public Builder toBuilder() {
       Builder builder = new Builder();
@@ -131,6 +133,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
     /**
      * Creates an empty Builder.
+     *
+     * @since 1.21.0
      */
     public static Builder newBuilder() {
       return new Builder();
@@ -146,6 +150,8 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
     /**
      * Builds {@link StreamInfo} objects.
+     *
+     * @since 1.21.0
      */
     public static final class Builder {
       private Attributes transportAttrs = Attributes.EMPTY;
