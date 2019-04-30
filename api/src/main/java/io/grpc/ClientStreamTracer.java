@@ -88,6 +88,11 @@ public abstract class ClientStreamTracer extends StreamTracer {
 
   /**
    * Information about a stream.
+   *
+   * <p>Note this class doesn't override {@code equals()} and {@code hashCode}, as is the case for
+   * {@link CallOptions}.
+   *
+   * @since 1.20.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public static final class StreamInfo {
