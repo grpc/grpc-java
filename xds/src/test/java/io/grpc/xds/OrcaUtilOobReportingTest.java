@@ -222,13 +222,17 @@ public class OrcaUtilOobReportingTest {
             .addCostName("orca-test-cost-name1")
             .addCostNames(Arrays.asList("orca-test-cost-name2", "orca-test-cost-name3"))
             .build();
-    assertThat(config.toBuilder().build()).isEqualTo(config);
     assertThat(config.getReportIntervalNanos()).isEqualTo(TimeUnit.MICROSECONDS.toNanos(interval));
     assertThat(config.getCostNames())
         .containsExactly("orca-test-cost-name1", "orca-test-cost-name2", "orca-test-cost-name3");
     String str = config.toString();
     assertThat(str).contains("reportIntervalNanos=");
     assertThat(str).contains("costNames=");
+    OrcaReportingConfig rebuildedConfig = config.toBuilder().build();
+    assertThat(rebuildedConfig.getReportIntervalNanos())
+        .isEqualTo(TimeUnit.MICROSECONDS.toNanos(interval));
+    assertThat(rebuildedConfig.getCostNames())
+        .containsExactly("orca-test-cost-name1", "orca-test-cost-name2", "orca-test-cost-name3");
   }
 
   /**

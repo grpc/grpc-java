@@ -159,14 +159,12 @@ public final class OrcaUtil {
   static final class OrcaReportingTracerFactory extends ClientStreamTracer.Factory {
 
     @VisibleForTesting
-    static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =
-        CallOptions.Key.create("internal-orca-report-broker");
-    @VisibleForTesting
     static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
         Metadata.Key.of(
             "x-endpoint-load-metrics-bin",
             ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
-
+    private static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =
+        CallOptions.Key.create("internal-orca-report-broker");
     private final ClientStreamTracer.Factory delegate;
     private final OrcaReportListener listener;
 
@@ -580,21 +578,6 @@ public final class OrcaUtil {
           .add("reportIntervalNanos", reportIntervalNanos)
           .add("costNames", costNames)
           .toString();
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(reportIntervalNanos, costNames);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (obj instanceof OrcaReportingConfig) {
-        OrcaReportingConfig other = (OrcaReportingConfig) obj;
-        return reportIntervalNanos == other.reportIntervalNanos
-            && costNames.equals(other.costNames);
-      }
-      return false;
     }
 
     public static final class Builder {
