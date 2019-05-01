@@ -26,8 +26,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
-import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.xds.OrcaUtil.OrcaReportListener;
@@ -44,17 +42,7 @@ import org.mockito.ArgumentCaptor;
 public class OrcaUtilPerRequestReportingTest {
 
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.EMPTY;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   /**
    * Test a single load balance policy's listener receive per-request ORCA reports upon call trailer

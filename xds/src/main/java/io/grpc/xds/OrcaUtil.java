@@ -31,7 +31,6 @@ import com.google.protobuf.util.Durations;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
 import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
-import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
@@ -183,19 +182,9 @@ public final class OrcaUtil {
       boolean augmented = false;
       if (broker == null) {
         broker = new OrcaReportBroker();
-        final StreamInfo currInfo = info;
-        final OrcaReportBroker currBroker = broker;
-        info = new ClientStreamTracer.StreamInfo() {
-          @Override
-          public Attributes getTransportAttrs() {
-            return currInfo.getTransportAttrs();
-          }
-
-          @Override
-          public CallOptions getCallOptions() {
-            return currInfo.getCallOptions().withOption(ORCA_REPORT_BROKER_KEY, currBroker);
-          }
-        };
+        info = info.toBuilder()
+            .setCallOptions(info.getCallOptions().withOption(ORCA_REPORT_BROKER_KEY, broker))
+            .build();
         augmented = true;
       }
       broker.addListener(listener);
