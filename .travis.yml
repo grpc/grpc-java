@@ -38,6 +38,8 @@ after_success:
 os:
   - linux
 
+dist: trusty
+
 jdk:
   # net.ltgt.errorprone supports jdk8 and jdk9, but has problems with jdk10
   # For jdk10, we need to switch over to using net.ltgt.errorprone-javacplugin,
