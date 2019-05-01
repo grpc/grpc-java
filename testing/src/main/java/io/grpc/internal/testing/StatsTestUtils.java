@@ -23,6 +23,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Maps;
+import io.grpc.Context;
 import io.opencensus.common.Scope;
 import io.opencensus.stats.Measure;
 import io.opencensus.stats.MeasureMap;
@@ -168,7 +169,7 @@ public class StatsTestUtils {
 
     @Override
     public TagContext getCurrentTagContext() {
-      return ContextUtils.TAG_CONTEXT_KEY.get();
+      return ContextUtils.getValue(Context.current());
     }
 
     @Override

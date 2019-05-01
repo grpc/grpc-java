@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -48,6 +47,7 @@ import io.opencensus.tags.Tagger;
 import io.opencensus.tags.Tags;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.tags.propagation.TagContextSerializationException;
+import io.opencensus.tags.unsafe.ContextUtils;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -654,7 +654,7 @@ public final class CensusStatsModule {
     @Override
     public Context filterContext(Context context) {
       if (!module.tagger.empty().equals(parentCtx)) {
-        return context.withValue(TAG_CONTEXT_KEY, parentCtx);
+        return ContextUtils.withValue(context, parentCtx);
       }
       return context;
     }
