@@ -79,8 +79,8 @@ public final class PerfTag {
       return false;
     }
     PerfTag that = (PerfTag) obj;
-    return numericTag == that.numericTag && (
-        stringTag == that.stringTag || (stringTag != null && stringTag.equals(that.stringTag)));
+    return numericTag == that.numericTag
+        && (stringTag == that.stringTag || (stringTag != null && stringTag.equals(that.stringTag)));
   }
 
   /**
