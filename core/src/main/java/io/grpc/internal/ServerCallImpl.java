@@ -74,7 +74,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     this.stream = stream;
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this to the ServerImpl to record startCall.
-    this.tag = PerfTag.create(PerfTag.allocateNumericId(), method.getFullMethodName());
+    this.tag = PerfMark.createTag(method.getFullMethodName());
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
@@ -94,7 +94,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       sendHeadersInternal(headers);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ServerCall.sendHeaders");
     }
   }
 
@@ -143,7 +143,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       sendMessageInternal(message);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ServerCall.sendMessage");
     }
   }
 
@@ -196,7 +196,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     try {
       closeInternal(status, trailers);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ServerCall.close");
     }
   }
 
@@ -305,7 +305,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         MoreThrowables.throwIfUnchecked(t);
         throw new RuntimeException(t);
       } finally {
-        PerfMark.taskEnd();
+        PerfMark.taskEnd(call.tag, "ServerCall.messagesAvailable");
       }
     }
 
@@ -320,7 +320,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       try {
         listener.onHalfClose();
       } finally {
-        PerfMark.taskEnd();
+        PerfMark.taskEnd(call.tag, "ServerCall.halfClosed");
       }
     }
 
@@ -342,7 +342,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
         }
       } finally {
-        PerfMark.taskEnd();
+        PerfMark.taskEnd(call.tag, "ServerCall.closed");
       }
     }
 
@@ -355,7 +355,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       try {
         listener.onReady();
       } finally {
-        PerfMark.taskEnd();
+        PerfMark.taskEnd(call.tag, "ServerCall.closed");
       }
     }
   }

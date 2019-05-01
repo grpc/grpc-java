@@ -16,6 +16,9 @@
 
 /**
  * This is an internal, experimental API and not subject to the normal compatibility guarantees.
+ *
+ * @see io.grpc.Internal
  */
-@io.grpc.Internal
+@javax.annotation.CheckReturnValue
+@javax.annotation.ParametersAreNonnullByDefault
 package io.grpc.perfmark;
