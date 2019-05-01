@@ -1445,8 +1445,13 @@ public abstract class AbstractInteropTest {
     Span clientParentSpan = Tracing.getTracer().spanBuilder("Test.interopTest").startSpan();
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());
-    Context ctx = io.opencensus.tags.unsafe.ContextUtils.withValue(Context.ROOT, tagger.emptyBuilder().put(
-        StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build());
+    Context ctx =
+        io.opencensus.tags.unsafe.ContextUtils.withValue(
+            Context.ROOT,
+            tagger
+                .emptyBuilder()
+                .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                .build());
     ctx = ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {

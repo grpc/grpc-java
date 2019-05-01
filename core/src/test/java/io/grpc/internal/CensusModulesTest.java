@@ -250,8 +250,13 @@ public class CensusModulesTest {
             censusStats.getClientInterceptor(), censusTracing.getClientInterceptor());
     ClientCall<String, String> call;
     if (nonDefaultContext) {
-      Context ctx = io.opencensus.tags.unsafe.ContextUtils.withValue(Context.ROOT, tagger.emptyBuilder().put(
-          StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build());
+      Context ctx =
+          io.opencensus.tags.unsafe.ContextUtils.withValue(
+              Context.ROOT,
+              tagger
+                  .emptyBuilder()
+                  .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                  .build());
       ctx = ContextUtils.withValue(ctx, fakeClientParentSpan);
       Context origCtx = ctx.attach();
       try {
@@ -643,7 +648,7 @@ public class CensusModulesTest {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
-    TagContext clientCtx = tagger.emptyBuilder().put(
+    TagContext clientCtx = tagger.emptyBuilder().putPropagating(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897")).build();
     CensusStatsModule census =
         new CensusStatsModule(
@@ -684,7 +689,7 @@ public class CensusModulesTest {
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
         tagger.toBuilder(clientCtx)
-            .put(
+            .putPropagating(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
@@ -920,7 +925,7 @@ public class CensusModulesTest {
     assertEquals(
         tagger
             .emptyBuilder()
-            .put(
+            .putPropagating(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
