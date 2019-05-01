@@ -42,6 +42,8 @@ after_success:
 os:
   - linux
 
+dist: trusty
+
 notifications:
   email: false
 
