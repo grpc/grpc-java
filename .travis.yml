@@ -42,6 +42,8 @@ os:
   - linux
   - osx
 
+dist: trusty
+
 notifications:
   email: false
 
