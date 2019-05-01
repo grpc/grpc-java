@@ -41,6 +41,8 @@ after_success:
 os:
   - linux
 
+dist: trusty
+
 jdk:
   - oraclejdk8
   - openjdk11
