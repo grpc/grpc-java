@@ -344,7 +344,7 @@ public final class OrcaUtil {
 
       void setOrcaReportingConfig(OrcaReportingConfig config) {
         boolean reconfigured = false;
-        // The overall config is the superset of existing config and new config requested by some
+        // The overall config is the union of existing config and new config requested by some
         // load balancing policy.
         if (overallConfig != null) {
           if (config.reportIntervalNanos < overallConfig.reportIntervalNanos) {
@@ -487,9 +487,9 @@ public final class OrcaUtil {
           if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
             disabled = true;
             logger
-                .log(Level.WARNING, "Backend {0} OpenRcaService is disabled. Server returned: {1}",
+                .log(Level.SEVERE, "Backend {0} OpenRcaService is disabled. Server returned: {1}",
                     new Object[]{subchannel.getAllAddresses(), status});
-            subchannelLogger.log(ChannelLogLevel.WARNING, "OpenRcaService disabled: {0}", status);
+            subchannelLogger.log(ChannelLogLevel.ERROR, "OpenRcaService disabled: {0}", status);
             return;
           }
           long delayNanos = 0;

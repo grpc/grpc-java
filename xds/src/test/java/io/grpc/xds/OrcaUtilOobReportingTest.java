@@ -350,7 +350,7 @@ public class OrcaUtilOobReportingTest {
     subchannel.logs.clear();
     serverCall.responseObserver.onError(Status.UNIMPLEMENTED.asException());
     assertLog(subchannel.logs,
-        "WARNING: OpenRcaService disabled: " + Status.UNIMPLEMENTED);
+        "ERROR: OpenRcaService disabled: " + Status.UNIMPLEMENTED);
     verifyNoMoreInteractions(mockOrcaListener);
 
     // Re-connecting on Subchannel will reset the "disabled" flag and restart ORCA reporting.
@@ -501,7 +501,7 @@ public class OrcaUtilOobReportingTest {
         "DEBUG: Starting ORCA reporting for " + subchannel.getAllAddresses());
 
     // The actual report interval to be requested is the smallest one configured by helpers
-    // wishing to receive reports and the named costs is the super set of all requested
+    // wishing to receive reports and the named costs is the union of all requested
     // cost names.
     // Note an empty set of name costs indicates reporting all known requests costs tracked
     // by the load reporting agent.
