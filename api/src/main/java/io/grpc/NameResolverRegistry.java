@@ -148,10 +148,10 @@ public final class NameResolverRegistry {
   private final class NameResolverFactory extends NameResolver.Factory {
     @Override
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
       List<NameResolverProvider> providers = providers();
       for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, helper);
+        NameResolver resolver = provider.newNameResolver(targetUri, args);
         if (resolver != null) {
           return resolver;
         }
