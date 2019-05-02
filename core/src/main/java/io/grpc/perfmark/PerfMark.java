@@ -157,13 +157,6 @@ public final class PerfMark {
     return NULL_PERF_TAG;
   }
 
-  /**
-   * Returns the null tag.
-   */
-  public static PerfTag create() {
-    return NULL_PERF_TAG;
-  }
-
   private static final PerfTag NULL_PERF_TAG = TagFactory.create();
 
   private static final class NoopTask extends PerfMarkTask {
