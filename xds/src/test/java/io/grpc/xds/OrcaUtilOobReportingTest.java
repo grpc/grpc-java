@@ -447,19 +447,19 @@ public class OrcaUtilOobReportingTest {
    */
   @Test
   public void twoLevelPoliciesReceiveSameReport() {
-    OrcaReportListener childListener = mockOrcaListener;
-    OrcaReportingHelperWrapper childHelperWrapper = orcaHelperWrapper;
-    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaReportListener parentListener = mock(OrcaReportListener.class);
-    OrcaReportingHelperWrapper parentHelperWrapper =
+    OrcaReportListener parentListener = mockOrcaListener;
+    OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
+    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    OrcaReportListener childListener = mock(OrcaReportListener.class);
+    OrcaReportingHelperWrapper childHelperWrapper =
         OrcaUtil.newOrcaReportingHelperWrapper(
-            childHelperWrapper.asHelper(),
-            parentListener,
+            parentHelperWrapper.asHelper(),
+            childListener,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
 
-    createSubchannel(parentHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    createSubchannel(childHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
@@ -489,24 +489,24 @@ public class OrcaUtilOobReportingTest {
    */
   @Test
   public void reportMostEntriesAndMostFrequentIntervalRequested() {
-    OrcaReportingHelperWrapper childHelperWrapper = orcaHelperWrapper;
-    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaReportListener parentListener = mock(OrcaReportListener.class);
+    OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
+    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    OrcaReportListener childListener = mock(OrcaReportListener.class);
     OrcaReportingConfig config =
         OrcaReportingConfig.newBuilder()
             .setReportInterval(12, TimeUnit.NANOSECONDS)
             .addCostName("costs.named.test")
             .build();
 
-    OrcaReportingHelperWrapper parentHelperWrapper =
+    OrcaReportingHelperWrapper childHelperWrapper =
         OrcaUtil.newOrcaReportingHelperWrapper(
-            childHelperWrapper.asHelper(),
-            parentListener,
+            parentHelperWrapper.asHelper(),
+            childListener,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
-    parentHelperWrapper.setReportingConfig(config);
+    childHelperWrapper.setReportingConfig(config);
 
-    createSubchannel(parentHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    createSubchannel(childHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
