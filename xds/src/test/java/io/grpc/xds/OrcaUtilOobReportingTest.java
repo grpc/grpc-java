@@ -64,7 +64,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.OrcaUtil.OrcaReportListener;
+import io.grpc.xds.OrcaUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaUtil.OrcaReportingHelperWrapper;
 import java.net.SocketAddress;
@@ -123,7 +123,7 @@ public class OrcaUtilOobReportingTest {
   private final FakeClock fakeClock = new FakeClock();
   private final Helper origHelper = mock(Helper.class, delegatesTo(new FakeHelper()));
   @Mock
-  private OrcaReportListener mockOrcaListener;
+  private OrcaOobReportListener mockOrcaListener;
   @Mock private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock private BackoffPolicy backoffPolicy1;
   @Mock private BackoffPolicy backoffPolicy2;
@@ -302,7 +302,7 @@ public class OrcaUtilOobReportingTest {
       OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-      verify(mockOrcaListener, times(i + 1)).onLoadReport(eq(report));
+      verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -367,7 +367,7 @@ public class OrcaUtilOobReportingTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     serverCall.responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    verify(mockOrcaListener).onLoadReport(eq(report));
+    verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
 
     verifyZeroInteractions(backoffPolicyProvider);
   }
@@ -416,7 +416,7 @@ public class OrcaUtilOobReportingTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     orcaServiceImp.calls.peek().responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    inOrder.verify(mockOrcaListener).onLoadReport(eq(report));
+    inOrder.verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
 
     // Server closes the ORCA reporting RPC after a response, will restart immediately.
     orcaServiceImp.calls.poll().responseObserver.onCompleted();
@@ -447,10 +447,10 @@ public class OrcaUtilOobReportingTest {
    */
   @Test
   public void twoLevelPoliciesReceiveSameReport() {
-    OrcaReportListener parentListener = mockOrcaListener;
+    OrcaOobReportListener parentListener = mockOrcaListener;
     OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
     parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaReportListener childListener = mock(OrcaReportListener.class);
+    OrcaOobReportListener childListener = mock(OrcaOobReportListener.class);
     OrcaReportingHelperWrapper childHelperWrapper =
         OrcaUtil.newOrcaReportingHelperWrapper(
             parentHelperWrapper.asHelper(),
@@ -475,8 +475,8 @@ public class OrcaUtilOobReportingTest {
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
     ArgumentCaptor<OrcaLoadReport> parentReportCaptor = ArgumentCaptor.forClass(null);
     ArgumentCaptor<OrcaLoadReport> childReportCaptor = ArgumentCaptor.forClass(null);
-    verify(parentListener).onLoadReport(parentReportCaptor.capture());
-    verify(childListener).onLoadReport(childReportCaptor.capture());
+    verify(parentListener).onLoadReport(same(subchannel), parentReportCaptor.capture());
+    verify(childListener).onLoadReport(same(subchannel), childReportCaptor.capture());
     assertThat(parentReportCaptor.getValue()).isEqualTo(report);
     assertThat(childReportCaptor.getValue()).isSameInstanceAs(parentReportCaptor.getValue());
   }
@@ -491,7 +491,7 @@ public class OrcaUtilOobReportingTest {
   public void reportMostEntriesAndMostFrequentIntervalRequested() {
     OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
     parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaReportListener childListener = mock(OrcaReportListener.class);
+    OrcaOobReportListener childListener = mock(OrcaOobReportListener.class);
     OrcaReportingConfig config =
         OrcaReportingConfig.newBuilder()
             .setReportInterval(12, TimeUnit.NANOSECONDS)

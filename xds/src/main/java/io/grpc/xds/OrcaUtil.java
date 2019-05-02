@@ -83,33 +83,35 @@ public final class OrcaUtil {
       };
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link OrcaReportListener}
-   * installed to receive callback when a per-request ORCA report is received.
+   * Creates a new {@link ClientStreamTracer.Factory} with provided
+   * {@link OrcaPerRequestReportListener} installed to receive callback when a per-request
+   * ORCA report is received.
    *
    * @param listener contains the callback to be invoked when a per-request ORCA report is
    *     received.
    */
   public static ClientStreamTracer.Factory newOrcaClientStreamTracerFactory(
-      OrcaReportListener listener) {
+      OrcaPerRequestReportListener listener) {
     return newOrcaClientStreamTracerFactory(NOOP_CLIENT_STREAM_TRACER_FACTORY, listener);
   }
 
   /**
-   * Creates a new {@link ClientStreamTracer.Factory} with provided {@link OrcaReportListener}
-   * installed to receive callback when a per-request ORCA report is received.
+   * Creates a new {@link ClientStreamTracer.Factory} with provided
+   * {@link OrcaPerRequestReportListener} installed to receive callback when a per-request
+   * ORCA report is received.
    *
    * @param delegate the delegate factory to produce other client stream tracing.
    * @param listener contains the callback to be invoked when a per-request ORCA report is
    *     received.
    */
   public static ClientStreamTracer.Factory newOrcaClientStreamTracerFactory(
-      ClientStreamTracer.Factory delegate, OrcaReportListener listener) {
+      ClientStreamTracer.Factory delegate, OrcaPerRequestReportListener listener) {
     return new OrcaReportingTracerFactory(delegate, listener);
   }
 
   /**
-   * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaReportListener} installed to
-   * receive callback when an out-of-band ORCA report is received.
+   * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaOobReportListener}
+   * installed to receive callback when an out-of-band ORCA report is received.
    *
    * <p>Note the original {@code LoadBalancer} must call returned helper's
    * {@code Helper.createSubchannel()} from its SynchronizationContext, or it will throw.
@@ -124,7 +126,7 @@ public final class OrcaUtil {
    */
   public static OrcaReportingHelperWrapper newOrcaReportingHelperWrapper(
       LoadBalancer.Helper delegate,
-      OrcaReportListener listener,
+      OrcaOobReportListener listener,
       BackoffPolicy.Provider backoffPolicyProvider,
       Supplier<Stopwatch> stopwatchSupplier) {
     final OrcaReportingHelper orcaHelper =
@@ -144,21 +146,36 @@ public final class OrcaUtil {
   }
 
   /**
-   * The listener interface for receiving backend ORCA reports. The class that is interested in
-   * processing backend cost metrics implements this interface, and the object created with that
-   * class is registered with a component, using methods in {@link OrcaUtil}. When an ORCA report is
-   * received, that object's {@code onLoadReport} method is invoked.
+   * The listener interface for receiving per-request ORCA reports from backends. The class that
+   * is interested in processing backend cost metrics implements this interface, and the object
+   * created with that class is registered with a component, using methods in {@link OrcaUtil}.
+   * When an ORCA report is received, that object's {@code onLoadReport} method is invoked.
    */
-  public interface OrcaReportListener {
+  public interface OrcaPerRequestReportListener {
 
     /**
-     * Invoked when an ORCA report is received.
+     * Invoked when an per-request ORCA report is received.
      *
-     * <p>For out-of-band reporting, the actual reporting might be more frequently and the reports
-     * might contain more entries of named cost metrics than configured due to other load balancing
-     * polices requesting for more frequent and detailed reports.
+     * @param report load report in the format of ORCA format.
      */
     void onLoadReport(OrcaLoadReport report);
+  }
+
+  /**
+   * The listener interface for receiving out-of-band ORCA reports from backends. The class that
+   * is interested in processing backend cost metrics implements this interface, and the object
+   * created with that class is registered with a component, using methods in {@link OrcaUtil}.
+   * When an ORCA report is received, that object's {@code onLoadReport} method is invoked.
+   */
+  public interface OrcaOobReportListener {
+
+    /**
+     * Invoked when an out-of-band ORCA report is received.
+     *
+     * @param subchannel the subchannel over which the connection to a backend is established.
+     * @param report load report in the format of ORCA protocol.
+     */
+    void onLoadReport(Subchannel subchannel, OrcaLoadReport report);
   }
 
   /**
@@ -204,10 +221,10 @@ public final class OrcaUtil {
     private static final CallOptions.Key<OrcaReportBroker> ORCA_REPORT_BROKER_KEY =
         CallOptions.Key.create("internal-orca-report-broker");
     private final ClientStreamTracer.Factory delegate;
-    private final OrcaReportListener listener;
+    private final OrcaPerRequestReportListener listener;
 
     OrcaReportingTracerFactory(
-        ClientStreamTracer.Factory delegate, OrcaReportListener listener) {
+        ClientStreamTracer.Factory delegate, OrcaPerRequestReportListener listener) {
       this.delegate = checkNotNull(delegate, "delegate");
       this.listener = checkNotNull(listener, "listener");
     }
@@ -250,19 +267,19 @@ public final class OrcaUtil {
   }
 
   /**
-   * An {@link OrcaReportBroker} instance holds registered {@link OrcaReportListener}s and invoke
-   * all of them when an {@link OrcaLoadReport} is received.
+   * A container class to hold registered {@link OrcaPerRequestReportListener}s and invoke all
+   * of them when an {@link OrcaLoadReport} is received.
    */
   private static final class OrcaReportBroker {
 
-    private final List<OrcaReportListener> listeners = new ArrayList<>();
+    private final List<OrcaPerRequestReportListener> listeners = new ArrayList<>();
 
-    void addListener(OrcaReportListener listener) {
+    void addListener(OrcaPerRequestReportListener listener) {
       listeners.add(listener);
     }
 
     void onReport(OrcaLoadReport report) {
-      for (OrcaReportListener listener : listeners) {
+      for (OrcaPerRequestReportListener listener : listeners) {
         listener.onLoadReport(report);
       }
     }
@@ -275,12 +292,12 @@ public final class OrcaUtil {
    */
   private static final class OrcaReportingHelper
       extends ForwardingLoadBalancerHelper
-      implements OrcaReportListener {
+      implements OrcaOobReportListener {
 
     private static final CreateSubchannelArgs.Key<OrcaReportingState> ORCA_REPORTING_STATE_KEY =
         CreateSubchannelArgs.Key.create("internal-orca-reporting-state");
     private final LoadBalancer.Helper delegate;
-    private final OrcaReportListener listener;
+    private final OrcaOobReportListener listener;
     private final SynchronizationContext syncContext;
     private final BackoffPolicy.Provider backoffPolicyProvider;
     private final Supplier<Stopwatch> stopwatchSupplier;
@@ -289,7 +306,7 @@ public final class OrcaUtil {
     private OrcaReportingConfig orcaConfig;
 
     OrcaReportingHelper(LoadBalancer.Helper delegate,
-        OrcaReportListener listener,
+        OrcaOobReportListener listener,
         BackoffPolicy.Provider backoffPolicyProvider,
         Supplier<Stopwatch> stopwatchSupplier) {
       this.delegate = checkNotNull(delegate, "delegate");
@@ -315,7 +332,6 @@ public final class OrcaUtil {
         // create subchannel to.
         orcaState = new OrcaReportingState(
             this,
-            new OrcaReportBroker(),
             args.getStateListener(),
             syncContext,
             delegate().getScheduledExecutorService());
@@ -323,7 +339,7 @@ public final class OrcaUtil {
         args = args.toBuilder().addOption(ORCA_REPORTING_STATE_KEY, orcaState).build();
         augmented = true;
       }
-      orcaState.broker.addListener(this);
+      orcaState.listeners.add(this);
       Subchannel subchannel;
       if (augmented) {
         subchannel = super.createSubchannel(args.toBuilder().setStateListener(orcaState).build());
@@ -345,9 +361,9 @@ public final class OrcaUtil {
     }
 
     @Override
-    public void onLoadReport(OrcaLoadReport report) {
+    public void onLoadReport(Subchannel subchannel, OrcaLoadReport report) {
       if (orcaConfig != null) {
-        listener.onLoadReport(report);
+        listener.onLoadReport(subchannel, report);
       }
     }
 
@@ -362,7 +378,7 @@ public final class OrcaUtil {
       private final SubchannelStateListener stateListener;
       private final SynchronizationContext syncContext;
       private final ScheduledExecutorService timeService;
-      private final OrcaReportBroker broker;
+      private final List<OrcaOobReportListener> listeners = new ArrayList<>();
       @Nullable
       private Subchannel subchannel;
       @Nullable
@@ -387,12 +403,10 @@ public final class OrcaUtil {
 
       OrcaReportingState(
           OrcaReportingHelper orcaHelper,
-          OrcaReportBroker broker,
           SubchannelStateListener stateListener,
           SynchronizationContext syncContext,
           ScheduledExecutorService timeService) {
         this.orcaHelper = checkNotNull(orcaHelper, "orcaHelper");
-        this.broker = checkNotNull(broker, "broker");
         this.stateListener = checkNotNull(stateListener, "stateListener");
         this.syncContext = checkNotNull(syncContext, "syncContext");
         this.timeService = checkNotNull(timeService, "timeService");
@@ -544,7 +558,9 @@ public final class OrcaUtil {
           callHasResponded = true;
           backoffPolicy = null;
           subchannelLogger.log(ChannelLogLevel.DEBUG, "Received an ORCA report: {0}", response);
-          broker.onReport(response);
+          for (OrcaOobReportListener listener : listeners) {
+            listener.onLoadReport(subchannel, response);
+          }
           call.request(1);
         }
 
