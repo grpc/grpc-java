@@ -128,10 +128,10 @@ final class XdsComms {
                   if (lbProvider == null)  {
                     helper.getChannelLogger().log(
                         ChannelLogLevel.INFO,
-                        "Unable to load lbPolicy '{0}', use round_robin instead", lbPolicy);
+                        "Unable to load lbPolicy '{0}', use '{1}' instead", lbPolicy, ROUND_ROBIN);
                     lbProvider =  checkNotNull(
                         lbRegistry.getProvider(ROUND_ROBIN),
-                        "Unable to find round-robin LoadBalancer");
+                        "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
 
                   }
                   subchannelStore.updateLoadBalancerProvider(lbProvider);
