@@ -111,6 +111,7 @@ public class NameResolverTest {
   }
 
   @Deprecated
+  @SuppressWarnings("unchecked")
   @Test
   public void newNameResolver_Api3DelegatesToApi2() {
     final AtomicReference<NameResolver.Helper> helperCapture = new AtomicReference<>();
@@ -145,6 +146,7 @@ public class NameResolverTest {
   // Tests that a forwarding factory on API1 can correctly delegate to a factory already migrated
   // to API3 without losing information.
   @Deprecated
+  @SuppressWarnings("unchecked")
   @Test
   public void newNameResolver_forwardingFactory1DelegatesToApi3() {
     final AtomicReference<NameResolver.Args> argsCapture = new AtomicReference<>();
@@ -193,6 +195,7 @@ public class NameResolverTest {
   // Tests that a forwarding factory on API2 can correctly delegate to a factory already migrated
   // to API3 without losing information.
   @Deprecated
+  @SuppressWarnings("unchecked")
   @Test
   public void newNameResolver_forwardingFactory2DelegatesToApi3() {
     final AtomicReference<NameResolver.Args> argsCapture = new AtomicReference<>();

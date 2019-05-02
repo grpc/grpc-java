@@ -23,7 +23,6 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
-import io.grpc.ProxyDetector;
 import io.grpc.SynchronizationContext;
 import java.net.URI;
 import org.junit.Test;

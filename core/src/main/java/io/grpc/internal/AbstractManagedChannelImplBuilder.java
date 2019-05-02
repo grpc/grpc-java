@@ -582,7 +582,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     @Override
-    public NameResolver newNameResolver(URI notUsedUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(URI notUsedUri, NameResolver.Args args) {
       return new NameResolver() {
         @Override
         public String getServiceAuthority() {

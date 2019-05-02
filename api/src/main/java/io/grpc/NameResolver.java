@@ -199,7 +199,7 @@ public abstract class NameResolver {
      * @param helper utility that may be used by the NameResolver implementation
      *
      * @since 1.19.0
-     * @deprecated implement {@link #newNameResolver(URI, Args)} instead
+     * @deprecated implement {@link #newNameResolver(URI, NameResolver.Args)} instead
      */
     @Deprecated
     @Nullable
@@ -388,7 +388,7 @@ public abstract class NameResolver {
      * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
      * {@link Status} representing the failure to parse.  Implementations are expected to not throw
      * exceptions but return a Status representing the failure.  The value inside the
-     * {@link ConfigOrError} should implement {@link Object#equals()} and {@link Object#hashCode()}.
+     * {@link ConfigOrError} should implement {@code equals()} and {@code hashCode()}.
      *
      * @param rawServiceConfig The {@link Map} representation of the service config
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.
@@ -528,7 +528,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@Link Args#getSynchronizationContext}.  This is a required field.
+       * See {@link Args#getSynchronizationContext}.  This is a required field.
        *
        * @since 1.21.0
        */
@@ -570,7 +570,7 @@ public abstract class NameResolver {
      * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
      * {@link Status} representing the failure to parse.  Implementations are expected to not throw
      * exceptions but return a Status representing the failure.  The value inside the
-     * {@link ConfigOrError} should implement {@link Object#equals()} and {@link Object#hashCode()}.
+     * {@link ConfigOrError} should implement {@code equals()} and {@code hashCode()}.
      *
      * @param rawServiceConfig The {@link Map} representation of the service config
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.

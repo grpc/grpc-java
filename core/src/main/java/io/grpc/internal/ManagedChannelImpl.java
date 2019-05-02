@@ -130,8 +130,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final InternalLogId logId;
   private final String target;
   private final NameResolver.Factory nameResolverFactory;
-  private final NameResolver.Helper nameResolverHelper;
-  private final LoadBalancer.Factory loadBalancerFactory;
+  private final NameResolver.Args nameResolverArgs;
+  private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
   private final ScheduledExecutorForBalancer scheduledExecutorForBalancer;
   private final Executor executor;
@@ -334,7 +334,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       nameResolver.shutdown();
       nameResolverStarted = false;
       if (channelIsActive) {
-        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
+        nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
       } else {
         nameResolver = null;
       }
@@ -559,19 +559,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
-        new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-    this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
-    this.nameResolverHelper =
-        new NrHelper(
-            builder.getDefaultPort(),
-            proxyDetector,
-            syncContext,
-            retryEnabled,
-            builder.maxRetryAttempts,
-            builder.maxHedgedAttempts,
-            autoConfiguredLoadBalancerFactory);
-    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverHelper);
+    this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.nameResolverArgs = NameResolver.Args.newBuilder()
+        .setDefaultPort(builder.getDefaultPort())
+        .setProxyDetector(proxyDetector)
+        .setSynchronizationContext(syncContext)
+        .setServiceConfigParser(
+            new ScParser(
+                retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts,
+                loadBalancerFactory))
+        .build();
+    this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
     channelTracer = new ChannelTracer(
@@ -656,7 +654,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   @VisibleForTesting
   static NameResolver getNameResolver(String target, NameResolver.Factory nameResolverFactory,
-      NameResolver.Helper nameResolverHelper) {
+      NameResolver.Args nameResolverArgs) {
     // Finding a NameResolver. Try using the target string as the URI. If that fails, try prepending
     // "dns:///".
     URI targetUri = null;
@@ -671,7 +669,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       uriSyntaxErrors.append(e.getMessage());
     }
     if (targetUri != null) {
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverHelper);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverArgs);
       if (resolver != null) {
         return resolver;
       }
@@ -689,7 +687,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         // Should not be possible.
         throw new IllegalArgumentException(e);
       }
-      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverHelper);
+      NameResolver resolver = nameResolverFactory.newNameResolver(targetUri, nameResolverArgs);
       if (resolver != null) {
         return resolver;
       }
@@ -1748,47 +1746,23 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @VisibleForTesting
-  static final class NrHelper extends NameResolver.Helper {
+  static final class ScParser extends NameResolver.ServiceConfigParser {
 
-    private final int defaultPort;
-    private final ProxyDetector proxyDetector;
-    private final SynchronizationContext syncCtx;
     private final boolean retryEnabled;
     private final int maxRetryAttemptsLimit;
     private final int maxHedgedAttemptsLimit;
-    // TODO(zhangkun83): remove this once setting a specific LB is prohibited.
-    @Nullable private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
+    private final AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory;
 
-    NrHelper(
-        int defaultPort,
-        ProxyDetector proxyDetector,
-        SynchronizationContext syncCtx,
+    ScParser(
         boolean retryEnabled,
         int maxRetryAttemptsLimit,
         int maxHedgedAttemptsLimit,
         AutoConfiguredLoadBalancerFactory autoLoadBalancerFactory) {
-      this.defaultPort = defaultPort;
-      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector");
-      this.syncCtx = checkNotNull(syncCtx, "syncCtx");
       this.retryEnabled = retryEnabled;
       this.maxRetryAttemptsLimit = maxRetryAttemptsLimit;
       this.maxHedgedAttemptsLimit = maxHedgedAttemptsLimit;
-      this.autoLoadBalancerFactory = autoLoadBalancerFactory;
-    }
-
-    @Override
-    public int getDefaultPort() {
-      return defaultPort;
-    }
-
-    @Override
-    public ProxyDetector getProxyDetector() {
-      return proxyDetector;
-    }
-
-    @Override
-    public SynchronizationContext getSynchronizationContext() {
-      return syncCtx;
+      this.autoLoadBalancerFactory =
+          checkNotNull(autoLoadBalancerFactory, "autoLoadBalancerFactory");
     }
 
     @Override
@@ -1796,18 +1770,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
         Object loadBalancingPolicySelection;
-        if (autoLoadBalancerFactory != null) {
-          ConfigOrError choiceFromLoadBalancer =
-              autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
-          if (choiceFromLoadBalancer == null) {
-            loadBalancingPolicySelection = null;
-          } else if (choiceFromLoadBalancer.getError() != null) {
-            return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
-          } else {
-            loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
-          }
-        } else {
+        ConfigOrError choiceFromLoadBalancer =
+            autoLoadBalancerFactory.selectLoadBalancerPolicy(rawServiceConfig);
+        if (choiceFromLoadBalancer == null) {
           loadBalancingPolicySelection = null;
+        } else if (choiceFromLoadBalancer.getError() != null) {
+          return ConfigOrError.fromError(choiceFromLoadBalancer.getError());
+        } else {
+          loadBalancingPolicySelection = choiceFromLoadBalancer.getConfig();
         }
         return ConfigOrError.fromConfig(
             ManagedChannelServiceConfig.fromServiceConfig(
