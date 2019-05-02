@@ -66,6 +66,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.OrcaUtil.OrcaReportListener;
 import io.grpc.xds.OrcaUtil.OrcaReportingConfig;
+import io.grpc.xds.OrcaUtil.OrcaReportingHelperWrapper;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
@@ -127,7 +128,7 @@ public class OrcaUtilOobReportingTest {
   @Mock private BackoffPolicy backoffPolicy1;
   @Mock private BackoffPolicy backoffPolicy2;
   private FakeSubchannel[] subchannels;
-  private Helper orcaHelper;
+  private OrcaReportingHelperWrapper orcaHelperWrapper;
 
   private static OrcaLoadReportRequest buildOrcaRequestFromConfig(
       OrcaReportingConfig config) {
@@ -196,12 +197,11 @@ public class OrcaUtilOobReportingTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(12L, 22L);
 
     subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
-    orcaHelper = OrcaUtil.newOrcaReportingHelper(
+    orcaHelperWrapper = OrcaUtil.newOrcaReportingHelperWrapper(
         origHelper,
         mockOrcaListener,
         backoffPolicyProvider,
-        fakeClock.getStopwatchSupplier(),
-        ORCA_REPORTING_CONFIG);
+        fakeClock.getStopwatchSupplier());
   }
 
   @After
@@ -244,6 +244,7 @@ public class OrcaUtilOobReportingTest {
   @Test
   @SuppressWarnings("unchecked")
   public void typicalWorkflow() {
+    orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
     verify(origHelper, atLeast(0)).getSynchronizationContext();
     verifyNoMoreInteractions(origHelper);
 
@@ -254,7 +255,8 @@ public class OrcaUtilOobReportingTest {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs =
           Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
-      assertThat(createSubchannel(orcaHelper, i, attrs)).isSameInstanceAs(subchannels[i]);
+      assertThat(createSubchannel(orcaHelperWrapper.asHelper(), i, attrs))
+          .isSameInstanceAs(subchannels[i]);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -335,7 +337,8 @@ public class OrcaUtilOobReportingTest {
   @Test
   @SuppressWarnings("unchecked")
   public void orcReportingDisabledWhenServiceNotImplemented() {
-    createSubchannel(orcaHelper, 0, Attributes.EMPTY);
+    orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
@@ -374,7 +377,8 @@ public class OrcaUtilOobReportingTest {
    */
   @Test
   public void orcaReportingStreamClosedAndRetried() {
-    createSubchannel(orcaHelper, 0, Attributes.EMPTY);
+    orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
@@ -444,13 +448,18 @@ public class OrcaUtilOobReportingTest {
   @Test
   public void twoLevelPoliciesReceiveSameReport() {
     OrcaReportListener childListener = mockOrcaListener;
-    Helper childHelper = orcaHelper;
+    OrcaReportingHelperWrapper childHelperWrapper = orcaHelperWrapper;
+    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
     OrcaReportListener parentListener = mock(OrcaReportListener.class);
-    Helper parentHelper = OrcaUtil
-        .newOrcaReportingHelper(childHelper, parentListener, backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(), ORCA_REPORTING_CONFIG);
+    OrcaReportingHelperWrapper parentHelperWrapper =
+        OrcaUtil.newOrcaReportingHelperWrapper(
+            childHelperWrapper.asHelper(),
+            parentListener,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
 
-    createSubchannel(parentHelper, 0, Attributes.EMPTY);
+    createSubchannel(parentHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
@@ -480,16 +489,24 @@ public class OrcaUtilOobReportingTest {
    */
   @Test
   public void reportMostEntriesAndMostFrequentIntervalRequested() {
-    Helper childHelper = orcaHelper;
+    OrcaReportingHelperWrapper childHelperWrapper = orcaHelperWrapper;
+    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
     OrcaReportListener parentListener = mock(OrcaReportListener.class);
-    OrcaReportingConfig config = OrcaReportingConfig.newBuilder()
-        .setReportInterval(12, TimeUnit.NANOSECONDS).addCostName("costs.named.test").build();
+    OrcaReportingConfig config =
+        OrcaReportingConfig.newBuilder()
+            .setReportInterval(12, TimeUnit.NANOSECONDS)
+            .addCostName("costs.named.test")
+            .build();
 
-    Helper parentHelper = OrcaUtil
-        .newOrcaReportingHelper(childHelper, parentListener, backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier(), config);
+    OrcaReportingHelperWrapper parentHelperWrapper =
+        OrcaUtil.newOrcaReportingHelperWrapper(
+            childHelperWrapper.asHelper(),
+            parentListener,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+    parentHelperWrapper.setReportingConfig(config);
 
-    createSubchannel(parentHelper, 0, Attributes.EMPTY);
+    createSubchannel(parentHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];

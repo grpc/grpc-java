@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -120,16 +121,26 @@ public final class OrcaUtil {
    * @param backoffPolicyProvider the provider of backoff policy used to backoff failure of ORCA
    *     service streaming.
    * @param stopwatchSupplier supplies stopwatch utility.
-   * @param reportingConfig configuration for receiving out-of-band ORCA reports.
    */
-  public static LoadBalancer.Helper newOrcaReportingHelper(
+  public static OrcaReportingHelperWrapper newOrcaReportingHelperWrapper(
       LoadBalancer.Helper delegate,
       OrcaReportListener listener,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier,
-      OrcaReportingConfig reportingConfig) {
-    return new OrcaReportingHelper(delegate, listener, backoffPolicyProvider, stopwatchSupplier,
-        reportingConfig);
+      Supplier<Stopwatch> stopwatchSupplier) {
+    final OrcaReportingHelper orcaHelper =
+        new OrcaReportingHelper(delegate, listener, backoffPolicyProvider, stopwatchSupplier);
+
+    return new OrcaReportingHelperWrapper() {
+      @Override
+      public void setReportingConfig(OrcaReportingConfig config) {
+        orcaHelper.setReportingConfig(config);
+      }
+
+      @Override
+      public Helper asHelper() {
+        return orcaHelper;
+      }
+    };
   }
 
   /**
@@ -148,6 +159,33 @@ public final class OrcaUtil {
      * polices requesting for more frequent and detailed reports.
      */
     void onLoadReport(OrcaLoadReport report);
+  }
+
+  /**
+   * The blueprint for {@link LoadBalancer.Helper} with the capability of allowing {@link
+   * LoadBalancer}s interested in receiving out-of-band ORCA reports to update the reporting
+   * configuration such as reporting interval.
+   */
+  public abstract static class OrcaReportingHelperWrapper {
+
+    /**
+     * Sets the configuration of receiving ORCA reports, such as the interval of receiving reports.
+     *
+     * <p>Each load balancing policy must call this method to configure the
+     * backend load reporting. Otherwise, it will not receive ORCA reports.
+     *
+     * <p>If multiple load balancing policies configure reporting with different intervals,
+     * reports come with the minimum of those intervals.
+     *
+     * @param config the configuration to be set.
+     */
+    public abstract void setReportingConfig(OrcaReportingConfig config);
+
+    /**
+     * Returns a {@link LoadBalancer.Helper} that is backed by the Helper this {@code
+     * OrcaReportingHelperWrapper} delegates to.
+     */
+    public abstract LoadBalancer.Helper asHelper();
   }
 
   /**
@@ -235,7 +273,9 @@ public final class OrcaUtil {
    * functionality to manage RPCs for out-of-band ORCA reporting for each backend it establishes
    * connection to.
    */
-  private static final class OrcaReportingHelper extends ForwardingLoadBalancerHelper {
+  private static final class OrcaReportingHelper
+      extends ForwardingLoadBalancerHelper
+      implements OrcaReportListener {
 
     private static final CreateSubchannelArgs.Key<OrcaReportingState> ORCA_REPORTING_STATE_KEY =
         CreateSubchannelArgs.Key.create("internal-orca-reporting-state");
@@ -244,18 +284,18 @@ public final class OrcaUtil {
     private final SynchronizationContext syncContext;
     private final BackoffPolicy.Provider backoffPolicyProvider;
     private final Supplier<Stopwatch> stopwatchSupplier;
-    private final OrcaReportingConfig orcaConfig;
+    private final Set<OrcaReportingState> orcaStates = new HashSet<>();
+    @Nullable
+    private OrcaReportingConfig orcaConfig;
 
     OrcaReportingHelper(LoadBalancer.Helper delegate,
         OrcaReportListener listener,
         BackoffPolicy.Provider backoffPolicyProvider,
-        Supplier<Stopwatch> stopwatchSupplier,
-        OrcaReportingConfig orcaConfig) {
+        Supplier<Stopwatch> stopwatchSupplier) {
       this.delegate = checkNotNull(delegate, "delegate");
       this.listener = checkNotNull(listener, "listener");
       this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
       this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-      this.orcaConfig = checkNotNull(orcaConfig, "orcaConfig");
       syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
     }
 
@@ -273,15 +313,17 @@ public final class OrcaUtil {
         // Only the root load balanceing policy instantiate an OrcaReportingState instance to
         // request for ORCA report from the backend that the delegated helper is trying to
         // create subchannel to.
-        orcaState = new OrcaReportingState(new OrcaReportBroker(),
+        orcaState = new OrcaReportingState(
+            this,
+            new OrcaReportBroker(),
             args.getStateListener(),
             syncContext,
             delegate().getScheduledExecutorService());
+        orcaStates.add(orcaState);
         args = args.toBuilder().addOption(ORCA_REPORTING_STATE_KEY, orcaState).build();
         augmented = true;
       }
-      orcaState.broker.addListener(listener);
-      orcaState.setOrcaReportingConfig(orcaConfig);
+      orcaState.broker.addListener(this);
       Subchannel subchannel;
       if (augmented) {
         subchannel = super.createSubchannel(args.toBuilder().setStateListener(orcaState).build());
@@ -289,7 +331,24 @@ public final class OrcaUtil {
       } else {
         subchannel = super.createSubchannel(args);
       }
+      if (orcaConfig != null) {
+        orcaState.setReportingConfig(orcaConfig);
+      }
       return subchannel;
+    }
+
+    void setReportingConfig(OrcaReportingConfig config) {
+      orcaConfig = config;
+      for (OrcaReportingState state : orcaStates) {
+        state.setReportingConfig(config);
+      }
+    }
+
+    @Override
+    public void onLoadReport(OrcaLoadReport report) {
+      if (orcaConfig != null) {
+        listener.onLoadReport(report);
+      }
     }
 
     /**
@@ -299,6 +358,7 @@ public final class OrcaUtil {
      */
     private final class OrcaReportingState implements SubchannelStateListener {
 
+      private final OrcaReportingHelper orcaHelper;
       private final SubchannelStateListener stateListener;
       private final SynchronizationContext syncContext;
       private final ScheduledExecutorService timeService;
@@ -326,10 +386,12 @@ public final class OrcaUtil {
       private boolean disabled;
 
       OrcaReportingState(
+          OrcaReportingHelper orcaHelper,
           OrcaReportBroker broker,
           SubchannelStateListener stateListener,
           SynchronizationContext syncContext,
           ScheduledExecutorService timeService) {
+        this.orcaHelper = checkNotNull(orcaHelper, "orcaHelper");
         this.broker = checkNotNull(broker, "broker");
         this.stateListener = checkNotNull(stateListener, "stateListener");
         this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -342,7 +404,7 @@ public final class OrcaUtil {
         this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       }
 
-      void setOrcaReportingConfig(OrcaReportingConfig config) {
+      void setReportingConfig(OrcaReportingConfig config) {
         boolean reconfigured = false;
         // The overall config is the union of existing config and new config requested by some
         // load balancing policy.
@@ -377,6 +439,9 @@ public final class OrcaUtil {
           // may be available on the new connection.
           disabled = false;
         }
+        if (Objects.equal(newState.getState(), SHUTDOWN)) {
+          orcaHelper.orcaStates.remove(this);
+        }
         state = newState;
         adjustOrcaReporting();
         // Propagate subchannel state update to downstream listeners.
@@ -384,7 +449,7 @@ public final class OrcaUtil {
       }
 
       void adjustOrcaReporting() {
-        if (!disabled && orcaConfig != null && Objects.equal(state.getState(), READY)) {
+        if (!disabled && overallConfig != null && Objects.equal(state.getState(), READY)) {
           if (orcaRpc == null && !isRetryTimerPending()) {
             startRpc();
           }
@@ -443,8 +508,8 @@ public final class OrcaUtil {
           stopwatch.reset().start();
           call.start(this, new Metadata());
           call.sendMessage(OrcaLoadReportRequest.newBuilder()
-              .setReportInterval(Durations.fromNanos(orcaConfig.getReportIntervalNanos()))
-              .addAllRequestCostNames(orcaConfig.getCostNames())
+              .setReportInterval(Durations.fromNanos(overallConfig.getReportIntervalNanos()))
+              .addAllRequestCostNames(overallConfig.getCostNames())
               .build());
           call.halfClose();
           call.request(1);
