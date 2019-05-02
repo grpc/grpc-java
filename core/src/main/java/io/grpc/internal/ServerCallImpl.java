@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -302,7 +303,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
-        MoreThrowables.throwIfUnchecked(t);
+        Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);
       } finally {
         PerfMark.taskEnd();
