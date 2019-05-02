@@ -107,15 +107,7 @@ class XdsLbState {
     if (xdsComms != null) {
       xdsComms.refreshAdsStream();
     } else {
-      // ** This is wrong **
-      // FIXME: use name resolver to resolve addresses for balancerName, and create xdsComms in
-      // name resolver listener callback.
-      // TODO: consider pass a fake EAG as a static final field visible to tests and verify
-      // createOobChannel() with this EAG in tests.
-      ManagedChannel oobChannel = helper.createOobChannel(
-          new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(
-              new java.net.SocketAddress() {})),
-          balancerName);
+      ManagedChannel oobChannel = helper.createResolvingOobChannel(balancerName);
       xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore);
     }
 
@@ -500,7 +492,7 @@ class XdsLbState {
         // TODO: put endPointWeights into attributes for WRR.
         intraLocalitySubchannelStore.childBalancer
             .handleResolvedAddresses(
-                ResolvedAddresses.newBuilder().setServers(newEags).build());
+                ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
         LocalityState localityState =
             new LocalityState(

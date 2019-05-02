@@ -236,7 +236,7 @@ public class XdsLoadBalancerTest {
         delegatesTo(cleanupRule.register(channelBuilder.build())));
 
     doReturn(oobChannel1).doReturn(oobChannel2).doReturn(oobChannel3)
-      .when(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+      .when(helper).createResolvingOobChannel(anyString());
   }
 
   @After
@@ -268,7 +268,7 @@ public class XdsLoadBalancerTest {
 
     XdsLbState xdsLbState1 = lb.getXdsLbStateForTest();
     assertThat(xdsLbState1.childPolicy).isNull();
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -293,7 +293,7 @@ public class XdsLoadBalancerTest {
     assertThat(xdsLbState2).isSameInstanceAs(xdsLbState1);
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is unchanged
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -316,7 +316,7 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -339,7 +339,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -362,7 +362,7 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -387,7 +387,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNull();
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -411,7 +411,7 @@ public class XdsLoadBalancerTest {
             .build());
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -433,7 +433,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -456,7 +456,7 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -479,8 +479,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
     // verify oobChannel is unchanged
-    verify(helper, times(2)).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(),
-        anyString());
+    verify(helper, times(2)).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());

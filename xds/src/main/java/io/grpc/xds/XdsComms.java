@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -54,6 +55,7 @@ import java.util.Map;
 final class XdsComms {
   private final ManagedChannel channel;
   private final Helper helper;
+  private final LoadBalancerRegistry lbRegistry;
 
   // never null
   private AdsStream adsStream;
@@ -64,6 +66,7 @@ final class XdsComms {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
     static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
+    static final String ROUND_ROBIN = "round_robin";
     final SubchannelStore subchannelStore;
 
     final AdsStreamCallback adsStreamCallback;
@@ -120,15 +123,14 @@ final class XdsComms {
                     return;
                   }
 
-                  lbProvider = LoadBalancerRegistry.getDefaultRegistry()
-                      .getProvider(lbPolicy.name().toLowerCase());
+                  lbProvider = lbRegistry.getProvider(lbPolicy.name().toLowerCase());
 
                   if (lbProvider == null)  {
                     helper.getChannelLogger().log(
                         ChannelLogLevel.INFO,
                         "Unable to load lbPolicy '{0}', use round_robin instead", lbPolicy);
                     lbProvider =  checkNotNull(
-                        LoadBalancerRegistry.getDefaultRegistry().getProvider("round_robin"),
+                        lbRegistry.getProvider(ROUND_ROBIN),
                         "Unable to find round-robin LoadBalancer");
 
                   }
@@ -239,19 +241,37 @@ final class XdsComms {
     AdsStream(AdsStream adsStream) {
       this(adsStream.adsStreamCallback, adsStream.subchannelStore);
     }
+
+    void cancelRpc(String message, Throwable cause) {
+      if (cancelled) {
+        return;
+      }
+      cancelled = true;
+      xdsRequestWriter.onError(
+          Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
+    }
   }
 
   /**
    * Starts a new ADS streaming RPC.
    */
+  XdsComms(ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
+      SubchannelStore subchannelStore) {
+    this(
+        channel, helper, adsStreamCallback, subchannelStore,
+        LoadBalancerRegistry.getDefaultRegistry());
+  }
+
+  @VisibleForTesting
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      SubchannelStore subchannelStore) {
+      SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.adsStream = new AdsStream(
         checkNotNull(adsStreamCallback, "adsStreamCallback"),
         checkNotNull(subchannelStore, "subchannelStore"));
+    this.lbRegistry = lbRegistry;
   }
 
   void shutdownChannel() {
@@ -268,16 +288,7 @@ final class XdsComms {
   }
 
   void shutdownLbRpc(String message) {
-    cancelRpc(message, null);
-  }
-
-  private void cancelRpc(String message, Throwable cause) {
-    if (adsStream.cancelled) {
-      return;
-    }
-    adsStream.cancelled = true;
-    adsStream.xdsRequestWriter.onError(
-        Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
+    adsStream.cancelRpc(message, null);
   }
 
   /**

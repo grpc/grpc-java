@@ -203,10 +203,10 @@ public class XdsLbStateTest {
     assertThat(childHelpers.keySet()).containsExactly("sz1", "sz2");
 
     verify(loadBalancers.get("sz1")).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getServers())
+    assertThat(resolvedAddressesCaptor.getValue().getAddresses())
         .containsExactly(eag11, eag12).inOrder();
     verify(loadBalancers.get("sz2")).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getServers())
+    assertThat(resolvedAddressesCaptor.getValue().getAddresses())
         .containsExactly(eag21, eag22).inOrder();
     verify(helper, never()).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
@@ -218,16 +218,16 @@ public class XdsLbStateTest {
     verify(helper).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
 
     wrrAlgorithm.setNextIndex(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs)).isSameAs(
-        PickResult.withNoResult());
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
+        .isSameInstanceAs(PickResult.withNoResult());
 
     wrrAlgorithm.setNextIndex(0);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameAs(pickResult1);
+        .isSameInstanceAs(pickResult1);
 
     wrrAlgorithm.setNextIndex(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs)).isSameAs(
-        PickResult.withNoResult());
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
+        .isSameInstanceAs(PickResult.withNoResult());
 
     SubchannelPicker childPicker2 = mock(SubchannelPicker.class);
     PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
@@ -236,6 +236,6 @@ public class XdsLbStateTest {
     verify(helper, times(2)).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
 
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameAs(pickResult2);
+        .isSameInstanceAs(pickResult2);
   }
 }
