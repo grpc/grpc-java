@@ -29,9 +29,11 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.grpclb.GrpclbState.Mode;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.CachedSubchannelPool;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.internal.SubchannelPool;
 import io.grpc.internal.TimeProvider;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,6 +67,15 @@ class GrpclbLoadBalancer extends LoadBalancer {
 
   GrpclbLoadBalancer(
       Helper helper,
+      TimeProvider time,
+      Stopwatch stopwatch,
+      BackoffPolicy.Provider backoffPolicyProvider) {
+    this(helper, new CachedSubchannelPool(), time, stopwatch, backoffPolicyProvider);
+  }
+
+  @VisibleForTesting
+  GrpclbLoadBalancer(
+      Helper helper,
       SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
@@ -74,7 +85,6 @@ class GrpclbLoadBalancer extends LoadBalancer {
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.subchannelPool = checkNotNull(subchannelPool, "subchannelPool");
-    this.subchannelPool.init(helper);
     recreateStates();
     checkNotNull(grpclbState, "grpclbState");
   }

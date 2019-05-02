@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.grpclb;
+package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
@@ -30,14 +29,16 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
  * A {@link SubchannelPool} that keeps returned {@link Subchannel}s for a given time before it's
  * shut down by the pool.
  */
-final class CachedSubchannelPool implements SubchannelPool {
-  private final HashMap<EquivalentAddressGroup, CacheEntry> cache =
+// TODO: make it package private. Right now it has to be public for grpclb testing.
+public final class CachedSubchannelPool implements SubchannelPool {
+  private final HashMap<List<EquivalentAddressGroup>, CacheEntry> cache =
       new HashMap<>();
 
   private Helper helper;
@@ -51,25 +52,31 @@ final class CachedSubchannelPool implements SubchannelPool {
   }
 
   @Override
-  public Subchannel takeOrCreateSubchannel(
-      EquivalentAddressGroup eag, Attributes defaultAttributes, SubchannelStateListener listener) {
-    final CacheEntry entry = cache.get(eag);
-    final Subchannel subchannel;
+  public ForwardingSubchannel takeOrCreateSubchannel(CreateSubchannelArgs args) {
+    List<EquivalentAddressGroup> eags = args.getAddresses();
+    final CacheEntry entry = cache.get(args.getAddresses());
+    final ForwardingSubchannel subchannel;
     if (entry == null) {
       final CacheEntry newEntry = new CacheEntry();
-      subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-          .setAddresses(eag)
-          .setAttributes(defaultAttributes)
-          .setStateListener(new StateListener(newEntry))
-          .build());
+      subchannel = new ForwardingSubchannel(
+          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(eags)
+              .setAttributes(args.getAttributes())
+              .setStateListener(new StateListener(newEntry))
+              .build())) {
+        @Override
+        public void shutdown() {
+          returnSubchannel(this);
+        }
+      };
       newEntry.init(subchannel);
-      cache.put(eag, newEntry);
-      newEntry.taken(listener);
+      cache.put(eags, newEntry);
+      newEntry.taken(args.getStateListener());
     } else {
       subchannel = entry.subchannel;
-      checkState(eag.equals(subchannel.getAddresses()),
-          "Unexpected address change from %s to %s", eag, subchannel.getAddresses());
-      entry.taken(listener);
+      checkState(eags.equals(subchannel.getAllAddresses()),
+          "Unexpected address change from %s to %s", eags, subchannel.getAllAddresses());
+      entry.taken(args.getStateListener());
       // Make the listener up-to-date with the latest state in case it has changed while it's in the
       // cache.
       helper.getSynchronizationContext().execute(new Runnable() {
@@ -79,12 +86,13 @@ final class CachedSubchannelPool implements SubchannelPool {
           }
         });
     }
+
     return subchannel;
   }
 
   @Override
   public void returnSubchannel(Subchannel subchannel) {
-    CacheEntry entry = cache.get(subchannel.getAddresses());
+    CacheEntry entry = cache.get(subchannel.getAllAddresses());
     checkArgument(entry != null, "Cache record for %s not found", subchannel);
     checkArgument(entry.subchannel == subchannel,
         "Subchannel being returned (%s) doesn't match the cache (%s)",
@@ -96,37 +104,37 @@ final class CachedSubchannelPool implements SubchannelPool {
   public void clear() {
     for (CacheEntry entry : cache.values()) {
       entry.cancelShutdownTimer();
-      entry.subchannel.shutdown();
+      entry.subchannel.delegate.shutdown();
     }
     cache.clear();
   }
 
   @VisibleForTesting
   final class ShutdownSubchannelTask implements Runnable {
-    private final Subchannel subchannel;
+    private final ForwardingSubchannel subchannel;
 
-    private ShutdownSubchannelTask(Subchannel subchannel) {
+    private ShutdownSubchannelTask(ForwardingSubchannel subchannel) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
     }
 
     // This runs in channelExecutor
     @Override
     public void run() {
-      CacheEntry entry = cache.remove(subchannel.getAddresses());
+      CacheEntry entry = cache.remove(subchannel.getAllAddresses());
       checkState(entry.subchannel == subchannel, "Inconsistent state");
       entry.cancelShutdownTimer();
-      subchannel.shutdown();
+      subchannel.delegate.shutdown();
     }
   }
 
   private class CacheEntry {
-    Subchannel subchannel;
+    ForwardingSubchannel subchannel;
     ScheduledHandle shutdownTimer;
     ConnectivityStateInfo state;
     // Not null if outside of pool
     SubchannelStateListener stateListener;
 
-    void init(Subchannel subchannel) {
+    void init(ForwardingSubchannel subchannel) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
     }
 

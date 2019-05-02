@@ -49,6 +49,8 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
+import io.grpc.internal.SubchannelPool;
+import io.grpc.internal.SubchannelPoolHelper;
 import io.grpc.internal.TimeProvider;
 import io.grpc.lb.v1.ClientStats;
 import io.grpc.lb.v1.InitialLoadBalanceRequest;
@@ -113,7 +115,6 @@ final class GrpclbState implements SubchannelStateListener {
   private final String serviceName;
   private final Helper helper;
   private final SynchronizationContext syncContext;
-  private final SubchannelPool subchannelPool;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
   private final ScheduledExecutorService timerService;
@@ -161,10 +162,44 @@ final class GrpclbState implements SubchannelStateListener {
       Stopwatch stopwatch,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this.mode = checkNotNull(mode, "mode");
-    this.helper = checkNotNull(helper, "helper");
+    if (mode == Mode.ROUND_ROBIN) {
+      this.helper = new SubchannelPoolHelper(
+          checkNotNull(helper, "helper"), checkNotNull(subchannelPool, "subchannelPool"));
+    } else { // PICK_FIRST
+      /**
+       * A SubchannelPool that only remembers the latest subchannel.
+       */
+      class SimpleSubchannelPool implements SubchannelPool {
+
+        Helper helper;
+        Subchannel subchannel;
+
+        @Override
+        public void init(Helper helper) {
+          this.helper = checkNotNull(helper, "helper");
+        }
+
+        @Override
+        public Subchannel takeOrCreateSubchannel(CreateSubchannelArgs args) {
+          subchannel = helper.createSubchannel(args);
+          return subchannel;
+        }
+
+        @Override
+        public void returnSubchannel(Subchannel subchannel) {
+          subchannel.shutdown();
+        }
+
+        @Override
+        public void clear() {
+          // For PICK_FIRST, the subchannel is already shutdown when clear() is called
+        }
+      }
+
+      this.helper = new SubchannelPoolHelper(
+          checkNotNull(helper, "helper"), new SimpleSubchannelPool());
+    }
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.subchannelPool =
-        mode == Mode.ROUND_ROBIN ? checkNotNull(subchannelPool, "subchannelPool") : null;
     this.time = checkNotNull(time, "time provider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timerService");
@@ -318,22 +353,13 @@ final class GrpclbState implements SubchannelStateListener {
 
   void shutdown() {
     shutdownLbComm();
-    switch (mode) {
-      case ROUND_ROBIN:
-        // We close the subchannels through subchannelPool instead of helper just for convenience of
-        // testing.
-        for (Subchannel subchannel : subchannels.values()) {
-          subchannelPool.returnSubchannel(subchannel);
-        }
-        subchannelPool.clear();
-        break;
-      case PICK_FIRST:
-        checkState(subchannels.size() == 1, "Excessive Subchannels: %s", subchannels);
-        subchannels.values().iterator().next().shutdown();
-        break;
-      default:
-        throw new AssertionError("Missing case for " + mode);
+
+    for (Subchannel subchannel : subchannels.values()) {
+      subchannel.shutdown();
     }
+
+    helper.shutdown();
+
     subchannels = Collections.emptyMap();
     cancelFallbackTimer();
     cancelLbRpcRetryTimer();
@@ -364,12 +390,11 @@ final class GrpclbState implements SubchannelStateListener {
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
     logger.log(
         ChannelLogLevel.INFO, "Using RR list={0}, drop={1}", newBackendAddrList, newDropList);
-    HashMap<List<EquivalentAddressGroup>, Subchannel> newSubchannelMap =
-        new HashMap<>();
     List<BackendEntry> newBackendList = new ArrayList<>();
 
     switch (mode) {
       case ROUND_ROBIN:
+        HashMap<List<EquivalentAddressGroup>, Subchannel> newSubchannelMap = new HashMap<>();
         for (BackendAddressGroup backendAddr : newBackendAddrList) {
           EquivalentAddressGroup eag = backendAddr.getAddresses();
           List<EquivalentAddressGroup> eagAsList = Collections.singletonList(eag);
@@ -377,8 +402,12 @@ final class GrpclbState implements SubchannelStateListener {
           if (subchannel == null) {
             subchannel = subchannels.get(eagAsList);
             if (subchannel == null) {
-              subchannel = subchannelPool.takeOrCreateSubchannel(
-                  eag, createSubchannelAttrs(), this);
+              subchannel =
+                  helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                      .setAddresses(eagAsList)
+                      .setAttributes(createSubchannelAttrs())
+                      .setStateListener(this)
+                      .build());
               subchannel.requestConnection();
             }
             newSubchannelMap.put(eagAsList, subchannel);
@@ -396,7 +425,7 @@ final class GrpclbState implements SubchannelStateListener {
         for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
           List<EquivalentAddressGroup> eagList = entry.getKey();
           if (!newSubchannelMap.containsKey(eagList)) {
-            subchannelPool.returnSubchannel(entry.getValue());
+            entry.getValue().shutdown();
           }
         }
         subchannels = Collections.unmodifiableMap(newSubchannelMap);

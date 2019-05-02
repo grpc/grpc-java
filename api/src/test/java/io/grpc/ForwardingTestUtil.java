@@ -83,6 +83,7 @@ public final class ForwardingTestUtil {
     for (Method method : delegateClass.getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers())
           || Modifier.isPrivate(method.getModifiers())
+          || Modifier.isFinal(method.getModifiers())
           || skippedMethods.contains(method)) {
         continue;
       }

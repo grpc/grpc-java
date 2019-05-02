@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package io.grpc.grpclb;
+package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.grpclb.CachedSubchannelPool.SHUTDOWN_TIMEOUT_MS;
+import static io.grpc.internal.CachedSubchannelPool.SHUTDOWN_TIMEOUT_MS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
@@ -40,7 +40,6 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.FakeClock;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -113,11 +112,21 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void subchannelExpireAfterReturned() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    ForwardingSubchannel subchannel1 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel1).isNotNull();
     verify(helper).createSubchannel(argsWith(EAG1, "1"));
 
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    ForwardingSubchannel subchannel2 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel2).isNotNull();
     assertThat(subchannel2).isNotSameInstanceAs(subchannel1);
     verify(helper).createSubchannel(argsWith(EAG2, "2"));
@@ -126,30 +135,40 @@ public class CachedSubchannelPoolTest {
 
     // subchannel1 is 1ms away from expiration.
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
-    verify(subchannel1, never()).shutdown();
+    verify(subchannel1.delegate, never()).shutdown();
 
     pool.returnSubchannel(subchannel2);
 
     // subchannel1 expires. subchannel2 is (SHUTDOWN_TIMEOUT_MS - 1) away from expiration.
     clock.forwardTime(1, MILLISECONDS);
-    verify(subchannel1).shutdown();
+    verify(subchannel1.delegate).shutdown();
 
     // subchanne2 expires.
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
-    verify(subchannel2).shutdown();
+    verify(subchannel2.delegate).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 
   @Test
   public void subchannelReused() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    ForwardingSubchannel subchannel1 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel1).isNotNull();
     verify(helper).createSubchannel(argsWith(EAG1, "1"));
 
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    ForwardingSubchannel subchannel2 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel2).isNotNull();
-    assertThat(subchannel2).isNotSameInstanceAs(subchannel1);
+    assertThat(subchannel2.delegate).isNotSameInstanceAs(subchannel1.delegate);
     verify(helper).createSubchannel(argsWith(EAG2, "2"));
 
     pool.returnSubchannel(subchannel1);
@@ -158,40 +177,62 @@ public class CachedSubchannelPoolTest {
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
 
     // This will cancel the shutdown timer for subchannel1
-    Subchannel subchannel1a = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    ForwardingSubchannel subchannel1a =  pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel1a).isSameInstanceAs(subchannel1);
 
     pool.returnSubchannel(subchannel2);
 
     // subchannel2 expires SHUTDOWN_TIMEOUT_MS after being returned
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
-    verify(subchannel2, never()).shutdown();
+    verify(subchannel2.delegate, never()).shutdown();
     clock.forwardTime(1, MILLISECONDS);
-    verify(subchannel2).shutdown();
+    verify(subchannel2.delegate).shutdown();
 
     // pool will create a new channel for EAG2 when requested
-    Subchannel subchannel2a = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    Subchannel subchannel2a = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel2a).isNotSameInstanceAs(subchannel2);
     verify(helper, times(2)).createSubchannel(argsWith(EAG2, "2"));
 
     // subchannel1 expires SHUTDOWN_TIMEOUT_MS after being returned
     pool.returnSubchannel(subchannel1a);
     clock.forwardTime(SHUTDOWN_TIMEOUT_MS - 1, MILLISECONDS);
-    verify(subchannel1a, never()).shutdown();
+    verify(subchannel1a.delegate, never()).shutdown();
     clock.forwardTime(1, MILLISECONDS);
-    verify(subchannel1a).shutdown();
+    verify(subchannel1a.delegate).shutdown();
 
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 
   @Test
   public void updateStateWhileInPool() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    ForwardingSubchannel subchannel1 =  pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
+    ForwardingSubchannel subchannel2 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener)
+            .build());
 
     // Simulate state updates while they are in the pool
-    stateListeners.get(subchannel1).onSubchannelState(subchannel1, TRANSIENT_FAILURE_STATE);
-    stateListeners.get(subchannel2).onSubchannelState(subchannel1, TRANSIENT_FAILURE_STATE);
+    stateListeners.get(subchannel1.delegate)
+        .onSubchannelState(subchannel1, TRANSIENT_FAILURE_STATE);
+    stateListeners.get(subchannel2.delegate)
+        .onSubchannelState(subchannel1, TRANSIENT_FAILURE_STATE);
 
     verify(mockListener).onSubchannelState(same(subchannel1), same(TRANSIENT_FAILURE_STATE));
     verify(mockListener).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
@@ -203,18 +244,28 @@ public class CachedSubchannelPoolTest {
         ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE.withDescription("Another"));
 
     // Simulate a subchannel state update while it's in the pool
-    stateListeners.get(subchannel1).onSubchannelState(subchannel1, anotherFailureState);
+    stateListeners.get(subchannel1.delegate).onSubchannelState(subchannel1, anotherFailureState);
 
     SubchannelStateListener mockListener1 = mock(SubchannelStateListener.class);
     SubchannelStateListener mockListener2 = mock(SubchannelStateListener.class);
 
     // Saved state is populated to new mockListeners
-    assertThat(pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener1))
+    assertThat(
+        pool.takeOrCreateSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener1)
+            .build()))
         .isSameInstanceAs(subchannel1);
     verify(mockListener1).onSubchannelState(same(subchannel1), same(anotherFailureState));
     verifyNoMoreInteractions(mockListener1);
 
-    assertThat(pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener2))
+    assertThat(pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener2)
+            .build()))
         .isSameInstanceAs(subchannel2);
     verify(mockListener2).onSubchannelState(same(subchannel2), same(TRANSIENT_FAILURE_STATE));
     verifyNoMoreInteractions(mockListener2);
@@ -225,9 +276,19 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void takeTwice_willThrow() {
-    Subchannel unused = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     try {
-      pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+      pool.takeOrCreateSubchannel(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(EAG1)
+              .setAttributes(ATTRS1)
+              .setStateListener(mockListener)
+              .build());
       fail("Should throw");
     } catch (IllegalStateException e) {
       assertThat(e).hasMessageThat().contains("Already out of pool");
@@ -236,7 +297,12 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void returnTwice_willThrow() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel subchannel1 =  pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     pool.returnSubchannel(subchannel1);
     try {
       pool.returnSubchannel(subchannel1);
@@ -266,7 +332,12 @@ public class CachedSubchannelPoolTest {
         CreateSubchannelArgs.newBuilder()
             .setAddresses(EAG1).setStateListener(mockListener)
             .build());
-    Subchannel subchannel1c = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
+    Subchannel subchannel1c = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
     assertThat(subchannel1).isNotSameInstanceAs(subchannel1c);
     try {
       pool.returnSubchannel(subchannel1);
@@ -278,16 +349,26 @@ public class CachedSubchannelPoolTest {
 
   @Test
   public void clear() {
-    Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1, mockListener);
-    Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2, mockListener);
+    ForwardingSubchannel subchannel1 =  pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG1)
+            .setAttributes(ATTRS1)
+            .setStateListener(mockListener)
+            .build());
+    ForwardingSubchannel subchannel2 = pool.takeOrCreateSubchannel(
+        CreateSubchannelArgs.newBuilder()
+            .setAddresses(EAG2)
+            .setAttributes(ATTRS2)
+            .setStateListener(mockListener)
+            .build());
 
     pool.returnSubchannel(subchannel1);
 
-    verify(subchannel1, never()).shutdown();
-    verify(subchannel2, never()).shutdown();
+    verify(subchannel1.delegate, never()).shutdown();
+    verify(subchannel2.delegate, never()).shutdown();
     pool.clear();
-    verify(subchannel1).shutdown();
-    verify(subchannel2).shutdown();
+    verify(subchannel1.delegate).shutdown();
+    verify(subchannel2.delegate).shutdown();
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 

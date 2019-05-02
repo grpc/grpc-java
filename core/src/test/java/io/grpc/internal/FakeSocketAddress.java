@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package io.grpc.grpclb;
+package io.grpc.internal;
 
 import java.net.SocketAddress;
 
-final class FakeSocketAddress extends SocketAddress {
+public final class FakeSocketAddress extends SocketAddress {
   final String name;
 
-  FakeSocketAddress(String name) {
+  public FakeSocketAddress(String name) {
     this.name = name;
   }
 

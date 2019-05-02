@@ -14,47 +14,43 @@
  * limitations under the License.
  */
 
-package io.grpc.grpclb;
+package io.grpc.internal;
 
-import io.grpc.Attributes;
-import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Manages life-cycle of Subchannels for {@link GrpclbState}.
+ * Manages life-cycle of Subchannels.
  *
  * <p>All methods are run from the ChannelExecutor that the helper uses.
  */
 @NotThreadSafe
-interface SubchannelPool {
+// TODO: make it package private. Right now it has to be public for grpclb testing.
+public interface SubchannelPool {
   /**
    * Pass essential utilities and the balancer that's using this pool.
    */
   void init(Helper helper);
 
   /**
-   * Takes a {@link Subchannel} from the pool for the given {@code eag} if there is one available.
-   * Otherwise, creates and returns a new {@code Subchannel} with the given {@code eag} and {@code
-   * defaultAttributes}.
+   * Takes a {@link Subchannel} from the pool for the given {@code args.eags} if there is one
+   * available. Otherwise, creates and returns a new {@code Subchannel} with the given {@code args}.
+   * The given {@args.stateListener} will receive state updates for the returned subchannel.
    *
-   * <p>There can be at most one Subchannel for each EAG.  After a Subchannel is taken out of the
-   * pool, it must be returned before the same EAG can be used to call this method.
+   * <p>There can be at most one Subchannel for each EAGs.  After a Subchannel is taken out of the
+   * pool, it must be returned before the same EAGs can be used to call this method.
    *
-   * @param defaultAttributes the attributes used to create the Subchannel.  Not used if a pooled
-   *        subchannel is returned.
-   * @param stateListener receives state updates from now on
+   * <p>Note that {@code args.attrs} and {@code args.customOptions} will not be used if a pooled
+   * subchannel is returned.
    */
-  Subchannel takeOrCreateSubchannel(
-      EquivalentAddressGroup eag, Attributes defaultAttributes,
-      SubchannelStateListener stateListener);
+  Subchannel takeOrCreateSubchannel(CreateSubchannelArgs args);
 
   /**
    * Puts a {@link Subchannel} back to the pool.  From this point the Subchannel is owned by the
    * pool, and the caller should stop referencing to this Subchannel.  The {@link
-   * SubchannelStateListener} will not receive any more updates.
+   * io.grpc.LoadBalancer.SubchannelStateListener} will not receive any more updates.
    *
    * <p>Can only be called with a Subchannel created by this pool.  Must not be called if the
    * Subchannel is already in the pool.

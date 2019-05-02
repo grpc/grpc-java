@@ -1136,6 +1136,15 @@ public abstract class LoadBalancer {
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * Once called, all the subchannels that the helper has created will be cleared.
+     *
+     * @since 1.21.0
+     */
+    public void shutdown() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
