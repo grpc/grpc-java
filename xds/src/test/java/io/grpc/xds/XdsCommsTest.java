@@ -40,8 +40,10 @@ import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -88,6 +90,7 @@ public class XdsCommsTest {
           throw new AssertionError(e);
         }
       });
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
   private StreamObserver<DiscoveryResponse> responseWriter;
@@ -139,7 +142,28 @@ public class XdsCommsTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
-    xdsComms = new XdsComms(channel, helper, adsStreamCallback, subchannelStore);
+    lbRegistry.register(new LoadBalancerProvider() {
+      @Override
+      public boolean isAvailable() {
+        return true;
+      }
+
+      @Override
+      public int getPriority() {
+        return 0;
+      }
+
+      @Override
+      public String getPolicyName() {
+        return "round_robin";
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(Helper helper) {
+        return null;
+      }
+    });
+    xdsComms = new XdsComms(channel, helper, adsStreamCallback, subchannelStore, lbRegistry);
   }
 
   @Test

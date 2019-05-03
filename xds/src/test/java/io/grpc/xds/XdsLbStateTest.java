@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
@@ -76,8 +77,6 @@ public class XdsLbStateTest {
   @Mock
   private Helper helper;
   @Mock
-  private SubchannelPool subchannelPool;
-  @Mock
   private AdsStreamCallback adsStreamCallback;
   @Mock
   private PickSubchannelArgs pickSubchannelArgs;
@@ -101,6 +100,7 @@ public class XdsLbStateTest {
 
   private FakeWrrAlgorith wrrAlgorithm = new FakeWrrAlgorith();
 
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
   private final Map<String, Helper> childHelpers = new HashMap<>();
 
@@ -154,9 +154,9 @@ public class XdsLbStateTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
 
-    subchannelStore = new SubchannelStoreImpl(helper, subchannelPool, wrrAlgorithm);
+    subchannelStore = new SubchannelStoreImpl(helper, wrrAlgorithm);
     xdsLbState = new XdsLbState(
-        "fake_balancer_name", null, null, helper, subchannelStore, adsStreamCallback);
+        "fake_balancer_name", null, null, helper, subchannelStore, adsStreamCallback, lbRegistry);
   }
 
   @Test

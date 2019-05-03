@@ -83,14 +83,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
   }
 
-  private XdsLoadBalancer(
-      Helper helper, LoadBalancerRegistry lbRegistry, SubchannelPool subchannelPool) {
-    this(helper, lbRegistry, new SubchannelStoreImpl(helper, subchannelPool));
-    subchannelPool.init(helper, this);
-  }
-
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
-    this(helper, lbRegistry, new CachedSubchannelPool());
+    this(helper, lbRegistry, new SubchannelStoreImpl(helper));
   }
 
   @Override
@@ -141,7 +135,8 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
     }
     xdsLbState = new XdsLbState(
-        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback);
+        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback,
+        lbRegistry);
   }
 
   @Nullable

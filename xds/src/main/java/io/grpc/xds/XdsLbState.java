@@ -27,6 +27,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.grpc.Attributes;
@@ -35,13 +36,16 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -52,9 +56,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -73,6 +79,8 @@ import javax.annotation.Nullable;
  */
 class XdsLbState {
 
+  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
+      Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
   final String balancerName;
 
   @Nullable
@@ -81,6 +89,7 @@ class XdsLbState {
   private final SubchannelStore subchannelStore;
   private final Helper helper;
   private final AdsStreamCallback adsStreamCallback;
+  private final LoadBalancerRegistry lbRegistry;
 
   @Nullable
   private XdsComms xdsComms;
@@ -91,13 +100,15 @@ class XdsLbState {
       @Nullable XdsComms xdsComms,
       Helper helper,
       SubchannelStore subchannelStore,
-      AdsStreamCallback adsStreamCallback) {
+      AdsStreamCallback adsStreamCallback,
+      LoadBalancerRegistry lbRegistry) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.xdsComms = xdsComms;
     this.helper = checkNotNull(helper, "helper");
     this.subchannelStore = checkNotNull(subchannelStore, "subchannelStore");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
+    this.lbRegistry = lbRegistry;
   }
 
   final void handleResolvedAddressGroups(
@@ -108,7 +119,7 @@ class XdsLbState {
       xdsComms.refreshAdsStream();
     } else {
       ManagedChannel oobChannel = helper.createResolvingOobChannel(balancerName);
-      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore);
+      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore, lbRegistry);
     }
 
     // TODO: maybe update picker
@@ -123,7 +134,7 @@ class XdsLbState {
 
   final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // TODO: maybe update picker
-    subchannelStore.handleSubchannelState(subchannel, newState);
+    subchannelStore.onSubchannelState(subchannel, newState);
   }
 
   /**
@@ -385,7 +396,6 @@ class XdsLbState {
     };
     private static final WrrAlgorithm wrrAlgorithm = new WrrAlgorithmImpl();
 
-    private final SubchannelPool subchannelPool;
     private final Helper helper;
     private final WrrAlgorithm wrrAlgo;
 
@@ -397,21 +407,22 @@ class XdsLbState {
     private boolean shutdown;
 
     @VisibleForTesting
-    SubchannelStoreImpl(Helper helper, SubchannelPool subchannelPool, WrrAlgorithm wrrAlgo) {
+    SubchannelStoreImpl(Helper helper, WrrAlgorithm wrrAlgo) {
       this.helper = helper;
-      this.subchannelPool = subchannelPool;
       this.wrrAlgo = wrrAlgo;
     }
 
-    SubchannelStoreImpl(Helper helper, SubchannelPool subchannelPool) {
-      this(helper, subchannelPool, wrrAlgorithm);
+    SubchannelStoreImpl(Helper helper) {
+      this(helper, wrrAlgorithm);
     }
 
     @Override
     public boolean hasReadyBackends() {
+      // maybe optimize by tracking count of READY subchannels
       for (IntraLocalitySubchannelStore localitySubchannels : localityStore.values()) {
-        for (ConnectivityStateInfo state : localitySubchannels.subchannels.values()) {
-          if (state != null && state.getState() == ConnectivityState.READY) {
+        for (Subchannel subchannel : localitySubchannels.subchannels) {
+          if (ConnectivityState.READY
+              == subchannel.getAttributes().get(STATE_INFO).get().getState()) {
             return true;
           }
         }
@@ -427,14 +438,13 @@ class XdsLbState {
 
     // This is triggered by xdsLoadbalancer.handleSubchannelState
     @Override
-    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      // just in case the subchannel is in the pool
-      subchannelPool.handleSubchannelState(subchannel, newState);
+    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+      subchannel.getAttributes().get(STATE_INFO).set(newState);
 
       // delegate to the childBalancer who manages this subchannel
       for (IntraLocalitySubchannelStore intraLocalitySubchannelStore : localityStore.values()) {
-        if (intraLocalitySubchannelStore.subchannels.keySet().contains(subchannel)) {
-          intraLocalitySubchannelStore.subchannels.put(subchannel, newState);
+        if (intraLocalitySubchannelStore.subchannels.contains(subchannel)) {
+          intraLocalitySubchannelStore.subchannels.add(subchannel);
 
           // This will probably trigger childHelper.updateBalancingState
           intraLocalitySubchannelStore.childBalancer.handleSubchannelState(subchannel, newState);
@@ -588,8 +598,7 @@ class XdsLbState {
       @Nullable // null means the subchannel state is not updated at the moment yet
       ConnectivityState currentChildState;
 
-      // Set of subchannels in this locality, with additional state info for CachedSubchannelPool
-      private Map<Subchannel, ConnectivityStateInfo> subchannels = new HashMap<>();
+      private Set<Subchannel> subchannels = new HashSet<>();
 
       IntraLocalitySubchannelStore(Locality locality, LoadBalancerProvider loadBalancerProvider) {
         this.locality = locality;
@@ -599,14 +608,10 @@ class XdsLbState {
 
       void shutdown() {
         childBalancer.shutdown();
-        for (Map.Entry<Subchannel, ConnectivityStateInfo> subchannel : subchannels.entrySet()) {
-          ConnectivityStateInfo stateInfo = subchannel.getValue();
-          if (stateInfo == null) {
-            stateInfo = ConnectivityStateInfo.forNonError(IDLE);
-          }
-          subchannelPool.returnSubchannel(subchannel.getKey(), stateInfo);
+        for (Subchannel subchannel : subchannels) {
+          subchannel.shutdown();
         }
-        subchannels = ImmutableMap.of();
+        subchannels = ImmutableSet.of();
       }
 
       class ChildHelper extends ForwardingLoadBalancerHelper {
@@ -620,11 +625,18 @@ class XdsLbState {
         public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
 
           // delegate to parent helper
-          Subchannel subchannel = subchannelPool.takeOrCreateSubchannel(addrs, attrs);
+          Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(addrs)
+              .setAttributes(
+                  Attributes.newBuilder()
+                      .set(STATE_INFO,
+                          new AtomicReference<>(
+                              ConnectivityStateInfo.forNonError(IDLE)))
+                      .build())
+              .setStateListener(SubchannelStoreImpl.this)
+              .build());
 
-          if (!subchannels.containsKey(subchannel)) {
-            subchannels.put(subchannel, null); // its state will be updated later
-          }
+          subchannels.add(subchannel);
           return subchannel;
         }
 
@@ -659,13 +671,11 @@ class XdsLbState {
    * The interface of {@link XdsLbState.SubchannelStoreImpl} that is convenient for testing.
    */
   // Must be accessed/run in SynchronizedContext.
-  public interface SubchannelStore {
+  public interface SubchannelStore extends SubchannelStateListener {
 
     boolean hasReadyBackends();
 
     boolean hasNonDropBackends();
-
-    void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
     void shutdown();
 

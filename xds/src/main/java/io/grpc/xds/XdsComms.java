@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -255,14 +254,6 @@ final class XdsComms {
   /**
    * Starts a new ADS streaming RPC.
    */
-  XdsComms(ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      SubchannelStore subchannelStore) {
-    this(
-        channel, helper, adsStreamCallback, subchannelStore,
-        LoadBalancerRegistry.getDefaultRegistry());
-  }
-
-  @VisibleForTesting
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
       SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
