@@ -670,6 +670,7 @@ public class OrcaUtilOobReportingTest {
     ArgumentCaptor<OrcaLoadReport> parentReportCaptor = ArgumentCaptor.forClass(null);
     verify(mockOrcaListener1).onLoadReport(same(subchannels[0]), parentReportCaptor.capture());
     assertThat(parentReportCaptor.getValue()).isEqualTo(report);
+    verifyNoMoreInteractions(mockOrcaListener2);
 
     // Now child helper also wants to receive reports.
     childHelperWrapper.setReportingConfig(SHORT_INTERVAL_CONFIG);
