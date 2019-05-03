@@ -431,7 +431,7 @@ public final class OrcaUtil {
         // Real reporting interval is the minimum of intervals requested by all participating
         // helpers.
         if (overallConfig == null) {
-          overallConfig = config;
+          overallConfig = config.toBuilder().build();
           reconfigured = true;
         } else {
           long minInterval = Long.MAX_VALUE;
