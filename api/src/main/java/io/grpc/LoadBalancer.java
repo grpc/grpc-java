@@ -338,9 +338,8 @@ public abstract class LoadBalancer {
    * @param stateInfo the new state
    * @since 1.2.0
    * @deprecated This method will be removed.  Stop overriding it.  Instead, pass {@link
-   *             SubchannelStateListener} to {@link Helper#createSubchannel(List, Attributes,
-   *             SubchannelStateListener)} or {@link Helper#createSubchannel(EquivalentAddressGroup,
-   *             Attributes, SubchannelStateListener)} to receive Subchannel state updates
+   *             SubchannelStateListener} to {@link Helper#createSubchannel(CreateSubchannelArgs)}
+   *             to receive Subchannel state updates
    */
   @Deprecated
   public void handleSubchannelState(
@@ -826,8 +825,8 @@ public abstract class LoadBalancer {
 
       /**
        * Receives state changes of the created Subchannel.  The listener is called from
-       * the {@link #getSynchronizationContext Synchronization Context}.  It's safe to share the
-       * listener among multiple Subchannels.
+       * the {@link Helper#getSynchronizationContext Synchronization Context}.  It's safe to share
+       * the listener among multiple Subchannels.
        *
        * <p>This is a <strong>required</strong> property.
        */
