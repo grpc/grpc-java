@@ -19,10 +19,12 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
@@ -30,10 +32,13 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.xds.OrcaUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.OrcaUtil.OrcaReportingTracerFactory;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for {@link OrcaUtil}'s methods for per-request ORCA reporting.
@@ -44,13 +49,22 @@ public class OrcaUtilPerRequestReportingTest {
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
 
+  @Mock
+  private OrcaPerRequestReportListener orcaListener1;
+  @Mock
+  private OrcaPerRequestReportListener orcaListener2;
+
+  @Before
+  public void setUp() {
+    MockitoAnnotations.initMocks(this);
+  }
+
   /**
-   * Test a single load balance policy's listener receive per-request ORCA reports upon call trailer
+   * Tests a single load balance policy's listener receive per-request ORCA reports upon call trailer
    * arrives.
    */
   @Test
-  public void singlePolicyPerRequestListener() {
-    OrcaPerRequestReportListener mockListener = mock(OrcaPerRequestReportListener.class);
+  public void singlePolicyTypicalWorkflow() {
     // Use a mocked noop stream tracer factory as the original stream tracer factory.
     ClientStreamTracer.Factory fakeDelegateFactory = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer fakeTracer = mock(ClientStreamTracer.class);
@@ -63,7 +77,7 @@ public class OrcaUtilPerRequestReportingTest {
     // newClientStreamTracer method. The augmented StreamInfo's CallOptions will contain
     // a OrcaReportBroker, in which has the registered listener.
     ClientStreamTracer.Factory factory =
-        OrcaUtil.newOrcaClientStreamTracerFactory(fakeDelegateFactory, mockListener);
+        OrcaUtil.newOrcaClientStreamTracerFactory(fakeDelegateFactory, orcaListener1);
     ClientStreamTracer tracer = factory.newClientStreamTracer(STREAM_INFO, new Metadata());
     ArgumentCaptor<ClientStreamTracer.StreamInfo> streamInfoCaptor = ArgumentCaptor.forClass(null);
     verify(fakeDelegateFactory)
@@ -74,7 +88,7 @@ public class OrcaUtilPerRequestReportingTest {
     // When the trailer does not contain ORCA report, listener callback will not be invoked.
     Metadata trailer = new Metadata();
     tracer.inboundTrailers(trailer);
-    verify(mockListener, never()).onLoadReport(any(OrcaLoadReport.class));
+    verifyNoMoreInteractions(orcaListener1);
 
     // When the trailer contains an ORCA report, listener callback will be invoked.
     trailer.put(
@@ -82,24 +96,22 @@ public class OrcaUtilPerRequestReportingTest {
         OrcaLoadReport.getDefaultInstance());
     tracer.inboundTrailers(trailer);
     ArgumentCaptor<OrcaLoadReport> reportCaptor = ArgumentCaptor.forClass(null);
-    verify(mockListener).onLoadReport(reportCaptor.capture());
+    verify(orcaListener1).onLoadReport(reportCaptor.capture());
     assertThat(reportCaptor.getValue()).isEqualTo(OrcaLoadReport.getDefaultInstance());
   }
 
   /**
-   * Test parent-child load balance policies' listener both receive per-request ORCA reports upon
+   * Tests parent-child load balance policies' listeners both receive per-request ORCA reports upon
    * call trailer arrives and ORCA report deserialization happens only once.
    */
   @Test
-  public void twoLevelPoliciesPerRequestListeners() {
-    OrcaPerRequestReportListener parentListener = mock(OrcaPerRequestReportListener.class);
+  public void twoLevelPoliciesTypicalWorkflow() {
     ClientStreamTracer.Factory parentFactory =
         mock(ClientStreamTracer.Factory.class,
-            delegatesTo(OrcaUtil.newOrcaClientStreamTracerFactory(parentListener)));
+            delegatesTo(OrcaUtil.newOrcaClientStreamTracerFactory(orcaListener1)));
 
-    OrcaPerRequestReportListener childListener = mock(OrcaPerRequestReportListener.class);
     ClientStreamTracer.Factory childFactory =
-        OrcaUtil.newOrcaClientStreamTracerFactory(parentFactory, childListener);
+        OrcaUtil.newOrcaClientStreamTracerFactory(parentFactory, orcaListener2);
     // Child factory will augment the StreamInfo and pass it to the parent factory.
     ClientStreamTracer childTracer =
         childFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
@@ -111,8 +123,8 @@ public class OrcaUtilPerRequestReportingTest {
     // When the trailer does not contain ORCA report, no listener callback will be invoked.
     Metadata trailer = new Metadata();
     childTracer.inboundTrailers(trailer);
-    verify(parentListener, never()).onLoadReport(any(OrcaLoadReport.class));
-    verify(childListener, never()).onLoadReport(any(OrcaLoadReport.class));
+    verifyNoMoreInteractions(orcaListener1);
+    verifyNoMoreInteractions(orcaListener2);
 
     // When the trailer contains an ORCA report, callbacks for both listeners will be invoked.
     // Both listener will receive the same ORCA report instance, which means deserialization
@@ -123,9 +135,32 @@ public class OrcaUtilPerRequestReportingTest {
     childTracer.inboundTrailers(trailer);
     ArgumentCaptor<OrcaLoadReport> parentReportCap = ArgumentCaptor.forClass(null);
     ArgumentCaptor<OrcaLoadReport> childReportCap = ArgumentCaptor.forClass(null);
-    verify(parentListener).onLoadReport(parentReportCap.capture());
-    verify(childListener).onLoadReport(childReportCap.capture());
+    verify(orcaListener1).onLoadReport(parentReportCap.capture());
+    verify(orcaListener2).onLoadReport(childReportCap.capture());
     assertThat(parentReportCap.getValue()).isEqualTo(OrcaLoadReport.getDefaultInstance());
     assertThat(childReportCap.getValue()).isSameInstanceAs(parentReportCap.getValue());
+  }
+
+  /**
+   * Tests the case when parent policy creates its own {@link ClientStreamTracer.Factory}, ORCA
+   * reports are only forwarded to the parent's listener.
+   */
+  @Test
+  public void onlyParentPolicyReceivesReportsIfCreatesOwnTracer() {
+    ClientStreamTracer.Factory parentFactory =
+        OrcaUtil.newOrcaClientStreamTracerFactory(orcaListener1);
+    ClientStreamTracer.Factory childFactory =
+        mock(ClientStreamTracer.Factory.class,
+            delegatesTo(OrcaUtil.newOrcaClientStreamTracerFactory(parentFactory, orcaListener2)));
+    ClientStreamTracer parentTracer =
+        parentFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
+    Metadata trailer = new Metadata();
+    trailer.put(
+        OrcaReportingTracerFactory.ORCA_ENDPOINT_LOAD_METRICS_KEY,
+        OrcaLoadReport.getDefaultInstance());
+    parentTracer.inboundTrailers(trailer);
+    verify(orcaListener1).onLoadReport(eq(OrcaLoadReport.getDefaultInstance()));
+    verifyZeroInteractions(childFactory);
+    verifyZeroInteractions(orcaListener2);
   }
 }
