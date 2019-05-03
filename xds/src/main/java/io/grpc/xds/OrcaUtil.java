@@ -55,10 +55,10 @@ import io.grpc.protobuf.ProtoUtils;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -327,18 +327,17 @@ public final class OrcaUtil {
       OrcaReportingState orcaState = args.getOption(ORCA_REPORTING_STATE_KEY);
       boolean augmented = false;
       if (orcaState == null) {
-        // Only the root load balanceing policy instantiate an OrcaReportingState instance to
-        // request for ORCA report from the backend that the delegated helper is trying to
-        // create subchannel to.
+        // Only the first load balancing policy requesting ORCA reports instantiates an
+        // OrcaReportingState.
         orcaState = new OrcaReportingState(
             this,
             args.getStateListener(),
             syncContext,
             delegate().getScheduledExecutorService());
-        orcaStates.add(orcaState);
         args = args.toBuilder().addOption(ORCA_REPORTING_STATE_KEY, orcaState).build();
         augmented = true;
       }
+      orcaStates.add(orcaState);
       orcaState.listeners.add(this);
       Subchannel subchannel;
       if (augmented) {
@@ -348,16 +347,23 @@ public final class OrcaUtil {
         subchannel = super.createSubchannel(args);
       }
       if (orcaConfig != null) {
-        orcaState.setReportingConfig(orcaConfig);
+        orcaState.setReportingConfig(this, orcaConfig);
       }
       return subchannel;
     }
 
-    void setReportingConfig(OrcaReportingConfig config) {
-      orcaConfig = config;
-      for (OrcaReportingState state : orcaStates) {
-        state.setReportingConfig(config);
-      }
+    void setReportingConfig(final OrcaReportingConfig config) {
+      syncContext.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              orcaConfig = config;
+              for (OrcaReportingState state : orcaStates) {
+                state.setReportingConfig(OrcaReportingHelper.this, config);
+              }
+            }
+          }
+      );
     }
 
     @Override
@@ -379,6 +385,7 @@ public final class OrcaUtil {
       private final SynchronizationContext syncContext;
       private final ScheduledExecutorService timeService;
       private final List<OrcaOobReportListener> listeners = new ArrayList<>();
+      private final Map<OrcaReportingHelper, OrcaReportingConfig> configs = new HashMap<>();
       @Nullable
       private Subchannel subchannel;
       @Nullable
@@ -418,25 +425,25 @@ public final class OrcaUtil {
         this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       }
 
-      void setReportingConfig(OrcaReportingConfig config) {
+      void setReportingConfig(OrcaReportingHelper helper, OrcaReportingConfig config) {
         boolean reconfigured = false;
-        // The overall config is the union of existing config and new config requested by some
-        // load balancing policy.
-        if (overallConfig != null) {
-          if (config.reportIntervalNanos < overallConfig.reportIntervalNanos) {
-            overallConfig.reportIntervalNanos = config.reportIntervalNanos;
-            reconfigured = true;
-          }
-          if (!overallConfig.costNames.isEmpty()
-              && !overallConfig.costNames.containsAll(config.costNames)) {
-            overallConfig.costNames.addAll(config.costNames);
-            reconfigured = true;
-          } else {
-            overallConfig.costNames.clear();
-          }
-        } else {
+        configs.put(helper, config);
+        // Real reporting interval is the minimum of intervals requested by all participating
+        // helpers.
+        if (overallConfig == null) {
           overallConfig = config;
           reconfigured = true;
+        } else {
+          long minInterval = Long.MAX_VALUE;
+          for (OrcaReportingConfig c : configs.values()) {
+            if (c.reportIntervalNanos < minInterval) {
+              minInterval = c.reportIntervalNanos;
+            }
+          }
+          if (overallConfig.reportIntervalNanos != minInterval) {
+            overallConfig.reportIntervalNanos = minInterval;
+            reconfigured = true;
+          }
         }
         if (reconfigured) {
           stopRpc("ORCA reporting reconfigured");
@@ -502,6 +509,7 @@ public final class OrcaUtil {
         return MoreObjects.toStringHelper(this)
             .add("disabled", disabled)
             .add("orcaRpc", orcaRpc)
+            .add("reportingConfig", overallConfig)
             .add("connectivityState", state)
             .toString();
       }
@@ -523,7 +531,6 @@ public final class OrcaUtil {
           call.start(this, new Metadata());
           call.sendMessage(OrcaLoadReportRequest.newBuilder()
               .setReportInterval(Durations.fromNanos(overallConfig.getReportIntervalNanos()))
-              .addAllRequestCostNames(overallConfig.getCostNames())
               .build());
           call.halfClose();
           call.request(1);
@@ -637,27 +644,17 @@ public final class OrcaUtil {
     }
 
     /**
-     * Returns the set of configured cost metric names to be reported in ORCA report. If this is
-     * empty, all known requests costs tracked by the load reporting agent will be returned.
-     */
-    public Set<String> getCostNames() {
-      return Collections.unmodifiableSet(costNames);
-    }
-
-    /**
      * Returns a builder with the same initial values as this object.
      */
     public Builder toBuilder() {
       return newBuilder()
-          .setReportInterval(reportIntervalNanos, TimeUnit.NANOSECONDS)
-          .addCostNames(costNames);
+          .setReportInterval(reportIntervalNanos, TimeUnit.NANOSECONDS);
     }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("reportIntervalNanos", reportIntervalNanos)
-          .add("costNames", costNames)
           .toString();
     }
 
@@ -679,28 +676,6 @@ public final class OrcaUtil {
        */
       public Builder setReportInterval(long reportInterval, TimeUnit unit) {
         reportIntervalNanos = unit.toNanos(reportInterval);
-        return this;
-      }
-
-      /**
-       * Adds a custom named backend metric to be reported. This provides an opportunity for the
-       * client to selectively obtain a subset of tracked costs.
-       *
-       * @param costName name for custom metric to be reported.
-       */
-      public Builder addCostName(String costName) {
-        costNames.add(costName);
-        return this;
-      }
-
-      /**
-       * Adds a set of custom named backend metric to be reported. This provides an opportunity for
-       * the client to selectively obtain a subset of tracked costs.
-       *
-       * @param costNames collection of names for custom metric to be reported.
-       */
-      public Builder addCostNames(Collection<String> costNames) {
-        this.costNames.addAll(costNames);
         return this;
       }
 

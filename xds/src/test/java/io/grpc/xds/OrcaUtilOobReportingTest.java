@@ -55,7 +55,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
-import io.grpc.Server;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -98,9 +97,8 @@ public class OrcaUtilOobReportingTest {
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
       Attributes.Key.create("subchannel-attr-for-test");
   private static final OrcaReportingConfig ORCA_REPORTING_CONFIG =
-      OrcaReportingConfig.newBuilder().setReportInterval(3452, TimeUnit.MILLISECONDS).build();
+      OrcaReportingConfig.newBuilder().setReportInterval(3452L, TimeUnit.MILLISECONDS).build();
   @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
-  private final EquivalentAddressGroup[] eags = new EquivalentAddressGroup[NUM_SUBCHANNELS];
 
   @SuppressWarnings({"rawtypes", "unchecked"})
   private final List<EquivalentAddressGroup>[] eagLists = new List[NUM_SUBCHANNELS];
@@ -110,7 +108,6 @@ public class OrcaUtilOobReportingTest {
   private final SubchannelStateListener[] stateListeners =
       new SubchannelStateListener[NUM_SUBCHANNELS];
   private final ManagedChannel[] channels = new ManagedChannel[NUM_SUBCHANNELS];
-  private final Server[] servers = new Server[NUM_SUBCHANNELS];
   private final OpenRcaServiceImp[] orcaServiceImps = new OpenRcaServiceImp[NUM_SUBCHANNELS];
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -123,18 +120,23 @@ public class OrcaUtilOobReportingTest {
   private final FakeClock fakeClock = new FakeClock();
   private final Helper origHelper = mock(Helper.class, delegatesTo(new FakeHelper()));
   @Mock
-  private OrcaOobReportListener mockOrcaListener;
+  private OrcaOobReportListener mockOrcaListener0;
+  @Mock
+  private OrcaOobReportListener mockOrcaListener1;
+  @Mock
+  private OrcaOobReportListener mockOrcaListener2;
   @Mock private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock private BackoffPolicy backoffPolicy1;
   @Mock private BackoffPolicy backoffPolicy2;
   private FakeSubchannel[] subchannels;
   private OrcaReportingHelperWrapper orcaHelperWrapper;
+  private OrcaReportingHelperWrapper parentHelperWrapper;
+  private OrcaReportingHelperWrapper childHelperWrapper;
 
   private static OrcaLoadReportRequest buildOrcaRequestFromConfig(
       OrcaReportingConfig config) {
     return OrcaLoadReportRequest.newBuilder()
         .setReportInterval(Durations.fromNanos(config.getReportIntervalNanos()))
-        .addAllRequestCostNames(config.getCostNames())
         .build();
   }
 
@@ -172,21 +174,18 @@ public class OrcaUtilOobReportingTest {
     assertThat(NUM_SUBCHANNELS).isAtLeast(1);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       orcaServiceImps[i] = new OpenRcaServiceImp();
-      Server server =
-          cleanupRule.register(
-              InProcessServerBuilder.forName("orca-reporting-test-" + i)
-                  .addService(orcaServiceImps[i])
-                  .directExecutor()
-                  .build()
-                  .start());
-      servers[i] = server;
+      cleanupRule.register(
+          InProcessServerBuilder.forName("orca-reporting-test-" + i)
+              .addService(orcaServiceImps[i])
+              .directExecutor()
+              .build()
+              .start());
       ManagedChannel channel =
           cleanupRule.register(
               InProcessChannelBuilder.forName("orca-reporting-test-" + i).directExecutor().build());
       channels[i] = channel;
       EquivalentAddressGroup eag =
           new EquivalentAddressGroup(new FakeSocketAddress("address-" + i));
-      eags[i] = eag;
       List<EquivalentAddressGroup> eagList = Arrays.asList(eag);
       eagLists[i] = eagList;
       mockStateListeners[i] = mock(SubchannelStateListener.class);
@@ -197,11 +196,24 @@ public class OrcaUtilOobReportingTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(12L, 22L);
 
     subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
-    orcaHelperWrapper = OrcaUtil.newOrcaReportingHelperWrapper(
-        origHelper,
-        mockOrcaListener,
-        backoffPolicyProvider,
-        fakeClock.getStopwatchSupplier());
+    orcaHelperWrapper =
+        OrcaUtil.newOrcaReportingHelperWrapper(
+            origHelper,
+            mockOrcaListener0,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+    parentHelperWrapper =
+        OrcaUtil.newOrcaReportingHelperWrapper(
+            origHelper,
+            mockOrcaListener1,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+    childHelperWrapper =
+        OrcaUtil.newOrcaReportingHelperWrapper(
+            parentHelperWrapper.asHelper(),
+            mockOrcaListener2,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
   }
 
   @After
@@ -219,20 +231,13 @@ public class OrcaUtilOobReportingTest {
     OrcaReportingConfig config =
         OrcaReportingConfig.newBuilder()
             .setReportInterval(interval, TimeUnit.MICROSECONDS)
-            .addCostName("orca-test-cost-name1")
-            .addCostNames(Arrays.asList("orca-test-cost-name2", "orca-test-cost-name3"))
             .build();
     assertThat(config.getReportIntervalNanos()).isEqualTo(TimeUnit.MICROSECONDS.toNanos(interval));
-    assertThat(config.getCostNames())
-        .containsExactly("orca-test-cost-name1", "orca-test-cost-name2", "orca-test-cost-name3");
     String str = config.toString();
     assertThat(str).contains("reportIntervalNanos=");
-    assertThat(str).contains("costNames=");
     OrcaReportingConfig rebuildedConfig = config.toBuilder().build();
     assertThat(rebuildedConfig.getReportIntervalNanos())
         .isEqualTo(TimeUnit.MICROSECONDS.toNanos(interval));
-    assertThat(rebuildedConfig.getCostNames())
-        .containsExactly("orca-test-cost-name1", "orca-test-cost-name2", "orca-test-cost-name3");
   }
 
   /**
@@ -287,7 +292,7 @@ public class OrcaUtilOobReportingTest {
 
       assertThat(subchannel.logs).isEmpty();
       assertThat(orcaServiceImp.calls).isEmpty();
-      verifyNoMoreInteractions(mockOrcaListener);
+      verifyNoMoreInteractions(mockOrcaListener0);
       deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
       verify(mockStateListener)
           .onSubchannelState(same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
@@ -302,7 +307,7 @@ public class OrcaUtilOobReportingTest {
       OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
       serverCall.responseObserver.onNext(report);
       assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-      verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
+      verify(mockOrcaListener0).onLoadReport(same(subchannel), eq(report));
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -319,7 +324,7 @@ public class OrcaUtilOobReportingTest {
           .onSubchannelState(same(subchannel), eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
       assertThat(serverCall.cancelled).isTrue();
       assertThat(subchannel.logs).isEmpty();
-      verifyNoMoreInteractions(mockOrcaListener);
+      verifyNoMoreInteractions(mockOrcaListener0);
     }
 
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -342,9 +347,8 @@ public class OrcaUtilOobReportingTest {
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
-    InOrder inOrder = inOrder(mockStateListener);
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(mockStateListener)
+    verify(mockStateListener)
         .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
     assertThat(orcaServiceImp.calls).hasSize(1);
 
@@ -354,7 +358,7 @@ public class OrcaUtilOobReportingTest {
     serverCall.responseObserver.onError(Status.UNIMPLEMENTED.asException());
     assertLog(subchannel.logs,
         "ERROR: OpenRcaService disabled: " + Status.UNIMPLEMENTED);
-    verifyNoMoreInteractions(mockOrcaListener);
+    verifyNoMoreInteractions(mockOrcaListener0);
 
     // Re-connecting on Subchannel will reset the "disabled" flag and restart ORCA reporting.
     assertThat(orcaServiceImp.calls).hasSize(0);
@@ -367,14 +371,11 @@ public class OrcaUtilOobReportingTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     serverCall.responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
+    verify(mockOrcaListener0).onLoadReport(same(subchannel), eq(report));
 
     verifyZeroInteractions(backoffPolicyProvider);
   }
 
-  /**
-   * Tests the case when ORCA reporting RPCs are broken retry with backoff should be performed.
-   */
   @Test
   public void orcaReportingStreamClosedAndRetried() {
     orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
@@ -382,7 +383,7 @@ public class OrcaUtilOobReportingTest {
     FakeSubchannel subchannel = subchannels[0];
     OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
     SubchannelStateListener mockStateListener = mockStateListeners[0];
-    InOrder inOrder = inOrder(mockStateListener, mockOrcaListener, backoffPolicyProvider,
+    InOrder inOrder = inOrder(mockStateListener, mockOrcaListener0, backoffPolicyProvider,
         backoffPolicy1, backoffPolicy2);
 
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
@@ -416,7 +417,7 @@ public class OrcaUtilOobReportingTest {
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
     orcaServiceImp.calls.peek().responseObserver.onNext(report);
     assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
-    inOrder.verify(mockOrcaListener).onLoadReport(same(subchannel), eq(report));
+    inOrder.verify(mockOrcaListener0).onLoadReport(same(subchannel), eq(report));
 
     // Server closes the ORCA reporting RPC after a response, will restart immediately.
     orcaServiceImp.calls.poll().responseObserver.onCompleted();
@@ -437,94 +438,183 @@ public class OrcaUtilOobReportingTest {
     assertLog(subchannel.logs,
         "DEBUG: Starting ORCA reporting for " + subchannel.getAllAddresses());
 
-    verifyNoMoreInteractions(mockStateListener, mockOrcaListener, backoffPolicyProvider,
+    verifyNoMoreInteractions(mockStateListener, mockOrcaListener0, backoffPolicyProvider,
         backoffPolicy1, backoffPolicy2);
   }
 
+  @Test
+  public void reportingNotStartedUntilConfigured() {
+    createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    verify(mockStateListeners[0])
+        .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+    orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.peek().request)
+        .isEqualTo(buildOrcaRequestFromConfig(ORCA_REPORTING_CONFIG));
+  }
+
+  @Test
+  public void updateReportingIntervalAnyTime() {
+    // Sets report interval before creating a Subchannel, reporting starts right after suchannel
+    // state becomes READY.
+    createSubchannel(orcaHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    orcaHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    verify(mockStateListeners[0])
+        .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.peek().request)
+        .isEqualTo(buildOrcaRequestFromConfig(ORCA_REPORTING_CONFIG));
+
+    // Make reporting less frequent.
+    OrcaReportingConfig config =
+        OrcaReportingConfig.newBuilder().setReportInterval(243L, TimeUnit.SECONDS).build();
+    orcaHelperWrapper.setReportingConfig(config);
+    assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.peek().request)
+        .isEqualTo(buildOrcaRequestFromConfig(config));
+
+    // Configuring with the same report interval again does not restart ORCA RPC.
+    orcaHelperWrapper.setReportingConfig(config);
+    assertThat(orcaServiceImps[0].calls.peek().cancelled).isFalse();
+    assertThat(subchannels[0].logs).isEmpty();
+
+    // Make reporting more frequent.
+    config = OrcaReportingConfig.newBuilder().setReportInterval(1L, TimeUnit.NANOSECONDS).build();
+    orcaHelperWrapper.setReportingConfig(config);
+    assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(orcaServiceImps[0].calls.poll().request)
+        .isEqualTo(buildOrcaRequestFromConfig(config));
+  }
+
   /**
-   * Tests when two load balancing policies register listeners and they should use the same ORCA
-   * reporting RPCs and receive the same ORCA report instance.
+   * Tests when two load balancing policies register listeners to receive ORCA reports, the same
+   * ORCA report instance is forwarded to both listeners independently.
    */
   @Test
-  public void twoLevelPoliciesReceiveSameReport() {
-    OrcaOobReportListener parentListener = mockOrcaListener;
-    OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
-    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaOobReportListener childListener = mock(OrcaOobReportListener.class);
-    OrcaReportingHelperWrapper childHelperWrapper =
-        OrcaUtil.newOrcaReportingHelperWrapper(
-            parentHelperWrapper.asHelper(),
-            childListener,
-            backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier());
-    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-
+  public void policiesReceiveSameReportIndependently() {
     createSubchannel(childHelperWrapper.asHelper(), 0, Attributes.EMPTY);
-    FakeSubchannel subchannel = subchannels[0];
-    OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
-    SubchannelStateListener mockStateListener = mockStateListeners[0];
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
-    verify(mockStateListener)
-        .onSubchannelState(same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
-    assertLog(subchannel.logs,
-        "DEBUG: Starting ORCA reporting for " + subchannel.getAllAddresses());
+    // No helper sets ORCA reporting interval, so load reporting is not started.
+    verify(mockStateListeners[0])
+        .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+    assertThat(orcaServiceImps[0].calls).isEmpty();
+    assertThat(subchannels[0].logs).isEmpty();
+
+    // Parent helper requests ORCA reports with a certain interval, load reporting starts.
+    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
 
     OrcaLoadReport report = OrcaLoadReport.getDefaultInstance();
-    orcaServiceImp.calls.poll().responseObserver.onNext(report);
-    assertLog(subchannel.logs, "DEBUG: Received an ORCA report: " + report);
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
+    assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
+    // Only parent helper's listener receives the report.
     ArgumentCaptor<OrcaLoadReport> parentReportCaptor = ArgumentCaptor.forClass(null);
-    ArgumentCaptor<OrcaLoadReport> childReportCaptor = ArgumentCaptor.forClass(null);
-    verify(parentListener).onLoadReport(same(subchannel), parentReportCaptor.capture());
-    verify(childListener).onLoadReport(same(subchannel), childReportCaptor.capture());
+    verify(mockOrcaListener1).onLoadReport(same(subchannels[0]), parentReportCaptor.capture());
     assertThat(parentReportCaptor.getValue()).isEqualTo(report);
+
+    // Now child helper also wants to receive reports.
+    childHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    orcaServiceImps[0].calls.peek().responseObserver.onNext(report);
+    assertLog(subchannels[0].logs, "DEBUG: Received an ORCA report: " + report);
+    // Both helper receives the same report instance.
+    ArgumentCaptor<OrcaLoadReport> childReportCaptor = ArgumentCaptor.forClass(null);
+    verify(mockOrcaListener1, times(2))
+        .onLoadReport(same(subchannels[0]), parentReportCaptor.capture());
+    verify(mockOrcaListener2)
+        .onLoadReport(same(subchannels[0]), childReportCaptor.capture());
     assertThat(childReportCaptor.getValue()).isSameInstanceAs(parentReportCaptor.getValue());
   }
 
   /**
    * Tests when there are more than one load balancing policies registering listeners to receive
-   * ORCA reports in different reporting interval and asking for different set of named costs, the
-   * actual reporting interval should be the smallest of all requested intervals and the actual
-   * named costs to be requested should be the super set of all requested named costs.
+   * ORCA reports in different reporting interval, the real reporting interval should be the
+   * minimum of all requested intervals.
    */
   @Test
-  public void reportMostEntriesAndMostFrequentIntervalRequested() {
-    OrcaReportingHelperWrapper parentHelperWrapper = orcaHelperWrapper;
-    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
-    OrcaOobReportListener childListener = mock(OrcaOobReportListener.class);
-    OrcaReportingConfig config =
-        OrcaReportingConfig.newBuilder()
-            .setReportInterval(12, TimeUnit.NANOSECONDS)
-            .addCostName("costs.named.test")
-            .build();
+  public void reportWithMostFrequentIntervalRequested() {
+    OrcaReportingConfig longIntervalConfig =
+        OrcaReportingConfig.newBuilder().setReportInterval(1232L, TimeUnit.MILLISECONDS).build();
+    OrcaReportingConfig mediumIntervalConfig =
+        OrcaReportingConfig.newBuilder().setReportInterval(543L, TimeUnit.NANOSECONDS).build();
+    OrcaReportingConfig shortIntervalConfig =
+        OrcaReportingConfig.newBuilder().setReportInterval(5L, TimeUnit.NANOSECONDS).build();
 
-    OrcaReportingHelperWrapper childHelperWrapper =
-        OrcaUtil.newOrcaReportingHelperWrapper(
-            parentHelperWrapper.asHelper(),
-            childListener,
-            backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier());
-    childHelperWrapper.setReportingConfig(config);
+    parentHelperWrapper.setReportingConfig(shortIntervalConfig);
+    childHelperWrapper.setReportingConfig(longIntervalConfig);
 
     createSubchannel(childHelperWrapper.asHelper(), 0, Attributes.EMPTY);
-    FakeSubchannel subchannel = subchannels[0];
-    OpenRcaServiceImp orcaServiceImp = orcaServiceImps[0];
-    SubchannelStateListener mockStateListener = mockStateListeners[0];
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    verify(mockStateListeners[0])
+        .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+
+    // The real report interval to be requested is the minimum of intervals requested by helpers.
+    assertThat(Durations.toNanos(orcaServiceImps[0].calls.peek().request.getReportInterval()))
+        .isEqualTo(5L);
+
+    // Child helper wants reporting to be more frequent than its current setting while it is still
+    // less frequent than parent helper. Nothing should happen on existing RPC.
+    childHelperWrapper.setReportingConfig(mediumIntervalConfig);
+    assertThat(orcaServiceImps[0].calls.peek().cancelled).isFalse();
+    assertThat(subchannels[0].logs).isEmpty();
+
+    // Parent helper wants reporting to be less frequent.
+    parentHelperWrapper.setReportingConfig(mediumIntervalConfig);
+    assertThat(orcaServiceImps[0].calls.poll().cancelled).isTrue();
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    // ORCA reporting RPC restarts and the the real report interval is adjusted.
+    assertThat(Durations.toNanos(orcaServiceImps[0].calls.poll().request.getReportInterval()))
+        .isEqualTo(543L);
+  }
+
+  @Test
+  public void onlyParentPolicyReceivesReportsForSubchannelItCreates() {
+    parentHelperWrapper.setReportingConfig(ORCA_REPORTING_CONFIG);
+    createSubchannel(parentHelperWrapper.asHelper(), 0, Attributes.EMPTY);
     deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
-    verify(mockStateListener)
-        .onSubchannelState(same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
-    assertLog(subchannel.logs,
-        "DEBUG: Starting ORCA reporting for " + subchannel.getAllAddresses());
+    verify(mockStateListeners[0])
+        .onSubchannelState(same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    ServerSideCall serverCall = orcaServiceImps[0].calls.poll();
+    assertLog(subchannels[0].logs,
+        "DEBUG: Starting ORCA reporting for " + subchannels[0].getAllAddresses());
+    assertThat(serverCall.request).isEqualTo(buildOrcaRequestFromConfig(ORCA_REPORTING_CONFIG));
+    serverCall.responseObserver.onNext(OrcaLoadReport.getDefaultInstance());
+    verify(mockOrcaListener1)
+        .onLoadReport(same(subchannels[0]), eq(OrcaLoadReport.getDefaultInstance()));
+    verifyZeroInteractions(mockOrcaListener2);
 
-    // The actual report interval to be requested is the smallest one configured by helpers
-    // wishing to receive reports and the named costs is the union of all requested
-    // cost names.
-    // Note an empty set of name costs indicates reporting all known requests costs tracked
-    // by the load reporting agent.
-    ServerSideCall serverCall = orcaServiceImp.calls.poll();
-    assertThat(Durations.toNanos(serverCall.request.getReportInterval())).isEqualTo(12);
-    assertThat(serverCall.request.getRequestCostNamesList()).isEmpty();
+    // Child policy updates the reporting interval it requests has not effect as the Subchannel is
+    // created by the parent policy.
+    childHelperWrapper.setReportingConfig(
+        OrcaReportingConfig.newBuilder().setReportInterval(3L, TimeUnit.NANOSECONDS).build());
+    assertThat(serverCall.cancelled).isFalse();
+    assertThat(orcaServiceImps[0].calls).isEmpty();
   }
 
   private void deliverSubchannelState(final int index, final ConnectivityStateInfo newState) {
