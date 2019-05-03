@@ -23,22 +23,18 @@ import static io.grpc.ConnectivityState.SHUTDOWN;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
@@ -145,8 +141,8 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     if (xdsLbState != null) {
-      if (fallbackManager.fallbackBalancer != null) {
-        fallbackManager.fallbackBalancer.handleNameResolutionError(error);
+      if (fallbackManager.getFallbackBalancer() != null) {
+        fallbackManager.getFallbackBalancer().handleNameResolutionError(error);
       } else {
         xdsLbState.handleNameResolutionError(error);
       }
@@ -165,8 +161,8 @@ final class XdsLoadBalancer extends LoadBalancer {
       return;
     }
 
-    if (fallbackManager.fallbackBalancer != null) {
-      fallbackManager.fallbackBalancer.handleSubchannelState(subchannel, newState);
+    if (fallbackManager.getFallbackBalancer() != null) {
+      fallbackManager.getFallbackBalancer().handleSubchannelState(subchannel, newState);
     }
     if (subchannelStore.hasSubchannel(subchannel)) {
       if (newState.getState() == IDLE) {
@@ -198,111 +194,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Nullable
   XdsLbState getXdsLbStateForTest() {
     return xdsLbState;
-  }
-
-  @VisibleForTesting
-  static final class FallbackManager {
-
-    private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
-
-    private final Helper helper;
-    private final SubchannelStore subchannelStore;
-    private final LoadBalancerRegistry lbRegistry;
-
-    private LbConfig fallbackPolicy;
-
-    // read-only for outer class
-    private LoadBalancer fallbackBalancer;
-
-    // Scheduled only once.  Never reset.
-    @Nullable
-    private ScheduledHandle fallbackTimer;
-
-    private List<EquivalentAddressGroup> fallbackServers = ImmutableList.of();
-    private Attributes fallbackAttributes;
-
-    // allow value write by outer class
-    private boolean balancerWorking;
-
-    FallbackManager(
-        Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
-      this.helper = helper;
-      this.subchannelStore = subchannelStore;
-      this.lbRegistry = lbRegistry;
-    }
-
-    void cancelFallback() {
-      if (fallbackTimer != null) {
-        fallbackTimer.cancel();
-      }
-      if (fallbackBalancer != null) {
-        fallbackBalancer.shutdown();
-        fallbackBalancer = null;
-      }
-    }
-
-    void maybeUseFallbackPolicy() {
-      if (fallbackBalancer != null) {
-        return;
-      }
-      if (balancerWorking || subchannelStore.hasReadyBackends()) {
-        return;
-      }
-
-      helper.getChannelLogger().log(
-          ChannelLogLevel.INFO, "Using fallback policy");
-      fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
-          .newLoadBalancer(helper);
-      // TODO(carl-mastrangelo): propagate the load balancing config policy
-      fallbackBalancer.handleResolvedAddresses(
-          ResolvedAddresses.newBuilder()
-              .setAddresses(fallbackServers)
-              .setAttributes(fallbackAttributes)
-              .build());
-
-      // TODO: maybe update picker
-    }
-
-    void updateFallbackServers(
-        List<EquivalentAddressGroup> servers, Attributes attributes,
-        LbConfig fallbackPolicy) {
-      this.fallbackServers = servers;
-      this.fallbackAttributes = Attributes.newBuilder()
-          .setAll(attributes)
-          .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy.getRawConfigValue())
-          .build();
-      LbConfig currentFallbackPolicy = this.fallbackPolicy;
-      this.fallbackPolicy = fallbackPolicy;
-      if (fallbackBalancer != null) {
-        if (fallbackPolicy.getPolicyName().equals(currentFallbackPolicy.getPolicyName())) {
-          // TODO(carl-mastrangelo): propagate the load balancing config policy
-          fallbackBalancer.handleResolvedAddresses(
-              ResolvedAddresses.newBuilder()
-                  .setAddresses(fallbackServers)
-                  .setAttributes(fallbackAttributes)
-                  .build());
-        } else {
-          fallbackBalancer.shutdown();
-          fallbackBalancer = null;
-          maybeUseFallbackPolicy();
-        }
-      }
-    }
-
-    void maybeStartFallbackTimer() {
-      if (fallbackTimer == null) {
-        class FallbackTask implements Runnable {
-          @Override
-          public void run() {
-            maybeUseFallbackPolicy();
-          }
-        }
-
-        fallbackTimer = helper.getSynchronizationContext().schedule(
-            new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
-            helper.getScheduledExecutorService());
-      }
-    }
   }
 
   /**

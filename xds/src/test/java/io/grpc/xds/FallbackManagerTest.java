@@ -33,7 +33,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
-import io.grpc.xds.XdsLoadBalancer.FallbackManager;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
