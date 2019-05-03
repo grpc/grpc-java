@@ -44,14 +44,14 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.LbEndpoint;
 import io.grpc.xds.XdsLbState.Locality;
 import io.grpc.xds.XdsLbState.LocalityInfo;
-import io.grpc.xds.XdsLbState.LocalityState;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
-import io.grpc.xds.XdsLbState.WrrAlgorithm;
+import io.grpc.xds.XdsLbState.SubchannelStoreImpl.PickerFactory;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -84,21 +84,6 @@ public class XdsLbStateTest {
   private ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor;
   @Captor
   private ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor;
-
-  private static final class FakeWrrAlgorith implements WrrAlgorithm {
-    int nextIndex;
-
-    void setNextIndex(int i) {
-      nextIndex = i;
-    }
-
-    @Override
-    public Locality pickLocality(List<LocalityState> wrrList) {
-      return wrrList.get(nextIndex).locality;
-    }
-  }
-
-  private FakeWrrAlgorith wrrAlgorithm = new FakeWrrAlgorith();
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
@@ -145,6 +130,30 @@ public class XdsLbStateTest {
         }
       });
 
+  private static final class FakeInterLocalityPickerFactory implements PickerFactory {
+    int totalReadyLocalities;
+    int nextIndex;
+
+    @Override
+    public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
+      totalReadyLocalities = childPickers.size();
+
+      return new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
+        }
+      };
+    }
+
+    void setNextIndex(int nextIndex) {
+      this.nextIndex = nextIndex;
+    }
+  }
+
+  private final FakeInterLocalityPickerFactory interLocalityPickerFactory
+      = new FakeInterLocalityPickerFactory();
+
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
@@ -154,7 +163,7 @@ public class XdsLbStateTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
 
-    subchannelStore = new SubchannelStoreImpl(helper, wrrAlgorithm);
+    subchannelStore = new SubchannelStoreImpl(helper, interLocalityPickerFactory);
     xdsLbState = new XdsLbState(
         "fake_balancer_name", null, null, helper, subchannelStore, adsStreamCallback, lbRegistry);
   }
@@ -217,17 +226,10 @@ public class XdsLbStateTest {
     childHelpers.get("sz1").updateBalancingState(READY, childPicker1);
     verify(helper).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
 
-    wrrAlgorithm.setNextIndex(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameInstanceAs(PickResult.withNoResult());
-
-    wrrAlgorithm.setNextIndex(0);
+    assertThat(interLocalityPickerFactory.totalReadyLocalities).isEqualTo(1);
+    interLocalityPickerFactory.setNextIndex(0);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isSameInstanceAs(pickResult1);
-
-    wrrAlgorithm.setNextIndex(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameInstanceAs(PickResult.withNoResult());
 
     SubchannelPicker childPicker2 = mock(SubchannelPicker.class);
     PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
@@ -235,7 +237,8 @@ public class XdsLbStateTest {
     childHelpers.get("sz2").updateBalancingState(CONNECTING, childPicker2);
     verify(helper, times(2)).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
 
+    assertThat(interLocalityPickerFactory.totalReadyLocalities).isEqualTo(1);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameInstanceAs(pickResult2);
+        .isSameInstanceAs(pickResult1);
   }
 }

@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -50,6 +51,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -125,7 +127,6 @@ class XdsLbState {
     // TODO: maybe update picker
   }
 
-
   final void handleNameResolutionError(Status error) {
     if (!subchannelStore.hasNonDropBackends()) {
       // TODO: maybe update picker with transient failure
@@ -152,55 +153,6 @@ class XdsLbState {
     XdsComms xdsComms = this.xdsComms;
     this.xdsComms = null;
     return xdsComms;
-  }
-
-  @VisibleForTesting // Interface of weighted Round-Robin algorithm that is convenient for test.
-  interface WrrAlgorithm {
-    @Nullable
-    Locality pickLocality(List<LocalityState> wrrList);
-  }
-
-  private static final class WrrAlgorithmImpl implements WrrAlgorithm {
-
-    @Override
-    public Locality pickLocality(List<LocalityState> wrrList) {
-      if (wrrList.isEmpty()) {
-        return null;
-      }
-      return wrrList.iterator().next().locality;
-    }
-  }
-
-  static final class LocalityPicker {
-    private final List<LocalityState> wrrList;
-    private final WrrAlgorithm wrrAlgorithm;
-
-    LocalityPicker(List<LocalityState> wrrList, WrrAlgorithm wrrAlgorithm) {
-      this.wrrList = wrrList;
-      this.wrrAlgorithm = wrrAlgorithm;
-    }
-
-    @Nullable
-    Locality pickLocality() {
-      return wrrAlgorithm.pickLocality(wrrList);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      LocalityPicker that = (LocalityPicker) o;
-      return Objects.equal(wrrList, that.wrrList);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(wrrList);
-    }
   }
 
   static final class Locality {
@@ -248,42 +200,6 @@ class XdsLbState {
           .add("zone", zone)
           .add("subzone", subzone)
           .toString();
-    }
-  }
-
-  /**
-   * State about the locality for WRR locality picker.
-   */
-  static final class LocalityState {
-    final Locality locality;
-    final int weight;
-    @Nullable // null means the subchannel state is not updated at the moment yet
-    @SuppressWarnings("unused") // TODO: use it for locality picker
-    final ConnectivityState state;
-
-    LocalityState(Locality locality, int weight, @Nullable ConnectivityState state) {
-      this.locality = locality;
-      this.weight = weight;
-      this.state = state;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      LocalityState that = (LocalityState) o;
-      return weight == that.weight
-          && Objects.equal(locality, that.locality)
-          && state == that.state;
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(locality, weight, state);
     }
   }
 
@@ -355,72 +271,47 @@ class XdsLbState {
     }
   }
 
-
-  static final class XdsPicker extends SubchannelPicker {
-
-    private LocalityPicker localityPicker;
-    private final Map<Locality, SubchannelPicker> childPickers;
-
-    private static final XdsPicker BUFFER_PICKER = new XdsPicker(null, null);
-
-    XdsPicker(LocalityPicker localityPicker, Map<Locality, SubchannelPicker> childPickers) {
-      this.localityPicker = localityPicker;
-      this.childPickers = childPickers;
-    }
-
-    @Override
-    public PickResult pickSubchannel(PickSubchannelArgs args) {
-      Locality locality = localityPicker.pickLocality();
-      if (locality == null) {
-        return PickResult.withNoResult();
-      }
-      return childPickers.get(localityPicker.pickLocality()).pickSubchannel(args);
-    }
-  }
-
   /**
    * Manages EAG and locality info for a collection of subchannels, not including subchannels
    * created by the fallback balancer.
    */
   static final class SubchannelStoreImpl implements SubchannelStore {
-    private static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withNoResult();
-      }
-
-      @Override
-      public String toString() {
-        return "BUFFER_PICKER";
-      }
-    };
-    private static final WrrAlgorithm wrrAlgorithm = new WrrAlgorithmImpl();
 
     private final Helper helper;
-    private final WrrAlgorithm wrrAlgo;
-
-    private XdsPicker currentPicker = XdsPicker.BUFFER_PICKER;
-    private ConnectivityState currentState;
+    private final PickerFactory pickerFactory;
 
     private Map<Locality, IntraLocalitySubchannelStore> localityStore = new HashMap<>();
     private LoadBalancerProvider loadBalancerProvider;
     private boolean shutdown;
 
-    @VisibleForTesting
-    SubchannelStoreImpl(Helper helper, WrrAlgorithm wrrAlgo) {
-      this.helper = helper;
-      this.wrrAlgo = wrrAlgo;
+    SubchannelStoreImpl(Helper helper) {
+      this(helper, pickerFactoryImpl);
     }
 
-    SubchannelStoreImpl(Helper helper) {
-      this(helper, wrrAlgorithm);
+    @VisibleForTesting
+    SubchannelStoreImpl(Helper helper, PickerFactory pickerFactory) {
+      this.helper = helper;
+      this.pickerFactory = pickerFactory;
     }
+
+    @VisibleForTesting // Introduced for testing only.
+    interface PickerFactory {
+      SubchannelPicker picker(List<WeightedChildPicker> childPickers);
+    }
+
+    private static final PickerFactory pickerFactoryImpl =
+        new PickerFactory() {
+          @Override
+          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
+            return new InterLocalityPicker(childPickers);
+          }
+        };
 
     @Override
     public boolean hasReadyBackends() {
       // maybe optimize by tracking count of READY subchannels
       for (IntraLocalitySubchannelStore localitySubchannels : localityStore.values()) {
-        for (Subchannel subchannel : localitySubchannels.subchannels) {
+        for (Subchannel subchannel : localitySubchannels.childHelper.subchannels) {
           if (ConnectivityState.READY
               == subchannel.getAttributes().get(STATE_INFO).get().getState()) {
             return true;
@@ -443,8 +334,8 @@ class XdsLbState {
 
       // delegate to the childBalancer who manages this subchannel
       for (IntraLocalitySubchannelStore intraLocalitySubchannelStore : localityStore.values()) {
-        if (intraLocalitySubchannelStore.subchannels.contains(subchannel)) {
-          intraLocalitySubchannelStore.subchannels.add(subchannel);
+        if (intraLocalitySubchannelStore.childHelper.subchannels.contains(subchannel)) {
+          intraLocalitySubchannelStore.childHelper.subchannels.add(subchannel);
 
           // This will probably trigger childHelper.updateBalancingState
           intraLocalitySubchannelStore.childBalancer.handleSubchannelState(subchannel, newState);
@@ -485,18 +376,28 @@ class XdsLbState {
       }
 
       ConnectivityState newState = null;
-      List<LocalityState> localityStates = new ArrayList<>(newLocalities.size());
-      Map<Locality, SubchannelPicker> childPickers = new HashMap<>();
+      List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
       for (Locality newLocality : newLocalities) {
 
         // Assuming standard mode only (EDS response with a list of endpoints) for now
         List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
         IntraLocalitySubchannelStore intraLocalitySubchannelStore;
+        ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          intraLocalitySubchannelStore = localityStore.get(newLocality);
+          IntraLocalitySubchannelStore oldIntraLocalitySubchannelStore
+              = localityStore.get(newLocality);
+          childHelper = oldIntraLocalitySubchannelStore.childHelper;
+          intraLocalitySubchannelStore = new IntraLocalitySubchannelStore(
+              localityInfoMap.get(newLocality).localityWeight,
+              oldIntraLocalitySubchannelStore.childBalancer,
+              childHelper);
         } else {
+          childHelper = new ChildHelper(newLocality);
           intraLocalitySubchannelStore =
-              new IntraLocalitySubchannelStore(newLocality, loadBalancerProvider);
+              new IntraLocalitySubchannelStore(
+                  localityInfoMap.get(newLocality).localityWeight,
+                  loadBalancerProvider.newLoadBalancer(childHelper),
+                  childHelper);
           localityStore.put(newLocality, intraLocalitySubchannelStore);
         }
         // TODO: put endPointWeights into attributes for WRR.
@@ -504,27 +405,65 @@ class XdsLbState {
             .handleResolvedAddresses(
                 ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
-        LocalityState localityState =
-            new LocalityState(
-                newLocality,
-                localityInfoMap.get(newLocality).localityWeight,
-                intraLocalitySubchannelStore.currentChildState);
-        localityStates.add(localityState);
-        childPickers.put(newLocality, intraLocalitySubchannelStore.currentChildPicker);
-        newState = aggregateState(newState, intraLocalitySubchannelStore.currentChildState);
+        if (intraLocalitySubchannelStore.childHelper.currentChildState == READY) {
+          childPickers.add(
+              new WeightedChildPicker(
+                  localityInfoMap.get(newLocality).localityWeight,
+                  intraLocalitySubchannelStore.childHelper.currentChildPicker));
+        }
+        newState = aggregateState(newState, childHelper.currentChildState);
       }
 
-      localityStates = Collections.unmodifiableList(localityStates);
-      LocalityPicker localityPicker = new LocalityPicker(localityStates, wrrAlgo);
-      if (!localityPicker.equals(currentPicker.localityPicker)) {
-        childPickers = Collections.unmodifiableMap(childPickers);
-        XdsPicker newXdsPicker = new XdsPicker(localityPicker, childPickers);
+      childPickers = Collections.unmodifiableList(childPickers);
+      SubchannelPicker interLocalityPicker =
+          pickerFactory.picker(childPickers);
+
+      SubchannelPicker newXdsPicker;
+      if (childPickers.isEmpty()) {
+        if (newState == TRANSIENT_FAILURE) {
+          newXdsPicker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
+        } else {
+          newXdsPicker = BUFFER_PICKER;
+        }
+      } else {
+        newXdsPicker = interLocalityPicker;
+      }
+      if (newState != null) {
         updatePicker(newState, newXdsPicker);
       }
     }
 
+    private static final class ErrorPicker extends SubchannelPicker {
+
+      final Status error;
+
+      ErrorPicker(Status error) {
+        this.error = checkNotNull(error, "error");
+      }
+
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withError(error);
+      }
+    }
+
+    private static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withNoResult();
+      }
+
+      @Override
+      public String toString() {
+        return "BUFFER_PICKER";
+      }
+    };
+
     private static ConnectivityState aggregateState(
         ConnectivityState overallState, ConnectivityState childState) {
+      if (overallState == null) {
+        return childState;
+      }
       if (overallState == READY || childState == READY) {
         return READY;
       }
@@ -551,9 +490,7 @@ class XdsLbState {
     /**
      * Update the given picker to the helper if it's different from the current one.
      */
-    private void updatePicker(ConnectivityState state, XdsPicker picker) {
-      currentPicker = picker;
-      currentState = state;
+    private void updatePicker(ConnectivityState state, SubchannelPicker picker) {
       helper.getChannelLogger().log(
             ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
       if (state != null) {
@@ -563,106 +500,120 @@ class XdsLbState {
 
     private void updateChildState(
         Locality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (currentPicker.childPickers.containsKey(locality)) {
-        ConnectivityState overallState = aggregateState(currentState, newChildState);
-
-        List<LocalityState> localityStates =
-            new ArrayList<>(currentPicker.localityPicker.wrrList);
-        for (int i = 0; i < localityStates.size(); i++) {
-          LocalityState curLocality = localityStates.get(i);
-          if (curLocality.locality.equals(locality)) {
-            localityStates.set(i, new LocalityState(locality, curLocality.weight, newChildState));
-          }
-        }
-        localityStates = Collections.unmodifiableList(localityStates);
-
-        Map<Locality, SubchannelPicker> childPickers = new HashMap<>(currentPicker.childPickers);
-        childPickers.put(locality, newChildPicker);
-        childPickers = Collections.unmodifiableMap(childPickers);
-
-        XdsPicker xdsPicker =
-            new XdsPicker(new LocalityPicker(localityStates, wrrAlgo), childPickers);
-        updatePicker(overallState, xdsPicker);
+      if (!localityStore.containsKey(locality)) {
+        return;
       }
+
+      List<WeightedChildPicker> childPickers = new ArrayList<>();
+
+      ConnectivityState overallState = null;
+      for (Locality l : localityStore.keySet()) {
+        IntraLocalitySubchannelStore intraLocalitySubchannelStore = localityStore.get(l);
+        ConnectivityState childState;
+        SubchannelPicker childPicker;
+        if (l.equals(locality)) {
+          childState = newChildState;
+          childPicker = newChildPicker;
+        } else {
+          childState = intraLocalitySubchannelStore.childHelper.currentChildState;
+          childPicker = intraLocalitySubchannelStore.childHelper.currentChildPicker;
+        }
+        overallState = aggregateState(overallState, childState);
+
+        if (READY == childState) {
+          childPickers.add(
+              new WeightedChildPicker(intraLocalitySubchannelStore.localityWeight, childPicker));
+        }
+      }
+
+      updatePicker(overallState, pickerFactory.picker(childPickers));
     }
 
     /**
      * SubchannelStore for a single Locality.
      */
-    final class IntraLocalitySubchannelStore {
-      final Locality locality;
+    static final class IntraLocalitySubchannelStore {
+
+      final int localityWeight;
       final LoadBalancer childBalancer;
+      final ChildHelper childHelper;
 
-      SubchannelPicker currentChildPicker = BUFFER_PICKER;
-
-      @Nullable // null means the subchannel state is not updated at the moment yet
-      ConnectivityState currentChildState;
-
-      private Set<Subchannel> subchannels = new HashSet<>();
-
-      IntraLocalitySubchannelStore(Locality locality, LoadBalancerProvider loadBalancerProvider) {
-        this.locality = locality;
-        this.childBalancer = checkNotNull(loadBalancerProvider, "loadBalancerProvider")
-            .newLoadBalancer(new ChildHelper());
+      IntraLocalitySubchannelStore(
+          int localityWeight, LoadBalancer childBalancer, ChildHelper childHelper) {
+        checkArgument(localityWeight >= 0, "localityWeight must be non-negative");
+        this.localityWeight = localityWeight;
+        this.childBalancer = checkNotNull(childBalancer, "childBalancer");
+        this.childHelper = checkNotNull(childHelper, "childHelper");
       }
 
       void shutdown() {
         childBalancer.shutdown();
-        for (Subchannel subchannel : subchannels) {
+        for (Subchannel subchannel : childHelper.subchannels) {
           subchannel.shutdown();
         }
-        subchannels = ImmutableSet.of();
+        childHelper.subchannels = ImmutableSet.of();
+      }
+    }
+
+    class ChildHelper extends ForwardingLoadBalancerHelper {
+
+      private final Locality locality;
+
+      Set<Subchannel> subchannels = new HashSet<>();
+
+      private SubchannelPicker currentChildPicker = BUFFER_PICKER;
+      private ConnectivityState currentChildState = null;
+
+      ChildHelper(Locality locality) {
+        this.locality = checkNotNull(locality, "locality");
       }
 
-      class ChildHelper extends ForwardingLoadBalancerHelper {
+      @Override
+      protected Helper delegate() {
+        return helper;
+      }
 
-        @Override
-        protected Helper delegate() {
-          return helper;
-        }
+      @Override
+      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
 
-        @Override
-        public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+        // delegate to parent helper
+        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+            .setAddresses(addrs)
+            .setAttributes(
+                Attributes.newBuilder()
+                    .set(STATE_INFO,
+                        new AtomicReference<>(
+                            ConnectivityStateInfo.forNonError(IDLE)))
+                    .build())
+            .setStateListener(SubchannelStoreImpl.this)
+            .build());
 
-          // delegate to parent helper
-          Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-              .setAddresses(addrs)
-              .setAttributes(
-                  Attributes.newBuilder()
-                      .set(STATE_INFO,
-                          new AtomicReference<>(
-                              ConnectivityStateInfo.forNonError(IDLE)))
-                      .build())
-              .setStateListener(SubchannelStoreImpl.this)
-              .build());
+        subchannels.add(subchannel);
+        return subchannel;
+      }
 
-          subchannels.add(subchannel);
-          return subchannel;
-        }
+      // This is triggered by child balancer
+      @Override
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+        checkNotNull(newState, "newState");
+        checkNotNull(newPicker, "newPicker");
 
-        // This is triggered by child balancer
-        @Override
-        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-          checkNotNull(newState, "newState");
-          checkNotNull(newPicker, "newPicker");
+        currentChildState = newState;
+        currentChildPicker = newPicker;
 
-          currentChildState = newState;
-          currentChildPicker = newPicker;
+        // delegate to parent helper
+        updateChildState(locality, newState, newPicker);
+      }
 
-          // delegate to parent helper
-          updateChildState(locality, newState, newPicker);
-        }
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this).add("locality", locality).toString();
+      }
 
-        @Override
-        public String toString() {
-          return MoreObjects.toStringHelper(this).add("locality", locality).toString();
-        }
-
-        @Override
-        public String getAuthority() {
-          //FIXME: This should be a new proposed field of Locality, locality_name
-          return locality.subzone;
-        }
+      @Override
+      public String getAuthority() {
+        //FIXME: This should be a new proposed field of Locality, locality_name
+        return locality.subzone;
       }
     }
   }
