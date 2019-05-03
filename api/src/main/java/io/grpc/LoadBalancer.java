@@ -23,6 +23,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -722,7 +723,8 @@ public abstract class LoadBalancer {
      * Returns a builder with the same initial values as this object.
      */
     public Builder toBuilder() {
-      return newBuilder().setAddresses(addrs).setAttributes(attrs).setStateListener(stateListener);
+      return newBuilder().setAddresses(addrs).setAttributes(attrs).setStateListener(stateListener)
+          .copyCustomOptions(customOptions);
     }
 
     /**
@@ -738,26 +740,8 @@ public abstract class LoadBalancer {
           .add("addrs", addrs)
           .add("attrs", attrs)
           .add("listener", stateListener)
+          .add("customOptions", Arrays.deepToString(customOptions))
           .toString();
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(addrs, attrs, stateListener);
-    }
-
-    /**
-     * Returns true if the {@link Subchannel}, {@link Status}, and
-     * {@link ClientStreamTracer.Factory} all match.
-     */
-    @Override
-    public boolean equals(Object other) {
-      if (!(other instanceof CreateSubchannelArgs)) {
-        return false;
-      }
-      CreateSubchannelArgs that = (CreateSubchannelArgs) other;
-      return Objects.equal(addrs, that.addrs) && Objects.equal(attrs, that.attrs)
-          && Objects.equal(stateListener, that.stateListener);
     }
 
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
@@ -769,6 +753,12 @@ public abstract class LoadBalancer {
       private Object[][] customOptions = new Object[0][2];
 
       Builder() {
+      }
+
+      private <T> Builder copyCustomOptions(Object[][] options) {
+        customOptions = new Object[options.length][2];
+        System.arraycopy(options, 0, customOptions, 0, options.length);
+        return this;
       }
 
       /**

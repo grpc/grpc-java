@@ -49,7 +49,6 @@ import com.google.protobuf.ByteString;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.Timestamps;
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
@@ -187,17 +186,7 @@ public class GrpclbLoadBalancerTest {
         }
       });
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.EMPTY;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   private io.grpc.Server fakeLbServer;
   @Captor

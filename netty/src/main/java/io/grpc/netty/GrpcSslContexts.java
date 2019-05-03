@@ -18,9 +18,9 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.base.Throwables;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
-import io.grpc.internal.MoreThrowables;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -285,7 +285,7 @@ public class GrpcSslContexts {
       throw new AssertionError(ex);
     } catch (InvocationTargetException ex) {
       if (ex.getCause() != null) {
-        MoreThrowables.throwIfUnchecked(ex.getCause());
+        Throwables.throwIfUnchecked(ex.getCause());
         // If checked, just wrap up everything.
       }
       throw new AssertionError(ex);

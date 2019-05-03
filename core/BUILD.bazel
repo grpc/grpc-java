@@ -69,7 +69,6 @@ java_library(
         [
             "src/main/java/io/grpc/perfmark/*.java",
         ],
-        exclude = ["src/main/java/io/grpc/perfmark/package-info.java"],
     ),
     visibility = ["//:__subpackages__"],
     deps = [

@@ -28,8 +28,6 @@ import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
@@ -58,17 +56,7 @@ import org.mockito.MockitoAnnotations;
 public class XdsLoadReportStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.EMPTY;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+      ClientStreamTracer.StreamInfo.newBuilder().build();
   private static final Locality TEST_LOCALITY = Locality.newBuilder()
       .setRegion("test_region")
       .setZone("test_zone")

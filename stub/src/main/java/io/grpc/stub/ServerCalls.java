@@ -310,6 +310,8 @@ public final class ServerCalls {
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
+    private boolean aborted = false;
+    private boolean completed = false;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
@@ -338,6 +340,8 @@ public final class ServerCalls {
         }
         return;
       }
+      checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
+      checkState(!completed, "Stream is already completed, no further calls are allowed");
       if (!sentHeaders) {
         call.sendHeaders(new Metadata());
         sentHeaders = true;
@@ -352,6 +356,7 @@ public final class ServerCalls {
         metadata = new Metadata();
       }
       call.close(Status.fromThrowable(t), metadata);
+      aborted = true;
     }
 
     @Override
@@ -362,6 +367,7 @@ public final class ServerCalls {
         }
       } else {
         call.close(Status.OK, new Metadata());
+        completed = true;
       }
     }
 
