@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Only run this script on Linux environment.
+
 # Update VERSION then in this directory run ./import.sh
 
 set -e
@@ -67,6 +69,8 @@ do
   mkdir -p "$(dirname "${file}")"
   cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
+
+# DO NOT TOUCH! The following section is upstreamed with an internal script.
 
 # See google internal third_party/envoy/envoy-update.sh
 # ===========================================================================
