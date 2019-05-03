@@ -179,9 +179,9 @@ public final class OrcaUtil {
   }
 
   /**
-   * The blueprint for {@link LoadBalancer.Helper} with the capability of allowing {@link
-   * LoadBalancer}s interested in receiving out-of-band ORCA reports to update the reporting
-   * configuration such as reporting interval.
+   * Blueprint for the wrapper that wraps a {@link LoadBalancer.Helper} with the capability of
+   * allowing {@link LoadBalancer}s interested in receiving out-of-band ORCA reports to update
+   * the reporting configuration such as reporting interval.
    */
   public abstract static class OrcaReportingHelperWrapper {
 
