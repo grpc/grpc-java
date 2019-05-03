@@ -105,7 +105,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
-import io.grpc.internal.ManagedChannelImpl.NrHelper;
+import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
@@ -3268,7 +3268,7 @@ public class ManagedChannelImplTest {
 
       @Nullable
       @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         return (resolver = new FakeNameResolver());
       }
 
@@ -3393,8 +3393,8 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void nameResolverHelperPropagation() {
-    final AtomicReference<NameResolver.Helper> capturedHelper = new AtomicReference<>();
+  public void nameResolverArgsPropagation() {
+    final AtomicReference<NameResolver.Args> capturedArgs = new AtomicReference<>();
     final NameResolver noopResolver = new NameResolver() {
         @Override
         public String getServiceAuthority() {
@@ -3414,10 +3414,10 @@ public class ManagedChannelImplTest {
           return null;
         }
       };
-    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
+    NameResolver.Factory factory = new NameResolver.Factory() {
         @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          capturedHelper.set(helper);
+        public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+          capturedArgs.set(args);
           return noopResolver;
         }
 
@@ -3426,116 +3426,13 @@ public class ManagedChannelImplTest {
           return "fakescheme";
         }
       };
-    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
+    channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);
     createChannel();
 
-    NameResolver.Helper helper = capturedHelper.get();
-    assertThat(helper).isNotNull();
-    assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
-  }
-
-  @Test
-  @Deprecated
-  public void nameResolverParams_oldApi() {
-    final AtomicReference<Attributes> capturedParams = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener listener) {
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-    ProxyDetector neverProxy = new ProxyDetector() {
-        @Override
-        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-          return null;
-        }
-      };
-    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-          capturedParams.set(params);
-          return noopResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
-    createChannel();
-
-    Attributes attrs = capturedParams.get();
-    assertThat(attrs).isNotNull();
-    assertThat(attrs.get(NameResolver.Factory.PARAMS_DEFAULT_PORT)).isEqualTo(DEFAULT_PORT);
-    assertThat(attrs.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR)).isSameInstanceAs(neverProxy);
-  }
-
-  @Test
-  @Deprecated
-  public void nameResolverParams_forwardingResolverWithOldApi() {
-    final AtomicReference<NameResolver.Helper> capturedHelper = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener listener) {
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-    ProxyDetector neverProxy = new ProxyDetector() {
-        @Override
-        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-          return null;
-        }
-      };
-    final NameResolver.Factory factory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          capturedHelper.set(helper);
-          return noopResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-
-    // A forwarding factory still with the old API can forward to a delegate factory that has
-    // migrated to the new API.
-    NameResolver.Factory oldApiForwardingFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-          return factory.newNameResolver(targetUri, params);
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return factory.getDefaultScheme();
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiForwardingFactory).proxyDetector(neverProxy);
-    createChannel();
-
-    NameResolver.Helper helper = capturedHelper.get();
-    assertThat(helper).isNotNull();
-    assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
-    assertThat(helper.getSynchronizationContext()).isSameInstanceAs(channel.syncContext);
+    NameResolver.Args args = capturedArgs.get();
+    assertThat(args).isNotNull();
+    assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
+    assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
   }
 
   @Test
@@ -3555,18 +3452,16 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
-    ConfigOrError coe = nrh.parseServiceConfig(ImmutableMap.<String, Object>of());
+    ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
@@ -3583,19 +3478,17 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
-        nrh.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
+        parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
 
     assertThat(coe.getError()).isNotNull();
     assertThat(coe.getError().getCode()).isEqualTo(Code.UNKNOWN);
@@ -3615,17 +3508,14 @@ public class ManagedChannelImplTest {
     AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
         new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
-        nrh.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
+        parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
@@ -3956,11 +3846,11 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public NameResolver newNameResolver(final URI targetUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
-      assertEquals(DEFAULT_PORT, helper.getDefaultPort());
+      assertEquals(DEFAULT_PORT, args.getDefaultPort());
       FakeNameResolver resolver = new FakeNameResolver(error);
       resolvers.add(resolver);
       return resolver;
