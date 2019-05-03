@@ -60,8 +60,8 @@ public class OrcaUtilPerRequestReportingTest {
   }
 
   /**
-   * Tests a single load balance policy's listener receive per-request ORCA reports upon call trailer
-   * arrives.
+   * Tests a single load balance policy's listener receive per-request ORCA reports upon call
+   * trailer arrives.
    */
   @Test
   public void singlePolicyTypicalWorkflow() {
