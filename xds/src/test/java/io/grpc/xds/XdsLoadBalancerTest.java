@@ -55,7 +55,6 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;

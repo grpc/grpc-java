@@ -54,7 +54,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.LocalityInfo;
-import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;

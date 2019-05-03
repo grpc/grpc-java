@@ -41,7 +41,6 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.xds.XdsLbState.LbEndpoint;
 import io.grpc.xds.XdsLbState.Locality;
 import io.grpc.xds.XdsLbState.LocalityInfo;
-import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
