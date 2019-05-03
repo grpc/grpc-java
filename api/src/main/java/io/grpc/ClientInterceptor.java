@@ -24,10 +24,14 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>Implementers use this mechanism to add cross-cutting behavior to {@link Channel} and
  * stub implementations. Common examples of such behavior include:
  * <ul>
- * <li>Adding credentials to header metadata</li>
  * <li>Logging and monitoring call behavior</li>
+ * <li>Adding metadata for proxies to observe</li>
  * <li>Request and response rewriting</li>
  * </ul>
+ *
+ * <p>Providing authentication credentials is better served by {@link
+ * CallCredentials}. But a {@code ClientInterceptor} could set the {@code
+ * CallCredentials} within the {@link CallOptions}.
  */
 @ThreadSafe
 public interface ClientInterceptor {
