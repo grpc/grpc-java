@@ -262,6 +262,8 @@ final class XdsLoadBalancer extends LoadBalancer {
               .setAddresses(fallbackServers)
               .setAttributes(fallbackAttributes)
               .build());
+
+      // TODO: maybe update picker here if still use the old API but not SubchannelStateListener
     }
 
     void updateFallbackServers(
