@@ -203,19 +203,19 @@ public class OrcaOobUtilTest {
 
     subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
     orcaHelperWrapper =
-        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
+        OrcaOobUtil.newOrcaReportingHelperWrapper(
             origHelper,
             mockOrcaListener0,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     parentHelperWrapper =
-        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
+        OrcaOobUtil.newOrcaReportingHelperWrapper(
             origHelper,
             mockOrcaListener1,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     childHelperWrapper =
-        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
+        OrcaOobUtil.newOrcaReportingHelperWrapper(
             parentHelperWrapper.asHelper(),
             mockOrcaListener2,
             backoffPolicyProvider,

@@ -23,6 +23,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
@@ -48,6 +49,8 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -74,23 +77,12 @@ public abstract class OrcaOobUtil {
         @Override
         public OrcaReportingHelperWrapper newOrcaReportingHelperWrapper(
             LoadBalancer.Helper delegate,
-            OrcaOobReportListener listener,
-            BackoffPolicy.Provider backoffPolicyProvider,
-            Supplier<Stopwatch> stopwatchSupplier) {
-          final OrcaReportingHelper orcaHelper =
-              new OrcaReportingHelper(delegate, listener, backoffPolicyProvider, stopwatchSupplier);
-
-          return new OrcaReportingHelperWrapper() {
-            @Override
-            public void setReportingConfig(OrcaReportingConfig config) {
-              orcaHelper.setReportingConfig(config);
-            }
-
-            @Override
-            public Helper asHelper() {
-              return orcaHelper;
-            }
-          };
+            OrcaOobReportListener listener) {
+          return newOrcaReportingHelperWrapper(
+              delegate,
+              listener,
+              new ExponentialBackoffPolicy.Provider(),
+              GrpcUtil.STOPWATCH_SUPPLIER);
         }
       };
 
@@ -109,15 +101,32 @@ public abstract class OrcaOobUtil {
    *     backends.
    * @param listener contains the callback to be invoked when an out-of-band ORCA report is
    *     received.
-   * @param backoffPolicyProvider the provider of backoff policy used to backoff failure of ORCA
-   *     service streaming.
-   * @param stopwatchSupplier supplies stopwatch utility.
    */
   public abstract OrcaReportingHelperWrapper newOrcaReportingHelperWrapper(
       LoadBalancer.Helper delegate,
+      OrcaOobReportListener listener);
+
+  @VisibleForTesting
+  static OrcaReportingHelperWrapper newOrcaReportingHelperWrapper(
+      LoadBalancer.Helper delegate,
       OrcaOobReportListener listener,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Supplier<Stopwatch> stopwatchSupplier);
+      Supplier<Stopwatch> stopwatchSupplier) {
+    final OrcaReportingHelper orcaHelper =
+        new OrcaReportingHelper(delegate, listener, backoffPolicyProvider, stopwatchSupplier);
+
+    return new OrcaReportingHelperWrapper() {
+      @Override
+      public void setReportingConfig(OrcaReportingConfig config) {
+        orcaHelper.setReportingConfig(config);
+      }
+
+      @Override
+      public Helper asHelper() {
+        return orcaHelper;
+      }
+    };
+  }
 
   /**
    * The listener interface for receiving out-of-band ORCA reports from backends. The class that is
