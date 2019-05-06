@@ -58,6 +58,10 @@ public abstract class OrcaPerRequestUtil {
         }
       };
 
+  /**
+   * Gets an {@ocde OrcaPerRequestUtil} instance that provides actual implementation of
+   * {@link #newOrcaClientStreamTracerFactory}.
+   */
   public static OrcaPerRequestUtil getInstance() {
     return DEFAULT_INSTANCE;
   }

@@ -86,6 +86,10 @@ public abstract class OrcaOobUtil {
         }
       };
 
+  /**
+   * Gets an {@code OrcaOobUtil} instance that provides actual implementation of
+   * {@link #newOrcaReportingHelperWrapper}.
+   */
   public static OrcaOobUtil getInstance() {
     return DEFAULT_INSTANCE;
   }
@@ -138,6 +142,10 @@ public abstract class OrcaOobUtil {
 
     /**
      * Invoked when an out-of-band ORCA report is received.
+     *
+     * <p>The {@code Subchannel} instance passed here must be the same one as returned by
+     * {@link LoadBalancer.Helper#createSubchannel(CreateSubchannelArgs)} for
+     * {@link OrcaReportingHelperWrapper#asHelper()}, in which the listener is registered.
      *
      * @param subchannel the subchannel over which the connection to a backend is established.
      * @param report load report in the format of ORCA protocol.
