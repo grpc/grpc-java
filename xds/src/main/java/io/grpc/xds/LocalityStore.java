@@ -33,14 +33,12 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
@@ -61,7 +59,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * created by the fallback balancer.
  */
 // Must be accessed/run in SynchronizedContext.
-interface SubchannelStore extends SubchannelStateListener {
+interface LocalityStore {
 
   boolean hasReadyBackends();
 
@@ -73,7 +71,9 @@ interface SubchannelStore extends SubchannelStateListener {
 
   void updateLoadBalancerProvider(LoadBalancerProvider loadBalancerProvider);
 
-  final class SubchannelStoreImpl implements SubchannelStore {
+  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+
+  final class LocalityStoreImpl implements LocalityStore {
     private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.create("io.grpc.xds.stateInfo");
 
@@ -83,13 +83,14 @@ interface SubchannelStore extends SubchannelStateListener {
     private Map<Locality, IntraLocalitySubchannelStore> localityStore = new HashMap<>();
     private LoadBalancerProvider loadBalancerProvider;
     private boolean shutdown;
+    private ConnectivityState overallState;
 
-    SubchannelStoreImpl(Helper helper) {
+    LocalityStoreImpl(Helper helper) {
       this(helper, pickerFactoryImpl);
     }
 
     @VisibleForTesting
-    SubchannelStoreImpl(Helper helper, PickerFactory pickerFactory) {
+    LocalityStoreImpl(Helper helper, PickerFactory pickerFactory) {
       this.helper = helper;
       this.pickerFactory = pickerFactory;
     }
@@ -109,16 +110,7 @@ interface SubchannelStore extends SubchannelStateListener {
 
     @Override
     public boolean hasReadyBackends() {
-      // maybe optimize by tracking count of READY subchannels
-      for (IntraLocalitySubchannelStore localitySubchannels : localityStore.values()) {
-        for (Subchannel subchannel : localitySubchannels.childHelper.subchannels) {
-          if (ConnectivityState.READY
-              == subchannel.getAttributes().get(STATE_INFO).get().getState()) {
-            return true;
-          }
-        }
-      }
-      return false;
+      return overallState == READY;
     }
 
     @Override
@@ -129,7 +121,7 @@ interface SubchannelStore extends SubchannelStateListener {
 
     // This is triggered by xdsLoadbalancer.handleSubchannelState
     @Override
-    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
       subchannel.getAttributes().get(STATE_INFO).set(newState);
 
       // delegate to the childBalancer who manages this subchannel
@@ -327,6 +319,7 @@ interface SubchannelStore extends SubchannelStateListener {
       }
 
       updatePicker(overallState, pickerFactory.picker(childPickers));
+      this.overallState = overallState;
     }
 
     /**
@@ -377,14 +370,7 @@ interface SubchannelStore extends SubchannelStateListener {
       public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
 
         // delegate to parent helper
-        Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-            .setAddresses(addrs)
-            .setAttributes(
-                Attributes.newBuilder()
-                    .set(STATE_INFO, new AtomicReference<>(ConnectivityStateInfo.forNonError(IDLE)))
-                    .build())
-            .setStateListener(SubchannelStoreImpl.this)
-            .build());
+        Subchannel subchannel = helper.createSubchannel(addrs, attrs);
 
         subchannels.add(subchannel);
         return subchannel;

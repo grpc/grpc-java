@@ -45,8 +45,8 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
-import io.grpc.xds.SubchannelStore.SubchannelStoreImpl;
-import io.grpc.xds.SubchannelStore.SubchannelStoreImpl.PickerFactory;
+import io.grpc.xds.LocalityStore.LocalityStoreImpl;
+import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLbState.LbEndpoint;
 import io.grpc.xds.XdsLbState.Locality;
@@ -117,7 +117,7 @@ public class XdsLbStateTest {
   };
 
   private XdsLbState xdsLbState;
-  private SubchannelStore subchannelStore;
+  private LocalityStore subchannelStore;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -162,7 +162,7 @@ public class XdsLbStateTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
 
-    subchannelStore = new SubchannelStoreImpl(helper, interLocalityPickerFactory);
+    subchannelStore = new LocalityStoreImpl(helper, interLocalityPickerFactory);
     xdsLbState = new XdsLbState(
         "fake_balancer_name", null, null, helper, subchannelStore, adsStreamCallback, lbRegistry);
   }

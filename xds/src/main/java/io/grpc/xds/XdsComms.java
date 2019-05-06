@@ -65,7 +65,7 @@ final class XdsComms {
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
     static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
     static final String ROUND_ROBIN = "round_robin";
-    final SubchannelStore subchannelStore;
+    final LocalityStore subchannelStore;
 
     final AdsStreamCallback adsStreamCallback;
 
@@ -218,7 +218,7 @@ final class XdsComms {
     boolean cancelled;
     boolean closed;
 
-    AdsStream(AdsStreamCallback adsStreamCallback, SubchannelStore subchannelStore) {
+    AdsStream(AdsStreamCallback adsStreamCallback, LocalityStore subchannelStore) {
       this.adsStreamCallback = adsStreamCallback;
       this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
           .streamAggregatedResources(xdsResponseReader);
@@ -255,7 +255,7 @@ final class XdsComms {
    */
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
+      LocalityStore subchannelStore, LoadBalancerRegistry lbRegistry) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.adsStream = new AdsStream(

@@ -78,7 +78,7 @@ public class XdsCommsTest {
   @Mock
   private AdsStreamCallback adsStreamCallback;
   @Mock
-  private SubchannelStore subchannelStore;
+  private LocalityStore subchannelStore;
   @Captor
   private ArgumentCaptor<Map<XdsLbState.Locality, LocalityInfo>> localityEndpointsMappingCaptor;
 

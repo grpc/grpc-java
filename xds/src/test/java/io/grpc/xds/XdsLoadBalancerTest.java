@@ -165,7 +165,7 @@ public class XdsLoadBalancerTest {
       });
 
   @Mock
-  private SubchannelStore fakeSubchannelStore;
+  private LocalityStore fakeSubchannelStore;
 
   private ManagedChannel oobChannel1;
   private ManagedChannel oobChannel2;

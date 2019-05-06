@@ -62,7 +62,7 @@ class XdsLbState {
   @Nullable
   final LbConfig childPolicy;
 
-  private final SubchannelStore subchannelStore;
+  private final LocalityStore subchannelStore;
   private final Helper helper;
   private final AdsStreamCallback adsStreamCallback;
   private final LoadBalancerRegistry lbRegistry;
@@ -75,7 +75,7 @@ class XdsLbState {
       @Nullable LbConfig childPolicy,
       @Nullable XdsComms xdsComms,
       Helper helper,
-      SubchannelStore subchannelStore,
+      LocalityStore subchannelStore,
       AdsStreamCallback adsStreamCallback,
       LoadBalancerRegistry lbRegistry) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
@@ -109,7 +109,7 @@ class XdsLbState {
 
   final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // TODO: maybe update picker
-    subchannelStore.onSubchannelState(subchannel, newState);
+    subchannelStore.handleSubchannelState(subchannel, newState);
   }
 
   /**
