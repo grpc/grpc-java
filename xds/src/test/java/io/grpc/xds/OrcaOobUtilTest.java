@@ -63,9 +63,9 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.OrcaUtil.OrcaOobReportListener;
-import io.grpc.xds.OrcaUtil.OrcaReportingConfig;
-import io.grpc.xds.OrcaUtil.OrcaReportingHelperWrapper;
+import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
@@ -89,9 +89,11 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-/** Unit tests for {@link OrcaUtil}'s methods for out-of-band ORCA reporting. */
+/**
+ * Unit tests for {@link OrcaOobUtil} class.
+ */
 @RunWith(JUnit4.class)
-public class OrcaUtilOobReportingTest {
+public class OrcaOobUtilTest {
 
   private static final int NUM_SUBCHANNELS = 2;
   private static final Attributes.Key<String> SUBCHANNEL_ATTR_KEY =
@@ -201,19 +203,19 @@ public class OrcaUtilOobReportingTest {
 
     subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
     orcaHelperWrapper =
-        OrcaUtil.newOrcaReportingHelperWrapper(
+        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
             origHelper,
             mockOrcaListener0,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     parentHelperWrapper =
-        OrcaUtil.newOrcaReportingHelperWrapper(
+        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
             origHelper,
             mockOrcaListener1,
             backoffPolicyProvider,
             fakeClock.getStopwatchSupplier());
     childHelperWrapper =
-        OrcaUtil.newOrcaReportingHelperWrapper(
+        OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(
             parentHelperWrapper.asHelper(),
             mockOrcaListener2,
             backoffPolicyProvider,
