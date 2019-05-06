@@ -279,17 +279,6 @@ interface LocalityStore {
       this.loadBalancerProvider = loadBalancerProvider;
     }
 
-    /**
-     * Update the given picker to the helper if it's different from the current one.
-     */
-    private void updatePicker(ConnectivityState state, SubchannelPicker picker) {
-      helper.getChannelLogger().log(
-            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
-      if (state != null) {
-        helper.updateBalancingState(state, picker);
-      }
-    }
-
     private void updateChildState(
         Locality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
       if (!localityStore.containsKey(locality)) {
@@ -320,6 +309,14 @@ interface LocalityStore {
 
       updatePicker(overallState, pickerFactory.picker(childPickers));
       this.overallState = overallState;
+    }
+
+    private void updatePicker(ConnectivityState state, SubchannelPicker picker) {
+      helper.getChannelLogger().log(
+            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
+      if (state != null) {
+        helper.updateBalancingState(state, picker);
+      }
     }
 
     /**
