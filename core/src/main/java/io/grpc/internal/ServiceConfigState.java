@@ -16,10 +16,9 @@
 
 package io.grpc.internal;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import javax.annotation.Nullable;
 
@@ -28,13 +27,12 @@ import javax.annotation.Nullable;
  * and read from {@link ManagedChannelImpl} constructor or the provided syncContext.
  */
 final class ServiceConfigState {
-  @Nullable private final ManagedChannelServiceConfig defaultServiceConfig;
+  @Nullable private final ConfigOrError defaultServiceConfig;
   private final boolean lookUpServiceConfig;
 
   // mutable state
-  @Nullable private ManagedChannelServiceConfig currentServiceConfig;
-  @Nullable private Status currentError;
-  // Has there been at least one successful update?
+  @Nullable private ConfigOrError currentServiceConfigOrError;
+  // Has there been at least one update?
   private boolean updated;
 
   /**
@@ -45,10 +43,14 @@ final class ServiceConfigState {
   ServiceConfigState(
       @Nullable ManagedChannelServiceConfig defaultServiceConfig,
       boolean lookUpServiceConfig) {
-    this.defaultServiceConfig = defaultServiceConfig;
+    if (defaultServiceConfig == null) {
+      this.defaultServiceConfig = null;
+    } else {
+      this.defaultServiceConfig = ConfigOrError.fromConfig(defaultServiceConfig);
+    }
     this.lookUpServiceConfig = lookUpServiceConfig;
     if (!lookUpServiceConfig) {
-      this.currentServiceConfig = defaultServiceConfig;
+      this.currentServiceConfigOrError = this.defaultServiceConfig;
     }
   }
 
@@ -75,9 +77,12 @@ final class ServiceConfigState {
    *
    * @throws IllegalStateException if the service config has not yet been updated.
    */
+  @Deprecated
   @Nullable ManagedChannelServiceConfig getCurrentServiceConfig() {
     checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
-    return currentServiceConfig;
+    return currentServiceConfigOrError != null
+        ? (ManagedChannelServiceConfig) currentServiceConfigOrError.getConfig()
+        : null;
   }
 
   /**
@@ -85,35 +90,74 @@ final class ServiceConfigState {
    *
    * @throws IllegalStateException if the service config has not yet been updated.
    */
+  @Deprecated
   @Nullable Status getCurrentError() {
     checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
-    return currentError;
+    return currentServiceConfigOrError != null
+        ? currentServiceConfigOrError.getError()
+        : null;
+  }
+
+  @Nullable
+  ConfigOrError getCurrent() {
+    checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
+    return currentServiceConfigOrError;
+  }
+
+  void update(@Nullable ConfigOrError coe) {
+    checkState(expectUpdates(), "unexpected service config update");
+    boolean firstUpdate = !updated;
+    updated = true;
+    if (firstUpdate) {
+      if (coe == null) {
+        currentServiceConfigOrError = defaultServiceConfig;
+      } else if (coe.getError() != null) {
+        if (defaultServiceConfig != null) {
+          currentServiceConfigOrError = defaultServiceConfig;
+        } else {
+          currentServiceConfigOrError = coe;
+        }
+      } else {
+        assert coe.getConfig() != null;
+        currentServiceConfigOrError = coe;
+      }
+    } else {
+      if (coe == null) {
+        if (defaultServiceConfig != null) {
+          currentServiceConfigOrError = defaultServiceConfig;
+        } else {
+          currentServiceConfigOrError = null;
+        }
+      } else if (coe.getError() != null) {
+        if (currentServiceConfigOrError != null && currentServiceConfigOrError.getError() != null) {
+          currentServiceConfigOrError = coe;
+        } else {
+          // discard
+        }
+      } else {
+        assert coe.getConfig() != null;
+        currentServiceConfigOrError = coe;
+      }
+    }
   }
 
   /**
    * Returns {@code true} if the update was successfully applied, else {@code false}.
    */
+  @Deprecated
   boolean update(Status error) {
-    checkNotNull(error, "error");
-    checkArgument(!error.isOk(), "can't use OK error");
-    checkState(expectUpdates(), "unexpected service config update");
-    boolean firstUpdate = !updated;
-    updated = true;
-    if ((firstUpdate && defaultServiceConfig == null) || currentError != null) {
-      assert currentServiceConfig == null;
-      currentError = error;
-      return true;
-    }
-    if (currentServiceConfig == null) {
-      currentServiceConfig = defaultServiceConfig;
-    }
-    return false;
+    ConfigOrError coe = ConfigOrError.fromError(error);
+    update(coe);
+    return currentServiceConfigOrError == coe;
   }
 
   /**
    * Returns {@code} if the update was successfully applied, else {@code false}.
    */
+  @Deprecated
   void update(@Nullable ManagedChannelServiceConfig newServiceConfig) {
+    update(newServiceConfig != null ? ConfigOrError.fromConfig(newServiceConfig) : null);
+    /*
     checkState(expectUpdates(), "unexpected service config update");
     updated = true;
     if (newServiceConfig != null) {
@@ -122,6 +166,7 @@ final class ServiceConfigState {
       currentServiceConfig = defaultServiceConfig;
     }
     currentError = null;
+    */
   }
 
   boolean expectUpdates() {
