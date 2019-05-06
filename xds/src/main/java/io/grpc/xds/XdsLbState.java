@@ -108,10 +108,6 @@ class XdsLbState {
     }
   }
 
-  final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // TODO: maybe update picker
-  }
-
   /**
    * Shuts down subchannels and child loadbalancers, and cancels retry timer.
    */

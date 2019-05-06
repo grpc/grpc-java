@@ -21,6 +21,7 @@ import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsLoadBalancer.STATE_INFO;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -518,7 +519,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(fakeClock.getPendingTasks()).isEmpty();
     verify(fakeBalancer1, never()).handleResolvedAddresses(
-        ArgumentMatchers.any(ResolvedAddresses.class));
+        any(ResolvedAddresses.class));
   }
 
   @Test
@@ -540,7 +541,7 @@ public class XdsLoadBalancerTest {
     assertThat(fakeClock.getPendingTasks()).isEmpty();
 
     // verify handleResolvedAddresses() is not called again
-    verify(fakeBalancer1).handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
+    verify(fakeBalancer1).handleResolvedAddresses(any(ResolvedAddresses.class));
   }
 
   @Test
@@ -556,7 +557,7 @@ public class XdsLoadBalancerTest {
     serverResponseWriter.onError(new Exception("fake error"));
 
     verify(fakeBalancer1, never()).handleResolvedAddresses(
-        ArgumentMatchers.any(ResolvedAddresses.class));
+        any(ResolvedAddresses.class));
 
     Subchannel subchannel = new Subchannel() {
       @Override
@@ -577,7 +578,7 @@ public class XdsLoadBalancerTest {
 
     doReturn(true).when(fakeSubchannelStore).hasSubchannel(subchannel);
     doReturn(false).when(fakeSubchannelStore).hasReadyBackends();
-    lb.handleSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
+    lb.parentListener.onSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
         Status.UNAVAILABLE));
 
     ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);

@@ -20,13 +20,20 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.XdsLbState.SubchannelStore;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -37,9 +44,10 @@ final class FallbackManager {
 
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
-  private final Helper helper;
+  private final Helper parentHelper;
   private final SubchannelStore subchannelStore;
   private final LoadBalancerRegistry lbRegistry;
+  private final SubchannelStateListener parentListener;
 
   private LbConfig fallbackPolicy;
 
@@ -54,13 +62,15 @@ final class FallbackManager {
   private Attributes fallbackAttributes;
 
   // allow value write by outer class
-  private boolean balancerWorking;
+  boolean balancerWorking;
 
   FallbackManager(
-      Helper helper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry) {
-    this.helper = helper;
+      Helper parentHelper, SubchannelStore subchannelStore, LoadBalancerRegistry lbRegistry,
+      SubchannelStateListener parentListener) {
+    this.parentHelper = parentHelper;
     this.subchannelStore = subchannelStore;
     this.lbRegistry = lbRegistry;
+    this.parentListener = parentListener;
   }
 
   void cancelFallback() {
@@ -81,10 +91,10 @@ final class FallbackManager {
       return;
     }
 
-    helper.getChannelLogger().log(
+    parentHelper.getChannelLogger().log(
         ChannelLogLevel.INFO, "Using fallback policy");
     fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
-        .newLoadBalancer(helper);
+        .newLoadBalancer(new ChildHelper());
     // TODO(carl-mastrangelo): propagate the load balancing config policy
     fallbackBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -130,9 +140,41 @@ final class FallbackManager {
         }
       }
 
-      fallbackTimer = helper.getSynchronizationContext().schedule(
+      fallbackTimer = parentHelper.getSynchronizationContext().schedule(
           new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
-          helper.getScheduledExecutorService());
+          parentHelper.getScheduledExecutorService());
+    }
+  }
+
+  LoadBalancer getFallbackBalancer() {
+    return fallbackBalancer;
+  }
+
+  private final class ChildHelper extends ForwardingLoadBalancerHelper {
+    @Override
+    protected Helper delegate() {
+      return parentHelper;
+    }
+
+    @Override
+    public Subchannel createSubchannel(final CreateSubchannelArgs args) {
+      return parentHelper.createSubchannel(
+          args.toBuilder().setStateListener(
+              new SubchannelStateListener() {
+                @Override
+                public void onSubchannelState(Subchannel subchannel,
+                    ConnectivityStateInfo newState) {
+                  args.getStateListener().onSubchannelState(subchannel, newState);
+                  parentListener.onSubchannelState(subchannel, newState);
+                }
+              }).build());
+    }
+
+    @Override
+    public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      if (!balancerWorking) {
+        parentHelper.updateBalancingState(newState, newPicker);
+      }
     }
   }
 }

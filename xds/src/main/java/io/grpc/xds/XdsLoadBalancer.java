@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -76,7 +75,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     this.helper = checkNotNull(helper, "helper");
     this.lbRegistry = lbRegistry;
     this.subchannelStore = subchannelStore;
-    fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
+    fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry, parentListener);
   }
 
   @Override
@@ -153,26 +152,18 @@ final class XdsLoadBalancer extends LoadBalancer {
     // }
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    // xdsLbState should never be null here since handleSubchannelState cannot be called while the
-    // lb is shutdown.
-    if (newState.getState() == SHUTDOWN) {
-      return;
-    }
-
-    if (fallbackManager.getFallbackBalancer() != null) {
-      fallbackManager.getFallbackBalancer().handleSubchannelState(subchannel, newState);
-    }
-    if (subchannelStore.hasSubchannel(subchannel)) {
-      if (newState.getState() == IDLE) {
-        subchannel.requestConnection();
+  @VisibleForTesting
+  final SubchannelStateListener parentListener = new SubchannelStateListener() {
+    @Override
+    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+      if (newState.getState() == SHUTDOWN) {
+        return;
       }
-      subchannel.getAttributes().get(STATE_INFO).set(newState);
-      xdsLbState.handleSubchannelState(subchannel, newState);
-      fallbackManager.maybeUseFallbackPolicy();
+      if (subchannelStore.hasSubchannel(subchannel)) {
+        fallbackManager.maybeUseFallbackPolicy();
+      }
     }
-  }
+  };
 
   @Override
   public void shutdown() {

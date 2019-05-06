@@ -17,7 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.READY;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -27,12 +29,15 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -75,6 +80,7 @@ public class FallbackManagerTest {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
+      childHelper = helper;
       return fakeLb;
     }
   };
@@ -93,7 +99,10 @@ public class FallbackManagerTest {
   private LoadBalancer fakeLb;
   @Mock
   private ChannelLogger channelLogger;
+  @Mock
+  private SubchannelStateListener parentListener;
 
+  private Helper childHelper;
   private FallbackManager fallbackManager;
   private LbConfig fallbackPolicy;
 
@@ -103,7 +112,8 @@ public class FallbackManagerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(channelLogger).when(helper).getChannelLogger();
-    fallbackManager = new FallbackManager(helper, new SubchannelStoreImpl(), lbRegistry);
+    fallbackManager =
+        new FallbackManager(helper, new SubchannelStoreImpl(), lbRegistry, parentListener);
     fallbackPolicy = new LbConfig("test_policy", new HashMap<String, Void>());
     lbRegistry.register(fakeLbProvider);
   }
@@ -134,6 +144,38 @@ public class FallbackManagerTest {
                         fallbackPolicy.getRawConfigValue())
                     .build())
             .build());
+  }
+
+  @Test
+  public void updateFallbackPicker() {
+    fallbackManager.maybeStartFallbackTimer();
+    List<EquivalentAddressGroup> eags = new ArrayList<>();
+    eags.add(new EquivalentAddressGroup(new InetSocketAddress(0)));
+    fallbackManager.updateFallbackServers(
+        eags, Attributes.EMPTY, fallbackPolicy);
+
+    fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+    verify(fakeLb).handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(eags)
+            .setAttributes(
+                Attributes.newBuilder()
+                    .set(
+                        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG,
+                        fallbackPolicy.getRawConfigValue())
+                    .build())
+            .build());
+
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    childHelper.updateBalancingState(READY, picker);
+
+    verify(helper).updateBalancingState(READY, picker);
+
+    fallbackManager.cancelFallback();
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+
+    verify(helper, never()).updateBalancingState(READY, picker2);
   }
 
   @Test
