@@ -25,8 +25,6 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-- [Authentication](AUTHENTICATION_EXAMPLE.md)
-
 - [Google Authentication](example-gauth/GOOGLE_AUTH_EXAMPLE.md)
 
 ### To build the examples
