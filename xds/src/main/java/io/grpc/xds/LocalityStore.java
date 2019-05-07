@@ -25,7 +25,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -63,7 +62,7 @@ interface LocalityStore {
 
   boolean hasNonDropBackends();
 
-  void shutdown();
+  void reset();
 
   void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
 
@@ -75,9 +74,8 @@ interface LocalityStore {
     private final Helper helper;
     private final PickerFactory pickerFactory;
 
-    private Map<Locality, LocalityLbInfo> localityStore = new HashMap<>();
+    private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     private LoadBalancerProvider loadBalancerProvider;
-    private boolean shutdown;
     private ConnectivityState overallState;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -121,39 +119,34 @@ interface LocalityStore {
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
       // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityStore.values()) {
+      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
         // This will probably trigger childHelper.updateBalancingState
         localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
       }
     }
 
     @Override
-    public void shutdown() {
-      shutdown = true;
-      for (LocalityLbInfo subchannels : localityStore.values()) {
+    public void reset() {
+      for (LocalityLbInfo subchannels : localityMap.values()) {
         subchannels.shutdown();
       }
-      localityStore = ImmutableMap.of();
+      localityMap = new HashMap<>();
     }
 
     // This is triggered by EDS response.
     @Override
     public void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap) {
-      if (shutdown) {
-        return;
-      }
-
-      Set<Locality> oldLocalities = localityStore.keySet();
+      Set<Locality> oldLocalities = localityMap.keySet();
       Set<Locality> newLocalities = localityInfoMap.keySet();
 
       for (Locality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
           // No graceful transition until a high-level lb graceful transition design is available.
-          localityStore.get(oldLocality).shutdown();
-          localityStore.remove(oldLocality);
-          if (localityStore.isEmpty()) {
+          localityMap.get(oldLocality).shutdown();
+          localityMap.remove(oldLocality);
+          if (localityMap.isEmpty()) {
             // down-size the map
-            localityStore = new HashMap<>();
+            localityMap = new HashMap<>();
           }
         }
       }
@@ -168,7 +161,7 @@ interface LocalityStore {
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
           LocalityLbInfo oldLocalityLbInfo
-              = localityStore.get(newLocality);
+              = localityMap.get(newLocality);
           childHelper = oldLocalityLbInfo.childHelper;
           localityLbInfo = new LocalityLbInfo(
               localityInfoMap.get(newLocality).localityWeight,
@@ -181,7 +174,7 @@ interface LocalityStore {
                   localityInfoMap.get(newLocality).localityWeight,
                   loadBalancerProvider.newLoadBalancer(childHelper),
                   childHelper);
-          localityStore.put(newLocality, localityLbInfo);
+          localityMap.put(newLocality, localityLbInfo);
         }
         // TODO: put endPointWeights into attributes for WRR.
         localityLbInfo.childBalancer
@@ -259,15 +252,15 @@ interface LocalityStore {
 
     private void updateChildState(
         Locality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (!localityStore.containsKey(locality)) {
+      if (!localityMap.containsKey(locality)) {
         return;
       }
 
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
-      for (Locality l : localityStore.keySet()) {
-        LocalityLbInfo localityLbInfo = localityStore.get(l);
+      for (Locality l : localityMap.keySet()) {
+        LocalityLbInfo localityLbInfo = localityMap.get(l);
         ConnectivityState childState;
         SubchannelPicker childPicker;
         if (l.equals(locality)) {

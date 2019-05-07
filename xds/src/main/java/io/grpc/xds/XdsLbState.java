@@ -114,7 +114,7 @@ class XdsLbState {
   void shutdown() {
     // TODO: cancel retry timer
     // TODO: shutdown child balancers
-    localityStore.shutdown();
+    localityStore.reset();
   }
 
   @Nullable
