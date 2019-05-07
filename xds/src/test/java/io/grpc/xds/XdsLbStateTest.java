@@ -101,7 +101,7 @@ public class XdsLbStateTest {
 
     @Override
     public String getPolicyName() {
-      return "child_policy";
+      return "round_robin";
     }
 
     @Override
@@ -116,7 +116,6 @@ public class XdsLbStateTest {
     }
   };
 
-  private XdsLbState xdsLbState;
   private LocalityStore subchannelStore;
 
   private final FakeClock fakeClock = new FakeClock();
@@ -160,11 +159,8 @@ public class XdsLbStateTest {
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-
-
-    subchannelStore = new LocalityStoreImpl(helper, interLocalityPickerFactory);
-    xdsLbState = new XdsLbState(
-        "fake_balancer_name", null, null, helper, subchannelStore, adsStreamCallback, lbRegistry);
+    lbRegistry.register(childLbProvider);
+    subchannelStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry);
   }
 
   @Test
@@ -176,7 +172,6 @@ public class XdsLbStateTest {
 
   @Test
   public void handleSubchannelState() {
-    subchannelStore.updateLoadBalancerProvider(childLbProvider);
     assertThat(loadBalancers).isEmpty();
 
     Locality locality1 = new Locality("r1", "z1", "sz1");

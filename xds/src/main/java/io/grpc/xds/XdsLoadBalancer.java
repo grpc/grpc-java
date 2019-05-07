@@ -85,7 +85,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
-    this(helper, lbRegistry, new LocalityStoreImpl(helper));
+    this(helper, lbRegistry, new LocalityStoreImpl(helper, lbRegistry));
   }
 
   @Override
@@ -136,8 +136,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
     }
     xdsLbState = new XdsLbState(
-        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback,
-        lbRegistry);
+        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback);
   }
 
   @Nullable

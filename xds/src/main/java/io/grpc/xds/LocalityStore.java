@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
@@ -69,13 +70,12 @@ interface LocalityStore {
 
   void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
 
-  void updateLoadBalancerProvider(LoadBalancerProvider loadBalancerProvider);
-
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
         Attributes.Key.create("io.grpc.xds.stateInfo");
+    private static final String ROUND_ROBIN = "round_robin";
 
     private final Helper helper;
     private final PickerFactory pickerFactory;
@@ -85,14 +85,17 @@ interface LocalityStore {
     private boolean shutdown;
     private ConnectivityState overallState;
 
-    LocalityStoreImpl(Helper helper) {
-      this(helper, pickerFactoryImpl);
+    LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
+      this(helper, pickerFactoryImpl, lbRegistry);
     }
 
     @VisibleForTesting
-    LocalityStoreImpl(Helper helper, PickerFactory pickerFactory) {
+    LocalityStoreImpl(Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry) {
       this.helper = helper;
       this.pickerFactory = pickerFactory;
+      loadBalancerProvider = checkNotNull(
+          lbRegistry.getProvider(ROUND_ROBIN),
+          "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -269,14 +272,6 @@ interface LocalityStore {
         return TRANSIENT_FAILURE;
       }
       return overallState;
-    }
-
-    @Override
-    public void updateLoadBalancerProvider(LoadBalancerProvider loadBalancerProvider) {
-      if (shutdown) {
-        return;
-      }
-      this.loadBalancerProvider = loadBalancerProvider;
     }
 
     private void updateChildState(

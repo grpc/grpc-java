@@ -29,7 +29,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -65,7 +64,6 @@ class XdsLbState {
   private final LocalityStore subchannelStore;
   private final Helper helper;
   private final AdsStreamCallback adsStreamCallback;
-  private final LoadBalancerRegistry lbRegistry;
 
   @Nullable
   private XdsComms xdsComms;
@@ -76,15 +74,13 @@ class XdsLbState {
       @Nullable XdsComms xdsComms,
       Helper helper,
       LocalityStore subchannelStore,
-      AdsStreamCallback adsStreamCallback,
-      LoadBalancerRegistry lbRegistry) {
+      AdsStreamCallback adsStreamCallback) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.xdsComms = xdsComms;
     this.helper = checkNotNull(helper, "helper");
     this.subchannelStore = checkNotNull(subchannelStore, "subchannelStore");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
-    this.lbRegistry = lbRegistry;
   }
 
   final void handleResolvedAddressGroups(
@@ -95,7 +91,7 @@ class XdsLbState {
       xdsComms.refreshAdsStream();
     } else {
       ManagedChannel oobChannel = helper.createResolvingOobChannel(balancerName);
-      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore, lbRegistry);
+      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore);
     }
 
     // TODO: maybe update picker

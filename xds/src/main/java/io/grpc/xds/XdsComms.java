@@ -22,19 +22,13 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.Cluster;
-import io.envoyproxy.envoy.api.v2.Cluster.DiscoveryType;
-import io.envoyproxy.envoy.api.v2.Cluster.LbPolicy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -53,7 +47,6 @@ import java.util.Map;
 final class XdsComms {
   private final ManagedChannel channel;
   private final Helper helper;
-  private final LoadBalancerRegistry lbRegistry;
 
   // never null
   private AdsStream adsStream;
@@ -64,20 +57,16 @@ final class XdsComms {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
     static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
-    static final String ROUND_ROBIN = "round_robin";
     final LocalityStore subchannelStore;
 
     final AdsStreamCallback adsStreamCallback;
 
     final StreamObserver<DiscoveryRequest> xdsRequestWriter;
 
-    LoadBalancerProvider lbProvider;
-
     final StreamObserver<DiscoveryResponse> xdsResponseReader =
         new StreamObserver<DiscoveryResponse>() {
 
           boolean firstResponseReceived;
-          boolean cdsResponseReceived;
 
           @Override
           public void onNext(final DiscoveryResponse value) {
@@ -91,69 +80,8 @@ final class XdsComms {
                   adsStreamCallback.onWorking();
                 }
                 String typeUrl = value.getTypeUrl();
-                if (CDS_TYPE_URL.equals(typeUrl)) {
-                  // Assuming standard mode for now
-                  // Assuming there is only one CDS response per stream for now.
-                  // TODO: handle the case that this CDS response is not the first one.
-
-                  cdsResponseReceived = true;
-                  Cluster cluster;
-                  try {
-                    // maybe better to run this deserialization task out of syncContext?
-                    cluster = value.getResources(0).unpack(Cluster.class);
-                  } catch (InvalidProtocolBufferException | NullPointerException e) {
-                    cancelRpc("Received invalid CDS response", e);
-                    return;
-                  }
-
-                  DiscoveryType discoveryType = cluster.getType();
-                  if (!DiscoveryType.EDS.equals(discoveryType)) {
-                    cancelRpc(
-                        "Received invalid CDS response. Wrong DiscoveryType '" + discoveryType
-                            + "'",
-                        null);
-                    return;
-                  }
-
-                  LbPolicy lbPolicy = cluster.getLbPolicy();
-                  if (lbPolicy == null) {
-                    cancelRpc("Received invalid CDS response. lbPolicy is null", null);
-                    return;
-                  }
-
-                  lbProvider = lbRegistry.getProvider(lbPolicy.name().toLowerCase());
-
-                  if (lbProvider == null)  {
-                    helper.getChannelLogger().log(
-                        ChannelLogLevel.INFO,
-                        "Unable to load lbPolicy '{0}', use '{1}' instead", lbPolicy, ROUND_ROBIN);
-                    lbProvider =  checkNotNull(
-                        lbRegistry.getProvider(ROUND_ROBIN),
-                        "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
-
-                  }
-                  subchannelStore.updateLoadBalancerProvider(lbProvider);
-
-                  // send EDS request
-                  xdsRequestWriter.onNext(
-                      DiscoveryRequest.newBuilder()
-                          .setNode(Node.newBuilder()
-                              .setMetadata(Struct.newBuilder()
-                                  .putFields(
-                                      TRAFFICDIRECTOR_GRPC_HOSTNAME,
-                                      Value.newBuilder().setStringValue(helper.getAuthority())
-                                          .build())
-                                  .putFields(
-                                      "endpoints_required",
-                                      Value.newBuilder().setBoolValue(true).build())))
-                          .addResourceNames(helper.getAuthority())
-                          .setTypeUrl(EDS_TYPE_URL).build());
-                } else if (EDS_TYPE_URL.equals(typeUrl)) {
+                if (EDS_TYPE_URL.equals(typeUrl)) {
                   // Assuming standard mode.
-                  if (!cdsResponseReceived) {
-                    cancelRpc("Received EDS response prior to CDS response", null);
-                    return;
-                  }
 
                   ClusterLoadAssignment clusterLoadAssignment;
                   try {
@@ -224,16 +152,20 @@ final class XdsComms {
           .streamAggregatedResources(xdsResponseReader);
       this.subchannelStore = subchannelStore;
 
-      // Assuming standard mode, send CDS request
+      // Assuming standard mode, and send EDS request only
       xdsRequestWriter.onNext(
           DiscoveryRequest.newBuilder()
               .setNode(Node.newBuilder()
                   .setMetadata(Struct.newBuilder()
                       .putFields(
                           TRAFFICDIRECTOR_GRPC_HOSTNAME,
-                          Value.newBuilder().setStringValue(helper.getAuthority()).build())))
+                          Value.newBuilder().setStringValue(helper.getAuthority())
+                              .build())
+                      .putFields(
+                          "endpoints_required",
+                          Value.newBuilder().setBoolValue(true).build())))
               .addResourceNames(helper.getAuthority())
-              .setTypeUrl(CDS_TYPE_URL).build());
+              .setTypeUrl(EDS_TYPE_URL).build());
     }
 
     AdsStream(AdsStream adsStream) {
@@ -255,13 +187,12 @@ final class XdsComms {
    */
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      LocalityStore subchannelStore, LoadBalancerRegistry lbRegistry) {
+      LocalityStore subchannelStore) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.adsStream = new AdsStream(
         checkNotNull(adsStreamCallback, "adsStreamCallback"),
         checkNotNull(subchannelStore, "subchannelStore"));
-    this.lbRegistry = lbRegistry;
   }
 
   void shutdownChannel() {
