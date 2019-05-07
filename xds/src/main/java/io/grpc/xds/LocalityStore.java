@@ -80,7 +80,7 @@ interface LocalityStore {
     private final Helper helper;
     private final PickerFactory pickerFactory;
 
-    private Map<Locality, IntraLocalitySubchannelStore> localityStore = new HashMap<>();
+    private Map<Locality, LocalityLbInfo> localityStore = new HashMap<>();
     private LoadBalancerProvider loadBalancerProvider;
     private boolean shutdown;
     private ConnectivityState overallState;
@@ -128,12 +128,12 @@ interface LocalityStore {
       subchannel.getAttributes().get(STATE_INFO).set(newState);
 
       // delegate to the childBalancer who manages this subchannel
-      for (IntraLocalitySubchannelStore intraLocalitySubchannelStore : localityStore.values()) {
-        if (intraLocalitySubchannelStore.childHelper.subchannels.contains(subchannel)) {
-          intraLocalitySubchannelStore.childHelper.subchannels.add(subchannel);
+      for (LocalityLbInfo localityLbInfo : localityStore.values()) {
+        if (localityLbInfo.childHelper.subchannels.contains(subchannel)) {
+          localityLbInfo.childHelper.subchannels.add(subchannel);
 
           // This will probably trigger childHelper.updateBalancingState
-          intraLocalitySubchannelStore.childBalancer.handleSubchannelState(subchannel, newState);
+          localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
           return;
         }
       }
@@ -142,7 +142,7 @@ interface LocalityStore {
     @Override
     public void shutdown() {
       shutdown = true;
-      for (IntraLocalitySubchannelStore subchannels : localityStore.values()) {
+      for (LocalityLbInfo subchannels : localityStore.values()) {
         subchannels.shutdown();
       }
       localityStore = ImmutableMap.of();
@@ -176,35 +176,35 @@ interface LocalityStore {
 
         // Assuming standard mode only (EDS response with a list of endpoints) for now
         List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
-        IntraLocalitySubchannelStore intraLocalitySubchannelStore;
+        LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          IntraLocalitySubchannelStore oldIntraLocalitySubchannelStore
+          LocalityLbInfo oldLocalityLbInfo
               = localityStore.get(newLocality);
-          childHelper = oldIntraLocalitySubchannelStore.childHelper;
-          intraLocalitySubchannelStore = new IntraLocalitySubchannelStore(
+          childHelper = oldLocalityLbInfo.childHelper;
+          localityLbInfo = new LocalityLbInfo(
               localityInfoMap.get(newLocality).localityWeight,
-              oldIntraLocalitySubchannelStore.childBalancer,
+              oldLocalityLbInfo.childBalancer,
               childHelper);
         } else {
           childHelper = new ChildHelper(newLocality);
-          intraLocalitySubchannelStore =
-              new IntraLocalitySubchannelStore(
+          localityLbInfo =
+              new LocalityLbInfo(
                   localityInfoMap.get(newLocality).localityWeight,
                   loadBalancerProvider.newLoadBalancer(childHelper),
                   childHelper);
-          localityStore.put(newLocality, intraLocalitySubchannelStore);
+          localityStore.put(newLocality, localityLbInfo);
         }
         // TODO: put endPointWeights into attributes for WRR.
-        intraLocalitySubchannelStore.childBalancer
+        localityLbInfo.childBalancer
             .handleResolvedAddresses(
                 ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
-        if (intraLocalitySubchannelStore.childHelper.currentChildState == READY) {
+        if (localityLbInfo.childHelper.currentChildState == READY) {
           childPickers.add(
               new WeightedChildPicker(
                   localityInfoMap.get(newLocality).localityWeight,
-                  intraLocalitySubchannelStore.childHelper.currentChildPicker));
+                  localityLbInfo.childHelper.currentChildPicker));
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
@@ -284,21 +284,21 @@ interface LocalityStore {
 
       ConnectivityState overallState = null;
       for (Locality l : localityStore.keySet()) {
-        IntraLocalitySubchannelStore intraLocalitySubchannelStore = localityStore.get(l);
+        LocalityLbInfo localityLbInfo = localityStore.get(l);
         ConnectivityState childState;
         SubchannelPicker childPicker;
         if (l.equals(locality)) {
           childState = newChildState;
           childPicker = newChildPicker;
         } else {
-          childState = intraLocalitySubchannelStore.childHelper.currentChildState;
-          childPicker = intraLocalitySubchannelStore.childHelper.currentChildPicker;
+          childState = localityLbInfo.childHelper.currentChildState;
+          childPicker = localityLbInfo.childHelper.currentChildPicker;
         }
         overallState = aggregateState(overallState, childState);
 
         if (READY == childState) {
           childPickers.add(
-              new WeightedChildPicker(intraLocalitySubchannelStore.localityWeight, childPicker));
+              new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
         }
       }
 
@@ -315,15 +315,15 @@ interface LocalityStore {
     }
 
     /**
-     * SubchannelStore for a single Locality.
+     * State a single Locality.
      */
-    static final class IntraLocalitySubchannelStore {
+    static final class LocalityLbInfo {
 
       final int localityWeight;
       final LoadBalancer childBalancer;
       final ChildHelper childHelper;
 
-      IntraLocalitySubchannelStore(
+      LocalityLbInfo(
           int localityWeight, LoadBalancer childBalancer, ChildHelper childHelper) {
         checkArgument(localityWeight >= 0, "localityWeight must be non-negative");
         this.localityWeight = localityWeight;

@@ -61,7 +61,7 @@ class XdsLbState {
   @Nullable
   final LbConfig childPolicy;
 
-  private final LocalityStore subchannelStore;
+  private final LocalityStore localityStore;
   private final Helper helper;
   private final AdsStreamCallback adsStreamCallback;
 
@@ -73,13 +73,13 @@ class XdsLbState {
       @Nullable LbConfig childPolicy,
       @Nullable XdsComms xdsComms,
       Helper helper,
-      LocalityStore subchannelStore,
+      LocalityStore localityStore,
       AdsStreamCallback adsStreamCallback) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.xdsComms = xdsComms;
     this.helper = checkNotNull(helper, "helper");
-    this.subchannelStore = checkNotNull(subchannelStore, "subchannelStore");
+    this.localityStore = checkNotNull(localityStore, "localityStore");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
   }
 
@@ -91,21 +91,21 @@ class XdsLbState {
       xdsComms.refreshAdsStream();
     } else {
       ManagedChannel oobChannel = helper.createResolvingOobChannel(balancerName);
-      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, subchannelStore);
+      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, localityStore);
     }
 
     // TODO: maybe update picker
   }
 
   final void handleNameResolutionError(Status error) {
-    if (!subchannelStore.hasNonDropBackends()) {
+    if (!localityStore.hasNonDropBackends()) {
       // TODO: maybe update picker with transient failure
     }
   }
 
   final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // TODO: maybe update picker
-    subchannelStore.handleSubchannelState(subchannel, newState);
+    localityStore.handleSubchannelState(subchannel, newState);
   }
 
   /**
@@ -114,7 +114,7 @@ class XdsLbState {
   void shutdown() {
     // TODO: cancel retry timer
     // TODO: shutdown child balancers
-    subchannelStore.shutdown();
+    localityStore.shutdown();
   }
 
   @Nullable

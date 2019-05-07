@@ -57,7 +57,7 @@ final class XdsComms {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
     static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
-    final LocalityStore subchannelStore;
+    final LocalityStore localityStore;
 
     final AdsStreamCallback adsStreamCallback;
 
@@ -113,7 +113,7 @@ final class XdsComms {
                   localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
 
                   // TODO: parse drop_percentage, and also updateLoacalistyStore with dropPercentage
-                  subchannelStore.updateLocalityStore(localityEndpointsMapping);
+                  localityStore.updateLocalityStore(localityEndpointsMapping);
                 }
               }
             }
@@ -146,11 +146,11 @@ final class XdsComms {
     boolean cancelled;
     boolean closed;
 
-    AdsStream(AdsStreamCallback adsStreamCallback, LocalityStore subchannelStore) {
+    AdsStream(AdsStreamCallback adsStreamCallback, LocalityStore localityStore) {
       this.adsStreamCallback = adsStreamCallback;
       this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
           .streamAggregatedResources(xdsResponseReader);
-      this.subchannelStore = subchannelStore;
+      this.localityStore = localityStore;
 
       // Assuming standard mode, and send EDS request only
       xdsRequestWriter.onNext(
@@ -169,7 +169,7 @@ final class XdsComms {
     }
 
     AdsStream(AdsStream adsStream) {
-      this(adsStream.adsStreamCallback, adsStream.subchannelStore);
+      this(adsStream.adsStreamCallback, adsStream.localityStore);
     }
 
     void cancelRpc(String message, Throwable cause) {
@@ -187,12 +187,12 @@ final class XdsComms {
    */
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      LocalityStore subchannelStore) {
+      LocalityStore localityStore) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.adsStream = new AdsStream(
         checkNotNull(adsStreamCallback, "adsStreamCallback"),
-        checkNotNull(subchannelStore, "subchannelStore"));
+        checkNotNull(localityStore, "localityStore"));
   }
 
   void shutdownChannel() {

@@ -75,7 +75,7 @@ public class XdsCommsTest {
   @Mock
   private AdsStreamCallback adsStreamCallback;
   @Mock
-  private LocalityStore subchannelStore;
+  private LocalityStore localityStore;
   @Captor
   private ArgumentCaptor<Map<XdsLbState.Locality, LocalityInfo>> localityEndpointsMappingCaptor;
 
@@ -159,7 +159,7 @@ public class XdsCommsTest {
         return null;
       }
     });
-    xdsComms = new XdsComms(channel, helper, adsStreamCallback, subchannelStore);
+    xdsComms = new XdsComms(channel, helper, adsStreamCallback, localityStore);
   }
 
   @Test
@@ -257,7 +257,7 @@ public class XdsCommsTest {
         2);
     XdsLbState.Locality locality2 = new XdsLbState.Locality(localityProto2);
 
-    verify(subchannelStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+    verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
 
@@ -279,7 +279,7 @@ public class XdsCommsTest {
         .build();
     responseWriter.onNext(edsResponse);
 
-    verify(subchannelStore, times(2)).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+    verify(localityStore, times(2)).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 

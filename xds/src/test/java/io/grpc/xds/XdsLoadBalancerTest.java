@@ -165,7 +165,7 @@ public class XdsLoadBalancerTest {
       });
 
   @Mock
-  private LocalityStore fakeSubchannelStore;
+  private LocalityStore fakeLocalityStore;
 
   private ManagedChannel oobChannel1;
   private ManagedChannel oobChannel2;
@@ -179,7 +179,7 @@ public class XdsLoadBalancerTest {
     lbRegistry.register(lbProvider1);
     lbRegistry.register(lbProvider2);
     lbRegistry.register(roundRobin);
-    lb = new XdsLoadBalancer(helper, lbRegistry, fakeSubchannelStore);
+    lb = new XdsLoadBalancer(helper, lbRegistry, fakeLocalityStore);
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
@@ -550,7 +550,7 @@ public class XdsLoadBalancerTest {
             .build());
 
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    doReturn(true).when(fakeSubchannelStore).hasReadyBackends();
+    doReturn(true).when(fakeLocalityStore).hasReadyBackends();
     serverResponseWriter.onError(new Exception("fake error"));
 
     verify(fakeBalancer1, never()).handleResolvedAddresses(
@@ -573,7 +573,7 @@ public class XdsLoadBalancerTest {
       }
     };
 
-    doReturn(false).when(fakeSubchannelStore).hasReadyBackends();
+    doReturn(false).when(fakeLocalityStore).hasReadyBackends();
     lb.handleSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
         Status.UNAVAILABLE));
 

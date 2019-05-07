@@ -51,7 +51,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
 
-  private final LocalityStore subchannelStore;
+  private final LocalityStore localityStore;
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
@@ -77,11 +77,11 @@ final class XdsLoadBalancer extends LoadBalancer {
   private LbConfig fallbackPolicy;
 
   @VisibleForTesting
-  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry, LocalityStore subchannelStore) {
+  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry, LocalityStore localityStore) {
     this.helper = helper;
     this.lbRegistry = lbRegistry;
-    this.subchannelStore = subchannelStore;
-    fallbackManager = new FallbackManager(helper, subchannelStore, lbRegistry);
+    this.localityStore = localityStore;
+    fallbackManager = new FallbackManager(helper, localityStore, lbRegistry);
   }
 
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -136,7 +136,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
     }
     xdsLbState = new XdsLbState(
-        newBalancerName, childPolicy, xdsComms, helper, subchannelStore, adsStreamCallback);
+        newBalancerName, childPolicy, xdsComms, helper, localityStore, adsStreamCallback);
   }
 
   @Nullable
@@ -208,7 +208,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
     private final Helper helper;
-    private final LocalityStore subchannelStore;
+    private final LocalityStore localityStore;
     private final LoadBalancerRegistry lbRegistry;
 
     private LbConfig fallbackPolicy;
@@ -227,9 +227,9 @@ final class XdsLoadBalancer extends LoadBalancer {
     private boolean balancerWorking;
 
     FallbackManager(
-        Helper helper, LocalityStore subchannelStore, LoadBalancerRegistry lbRegistry) {
+        Helper helper, LocalityStore localityStore, LoadBalancerRegistry lbRegistry) {
       this.helper = helper;
-      this.subchannelStore = subchannelStore;
+      this.localityStore = localityStore;
       this.lbRegistry = lbRegistry;
     }
 
@@ -247,7 +247,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       if (fallbackBalancer != null) {
         return;
       }
-      if (balancerWorking || subchannelStore.hasReadyBackends()) {
+      if (balancerWorking || localityStore.hasReadyBackends()) {
         return;
       }
 

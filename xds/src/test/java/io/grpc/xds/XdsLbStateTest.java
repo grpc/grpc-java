@@ -116,7 +116,7 @@ public class XdsLbStateTest {
     }
   };
 
-  private LocalityStore subchannelStore;
+  private LocalityStore localityStore;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -160,7 +160,7 @@ public class XdsLbStateTest {
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     lbRegistry.register(childLbProvider);
-    subchannelStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry);
+    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry);
   }
 
   @Test
@@ -198,7 +198,7 @@ public class XdsLbStateTest {
     verify(helper, never()).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
-    subchannelStore.updateLocalityStore(localityInfoMap);
+    localityStore.updateLocalityStore(localityInfoMap);
 
     assertThat(loadBalancers).hasSize(2);
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2");
