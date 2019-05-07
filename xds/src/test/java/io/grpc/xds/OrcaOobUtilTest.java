@@ -141,39 +141,6 @@ public class OrcaOobUtilTest {
   private OrcaReportingHelperWrapper parentHelperWrapper;
   private OrcaReportingHelperWrapper childHelperWrapper;
 
-  private static OrcaLoadReportRequest buildOrcaRequestFromConfig(
-      OrcaReportingConfig config) {
-    return OrcaLoadReportRequest.newBuilder()
-        .setReportInterval(Durations.fromNanos(config.getReportIntervalNanos()))
-        .build();
-  }
-
-  private static void assertEqualOrcaRequest(OrcaLoadReportRequest expected,
-      OrcaLoadReportRequest actual) {
-    assertThat(Durations.compare(expected.getReportInterval(), actual.getReportInterval()))
-        .isEqualTo(0);
-    assertThat(actual.getRequestCostNamesCount()).isEqualTo(expected.getRequestCostNamesCount());
-    assertThat(new HashSet<>(actual.getRequestCostNamesList()))
-        .isEqualTo(new HashSet<>(expected.getRequestCostNamesList()));
-  }
-
-  private static void assertLog(List<String> logs, String expectedLog) {
-    assertThat(logs).containsExactly(expectedLog);
-    logs.clear();
-  }
-
-  private void verifyRetryAfterNanos(InOrder inOrder, OpenRcaServiceImp orcaServiceImp,
-      long nanos) {
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
-    assertThat(orcaServiceImp.calls).isEmpty();
-    fakeClock.forwardNanos(nanos - 1);
-    assertThat(orcaServiceImp.calls).isEmpty();
-    inOrder.verifyNoMoreInteractions();
-    fakeClock.forwardNanos(1);
-    assertThat(orcaServiceImp.calls).hasSize(1);
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
-  }
-
   @Before
   @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
@@ -823,6 +790,39 @@ public class OrcaOobUtilTest {
         .onLoadReport(same(innerSubchannelRef.get()), eq(OrcaLoadReport.getDefaultInstance()));
     verify(outerListener)
         .onLoadReport(same(outerSubchannelRef.get()), eq(OrcaLoadReport.getDefaultInstance()));
+  }
+
+  private static OrcaLoadReportRequest buildOrcaRequestFromConfig(
+      OrcaReportingConfig config) {
+    return OrcaLoadReportRequest.newBuilder()
+        .setReportInterval(Durations.fromNanos(config.getReportIntervalNanos()))
+        .build();
+  }
+
+  private static void assertEqualOrcaRequest(OrcaLoadReportRequest expected,
+      OrcaLoadReportRequest actual) {
+    assertThat(Durations.compare(expected.getReportInterval(), actual.getReportInterval()))
+        .isEqualTo(0);
+    assertThat(actual.getRequestCostNamesCount()).isEqualTo(expected.getRequestCostNamesCount());
+    assertThat(new HashSet<>(actual.getRequestCostNamesList()))
+        .isEqualTo(new HashSet<>(expected.getRequestCostNamesList()));
+  }
+
+  private static void assertLog(List<String> logs, String expectedLog) {
+    assertThat(logs).containsExactly(expectedLog);
+    logs.clear();
+  }
+
+  private void verifyRetryAfterNanos(InOrder inOrder, OpenRcaServiceImp orcaServiceImp,
+      long nanos) {
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(orcaServiceImp.calls).isEmpty();
+    fakeClock.forwardNanos(nanos - 1);
+    assertThat(orcaServiceImp.calls).isEmpty();
+    inOrder.verifyNoMoreInteractions();
+    fakeClock.forwardNanos(1);
+    assertThat(orcaServiceImp.calls).hasSize(1);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
   private void deliverSubchannelState(final int index, final ConnectivityStateInfo newState) {
