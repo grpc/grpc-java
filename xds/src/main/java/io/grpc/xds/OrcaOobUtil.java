@@ -518,11 +518,9 @@ public abstract class OrcaOobUtil {
   public static final class OrcaReportingConfig {
 
     private long reportIntervalNanos;
-    private Set<String> costNames;
 
-    private OrcaReportingConfig(long reportIntervalNanos, Set<String> costNames) {
+    private OrcaReportingConfig(long reportIntervalNanos) {
       this.reportIntervalNanos = reportIntervalNanos;
-      this.costNames = checkNotNull(costNames, "costNames");
     }
 
     /** Creates a new builder. */
@@ -550,7 +548,6 @@ public abstract class OrcaOobUtil {
     public static final class Builder {
 
       private long reportIntervalNanos;
-      private Set<String> costNames = new HashSet<>();
 
       Builder() {}
 
@@ -569,7 +566,7 @@ public abstract class OrcaOobUtil {
 
       /** Creates a new {@link OrcaReportingConfig} object. */
       public OrcaReportingConfig build() {
-        return new OrcaReportingConfig(reportIntervalNanos, costNames);
+        return new OrcaReportingConfig(reportIntervalNanos);
       }
     }
   }
