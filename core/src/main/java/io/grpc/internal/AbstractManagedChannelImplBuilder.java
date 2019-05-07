@@ -590,8 +590,8 @@ public abstract class AbstractManagedChannelImplBuilder
         }
 
         @Override
-        public void start(Observer observer) {
-          observer.onResult(
+        public void start(Listener2 listener) {
+          listener.onResult(
               ResolutionResult.newBuilder()
                   .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
                   .setAttributes(Attributes.EMPTY)

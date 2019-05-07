@@ -47,7 +47,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p>Implementations <strong>don't need to be thread-safe</strong>.  All methods are guaranteed to
  * be called sequentially.  Additionally, all methods that have side-effects, i.e.,
- * {@link #start(Observer)}, {@link #shutdown} and {@link #refresh} are called from the same
+ * {@link #start(Listener2)}, {@link #shutdown} and {@link #refresh} are called from the same
  * {@link SynchronizationContext} as returned by {@link Helper#getSynchronizationContext}.
  *
  * @since 1.0.0
@@ -71,15 +71,15 @@ public abstract class NameResolver {
    * Starts the resolution.
    *
    * @param listener used to receive updates on the target
-   * @deprecated override {@link #start(Observer)} instead.
+   * @deprecated override {@link #start(Listener2)} instead.
    * @since 1.0.0
    */
   @Deprecated
   public void start(final Listener listener) {
-    if (listener instanceof Observer) {
-      start((Observer) listener);
+    if (listener instanceof Listener2) {
+      start((Listener2) listener);
     } else {
-      start(new Observer() {
+      start(new Listener2() {
           @Override
           public void onError(Status error) {
             listener.onError(error);
@@ -96,11 +96,11 @@ public abstract class NameResolver {
   /**
    * Starts the resolution.  This method will become abstract in 1.21.0.
    *
-   * @param observer used to receive updates on the target
+   * @param listener used to receive updates on the target
    * @since 1.21.0
    */
-  public void start(Observer observer) {
-    start((Listener) observer);
+  public void start(Listener2 listener) {
+    start((Listener) listener);
   }
 
   /**
@@ -270,7 +270,7 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
-   * @deprecated use {@link Observer} instead.
+   * @deprecated use {@link Listener2} instead.
    * @since 1.0.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
@@ -307,7 +307,7 @@ public abstract class NameResolver {
    * @since 1.21.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public abstract static class Observer implements Listener {
+  public abstract static class Listener2 implements Listener {
     /**
      * @deprecated This will be removed in 1.21.0
      */
@@ -329,7 +329,7 @@ public abstract class NameResolver {
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
-     * Handles an error from the resolver. The observer is responsible for eventually invoking
+     * Handles an error from the resolver. The listener is responsible for eventually invoking
      * {@link NameResolver#refresh()} to re-attempt resolution.
      *
      * @param error a non-OK status
@@ -374,7 +374,7 @@ public abstract class NameResolver {
     public abstract ProxyDetector getProxyDetector();
 
     /**
-     * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
+     * Returns the {@link SynchronizationContext} where {@link #start(Listener2)}, {@link #shutdown}
      * and {@link #refresh} are run from.
      *
      * @since 1.20.0
@@ -442,7 +442,7 @@ public abstract class NameResolver {
     }
 
     /**
-     * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
+     * Returns the {@link SynchronizationContext} where {@link #start(Listener2)}, {@link #shutdown}
      * and {@link #refresh} are run from.
      *
      * @since 1.21.0

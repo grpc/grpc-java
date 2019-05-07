@@ -59,7 +59,7 @@ import javax.annotation.Nullable;
  * A DNS-based {@link NameResolver}.
  *
  * <p>Each {@code A} or {@code AAAA} record emits an {@link EquivalentAddressGroup} in the list
- * passed to {@link NameResolver.Observer#onResult(ResolutionResult)}.
+ * passed to {@link NameResolver.Listener2#onResult(ResolutionResult)}.
  *
  * @see DnsNameResolverProvider
  */
@@ -149,9 +149,9 @@ final class DnsNameResolver extends NameResolver {
   private Executor executor;
   private boolean resolving;
 
-  // The field must be accessed from syncContext, although the methods on an Observer can be called
+  // The field must be accessed from syncContext, although the methods on an Listener2 can be called
   // from any thread.
-  private NameResolver.Observer observer;
+  private NameResolver.Listener2 listener;
 
   DnsNameResolver(@Nullable String nsAuthority, String name, Args args,
       Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
@@ -184,24 +184,24 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Override
-  public void start(Observer observer) {
-    Preconditions.checkState(this.observer == null, "already started");
+  public void start(Listener2 listener) {
+    Preconditions.checkState(this.listener == null, "already started");
     executor = SharedResourceHolder.get(executorResource);
-    this.observer = Preconditions.checkNotNull(observer, "observer");
+    this.listener = Preconditions.checkNotNull(listener, "listener");
     resolve();
   }
 
   @Override
   public void refresh() {
-    Preconditions.checkState(observer != null, "not started");
+    Preconditions.checkState(listener != null, "not started");
     resolve();
   }
 
   private final class Resolve implements Runnable {
-    private final Observer savedObserver;
+    private final Listener2 savedListener;
 
-    Resolve(Observer savedObserver) {
-      this.savedObserver = Preconditions.checkNotNull(savedObserver, "savedObserver");
+    Resolve(Listener2 savedListener) {
+      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
     }
 
     @Override
@@ -229,7 +229,7 @@ final class DnsNameResolver extends NameResolver {
       try {
         proxiedAddr = proxyDetector.proxyFor(destination);
       } catch (IOException e) {
-        savedObserver.onError(
+        savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
         return;
       }
@@ -243,7 +243,7 @@ final class DnsNameResolver extends NameResolver {
                 .setAddresses(Collections.singletonList(server))
                 .setAttributes(Attributes.EMPTY)
                 .build();
-        savedObserver.onResult(resolutionResult);
+        savedListener.onResult(resolutionResult);
         return;
       }
 
@@ -273,7 +273,7 @@ final class DnsNameResolver extends NameResolver {
           logger.finer("Found DNS results " + resolutionResults + " for " + host);
         }
       } catch (Exception e) {
-        savedObserver.onError(
+        savedListener.onError(
             Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
         return;
       }
@@ -284,7 +284,7 @@ final class DnsNameResolver extends NameResolver {
       }
       servers.addAll(resolutionResults.balancerAddresses);
       if (servers.isEmpty()) {
-        savedObserver.onError(Status.UNAVAILABLE.withDescription(
+        savedListener.onError(Status.UNAVAILABLE.withDescription(
             "No DNS backend or balancer addresses found for " + host));
         return;
       }
@@ -295,7 +295,7 @@ final class DnsNameResolver extends NameResolver {
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
           if (serviceConfig.getError() != null) {
-            savedObserver.onError(serviceConfig.getError());
+            savedListener.onError(serviceConfig.getError());
             return;
           } else {
             @SuppressWarnings("unchecked")
@@ -308,7 +308,7 @@ final class DnsNameResolver extends NameResolver {
       }
       ResolutionResult resolutionResult =
           ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
-      savedObserver.onResult(resolutionResult);
+      savedListener.onResult(resolutionResult);
     }
   }
 
@@ -346,7 +346,7 @@ final class DnsNameResolver extends NameResolver {
       return;
     }
     resolving = true;
-    executor.execute(new Resolve(observer));
+    executor.execute(new Resolve(listener));
   }
 
   private boolean cacheRefreshRequired() {

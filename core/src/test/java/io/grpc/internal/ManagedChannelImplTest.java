@@ -732,7 +732,7 @@ public class ManagedChannelImplTest {
         .onSubchannelState(same(subchannel2), stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
 
-    resolver.observer.onError(resolutionError);
+    resolver.listener.onError(resolutionError);
     verify(mockLoadBalancer).handleNameResolutionError(resolutionError);
 
     verifyNoMoreInteractions(mockLoadBalancer);
@@ -742,7 +742,7 @@ public class ManagedChannelImplTest {
 
     // No more callback should be delivered to LoadBalancer after it's shut down
     transportInfo2.listener.transportReady();
-    resolver.observer.onError(resolutionError);
+    resolver.listener.onError(resolutionError);
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);
   }
@@ -860,7 +860,7 @@ public class ManagedChannelImplTest {
     assertEquals(0, timer.numPendingTasks());
 
     // Verify that the successful resolution reset the backoff policy
-    resolver.observer.onError(error);
+    resolver.listener.onError(error);
     timer.forwardNanos(RECONNECT_BACKOFF_INTERVAL_NANOS - 1);
     assertEquals(3, resolver.refreshCalled);
     timer.forwardNanos(1);
@@ -2611,15 +2611,15 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(Attributes.EMPTY)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult1);
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).observer.onError(Status.INTERNAL);
+    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
-    nameResolverFactory.resolvers.get(0).observer.onError(Status.INTERNAL);
+    nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -2629,7 +2629,7 @@ public class ManagedChannelImplTest {
               Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(Attributes.EMPTY)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult2);
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
   }
 
@@ -2655,7 +2655,7 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult1);
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -2671,7 +2671,7 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult2);
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
@@ -2688,7 +2688,7 @@ public class ManagedChannelImplTest {
                 Arrays.asList(new SocketAddress() {}, new SocketAddress() {}))))
         .setAttributes(attributes)
         .build();
-    nameResolverFactory.resolvers.get(0).observer.onResult(resolutionResult3);
+    nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult3);
     assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
     assertThat(getStats(channel).channelTrace.events.get(prevSize))
         .isEqualTo(new ChannelTrace.Event.Builder()
@@ -3237,7 +3237,7 @@ public class ManagedChannelImplTest {
     final List<EquivalentAddressGroup> addresses =
         ImmutableList.of(new EquivalentAddressGroup(new SocketAddress() {}));
     final class FakeNameResolver extends NameResolver {
-      Observer observer;
+      Listener2 listener;
 
       @Override
       public String getServiceAuthority() {
@@ -3245,9 +3245,9 @@ public class ManagedChannelImplTest {
       }
 
       @Override
-      public void start(Observer observer) {
-        this.observer = observer;
-        observer.onResult(
+      public void start(Listener2 listener) {
+        this.listener = listener;
+        listener.onResult(
             ResolutionResult.newBuilder()
                 .setAddresses(addresses)
                 .setAttributes(
@@ -3308,7 +3308,7 @@ public class ManagedChannelImplTest {
 
     // ok the service config is bad, let's fix it.
 
-    factory.resolver.observer.onResult(
+    factory.resolver.listener.onResult(
         ResolutionResult.newBuilder()
             .setAddresses(addresses)
             .setAttributes(
@@ -3340,7 +3340,7 @@ public class ManagedChannelImplTest {
   @Deprecated
   @Test
   public void nameResolver_forwardingStartOldApi() {
-    final AtomicReference<NameResolver.Observer> observerCapture = new AtomicReference<>();
+    final AtomicReference<NameResolver.Listener2> listenerCapture = new AtomicReference<>();
     final NameResolver noopResolver = new NameResolver() {
         @Override
         public String getServiceAuthority() {
@@ -3348,8 +3348,8 @@ public class ManagedChannelImplTest {
         }
 
         @Override
-        public void start(Observer observer) {
-          observerCapture.set(observer);
+        public void start(Listener2 listener) {
+          listenerCapture.set(listener);
         }
 
         @Override
@@ -3357,7 +3357,7 @@ public class ManagedChannelImplTest {
       };
 
     // This forwarding resolver is still on the old start() API.  Despite that, the delegate
-    // resolver which is on the new API should get the new Observer.
+    // resolver which is on the new API should get the new Listener2.
     final NameResolver oldApiForwardingResolver = new NameResolver() {
         @Override
         public String getServiceAuthority() {
@@ -3389,7 +3389,7 @@ public class ManagedChannelImplTest {
     channelBuilder.nameResolverFactory(oldApiResolverFactory);
     createChannel();
 
-    assertThat(observerCapture.get()).isNotNull();
+    assertThat(listenerCapture.get()).isNotNull();
   }
 
   @Test
@@ -3402,7 +3402,7 @@ public class ManagedChannelImplTest {
         }
 
         @Override
-        public void start(Observer observer) {
+        public void start(Listener2 listener) {
         }
 
         @Override
@@ -3868,7 +3868,7 @@ public class ManagedChannelImplTest {
     }
 
     final class FakeNameResolver extends NameResolver {
-      Observer observer;
+      Listener2 listener;
       boolean shutdown;
       int refreshCalled;
       Status error;
@@ -3881,8 +3881,8 @@ public class ManagedChannelImplTest {
         return expectedUri.getAuthority();
       }
 
-      @Override public void start(Observer observer) {
-        this.observer = observer;
+      @Override public void start(Listener2 listener) {
+        this.listener = listener;
         if (resolvedAtStart) {
           resolved();
         }
@@ -3895,10 +3895,10 @@ public class ManagedChannelImplTest {
 
       void resolved() {
         if (error != null) {
-          observer.onError(error);
+          listener.onError(error);
           return;
         }
-        observer.onResult(
+        listener.onResult(
             ResolutionResult.newBuilder()
                 .setAddresses(servers)
                 .setAttributes(nextResolvedAttributes.get())
