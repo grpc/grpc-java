@@ -179,7 +179,6 @@ public class OrcaOobUtilTest {
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
 
-    assertThat(NUM_SUBCHANNELS).isAtLeast(1);
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       orcaServiceImps[i] = new OpenRcaServiceImp();
       cleanupRule.register(
