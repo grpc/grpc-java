@@ -26,7 +26,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
@@ -49,7 +48,6 @@ import io.grpc.xds.XdsLbState.LocalityInfo;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -124,13 +122,8 @@ interface LocalityStore {
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
       // delegate to the childBalancer who manages this subchannel
       for (LocalityLbInfo localityLbInfo : localityStore.values()) {
-        if (localityLbInfo.childHelper.subchannels.contains(subchannel)) {
-          localityLbInfo.childHelper.subchannels.add(subchannel);
-
-          // This will probably trigger childHelper.updateBalancingState
-          localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
-          return;
-        }
+        // This will probably trigger childHelper.updateBalancingState
+        localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
       }
     }
 
@@ -263,9 +256,6 @@ interface LocalityStore {
       if (overallState == IDLE || childState == IDLE) {
         return IDLE;
       }
-      if (childState == TRANSIENT_FAILURE) {
-        return TRANSIENT_FAILURE;
-      }
       return overallState;
     }
 
@@ -328,18 +318,12 @@ interface LocalityStore {
 
       void shutdown() {
         childBalancer.shutdown();
-        for (Subchannel subchannel : childHelper.subchannels) {
-          subchannel.shutdown();
-        }
-        childHelper.subchannels = ImmutableSet.of();
       }
     }
 
     class ChildHelper extends ForwardingLoadBalancerHelper {
 
       private final Locality locality;
-
-      Set<Subchannel> subchannels = new HashSet<>();
 
       private SubchannelPicker currentChildPicker = BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
@@ -355,12 +339,8 @@ interface LocalityStore {
 
       @Override
       public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-
         // delegate to parent helper
-        Subchannel subchannel = helper.createSubchannel(addrs, attrs);
-
-        subchannels.add(subchannel);
-        return subchannel;
+        return helper.createSubchannel(addrs, attrs);
       }
 
       // This is triggered by child balancer
