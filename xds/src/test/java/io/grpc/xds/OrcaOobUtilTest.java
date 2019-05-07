@@ -48,6 +48,7 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
@@ -63,6 +64,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
@@ -223,7 +225,7 @@ public class OrcaOobUtilTest {
   }
 
   @After
-  public void shutDown() {
+  public void tearDown() {
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       if (subchannels[i] != null) {
         subchannels[i].shutdown();
@@ -746,6 +748,84 @@ public class OrcaOobUtilTest {
     assertThat(orcaServiceImps[0].calls).isEmpty();
   }
 
+  @Test
+  public void listenerCallbackWithSubchannelCreatedByHostingHelper() {
+    // We create three wrapping helpers: innerHelper is an OrcaReportingHelper that wraps the
+    // origHelper; wrappingHelper wraps innerHelper and intercepts createSubchannel() method
+    // by wrapping the Subchannel created by innerHelper; outerHelper is another OrcaReportingHelper
+    // that wraps wrappingHelper.
+    // Therefore, the Subchannel instance created by innerHelper.createSubchannel() is not the same
+    // one as created by outerHelper.createSubchannel().
+    // We test that listeners registered on innerHelper and outerHelper are invoked with Subchannel
+    // instances created by themselves, respectively.
+    OrcaOobReportListener innerListener = mock(OrcaOobReportListener.class);
+    final OrcaReportingHelperWrapper innerHelperWrapper =
+        OrcaOobUtil.newOrcaReportingHelperWrapper(
+            origHelper,
+            innerListener,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+
+    final Attributes.Key<AtomicReference<Subchannel>> tempKey =
+        Attributes.Key.create("wrapping-subchannel-key-test");
+
+    final AtomicReference<Subchannel> outerSubchannelRef = new AtomicReference<>();
+    final AtomicReference<Subchannel> innerSubchannelRef = new AtomicReference<>();
+
+    LoadBalancer.Helper wrappingHelper = new ForwardingLoadBalancerHelper() {
+      @Override
+      protected Helper delegate() {
+        return innerHelperWrapper.asHelper();
+      }
+
+      @Override
+      public Subchannel createSubchannel(CreateSubchannelArgs args) {
+        final SubchannelStateListener listener = args.getStateListener();
+        args = args.toBuilder().setStateListener(
+            new SubchannelStateListener() {
+              @Override
+              public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+                listener
+                    .onSubchannelState(subchannel.getAttributes().get(tempKey).get(),
+                        newState);
+              }
+            }).build();
+        args = args.toBuilder().setAttributes(
+            args.getAttributes().toBuilder().set(tempKey, outerSubchannelRef)
+                .build()).build();
+        final Subchannel innerSubchannel = super.createSubchannel(args);
+        innerSubchannelRef.set(innerSubchannel);
+        Subchannel wrappingSubchannel = new ForwardingSubchannel() {
+          @Override
+          protected Subchannel delegate() {
+            return innerSubchannel;
+          }
+        };
+        outerSubchannelRef.set(wrappingSubchannel);
+        return wrappingSubchannel;
+      }
+    };
+
+    OrcaOobReportListener outerListener = mock(OrcaOobReportListener.class);
+    OrcaReportingHelperWrapper outerHelperWrapper =
+        OrcaOobUtil.newOrcaReportingHelperWrapper(
+            wrappingHelper,
+            outerListener,
+            backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier());
+    innerHelperWrapper.setReportingConfig(SHORT_INTERVAL_CONFIG);
+    outerHelperWrapper.setReportingConfig(SHORT_INTERVAL_CONFIG);
+    createSubchannel(outerHelperWrapper.asHelper(), 0, Attributes.EMPTY);
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+
+    assertThat(orcaServiceImps[0].calls).hasSize(1);
+    orcaServiceImps[0].calls.poll().responseObserver.onNext(OrcaLoadReport.getDefaultInstance());
+    verify(innerListener)
+        .onLoadReport(same(innerSubchannelRef.get()), eq(OrcaLoadReport.getDefaultInstance()));
+    verify(outerListener)
+        .onLoadReport(same(outerSubchannelRef.get()), eq(OrcaLoadReport.getDefaultInstance()));
+  }
+
   private void deliverSubchannelState(final int index, final ConnectivityStateInfo newState) {
     syncContext.execute(
         new Runnable() {
@@ -773,6 +853,41 @@ public class OrcaOobUtilTest {
           }
         });
     return newSubchannel.get();
+  }
+
+  private abstract static class ForwardingSubchannel extends Subchannel {
+
+    protected abstract Subchannel delegate();
+
+    @Override
+    public void shutdown() {
+      delegate().shutdown();
+    }
+
+    @Override
+    public void requestConnection() {
+      delegate().requestConnection();
+    }
+
+    @Override
+    public List<EquivalentAddressGroup> getAllAddresses() {
+      return delegate().getAllAddresses();
+    }
+
+    @Override
+    public Attributes getAttributes() {
+      return delegate().getAttributes();
+    }
+
+    @Override
+    public Channel asChannel() {
+      return delegate().asChannel();
+    }
+
+    @Override
+    public ChannelLogger getChannelLogger() {
+      return delegate().getChannelLogger();
+    }
   }
 
   private static final class OpenRcaServiceImp extends OpenRcaServiceGrpc.OpenRcaServiceImplBase {

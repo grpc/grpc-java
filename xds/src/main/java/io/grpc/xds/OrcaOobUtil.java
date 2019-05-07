@@ -233,7 +233,6 @@ public abstract class OrcaOobUtil {
         augmented = true;
       }
       orcaStates.add(orcaState);
-      orcaState.listeners.add(this);
       Subchannel subchannel;
       if (augmented) {
         subchannel = super.createSubchannel(args.toBuilder().setStateListener(orcaState).build());
@@ -241,6 +240,7 @@ public abstract class OrcaOobUtil {
       } else {
         subchannel = super.createSubchannel(args);
       }
+      orcaState.listeners.add(new SubchannelBoundListener(subchannel, this));
       if (orcaConfig != null) {
         orcaState.setReportingConfig(this, orcaConfig);
       }
@@ -278,7 +278,7 @@ public abstract class OrcaOobUtil {
       private final SubchannelStateListener stateListener;
       private final SynchronizationContext syncContext;
       private final ScheduledExecutorService timeService;
-      private final List<OrcaOobReportListener> listeners = new ArrayList<>();
+      private final List<SubchannelBoundListener> listeners = new ArrayList<>();
       private final Map<OrcaReportingHelper, OrcaReportingConfig> configs = new HashMap<>();
       @Nullable private Subchannel subchannel;
       @Nullable private ChannelLogger subchannelLogger;
@@ -461,8 +461,8 @@ public abstract class OrcaOobUtil {
           callHasResponded = true;
           backoffPolicy = null;
           subchannelLogger.log(ChannelLogLevel.DEBUG, "Received an ORCA report: {0}", response);
-          for (OrcaOobReportListener listener : listeners) {
-            listener.onLoadReport(subchannel, response);
+          for (SubchannelBoundListener listener : listeners) {
+            listener.onLoadReport(response);
           }
           call.request(1);
         }
@@ -571,6 +571,26 @@ public abstract class OrcaOobUtil {
       public OrcaReportingConfig build() {
         return new OrcaReportingConfig(reportIntervalNanos, costNames);
       }
+    }
+  }
+
+  /**
+   * A {@code SubchannelBoundListener} binds a {@link OrcaOobReportListener} instance to an {@link
+   * Subchannel} so that the listener always invokes {@link OrcaOobReportListener#onLoadReport} with
+   * the subchannel it binds to.
+   */
+  private static class SubchannelBoundListener {
+
+    private final Subchannel subchannel;
+    private final OrcaOobReportListener listener;
+
+    SubchannelBoundListener(Subchannel subchannel, OrcaOobReportListener listener) {
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.listener = checkNotNull(listener, "listener");
+    }
+
+    void onLoadReport(OrcaLoadReport report) {
+      listener.onLoadReport(subchannel, report);
     }
   }
 }
