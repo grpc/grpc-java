@@ -64,6 +64,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -129,6 +130,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
   private final InternalLogId logId;
   private final String target;
+  private final NameResolverRegistry nameResolverRegistry;
   private final NameResolver.Factory nameResolverFactory;
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
@@ -560,6 +562,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.nameResolverRegistry = builder.nameResolverRegistry;
     this.nameResolverArgs = NameResolver.Args.newBuilder()
         .setDefaultPort(builder.getDefaultPort())
         .setProxyDetector(proxyDetector)
