@@ -1315,6 +1315,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public ChannelLogger getChannelLogger() {
       return channelLogger;
     }
+
+    @Override
+    public NameResolver.Args getNameResolverArgs() {
+      return nameResolverArgs;
+    }
+
+    @Override
+    public 
   }
 
   private final class NameResolverObserver extends NameResolver.Observer {

@@ -1136,6 +1136,22 @@ public abstract class LoadBalancer {
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * Returns the {@link NameResolver.Args} with which the {@link NameResolver} paired with
+     * this {@link LoadBalancer} was created.
+     */
+    public NameResolver.Args getNameResolverArgs() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns the {@link NameResolverRegistry} from which the {@link NameResolver} paired with
+     * this {@link LoadBalancer} was created.
+     */
+    public NameResolverRegistry getNameResolverRegistry() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
