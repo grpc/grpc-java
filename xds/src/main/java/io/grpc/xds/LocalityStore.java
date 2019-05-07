@@ -53,7 +53,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Manages EAG and locality info for a collection of subchannels, not including subchannels
@@ -73,8 +72,6 @@ interface LocalityStore {
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
   final class LocalityStoreImpl implements LocalityStore {
-    private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
-        Attributes.Key.create("io.grpc.xds.stateInfo");
     private static final String ROUND_ROBIN = "round_robin";
 
     private final Helper helper;
@@ -125,8 +122,6 @@ interface LocalityStore {
     // This is triggered by xdsLoadbalancer.handleSubchannelState
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      subchannel.getAttributes().get(STATE_INFO).set(newState);
-
       // delegate to the childBalancer who manages this subchannel
       for (LocalityLbInfo localityLbInfo : localityStore.values()) {
         if (localityLbInfo.childHelper.subchannels.contains(subchannel)) {
