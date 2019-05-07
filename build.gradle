@@ -4,7 +4,6 @@ buildscript {
         maven { url "https://plugins.gradle.org/m2/" }
     }
     dependencies {
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.13.0"
         classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
         classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.5'
         classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.6'
@@ -515,17 +514,5 @@ publicApiSubprojects.each { name ->
             // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
             // annotationExcludes = ['@io.grpc.ExperimentalApi']
         }
-    }
-}
-
-// format checkers
-apply plugin: "com.diffplug.gradle.spotless"
-apply plugin: 'groovy'
-spotless {
-    groovyGradle {
-        target '**/*.gradle'
-        greclipse()
-        indentWithSpaces()
-        paddedCell()
     }
 }
