@@ -52,8 +52,6 @@ final class XdsComms {
   private AdsStream adsStream;
 
   private final class AdsStream {
-    static final String CDS_TYPE_URL =
-        "type.googleapis.com/envoy.api.v2.Cluster";
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
     static final String TRAFFICDIRECTOR_GRPC_HOSTNAME = "TRAFFICDIRECTOR_GRPC_HOSTNAME";
@@ -139,7 +137,8 @@ final class XdsComms {
 
           @Override
           public void onCompleted() {
-            // TODO: impl
+            onError(Status.INTERNAL.withDescription("Server closed the ADS streaming RPC")
+                .asException());
           }
         };
 
