@@ -198,8 +198,6 @@ interface LocalityStore {
       }
 
       childPickers = Collections.unmodifiableList(childPickers);
-      SubchannelPicker interLocalityPicker =
-          pickerFactory.picker(childPickers);
 
       SubchannelPicker newXdsPicker;
       if (childPickers.isEmpty()) {
@@ -209,7 +207,7 @@ interface LocalityStore {
           newXdsPicker = BUFFER_PICKER;
         }
       } else {
-        newXdsPicker = interLocalityPicker;
+        newXdsPicker = pickerFactory.picker(childPickers);
       }
       if (newState != null) {
         updatePicker(newState, newXdsPicker);
