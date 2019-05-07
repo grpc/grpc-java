@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.NameResolver.ConfigOrError;
-import io.grpc.Status;
 import javax.annotation.Nullable;
 
 /**
@@ -73,31 +72,10 @@ final class ServiceConfigState {
   }
 
   /**
-   * Gets the current service config.
+   * Gets the current service config or error.
    *
    * @throws IllegalStateException if the service config has not yet been updated.
    */
-  @Deprecated
-  @Nullable ManagedChannelServiceConfig getCurrentServiceConfig() {
-    checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
-    return currentServiceConfigOrError != null
-        ? (ManagedChannelServiceConfig) currentServiceConfigOrError.getConfig()
-        : null;
-  }
-
-  /**
-   * Gets the current service config error.
-   *
-   * @throws IllegalStateException if the service config has not yet been updated.
-   */
-  @Deprecated
-  @Nullable Status getCurrentError() {
-    checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
-    return currentServiceConfigOrError != null
-        ? currentServiceConfigOrError.getError()
-        : null;
-  }
-
   @Nullable
   ConfigOrError getCurrent() {
     checkState(!shouldWaitOnServiceConfig(), "still waiting on service config");
@@ -139,34 +117,6 @@ final class ServiceConfigState {
         currentServiceConfigOrError = coe;
       }
     }
-  }
-
-  /**
-   * Returns {@code true} if the update was successfully applied, else {@code false}.
-   */
-  @Deprecated
-  boolean update(Status error) {
-    ConfigOrError coe = ConfigOrError.fromError(error);
-    update(coe);
-    return currentServiceConfigOrError == coe;
-  }
-
-  /**
-   * Returns {@code} if the update was successfully applied, else {@code false}.
-   */
-  @Deprecated
-  void update(@Nullable ManagedChannelServiceConfig newServiceConfig) {
-    update(newServiceConfig != null ? ConfigOrError.fromConfig(newServiceConfig) : null);
-    /*
-    checkState(expectUpdates(), "unexpected service config update");
-    updated = true;
-    if (newServiceConfig != null) {
-      currentServiceConfig = newServiceConfig;
-    } else {
-      currentServiceConfig = defaultServiceConfig;
-    }
-    currentError = null;
-    */
   }
 
   boolean expectUpdates() {
