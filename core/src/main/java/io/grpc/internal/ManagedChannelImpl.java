@@ -375,8 +375,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     // may throw. We don't want to confuse our state, even if we will enter panic mode.
     this.lbHelper = lbHelper;
 
-    NameResolverObserver observer = new NameResolverObserver(lbHelper, nameResolver);
-    nameResolver.start(observer);
+    NameResolverListener listener = new NameResolverListener(lbHelper, nameResolver);
+    nameResolver.start(listener);
     nameResolverStarted = true;
   }
 
@@ -1296,11 +1296,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private final class NameResolverObserver extends NameResolver.Observer {
+  private final class NameResolverListener extends NameResolver.Listener2 {
     final LbHelperImpl helper;
     final NameResolver resolver;
 
-    NameResolverObserver(LbHelperImpl helperImpl, NameResolver resolver) {
+    NameResolverListener(LbHelperImpl helperImpl, NameResolver resolver) {
       this.helper = checkNotNull(helperImpl, "helperImpl");
       this.resolver = checkNotNull(resolver, "resolver");
     }
@@ -1368,7 +1368,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           }
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (NameResolverObserver.this.helper == ManagedChannelImpl.this.lbHelper) {
+          if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
             if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
               handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
                   "Name resolver " + resolver + " returned an empty list"));
@@ -1413,7 +1413,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         haveBackends = false;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-      if (NameResolverObserver.this.helper != ManagedChannelImpl.this.lbHelper) {
+      if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
       }
       helper.lb.handleNameResolutionError(error);
