@@ -185,7 +185,6 @@ class XdsLbState {
       List<EquivalentAddressGroup> eags = new ArrayList<>(lbEndPoints.size());
       List<Integer> endPointWeights = new ArrayList<>(lbEndPoints.size());
       for (LbEndpoint lbEndPoint : lbEndPoints) {
-        // not sure what to do with lbEndPoint.healthStatus yet
         eags.add(lbEndPoint.eag);
         endPointWeights.add(lbEndPoint.endPointWeight);
       }
