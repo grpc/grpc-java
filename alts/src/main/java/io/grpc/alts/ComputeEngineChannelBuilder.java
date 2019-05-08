@@ -18,23 +18,18 @@ package io.grpc.alts;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import io.grpc.CallCredentials;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsClientOptions;
-import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
-import io.grpc.alts.internal.AltsTsiHandshaker;
-import io.grpc.alts.internal.GoogleDefaultProtocolNegotiator;
-import io.grpc.alts.internal.HandshakerServiceGrpc;
-import io.grpc.alts.internal.RpcProtocolVersionsUtil;
-import io.grpc.alts.internal.TsiHandshaker;
-import io.grpc.alts.internal.TsiHandshakerFactory;
+import io.grpc.alts.internal.AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import javax.net.ssl.SSLException;
@@ -47,12 +42,21 @@ public final class ComputeEngineChannelBuilder
     extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
-  private GoogleDefaultProtocolNegotiator negotiatorForTest;
 
   private ComputeEngineChannelBuilder(String target) {
     delegate = NettyChannelBuilder.forTarget(target);
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forClient().build();
+    } catch (SSLException e) {
+      throw new RuntimeException(e);
+    }
     InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        delegate(), new ProtocolNegotiatorFactory());
+        delegate(),
+        new GoogleDefaultProtocolNegotiatorFactory(
+            /* targetServiceAccounts= */ ImmutableList.<String>of(),
+            SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+            sslContext));
     CallCredentials credentials = MoreCallCredentials.from(ComputeEngineCredentials.create());
     Status status = Status.OK;
     if (!CheckGcpEnvironment.isOnGcp()) {
@@ -79,40 +83,17 @@ public final class ComputeEngineChannelBuilder
   }
 
   @VisibleForTesting
-  GoogleDefaultProtocolNegotiator getProtocolNegotiatorForTest() {
-    return negotiatorForTest;
-  }
-
-  private final class ProtocolNegotiatorFactory
-      implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
-
-    @Override
-    public GoogleDefaultProtocolNegotiator buildProtocolNegotiator() {
-      final LazyChannel lazyHandshakerChannel =
-          new LazyChannel(
-              SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL));
-      TsiHandshakerFactory altsHandshakerFactory =
-          new TsiHandshakerFactory() {
-            @Override
-            public TsiHandshaker newHandshaker(String authority) {
-              AltsClientOptions handshakerOptions =
-                  new AltsClientOptions.Builder()
-                      .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
-                      .setTargetName(authority)
-                      .build();
-              return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
-            }
-          };
-      SslContext sslContext;
-      try {
-        sslContext = GrpcSslContexts.forClient().build();
-      } catch (SSLException ex) {
-        throw new RuntimeException(ex);
-      }
-      return negotiatorForTest =
-          new GoogleDefaultProtocolNegotiator(
-              altsHandshakerFactory, lazyHandshakerChannel, sslContext);
+  ProtocolNegotiator getProtocolNegotiatorForTest() {
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forClient().build();
+    } catch (SSLException e) {
+      throw new RuntimeException(e);
     }
+    return new GoogleDefaultProtocolNegotiatorFactory(
+        /* targetServiceAccounts= */ ImmutableList.<String>of(),
+        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+        sslContext)
+        .buildProtocolNegotiator();
   }
 }
