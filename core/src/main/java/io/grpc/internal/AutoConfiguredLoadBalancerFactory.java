@@ -78,6 +78,9 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     public void handleNameResolutionError(Status error) {}
 
     @Override
+    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {}
+
+    @Override
     public void shutdown() {}
   }
 
@@ -162,7 +165,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       getDelegate().handleNameResolutionError(error);
     }
 
-    @Deprecated
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       getDelegate().handleSubchannelState(subchannel, stateInfo);
