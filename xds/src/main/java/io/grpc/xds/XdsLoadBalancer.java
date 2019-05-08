@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -173,9 +172,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     if (fallbackManager.fallbackBalancer != null) {
       fallbackManager.fallbackBalancer.handleSubchannelState(subchannel, newState);
     }
-    if (newState.getState() == IDLE) {
-      subchannel.requestConnection();
-    }
+
     xdsLbState.handleSubchannelState(subchannel, newState);
     fallbackManager.maybeUseFallbackPolicy();
   }

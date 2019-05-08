@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
@@ -216,21 +215,18 @@ class XdsLbState {
   static final class LbEndpoint {
     final EquivalentAddressGroup eag;
     final int endPointWeight;
-    final HealthStatus healthStatus;
 
     LbEndpoint(io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpointProto) {
 
       this(
           new EquivalentAddressGroup(ImmutableList.of(fromEnvoyProtoAddress(lbEndpointProto))),
-          lbEndpointProto.getLoadBalancingWeight().getValue(),
-          lbEndpointProto.getHealthStatus());
+          lbEndpointProto.getLoadBalancingWeight().getValue());
     }
 
     @VisibleForTesting
-    LbEndpoint(EquivalentAddressGroup eag, int endPointWeight, HealthStatus healthStatus) {
+    LbEndpoint(EquivalentAddressGroup eag, int endPointWeight) {
       this.eag = eag;
       this.endPointWeight = endPointWeight;
-      this.healthStatus = healthStatus;
     }
 
     private static java.net.SocketAddress fromEnvoyProtoAddress(

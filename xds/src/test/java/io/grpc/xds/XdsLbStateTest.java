@@ -28,7 +28,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -178,8 +177,8 @@ public class XdsLbStateTest {
     EquivalentAddressGroup eag11 = new EquivalentAddressGroup(new InetSocketAddress("addr11", 11));
     EquivalentAddressGroup eag12 = new EquivalentAddressGroup(new InetSocketAddress("addr12", 12));
 
-    LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11, HealthStatus.HEALTHY);
-    LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12, HealthStatus.HEALTHY);
+    LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11);
+    LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12);
     LocalityInfo localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
 
 
@@ -187,8 +186,8 @@ public class XdsLbStateTest {
     EquivalentAddressGroup eag21 = new EquivalentAddressGroup(new InetSocketAddress("addr21", 21));
     EquivalentAddressGroup eag22 = new EquivalentAddressGroup(new InetSocketAddress("addr22", 22));
 
-    LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21, HealthStatus.HEALTHY);
-    LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22, HealthStatus.HEALTHY);
+    LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21);
+    LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22);
     LocalityInfo localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
 
     Map<Locality, LocalityInfo> localityInfoMap = new LinkedHashMap<>();

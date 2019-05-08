@@ -25,7 +25,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.grpc.Attributes;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
@@ -326,12 +325,6 @@ interface LocalityStore {
       @Override
       protected Helper delegate() {
         return helper;
-      }
-
-      @Override
-      public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
-        // delegate to parent helper
-        return helper.createSubchannel(addrs, attrs);
       }
 
       // This is triggered by child balancer
