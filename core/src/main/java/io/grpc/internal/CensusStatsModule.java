@@ -18,7 +18,6 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
@@ -48,6 +47,7 @@ import io.opencensus.tags.Tagger;
 import io.opencensus.tags.Tags;
 import io.opencensus.tags.propagation.TagContextBinarySerializer;
 import io.opencensus.tags.propagation.TagContextSerializationException;
+import io.opencensus.tags.unsafe.ContextUtils;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
@@ -356,7 +356,7 @@ public final class CensusStatsModule {
       this.parentCtx = checkNotNull(parentCtx);
       TagValue methodTag = TagValue.create(fullMethodName);
       this.startCtx = module.tagger.toBuilder(parentCtx)
-          .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
+          .putPropagating(DeprecatedCensusConstants.RPC_METHOD, methodTag)
           .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
       if (module.recordStartedRpcs) {
@@ -442,7 +442,7 @@ public final class CensusStatsModule {
           module
               .tagger
               .toBuilder(startCtx)
-              .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
+              .putPropagating(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
   }
@@ -647,14 +647,14 @@ public final class CensusStatsModule {
           module
               .tagger
               .toBuilder(parentCtx)
-              .put(DeprecatedCensusConstants.RPC_STATUS, statusTag)
+              .putPropagating(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
 
     @Override
     public Context filterContext(Context context) {
       if (!module.tagger.empty().equals(parentCtx)) {
-        return context.withValue(TAG_CONTEXT_KEY, parentCtx);
+        return ContextUtils.withValue(context, parentCtx);
       }
       return context;
     }
@@ -672,7 +672,7 @@ public final class CensusStatsModule {
       parentCtx =
           tagger
               .toBuilder(parentCtx)
-              .put(DeprecatedCensusConstants.RPC_METHOD, methodTag)
+              .putPropagating(DeprecatedCensusConstants.RPC_METHOD, methodTag)
               .build();
       return new ServerTracer(CensusStatsModule.this, parentCtx);
     }

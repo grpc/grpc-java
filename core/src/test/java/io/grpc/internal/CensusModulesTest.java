@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -252,12 +251,13 @@ public class CensusModulesTest {
     ClientCall<String, String> call;
     if (nonDefaultContext) {
       Context ctx =
-          Context.ROOT.withValues(
-              TAG_CONTEXT_KEY,
-              tagger.emptyBuilder().put(
-                  StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build(),
-              ContextUtils.CONTEXT_SPAN_KEY,
-              fakeClientParentSpan);
+          io.opencensus.tags.unsafe.ContextUtils.withValue(
+              Context.ROOT,
+              tagger
+                  .emptyBuilder()
+                  .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                  .build());
+      ctx = ContextUtils.withValue(ctx, fakeClientParentSpan);
       Context origCtx = ctx.attach();
       try {
         call = interceptedChannel.newCall(method, CALL_OPTIONS);
@@ -265,8 +265,10 @@ public class CensusModulesTest {
         ctx.detach(origCtx);
       }
     } else {
-      assertEquals(TAG_CONTEXT_KEY.get(Context.ROOT), TAG_CONTEXT_KEY.get());
-      assertNull(ContextUtils.CONTEXT_SPAN_KEY.get());
+      assertEquals(
+          io.opencensus.tags.unsafe.ContextUtils.getValue(Context.ROOT),
+          io.opencensus.tags.unsafe.ContextUtils.getValue(Context.current()));
+      assertEquals(ContextUtils.getValue(Context.current()), BlankSpan.INSTANCE);
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
 
@@ -303,7 +305,7 @@ public class CensusModulesTest {
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     } else {
       verify(tracer).spanBuilderWithExplicitParent(
-          eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNull());
+          eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNotNull());
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     }
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
@@ -646,7 +648,7 @@ public class CensusModulesTest {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
-    TagContext clientCtx = tagger.emptyBuilder().put(
+    TagContext clientCtx = tagger.emptyBuilder().putPropagating(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897")).build();
     CensusStatsModule census =
         new CensusStatsModule(
@@ -687,11 +689,11 @@ public class CensusModulesTest {
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
         tagger.toBuilder(clientCtx)
-            .put(
+            .putPropagating(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
-        TAG_CONTEXT_KEY.get(serverContext));
+        io.opencensus.tags.unsafe.ContextUtils.getValue(serverContext));
 
     // Verifies that the server tracer records the status with the propagated tag
     serverTracer.streamClosed(Status.OK);
@@ -798,7 +800,7 @@ public class CensusModulesTest {
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverTracer.filterContext(Context.ROOT);
-    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+    assertSame(spyServerSpan, ContextUtils.getValue(filteredContext));
   }
 
   @Test
@@ -919,11 +921,11 @@ public class CensusModulesTest {
     }
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
-    TagContext statsCtx = TAG_CONTEXT_KEY.get(filteredContext);
+    TagContext statsCtx = io.opencensus.tags.unsafe.ContextUtils.getValue(filteredContext);
     assertEquals(
         tagger
             .emptyBuilder()
-            .put(
+            .putPropagating(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
@@ -1021,7 +1023,7 @@ public class CensusModulesTest {
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
-    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+    assertSame(spyServerSpan, ContextUtils.getValue(filteredContext));
 
     serverStreamTracer.serverCallStarted(
         new ServerCallInfoImpl<>(method, Attributes.EMPTY, null));
