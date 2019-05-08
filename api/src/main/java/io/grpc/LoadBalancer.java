@@ -1137,16 +1137,15 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Returns the {@link NameResolver.Args} with which the {@link NameResolver} paired with
-     * this {@link LoadBalancer} was created.
+     * Returns the {@link NameResolver.Args} that the Channel uses to create {@link NameResolver}s.
      */
     public NameResolver.Args getNameResolverArgs() {
       throw new UnsupportedOperationException();
     }
 
     /**
-     * Returns the {@link NameResolverRegistry} from which the {@link NameResolver} paired with
-     * this {@link LoadBalancer} was created.
+     * Returns the {@link NameResolverRegistry} that the Channel uses to look for {@link
+     * NameResolver}s.
      */
     public NameResolverRegistry getNameResolverRegistry() {
       throw new UnsupportedOperationException();

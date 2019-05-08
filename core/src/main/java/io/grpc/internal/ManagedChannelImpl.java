@@ -1325,7 +1325,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    public 
+    public NameResolverRegistry getNameResolverRegistry() {
+      return nameResolverRegistry;
+    }
   }
 
   private final class NameResolverObserver extends NameResolver.Observer {
