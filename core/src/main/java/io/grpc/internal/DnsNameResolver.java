@@ -153,9 +153,9 @@ final class DnsNameResolver extends NameResolver {
   // from any thread.
   private NameResolver.Observer observer;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Helper helper,
+  DnsNameResolver(@Nullable String nsAuthority, String name, Args args,
       Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
-    Preconditions.checkNotNull(helper, "helper");
+    Preconditions.checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -167,15 +167,15 @@ final class DnsNameResolver extends NameResolver {
         "nameUri (%s) doesn't have an authority", nameUri);
     host = nameUri.getHost();
     if (nameUri.getPort() == -1) {
-      port = helper.getDefaultPort();
+      port = args.getDefaultPort();
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = Preconditions.checkNotNull(helper.getProxyDetector(), "proxyDetector");
+    this.proxyDetector = Preconditions.checkNotNull(args.getProxyDetector(), "proxyDetector");
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
     this.syncContext =
-        Preconditions.checkNotNull(helper.getSynchronizationContext(), "syncContext");
+        Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
   }
 
   @Override

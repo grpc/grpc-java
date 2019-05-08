@@ -78,14 +78,12 @@ import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalChannelz.ChannelTrace;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
@@ -105,7 +103,7 @@ import io.grpc.StringMarshaller;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
-import io.grpc.internal.ManagedChannelImpl.NrHelper;
+import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
@@ -209,8 +207,6 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<CallOptions> callOptionsCaptor;
   @Mock
   private LoadBalancer mockLoadBalancer;
-  @Mock
-  private SubchannelStateListener subchannelStateListener;
   private final LoadBalancerProvider mockLoadBalancerProvider =
       mock(LoadBalancerProvider.class, delegatesTo(new LoadBalancerProvider() {
           @Override
@@ -338,9 +334,8 @@ public class ManagedChannelImplTest {
     LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);
   }
 
-  @Deprecated
   @Test
-  public void createSubchannel_old_outsideSynchronizationContextShouldLogWarning() {
+  public void createSubchannelOutsideSynchronizationContextShouldLogWarning() {
     createChannel();
     final AtomicReference<LogRecord> logRef = new AtomicReference<>();
     Handler handler = new Handler() {
@@ -368,48 +363,6 @@ public class ManagedChannelImplTest {
       assertThat(record.getThrown()).isInstanceOf(IllegalStateException.class);
     } finally {
       logger.removeHandler(handler);
-    }
-  }
-
-  @Deprecated
-  @Test
-  public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
-    createChannel();
-    final AtomicReference<Subchannel> subchannelCapture = new AtomicReference<>();
-    helper.getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          subchannelCapture.set(helper.createSubchannel(addressGroup, Attributes.EMPTY));
-        }
-      });
-
-    Subchannel subchannel = subchannelCapture.get();
-    subchannel.requestConnection();
-
-    verify(mockTransportFactory)
-        .newClientTransport(
-            any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-
-    MockClientTransportInfo transportInfo = transports.poll();
-    transportInfo.listener.transportReady();
-
-    verify(mockLoadBalancer).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
-  }
-
-  @Test
-  public void createSubchannel_outsideSynchronizationContextShouldThrow() {
-    createChannel();
-    try {
-      helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-          .setAddresses(addressGroup)
-          .setStateListener(subchannelStateListener)
-          .build());
-      fail("Should throw");
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().isEqualTo("Not called from the SynchronizationContext");
     }
   }
 
@@ -473,8 +426,7 @@ public class ManagedChannelImplTest {
     assertNotNull(channelz.getRootChannel(channel.getLogId().getId()));
 
     AbstractSubchannel subchannel =
-        (AbstractSubchannel) createSubchannelSafely(
-            helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     // subchannels are not root channels
     assertNull(channelz.getRootChannel(subchannel.getInternalSubchannel().getLogId().getId()));
     assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
@@ -566,8 +518,7 @@ public class ManagedChannelImplTest {
 
     // Configure the picker so that first RPC goes to delayed transport, and second RPC goes to
     // real transport.
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory)
         .newClientTransport(
@@ -706,12 +657,8 @@ public class ManagedChannelImplTest {
             .setAttributes(Attributes.EMPTY)
             .build());
 
-    SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
-    SubchannelStateListener stateListener2 = mock(SubchannelStateListener.class);
-    Subchannel subchannel1 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, stateListener1);
-    Subchannel subchannel2 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, stateListener2);
+    Subchannel subchannel1 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    Subchannel subchannel2 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel1.requestConnection();
     subchannel2.requestConnection();
     verify(mockTransportFactory, times(2))
@@ -722,14 +669,13 @@ public class ManagedChannelImplTest {
 
     // LoadBalancer receives all sorts of callbacks
     transportInfo1.listener.transportReady();
-
-    verify(stateListener1, times(2))
-        .onSubchannelState(same(subchannel1), stateInfoCaptor.capture());
+    verify(mockLoadBalancer, times(2))
+        .handleSubchannelState(same(subchannel1), stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getAllValues().get(0).getState());
     assertSame(READY, stateInfoCaptor.getAllValues().get(1).getState());
 
-    verify(stateListener2)
-        .onSubchannelState(same(subchannel2), stateInfoCaptor.capture());
+    verify(mockLoadBalancer)
+        .handleSubchannelState(same(subchannel2), stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
 
     resolver.observer.onError(resolutionError);
@@ -778,8 +724,7 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, headers);
 
     // Make the transport available
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     verify(mockTransportFactory, never())
         .newClientTransport(
             any(SocketAddress.class), any(ClientTransportOptions.class), any(ChannelLogger.class));
@@ -1016,7 +961,7 @@ public class ManagedChannelImplTest {
           return "badAddress";
         }
       };
-    InOrder inOrder = inOrder(mockLoadBalancer, subchannelStateListener);
+    InOrder inOrder = inOrder(mockLoadBalancer);
 
     List<SocketAddress> resolvedAddrs = Arrays.asList(badAddress, goodAddress);
     FakeNameResolverFactory nameResolverFactory =
@@ -1038,13 +983,12 @@ public class ManagedChannelImplTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(Arrays.asList(addressGroup))
             .build());
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(mockLoadBalancer).handleSubchannelState(
+        same(subchannel), stateInfoCaptor.capture());
     assertEquals(CONNECTING, stateInfoCaptor.getValue().getState());
 
     // The channel will starts with the first address (badAddress)
@@ -1070,8 +1014,8 @@ public class ManagedChannelImplTest {
         .thenReturn(mock(ClientStream.class));
 
     goodTransportInfo.listener.transportReady();
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(mockLoadBalancer).handleSubchannelState(
+        same(subchannel), stateInfoCaptor.capture());
     assertEquals(READY, stateInfoCaptor.getValue().getState());
 
     // A typical LoadBalancer will call this once the subchannel becomes READY
@@ -1161,7 +1105,7 @@ public class ManagedChannelImplTest {
           return "addr2";
         }
       };
-    InOrder inOrder = inOrder(mockLoadBalancer, subchannelStateListener);
+    InOrder inOrder = inOrder(mockLoadBalancer);
 
     List<SocketAddress> resolvedAddrs = Arrays.asList(addr1, addr2);
 
@@ -1189,14 +1133,13 @@ public class ManagedChannelImplTest {
         ResolvedAddresses.newBuilder()
             .setAddresses(Arrays.asList(addressGroup))
             .build());
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
 
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(mockLoadBalancer).handleSubchannelState(
+        same(subchannel), stateInfoCaptor.capture());
     assertEquals(CONNECTING, stateInfoCaptor.getValue().getState());
 
     // Connecting to server1, which will fail
@@ -1219,8 +1162,8 @@ public class ManagedChannelImplTest {
 
     // ... which makes the subchannel enter TRANSIENT_FAILURE. The last error Status is propagated
     // to LoadBalancer.
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(mockLoadBalancer).handleSubchannelState(
+        same(subchannel), stateInfoCaptor.capture());
     assertEquals(TRANSIENT_FAILURE, stateInfoCaptor.getValue().getState());
     assertSame(server2Error, stateInfoCaptor.getValue().getStatus());
 
@@ -1249,10 +1192,8 @@ public class ManagedChannelImplTest {
     // createSubchannel() always return a new Subchannel
     Attributes attrs1 = Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, "attr1").build();
     Attributes attrs2 = Attributes.newBuilder().set(SUBCHANNEL_ATTR_KEY, "attr2").build();
-    SubchannelStateListener listener1 = mock(SubchannelStateListener.class);
-    SubchannelStateListener listener2 = mock(SubchannelStateListener.class);
-    Subchannel sub1 = createSubchannelSafely(helper, addressGroup, attrs1, listener1);
-    Subchannel sub2 = createSubchannelSafely(helper, addressGroup, attrs2, listener2);
+    Subchannel sub1 = createSubchannelSafely(helper, addressGroup, attrs1);
+    Subchannel sub2 = createSubchannelSafely(helper, addressGroup, attrs2);
     assertNotSame(sub1, sub2);
     assertNotSame(attrs1, attrs2);
     assertSame(attrs1, sub1.getAttributes());
@@ -1319,10 +1260,8 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelsWhenChannelShutdownNow() {
     createChannel();
-    Subchannel sub1 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-    Subchannel sub2 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel sub1 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    Subchannel sub2 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     sub1.requestConnection();
     sub2.requestConnection();
 
@@ -1349,10 +1288,8 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelsNoConnectionShutdown() {
     createChannel();
-    Subchannel sub1 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-    Subchannel sub2 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel sub1 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    Subchannel sub2 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
 
     channel.shutdown();
     verify(mockLoadBalancer).shutdown();
@@ -1368,8 +1305,8 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelsNoConnectionShutdownNow() {
     createChannel();
-    createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-    createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     channel.shutdownNow();
 
     verify(mockLoadBalancer).shutdown();
@@ -1551,8 +1488,7 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelChannel_normalUsage() {
     createChannel();
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     verify(balancerRpcExecutorPool, never()).getObject();
 
     Channel sChannel = subchannel.asChannel();
@@ -1583,8 +1519,7 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelChannel_failWhenNotReady() {
     createChannel();
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     Channel sChannel = subchannel.asChannel();
     Metadata headers = new Metadata();
 
@@ -1612,8 +1547,7 @@ public class ManagedChannelImplTest {
   @Test
   public void subchannelChannel_failWaitForReady() {
     createChannel();
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     Channel sChannel = subchannel.asChannel();
     Metadata headers = new Metadata();
 
@@ -1700,8 +1634,7 @@ public class ManagedChannelImplTest {
       OobChannel oobChannel = (OobChannel) helper.createOobChannel(addressGroup, "oobAuthority");
       oobChannel.getSubchannel().requestConnection();
     } else {
-      Subchannel subchannel =
-          createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+      Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
       subchannel.requestConnection();
     }
 
@@ -1788,8 +1721,7 @@ public class ManagedChannelImplTest {
 
     // Simulate name resolution results
     EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     verify(mockTransportFactory)
         .newClientTransport(
@@ -1862,8 +1794,7 @@ public class ManagedChannelImplTest {
     ClientStreamTracer.Factory factory1 = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer.Factory factory2 = mock(ClientStreamTracer.Factory.class);
     createChannel();
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
     transportInfo.listener.transportReady();
@@ -1901,8 +1832,7 @@ public class ManagedChannelImplTest {
     ClientCall<String, Integer> call = channel.newCall(method, callOptions);
     call.start(mockCallListener, new Metadata());
 
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
     transportInfo.listener.transportReady();
@@ -2277,8 +2207,7 @@ public class ManagedChannelImplTest {
     Helper helper2 = helperCaptor.getValue();
 
     // Establish a connection
-    Subchannel subchannel =
-        createSubchannelSafely(helper2, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper2, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
     ConnectionClientTransport mockTransport = transportInfo.transport;
@@ -2346,8 +2275,7 @@ public class ManagedChannelImplTest {
     Helper helper2 = helperCaptor.getValue();
 
     // Establish a connection
-    Subchannel subchannel =
-        createSubchannelSafely(helper2, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper2, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     ClientStream mockStream = mock(ClientStream.class);
     MockClientTransportInfo transportInfo = transports.poll();
@@ -2376,10 +2304,8 @@ public class ManagedChannelImplTest {
     call.start(mockCallListener, new Metadata());
 
     // Make the transport available with subchannel2
-    Subchannel subchannel1 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
-    Subchannel subchannel2 =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel1 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
+    Subchannel subchannel2 = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel2.requestConnection();
 
     MockClientTransportInfo transportInfo = transports.poll();
@@ -2518,8 +2444,7 @@ public class ManagedChannelImplTest {
     createChannel();
     assertEquals(TARGET, getStats(channel).target);
 
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     assertEquals(Collections.singletonList(addressGroup).toString(),
         getStats((AbstractSubchannel) subchannel).target);
   }
@@ -2542,8 +2467,7 @@ public class ManagedChannelImplTest {
     createChannel();
     timer.forwardNanos(1234);
     AbstractSubchannel subchannel =
-        (AbstractSubchannel) createSubchannelSafely(
-            helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Child Subchannel created")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -2716,8 +2640,7 @@ public class ManagedChannelImplTest {
     channelBuilder.maxTraceEvents(10);
     createChannel();
     AbstractSubchannel subchannel =
-        (AbstractSubchannel) createSubchannelSafely(
-            helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     timer.forwardNanos(1234);
     subchannel.obtainActiveTransport();
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
@@ -2780,8 +2703,7 @@ public class ManagedChannelImplTest {
     assertEquals(CONNECTING, getStats(channel).state);
 
     AbstractSubchannel subchannel =
-        (AbstractSubchannel) createSubchannelSafely(
-            helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
 
     assertEquals(IDLE, getStats(subchannel).state);
     subchannel.requestConnection();
@@ -2835,8 +2757,7 @@ public class ManagedChannelImplTest {
     ClientStream mockStream = mock(ClientStream.class);
     ClientStreamTracer.Factory factory = mock(ClientStreamTracer.Factory.class);
     AbstractSubchannel subchannel =
-        (AbstractSubchannel) createSubchannelSafely(
-            helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+        (AbstractSubchannel) createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
     transportInfo.listener.transportReady();
@@ -3073,8 +2994,7 @@ public class ManagedChannelImplTest {
             .build());
 
     // simulating request connection and then transport ready after resolved address
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
@@ -3173,8 +3093,7 @@ public class ManagedChannelImplTest {
             .build());
 
     // simulating request connection and then transport ready after resolved address
-    Subchannel subchannel =
-        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
@@ -3268,7 +3187,7 @@ public class ManagedChannelImplTest {
 
       @Nullable
       @Override
-      public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+      public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
         return (resolver = new FakeNameResolver());
       }
 
@@ -3393,8 +3312,8 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  public void nameResolverHelperPropagation() {
-    final AtomicReference<NameResolver.Helper> capturedHelper = new AtomicReference<>();
+  public void nameResolverArgsPropagation() {
+    final AtomicReference<NameResolver.Args> capturedArgs = new AtomicReference<>();
     final NameResolver noopResolver = new NameResolver() {
         @Override
         public String getServiceAuthority() {
@@ -3414,10 +3333,10 @@ public class ManagedChannelImplTest {
           return null;
         }
       };
-    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
+    NameResolver.Factory factory = new NameResolver.Factory() {
         @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          capturedHelper.set(helper);
+        public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+          capturedArgs.set(args);
           return noopResolver;
         }
 
@@ -3426,116 +3345,13 @@ public class ManagedChannelImplTest {
           return "fakescheme";
         }
       };
-    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
+    channelBuilder.nameResolverFactory(factory).proxyDetector(neverProxy);
     createChannel();
 
-    NameResolver.Helper helper = capturedHelper.get();
-    assertThat(helper).isNotNull();
-    assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
-  }
-
-  @Test
-  @Deprecated
-  public void nameResolverParams_oldApi() {
-    final AtomicReference<Attributes> capturedParams = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener listener) {
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-    ProxyDetector neverProxy = new ProxyDetector() {
-        @Override
-        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-          return null;
-        }
-      };
-    NameResolver.Factory oldApiFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-          capturedParams.set(params);
-          return noopResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiFactory).proxyDetector(neverProxy);
-    createChannel();
-
-    Attributes attrs = capturedParams.get();
-    assertThat(attrs).isNotNull();
-    assertThat(attrs.get(NameResolver.Factory.PARAMS_DEFAULT_PORT)).isEqualTo(DEFAULT_PORT);
-    assertThat(attrs.get(NameResolver.Factory.PARAMS_PROXY_DETECTOR)).isSameInstanceAs(neverProxy);
-  }
-
-  @Test
-  @Deprecated
-  public void nameResolverParams_forwardingResolverWithOldApi() {
-    final AtomicReference<NameResolver.Helper> capturedHelper = new AtomicReference<>();
-    final NameResolver noopResolver = new NameResolver() {
-        @Override
-        public String getServiceAuthority() {
-          return "fake-authority";
-        }
-
-        @Override
-        public void start(Listener listener) {
-        }
-
-        @Override
-        public void shutdown() {}
-      };
-    ProxyDetector neverProxy = new ProxyDetector() {
-        @Override
-        public ProxiedSocketAddress proxyFor(SocketAddress targetAddress) {
-          return null;
-        }
-      };
-    final NameResolver.Factory factory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
-          capturedHelper.set(helper);
-          return noopResolver;
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return "fakescheme";
-        }
-      };
-
-    // A forwarding factory still with the old API can forward to a delegate factory that has
-    // migrated to the new API.
-    NameResolver.Factory oldApiForwardingFactory = new NameResolver.Factory() {
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-          return factory.newNameResolver(targetUri, params);
-        }
-
-        @Override
-        public String getDefaultScheme() {
-          return factory.getDefaultScheme();
-        }
-      };
-    channelBuilder.nameResolverFactory(oldApiForwardingFactory).proxyDetector(neverProxy);
-    createChannel();
-
-    NameResolver.Helper helper = capturedHelper.get();
-    assertThat(helper).isNotNull();
-    assertThat(helper.getDefaultPort()).isEqualTo(DEFAULT_PORT);
-    assertThat(helper.getProxyDetector()).isSameInstanceAs(neverProxy);
-    assertThat(helper.getSynchronizationContext()).isSameInstanceAs(channel.syncContext);
+    NameResolver.Args args = capturedArgs.get();
+    assertThat(args).isNotNull();
+    assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
+    assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
   }
 
   @Test
@@ -3555,18 +3371,16 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
-    ConfigOrError coe = nrh.parseServiceConfig(ImmutableMap.<String, Object>of());
+    ConfigOrError coe = parser.parseServiceConfig(ImmutableMap.<String, Object>of());
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
@@ -3583,19 +3397,17 @@ public class ManagedChannelImplTest {
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
-        nrh.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
+        parser.parseServiceConfig(ImmutableMap.<String, Object>of("methodConfig", "bogus"));
 
     assertThat(coe.getError()).isNotNull();
     assertThat(coe.getError().getCode()).isEqualTo(Code.UNKNOWN);
@@ -3615,17 +3427,14 @@ public class ManagedChannelImplTest {
     AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
         new AutoConfiguredLoadBalancerFactory("pick_first");
 
-    NrHelper nrh = new NrHelper(
-        defaultPort,
-        proxyDetector,
-        syncCtx,
+    ScParser parser = new ScParser(
         retryEnabled,
         maxRetryAttemptsLimit,
         maxHedgedAttemptsLimit,
         autoConfiguredLoadBalancerFactory);
 
     ConfigOrError coe =
-        nrh.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
+        parser.parseServiceConfig(ImmutableMap.of("loadBalancingConfig", ImmutableList.of()));
 
     assertThat(coe.getError()).isNull();
     ManagedChannelServiceConfig cfg = (ManagedChannelServiceConfig) coe.getConfig();
@@ -3956,11 +3765,11 @@ public class ManagedChannelImplTest {
     }
 
     @Override
-    public NameResolver newNameResolver(final URI targetUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(final URI targetUri, NameResolver.Args args) {
       if (!expectedUri.equals(targetUri)) {
         return null;
       }
-      assertEquals(DEFAULT_PORT, helper.getDefaultPort());
+      assertEquals(DEFAULT_PORT, args.getDefaultPort());
       FakeNameResolver resolver = new FakeNameResolver(error);
       resolvers.add(resolver);
       return resolver;
@@ -4071,18 +3880,13 @@ public class ManagedChannelImplTest {
 
   // We need this because createSubchannel() should be called from the SynchronizationContext
   private static Subchannel createSubchannelSafely(
-      final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs,
-      final SubchannelStateListener stateListener) {
+      final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs) {
     final AtomicReference<Subchannel> resultCapture = new AtomicReference<>();
     helper.getSynchronizationContext().execute(
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-                    .setAddresses(addressGroup)
-                    .setAttributes(attrs)
-                    .setStateListener(stateListener)
-                    .build()));
+            resultCapture.set(helper.createSubchannel(addressGroup, attrs));
           }
         });
     return resultCapture.get();

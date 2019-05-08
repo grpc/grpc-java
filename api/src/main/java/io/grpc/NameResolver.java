@@ -160,6 +160,10 @@ public abstract class NameResolver {
     private static final Attributes.Key<SynchronizationContext> PARAMS_SYNC_CONTEXT =
         Attributes.Key.create("params-sync-context");
 
+    @Deprecated
+    private static final Attributes.Key<ServiceConfigParser> PARAMS_PARSER =
+        Attributes.Key.create("params-parser");
+
     /**
      * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
      * cannot be resolved by this factory. The decision should be solely based on the scheme of the
@@ -177,23 +181,13 @@ public abstract class NameResolver {
     @Nullable
     @Deprecated
     public NameResolver newNameResolver(URI targetUri, final Attributes params) {
-      Helper helper = new Helper() {
-          @Override
-          public int getDefaultPort() {
-            return checkNotNull(params.get(PARAMS_DEFAULT_PORT), "default port not available");
-          }
-
-          @Override
-          public ProxyDetector getProxyDetector() {
-            return checkNotNull(params.get(PARAMS_PROXY_DETECTOR), "proxy detector not available");
-          }
-
-          @Override
-          public SynchronizationContext getSynchronizationContext() {
-            return checkNotNull(params.get(PARAMS_SYNC_CONTEXT), "sync context not available");
-          }
-        };
-      return newNameResolver(targetUri, helper);
+      Args args = Args.newBuilder()
+          .setDefaultPort(params.get(PARAMS_DEFAULT_PORT))
+          .setProxyDetector(params.get(PARAMS_PROXY_DETECTOR))
+          .setSynchronizationContext(params.get(PARAMS_SYNC_CONTEXT))
+          .setServiceConfigParser(params.get(PARAMS_PARSER))
+          .build();
+      return newNameResolver(targetUri, args);
     }
 
     /**
@@ -205,17 +199,60 @@ public abstract class NameResolver {
      * @param helper utility that may be used by the NameResolver implementation
      *
      * @since 1.19.0
+     * @deprecated implement {@link #newNameResolver(URI, NameResolver.Args)} instead
      */
-    // TODO(zhangkun83): make this abstract when the other override is deleted
+    @Deprecated
     @Nullable
-    public NameResolver newNameResolver(URI targetUri, Helper helper) {
+    public NameResolver newNameResolver(URI targetUri, final Helper helper) {
       return newNameResolver(
           targetUri,
           Attributes.newBuilder()
               .set(PARAMS_DEFAULT_PORT, helper.getDefaultPort())
               .set(PARAMS_PROXY_DETECTOR, helper.getProxyDetector())
               .set(PARAMS_SYNC_CONTEXT, helper.getSynchronizationContext())
+              .set(PARAMS_PARSER, new ServiceConfigParser() {
+                  @Override
+                  public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+                    return helper.parseServiceConfig(rawServiceConfig);
+                  }
+                })
               .build());
+    }
+
+    /**
+     * Creates a {@link NameResolver} for the given target URI, or {@code null} if the given URI
+     * cannot be resolved by this factory. The decision should be solely based on the scheme of the
+     * URI.
+     *
+     * @param targetUri the target URI to be resolved, whose scheme must not be {@code null}
+     * @param args other information that may be useful
+     *
+     * @since 1.21.0
+     */
+    @SuppressWarnings("deprecation")
+    // TODO(zhangkun83): make it abstract method after all other overrides have been deleted
+    public NameResolver newNameResolver(URI targetUri, final Args args) {
+      return newNameResolver(targetUri, new Helper() {
+          @Override
+          public int getDefaultPort() {
+            return args.getDefaultPort();
+          }
+
+          @Override
+          public ProxyDetector getProxyDetector() {
+            return args.getProxyDetector();
+          }
+
+          @Override
+          public SynchronizationContext getSynchronizationContext() {
+            return args.getSynchronizationContext();
+          }
+
+          @Override
+          public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
+            return args.getServiceConfigParser().parseServiceConfig(rawServiceConfig);
+          }
+        });
     }
 
     /**
@@ -315,7 +352,9 @@ public abstract class NameResolver {
    * A utility object passed to {@link Factory#newNameResolver(URI, NameResolver.Helper)}.
    *
    * @since 1.19.0
+   * @deprecated use {@link Args} instead.
    */
+  @Deprecated
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Helper {
     /**
@@ -338,7 +377,7 @@ public abstract class NameResolver {
      * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
      * and {@link #refresh} are run from.
      *
-     * @since 1.21.0
+     * @since 1.20.0
      */
     public SynchronizationContext getSynchronizationContext() {
       throw new UnsupportedOperationException("Not implemented");
@@ -349,7 +388,7 @@ public abstract class NameResolver {
      * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
      * {@link Status} representing the failure to parse.  Implementations are expected to not throw
      * exceptions but return a Status representing the failure.  The value inside the
-     * {@link ConfigOrError} should implement {@link Object#equals()} and {@link Object#hashCode()}.
+     * {@link ConfigOrError} should implement {@code equals()} and {@code hashCode()}.
      *
      * @param rawServiceConfig The {@link Map} representation of the service config
      * @return a tuple of the fully parsed and validated channel configuration, else the Status.
@@ -358,6 +397,186 @@ public abstract class NameResolver {
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       throw new UnsupportedOperationException("should have been implemented");
     }
+  }
+
+  /**
+   * Information that a {@link Factory} uses to create a {@link NameResolver}.
+   *
+   * <p>Note this class doesn't override neither {@code equals()} nor {@code hashCode()}.
+   *
+   * @since 1.21.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public static final class Args {
+    private final int defaultPort;
+    private final ProxyDetector proxyDetector;
+    private final SynchronizationContext syncContext;
+    private final ServiceConfigParser serviceConfigParser;
+
+    Args(Integer defaultPort, ProxyDetector proxyDetector,
+        SynchronizationContext syncContext, ServiceConfigParser serviceConfigParser) {
+      this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
+      this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
+      this.syncContext = checkNotNull(syncContext, "syncContext not set");
+      this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
+    }
+
+    /**
+     * The port number used in case the target or the underlying naming system doesn't provide a
+     * port number.
+     *
+     * @since 1.21.0
+     */
+    public int getDefaultPort() {
+      return defaultPort;
+    }
+
+    /**
+     * If the NameResolver wants to support proxy, it should inquire this {@link ProxyDetector}.
+     * See documentation on {@link ProxyDetector} about how proxies work in gRPC.
+     *
+     * @since 1.21.0
+     */
+    public ProxyDetector getProxyDetector() {
+      return proxyDetector;
+    }
+
+    /**
+     * Returns the {@link SynchronizationContext} where {@link #start(Observer)}, {@link #shutdown}
+     * and {@link #refresh} are run from.
+     *
+     * @since 1.21.0
+     */
+    public SynchronizationContext getSynchronizationContext() {
+      return syncContext;
+    }
+
+    /**
+     * Returns the {@link ServiceConfigParser}.
+     *
+     * @since 1.21.0
+     */
+    public ServiceConfigParser getServiceConfigParser() {
+      return serviceConfigParser;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("defaultPort", defaultPort)
+          .add("proxyDetector", proxyDetector)
+          .add("syncContext", syncContext)
+          .add("serviceConfigParser", serviceConfigParser)
+          .toString();
+    }
+
+    /**
+     * Returns a builder with the same initial values as this object.
+     *
+     * @since 1.21.0
+     */
+    public Builder toBuilder() {
+      Builder builder = new Builder();
+      builder.setDefaultPort(defaultPort);
+      builder.setProxyDetector(proxyDetector);
+      builder.setSynchronizationContext(syncContext);
+      builder.setServiceConfigParser(serviceConfigParser);
+      return builder;
+    }
+
+    /**
+     * Creates a new builder.
+     *
+     * @since 1.21.0
+     */
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    /**
+     * Builder for {@link Args}.
+     *
+     * @since 1.21.0
+     */
+    public static final class Builder {
+      private Integer defaultPort;
+      private ProxyDetector proxyDetector;
+      private SynchronizationContext syncContext;
+      private ServiceConfigParser serviceConfigParser;
+
+      Builder() {
+      }
+
+      /**
+       * See {@link Args#getDefaultPort}.  This is a required field.
+       *
+       * @since 1.21.0
+       */
+      public Builder setDefaultPort(int defaultPort) {
+        this.defaultPort = defaultPort;
+        return this;
+      }
+
+      /**
+       * See {@link Args#getProxyDetector}.  This is required field.
+       *
+       * @since 1.21.0
+       */
+      public Builder setProxyDetector(ProxyDetector proxyDetector) {
+        this.proxyDetector = checkNotNull(proxyDetector);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getSynchronizationContext}.  This is a required field.
+       *
+       * @since 1.21.0
+       */
+      public Builder setSynchronizationContext(SynchronizationContext syncContext) {
+        this.syncContext = checkNotNull(syncContext);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getServiceConfigParser}.  This is a required field.
+       *
+       * @since 1.21.0
+       */
+      public Builder setServiceConfigParser(ServiceConfigParser parser) {
+        this.serviceConfigParser = checkNotNull(parser);
+        return this;
+      }
+
+      /**
+       * Builds an {@link Args}.
+       *
+       * @since 1.21.0
+       */
+      public Args build() {
+        return new Args(defaultPort, proxyDetector, syncContext, serviceConfigParser);
+      }
+    }
+  }
+
+  /**
+   * Parses and validates service configuration.
+   *
+   * @since 1.21.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public abstract static class ServiceConfigParser {
+    /**
+     * Parses and validates the service configuration chosen by the name resolver.  This will
+     * return a {@link ConfigOrError} which contains either the successfully parsed config, or the
+     * {@link Status} representing the failure to parse.  Implementations are expected to not throw
+     * exceptions but return a Status representing the failure.  The value inside the
+     * {@link ConfigOrError} should implement {@code equals()} and {@code hashCode()}.
+     *
+     * @param rawServiceConfig The {@link Map} representation of the service config
+     * @return a tuple of the fully parsed and validated channel configuration, else the Status.
+     * @since 1.21.0
+     */
+    public abstract ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig);
   }
 
   /**

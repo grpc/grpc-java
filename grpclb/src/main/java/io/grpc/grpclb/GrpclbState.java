@@ -35,13 +35,11 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -83,7 +81,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * switches away from GRPCLB mode.
  */
 @NotThreadSafe
-final class GrpclbState implements SubchannelStateListener {
+final class GrpclbState {
   static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
   private static final Attributes LB_PROVIDED_BACKEND_ATTRS =
       Attributes.newBuilder().set(GrpcAttributes.ATTR_LB_PROVIDED_BACKEND, true).build();
@@ -173,12 +171,14 @@ final class GrpclbState implements SubchannelStateListener {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
   }
 
-  @Override
-  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     if (newState.getState() == SHUTDOWN) {
       return;
     }
     if (!subchannels.values().contains(subchannel)) {
+      if (subchannelPool != null ) {
+        subchannelPool.handleSubchannelState(subchannel, newState);
+      }
       return;
     }
     if (mode == Mode.ROUND_ROBIN && newState.getState() == IDLE) {
@@ -323,7 +323,7 @@ final class GrpclbState implements SubchannelStateListener {
         // We close the subchannels through subchannelPool instead of helper just for convenience of
         // testing.
         for (Subchannel subchannel : subchannels.values()) {
-          subchannelPool.returnSubchannel(subchannel);
+          returnSubchannelToPool(subchannel);
         }
         subchannelPool.clear();
         break;
@@ -345,6 +345,10 @@ final class GrpclbState implements SubchannelStateListener {
       maybeUpdatePicker(
           TRANSIENT_FAILURE, new RoundRobinPicker(dropList, Arrays.asList(new ErrorEntry(status))));
     }
+  }
+
+  private void returnSubchannelToPool(Subchannel subchannel) {
+    subchannelPool.returnSubchannel(subchannel, subchannel.getAttributes().get(STATE_INFO).get());
   }
 
   @VisibleForTesting
@@ -377,8 +381,7 @@ final class GrpclbState implements SubchannelStateListener {
           if (subchannel == null) {
             subchannel = subchannels.get(eagAsList);
             if (subchannel == null) {
-              subchannel = subchannelPool.takeOrCreateSubchannel(
-                  eag, createSubchannelAttrs(), this);
+              subchannel = subchannelPool.takeOrCreateSubchannel(eag, createSubchannelAttrs());
               subchannel.requestConnection();
             }
             newSubchannelMap.put(eagAsList, subchannel);
@@ -396,7 +399,7 @@ final class GrpclbState implements SubchannelStateListener {
         for (Entry<List<EquivalentAddressGroup>, Subchannel> entry : subchannels.entrySet()) {
           List<EquivalentAddressGroup> eagList = entry.getKey();
           if (!newSubchannelMap.containsKey(eagList)) {
-            subchannelPool.returnSubchannel(entry.getValue());
+            returnSubchannelToPool(entry.getValue());
           }
         }
         subchannels = Collections.unmodifiableMap(newSubchannelMap);
@@ -419,12 +422,7 @@ final class GrpclbState implements SubchannelStateListener {
         }
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
-          subchannel =
-              helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-                  .setAddresses(eagList)
-                  .setAttributes(createSubchannelAttrs())
-                  .setStateListener(this)
-                  .build());
+          subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
           subchannel = subchannels.values().iterator().next();
