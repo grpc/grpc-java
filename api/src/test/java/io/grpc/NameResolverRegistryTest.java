@@ -19,12 +19,12 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
+import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.internal.DnsNameResolverProvider;
+import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.util.List;
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -33,13 +33,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class NameResolverRegistryTest {
   private final URI uri = URI.create("dns:///localhost");
-  private final NameResolver.Helper helper = mock(NameResolver.Helper.class);
-
-  @After
-  public void wrapUp() {
-    // The helper is not implemented.  Make sure it's not used in the test.
-    verifyZeroInteractions(helper);
-  }
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(8080)
+      .setProxyDetector(mock(ProxyDetector.class))
+      .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .build();
 
   @Test
   public void register_unavilableProviderThrows() {
@@ -95,13 +94,13 @@ public class NameResolverRegistryTest {
     registry.register(
         new BaseProvider(true, 5) {
           @Override
-          public NameResolver newNameResolver(URI passedUri, NameResolver.Helper passedHelper) {
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             assertThat(passedUri).isSameInstanceAs(uri);
-            assertThat(passedHelper).isSameInstanceAs(helper);
+            assertThat(passedArgs).isSameInstanceAs(args);
             return null;
           }
         });
-    assertThat(registry.asFactory().newNameResolver(uri, helper)).isNull();
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isNull();
   }
 
   @Test
@@ -109,7 +108,7 @@ public class NameResolverRegistryTest {
     NameResolverRegistry registry = new NameResolverRegistry();
     registry.register(new BaseProvider(true, 5) {
       @Override
-      public NameResolver newNameResolver(URI passedUri, NameResolver.Helper passedHelper) {
+      public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
         return null;
       }
     });
@@ -129,25 +128,25 @@ public class NameResolverRegistryTest {
     registry.register(
         new BaseProvider(true, 4) {
           @Override
-          public NameResolver newNameResolver(URI passedUri, NameResolver.Helper passedHelper) {
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             return nr;
           }
         });
     registry.register(
         new BaseProvider(true, 3) {
           @Override
-          public NameResolver newNameResolver(URI passedUri, NameResolver.Helper passedHelper) {
+          public NameResolver newNameResolver(URI passedUri, NameResolver.Args passedArgs) {
             fail("Should not be called");
             throw new AssertionError();
           }
         });
-    assertThat(registry.asFactory().newNameResolver(uri, helper)).isSameInstanceAs(nr);
+    assertThat(registry.asFactory().newNameResolver(uri, args)).isSameInstanceAs(nr);
   }
 
   @Test
   public void newNameResolver_noProvider() {
     NameResolver.Factory factory = new NameResolverRegistry().asFactory();
-    assertThat(factory.newNameResolver(uri, helper)).isNull();
+    assertThat(factory.newNameResolver(uri, args)).isNull();
   }
 
   @Test
@@ -197,7 +196,7 @@ public class NameResolverRegistryTest {
     }
 
     @Override
-    public NameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
       throw new UnsupportedOperationException();
     }
 

@@ -41,6 +41,7 @@ import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -106,22 +107,12 @@ public class DnsNameResolverTest {
           throw new AssertionError(e);
         }
       });
-  private final NameResolver.Helper helper = new NameResolver.Helper() {
-      @Override
-      public int getDefaultPort() {
-        return DEFAULT_PORT;
-      }
-
-      @Override
-      public ProxyDetector getProxyDetector() {
-        return GrpcUtil.getDefaultProxyDetector();
-      }
-
-      @Override
-      public SynchronizationContext getSynchronizationContext() {
-        return syncContext;
-      }
-    };
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(DEFAULT_PORT)
+      .setProxyDetector(GrpcUtil.getDefaultProxyDetector())
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
@@ -175,22 +166,12 @@ public class DnsNameResolverTest {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
-        new NameResolver.Helper() {
-          @Override
-          public int getDefaultPort() {
-            return defaultPort;
-          }
-
-          @Override
-          public ProxyDetector getProxyDetector() {
-            return proxyDetector;
-          }
-
-          @Override
-          public SynchronizationContext getSynchronizationContext() {
-            return syncContext;
-          }
-        },
+        NameResolver.Args.newBuilder()
+            .setDefaultPort(defaultPort)
+            .setProxyDetector(proxyDetector)
+            .setSynchronizationContext(syncContext)
+            .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .build(),
         fakeExecutorResource,
         stopwatch,
         isAndroid);
@@ -1046,7 +1027,7 @@ public class DnsNameResolverTest {
 
   private void testInvalidUri(URI uri) {
     try {
-      provider.newNameResolver(uri, helper);
+      provider.newNameResolver(uri, args);
       fail("Should have failed");
     } catch (IllegalArgumentException e) {
       // expected
@@ -1054,7 +1035,7 @@ public class DnsNameResolverTest {
   }
 
   private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = provider.newNameResolver(uri, helper);
+    DnsNameResolver resolver = provider.newNameResolver(uri, args);
     assertNotNull(resolver);
     assertEquals(expectedPort, resolver.getPort());
     assertEquals(exportedAuthority, resolver.getServiceAuthority());
