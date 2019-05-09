@@ -53,7 +53,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -293,7 +292,7 @@ public class XdsLrsClientTest {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     lrsRequestObservers.clear();
 
-    ConcurrentMap<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityCounters =
+    ConcurrentMap<Locality, ClientLoadCounter> localityCounters =
         new ConcurrentHashMap<>();
     ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
     XdsLoadReportStore loadReportStore =

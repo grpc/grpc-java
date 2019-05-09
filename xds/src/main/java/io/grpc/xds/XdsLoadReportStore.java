@@ -29,7 +29,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
-import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
+import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -77,9 +77,9 @@ final class XdsLoadReportStore {
   ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
         .setLoadReportInterval(interval);
-    for (Map.Entry<Locality, XdsClientLoadRecorder.ClientLoadCounter> entry : localityLoadCounters
+    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters
         .entrySet()) {
-      XdsClientLoadRecorder.ClientLoadSnapshot snapshot = entry.getValue().snapshot();
+      ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       statsBuilder
           .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
               .setLocality(entry.getKey())
@@ -140,7 +140,7 @@ final class XdsLoadReportStore {
     if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
-    XdsClientLoadRecorder.ClientLoadCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     if (counter == null) {
       return pickResult;
     }

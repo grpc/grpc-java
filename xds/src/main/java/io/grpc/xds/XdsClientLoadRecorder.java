@@ -18,13 +18,11 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
-import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -44,63 +42,9 @@ final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
   @Override
   public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-    counter.callsInProgress.getAndIncrement();
+    counter.incrementCallsInProgress();
     final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
     return new StreamTracer(delegateTracer);
-  }
-
-  /**
-   * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter} to be sent as
-   * part of {@link io.envoyproxy.envoy.api.v2.endpoint.ClusterStats} to the balancer.
-   */
-  static final class ClientLoadSnapshot {
-
-    final long callsSucceed;
-    final long callsInProgress;
-    final long callsFailed;
-
-    ClientLoadSnapshot(long callsSucceed, long callsInProgress, long callsFailed) {
-      this.callsSucceed = callsSucceed;
-      this.callsInProgress = callsInProgress;
-      this.callsFailed = callsFailed;
-    }
-  }
-
-  static final class ClientLoadCounter {
-
-    private final AtomicLong callsInProgress = new AtomicLong();
-    private final AtomicLong callsFinished = new AtomicLong();
-    private final AtomicLong callsFailed = new AtomicLong();
-    private boolean active = true;
-
-    ClientLoadCounter() {
-    }
-
-    @VisibleForTesting
-    ClientLoadCounter(long callsInProgress, long callsFinished, long callsFailed) {
-      this.callsInProgress.set(callsInProgress);
-      this.callsFinished.set(callsFinished);
-      this.callsFailed.set(callsFailed);
-    }
-
-    /**
-     * Generate a query count snapshot and reset counts for next snapshot.
-     */
-    ClientLoadSnapshot snapshot() {
-      long numFailed = callsFailed.getAndSet(0);
-      return new ClientLoadSnapshot(
-          callsFinished.getAndSet(0) - numFailed,
-          callsInProgress.get(),
-          numFailed);
-    }
-
-    boolean isActive() {
-      return active;
-    }
-
-    void setActive(boolean value) {
-      active = value;
-    }
   }
 
   private class StreamTracer extends ForwardingClientStreamTracer {
@@ -118,10 +62,10 @@ final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
     @Override
     public void streamClosed(Status status) {
-      counter.callsFinished.getAndIncrement();
-      counter.callsInProgress.getAndDecrement();
+      counter.incrementCallsFinished();
+      counter.decrementCallsInProgress();
       if (!status.isOk()) {
-        counter.callsFailed.getAndIncrement();
+        counter.incrementCallsFailed();
       }
       delegate().streamClosed(status);
     }

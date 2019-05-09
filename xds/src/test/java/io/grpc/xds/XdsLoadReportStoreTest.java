@@ -33,7 +33,6 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
