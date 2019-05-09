@@ -1450,7 +1450,7 @@ public abstract class AbstractInteropTest {
             Context.ROOT,
             tagger
                 .emptyBuilder()
-                .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
                 .build());
     ctx = ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
