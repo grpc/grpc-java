@@ -189,10 +189,13 @@ public class TestUtils {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     ks.load(null, null);
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
-    try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(certChainFile))) {
+    BufferedInputStream in = new BufferedInputStream(new FileInputStream(certChainFile));
+    try {
       X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
       X500Principal principal = cert.getSubjectX500Principal();
       ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    } finally {
+      in.close();
     }
 
     // Set up trust manager factory to use our key store.
