@@ -84,9 +84,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
-  private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
-      NameResolverRegistry.getDefaultRegistry().asFactory();
-
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
 
@@ -99,9 +96,10 @@ public abstract class AbstractManagedChannelImplBuilder
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
+  final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
   // Access via getter, which may perform authority override as needed
-  private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+  private NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
 
@@ -238,7 +236,7 @@ public abstract class AbstractManagedChannelImplBuilder
     if (resolverFactory != null) {
       this.nameResolverFactory = resolverFactory;
     } else {
-      this.nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+      this.nameResolverFactory = nameResolverRegistry.asFactory();
     }
     return thisT();
   }

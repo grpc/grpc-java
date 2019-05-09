@@ -93,6 +93,7 @@ import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ProxiedSocketAddress;
 import io.grpc.ProxyDetector;
 import io.grpc.SecurityLevel;
@@ -1600,6 +1601,26 @@ public class ManagedChannelImplTest {
     } catch (UnsupportedOperationException e) {
       // exepcted
     }
+  }
+
+  @Test
+  public void lbHelper_getNameResolverArgs() {
+    createChannel();
+
+    NameResolver.Args args = helper.getNameResolverArgs();
+    assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
+    assertThat(args.getProxyDetector()).isSameInstanceAs(GrpcUtil.DEFAULT_PROXY_DETECTOR);
+    assertThat(args.getSynchronizationContext())
+        .isSameInstanceAs(helper.getSynchronizationContext());
+    assertThat(args.getServiceConfigParser()).isNotNull();
+  }
+
+  @Test
+  public void lbHelper_getNameResolverRegistry() {
+    createChannel();
+
+    assertThat(helper.getNameResolverRegistry())
+        .isSameInstanceAs(NameResolverRegistry.getDefaultRegistry());
   }
 
   @Test
