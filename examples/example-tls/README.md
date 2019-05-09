@@ -42,8 +42,8 @@ You can use the following script to generate self-signed certificates for grpc-j
 ```bash
 mkdir -p /tmp/sslcert
 pushd /tmp/sslcert
-# Changes these CN's to match your hosts in your environment if needed.
-SERVER_CA_CN=localhost-ca # must be different than SERVER_CN
+# Change these CN's to match your hosts in your environment if needed.
+SERVER_CA_CN=localhost-ca
 SERVER_CN=localhost
 CLIENT_CN=localhost # Used when doing mutual TLS
 
