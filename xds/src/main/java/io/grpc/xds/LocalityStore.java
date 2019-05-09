@@ -141,8 +141,7 @@ interface LocalityStore {
       for (Locality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
           // No graceful transition until a high-level lb graceful transition design is available.
-          localityMap.get(oldLocality).shutdown();
-          localityMap.remove(oldLocality);
+          localityMap.remove(oldLocality).shutdown();
           if (localityMap.isEmpty()) {
             // down-size the map
             localityMap = new HashMap<>();
