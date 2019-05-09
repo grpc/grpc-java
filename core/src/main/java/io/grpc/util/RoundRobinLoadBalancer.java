@@ -60,11 +60,11 @@ import javax.annotation.Nullable;
  * A {@link LoadBalancer} that provides round-robin load-balancing over the {@link
  * EquivalentAddressGroup}s from the {@link NameResolver}.
  */
-final class RoundRobinLoadBalancer extends LoadBalancer implements SubchannelStateListener {
+final class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
-  // package-private to avoid synthetic access
+  // package-private to avoid synthetic accessnnnnnnnn
   static final Attributes.Key<Ref<Subchannel>> STICKY_REF = Attributes.Key.create("sticky-ref");
 
   private final Helper helper;
@@ -126,13 +126,18 @@ final class RoundRobinLoadBalancer extends LoadBalancer implements SubchannelSta
         subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<>(null));
       }
 
-      Subchannel subchannel = checkNotNull(
+      final Subchannel subchannel = checkNotNull(
           helper.createSubchannel(CreateSubchannelArgs.newBuilder()
               .setAddresses(addressGroup)
               .setAttributes(subchannelAttrs.build())
-              .setStateListener(this)
               .build()),
           "subchannel");
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo state) {
+            processSubchannelState(subchannel, state);
+          }
+        });
       if (stickyRef != null) {
         stickyRef.value = subchannel;
       }
@@ -162,8 +167,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer implements SubchannelSta
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
   }
 
-  @Override
-  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(subchannel.getAddresses()) != subchannel) {
       return;
     }

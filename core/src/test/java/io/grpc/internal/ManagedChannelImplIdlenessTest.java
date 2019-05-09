@@ -510,12 +510,12 @@ public class ManagedChannelImplIdlenessTest {
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(
-                helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-                    .setAddresses(addressGroup)
-                    .setAttributes(attrs)
-                    .setStateListener(subchannelStateListener)
-                    .build()));
+            Subchannel s = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                .setAddresses(addressGroup)
+                .setAttributes(attrs)
+                .build());
+            s.start(subchannelStateListener);
+            resultCapture.set(s);
           }
         });
     return resultCapture.get();

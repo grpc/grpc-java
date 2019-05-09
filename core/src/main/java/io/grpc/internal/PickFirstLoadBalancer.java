@@ -34,7 +34,7 @@ import java.util.List;
  * NameResolver}.  The channel's default behavior is used, which is walking down the address list
  * and sticking to the first that works.
  */
-final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStateListener {
+final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
 
@@ -46,11 +46,17 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (subchannel == null) {
-      subchannel = helper.createSubchannel(
+      final Subchannel subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
               .setAddresses(servers)
-              .setStateListener(this)
               .build());
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+            processSubchannelState(subchannel, stateInfo);
+          }
+        });
+      this.subchannel = subchannel;
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
@@ -72,10 +78,9 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
     helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
-  @Override
-  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState currentState = stateInfo.getState();
-    if (subchannel != PickFirstLoadBalancer.this.subchannel || currentState == SHUTDOWN) {
+    if (currentState == SHUTDOWN) {
       return;
     }
 

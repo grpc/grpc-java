@@ -707,7 +707,6 @@ public class AutoConfiguredLoadBalancerFactoryTest {
         return new TestSubchannel(CreateSubchannelArgs.newBuilder()
             .setAddresses(addrs)
             .setAttributes(attrs)
-            .setStateListener(mock(SubchannelStateListener.class))
             .build());
       }
 
@@ -872,6 +871,10 @@ public class AutoConfiguredLoadBalancerFactoryTest {
 
     final List<EquivalentAddressGroup> addrs;
     final Attributes attrs;
+
+    @Override
+    public void start(SubchannelStateListener listener) {
+    }
 
     @Override
     public void shutdown() {

@@ -405,7 +405,6 @@ public class ManagedChannelImplTest {
     try {
       helper.createSubchannel(CreateSubchannelArgs.newBuilder()
           .setAddresses(addressGroup)
-          .setStateListener(subchannelStateListener)
           .build());
       fail("Should throw");
     } catch (IllegalStateException e) {
@@ -478,8 +477,7 @@ public class ManagedChannelImplTest {
     // subchannels are not root channels
     assertNull(channelz.getRootChannel(subchannel.getInternalSubchannel().getLogId().getId()));
     assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
-    assertThat(getStats(channel).subchannels)
-        .containsExactly(subchannel.getInternalSubchannel());
+    assertThat(getStats(channel).subchannels).containsExactly(subchannel.getInternalSubchannel());
 
     subchannel.requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
@@ -514,8 +512,7 @@ public class ManagedChannelImplTest {
 
     AbstractSubchannel subchannel = (AbstractSubchannel) oob.getSubchannel();
     assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
-    assertThat(getStats(oob).subchannels)
-        .containsExactly(subchannel.getInternalSubchannel());
+    assertThat(getStats(oob).subchannels).containsExactly(subchannel.getInternalSubchannel());
     assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
 
     oob.getSubchannel().requestConnection();
@@ -723,13 +720,11 @@ public class ManagedChannelImplTest {
     // LoadBalancer receives all sorts of callbacks
     transportInfo1.listener.transportReady();
 
-    verify(stateListener1, times(2))
-        .onSubchannelState(same(subchannel1), stateInfoCaptor.capture());
+    verify(stateListener1, times(2)).onSubchannelState(stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getAllValues().get(0).getState());
     assertSame(READY, stateInfoCaptor.getAllValues().get(1).getState());
 
-    verify(stateListener2)
-        .onSubchannelState(same(subchannel2), stateInfoCaptor.capture());
+    verify(stateListener2).onSubchannelState(stateInfoCaptor.capture());
     assertSame(CONNECTING, stateInfoCaptor.getValue().getState());
 
     resolver.listener.onError(resolutionError);
@@ -1043,8 +1038,7 @@ public class ManagedChannelImplTest {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(subchannelStateListener).onSubchannelState(stateInfoCaptor.capture());
     assertEquals(CONNECTING, stateInfoCaptor.getValue().getState());
 
     // The channel will starts with the first address (badAddress)
@@ -1070,8 +1064,7 @@ public class ManagedChannelImplTest {
         .thenReturn(mock(ClientStream.class));
 
     goodTransportInfo.listener.transportReady();
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(subchannelStateListener).onSubchannelState(stateInfoCaptor.capture());
     assertEquals(READY, stateInfoCaptor.getValue().getState());
 
     // A typical LoadBalancer will call this once the subchannel becomes READY
@@ -1195,8 +1188,7 @@ public class ManagedChannelImplTest {
         .thenReturn(PickResult.withSubchannel(subchannel));
     subchannel.requestConnection();
 
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(subchannelStateListener).onSubchannelState(stateInfoCaptor.capture());
     assertEquals(CONNECTING, stateInfoCaptor.getValue().getState());
 
     // Connecting to server1, which will fail
@@ -1219,8 +1211,7 @@ public class ManagedChannelImplTest {
 
     // ... which makes the subchannel enter TRANSIENT_FAILURE. The last error Status is propagated
     // to LoadBalancer.
-    inOrder.verify(subchannelStateListener)
-        .onSubchannelState(same(subchannel), stateInfoCaptor.capture());
+    inOrder.verify(subchannelStateListener).onSubchannelState(stateInfoCaptor.capture());
     assertEquals(TRANSIENT_FAILURE, stateInfoCaptor.getValue().getState());
     assertSame(server2Error, stateInfoCaptor.getValue().getStatus());
 
@@ -2545,7 +2536,7 @@ public class ManagedChannelImplTest {
         (AbstractSubchannel) createSubchannelSafely(
             helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     assertThat(getStats(channel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
-        .setDescription("Child Subchannel created")
+        .setDescription("Child Subchannel started")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
         .setSubchannelRef(subchannel.getInternalSubchannel())
@@ -3968,11 +3959,12 @@ public class ManagedChannelImplTest {
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(helper.createSubchannel(CreateSubchannelArgs.newBuilder()
-                    .setAddresses(addressGroup)
-                    .setAttributes(attrs)
-                    .setStateListener(stateListener)
-                    .build()));
+            Subchannel s = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                .setAddresses(addressGroup)
+                .setAttributes(attrs)
+                .build());
+            s.start(stateListener);
+            resultCapture.set(s);
           }
         });
     return resultCapture.get();
