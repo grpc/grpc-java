@@ -29,7 +29,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
 @NotThreadSafe
-class ClientLoadCounter {
+final class ClientLoadCounter {
   private static final int THREAD_BALANCING_FACTOR = 64;
   private final AtomicLong callsInProgress = new AtomicLong();
   private final AtomicLong callsFinished = new AtomicLong();

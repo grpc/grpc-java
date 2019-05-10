@@ -31,16 +31,21 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
+import io.grpc.Status;
+import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
  */
+@NotThreadSafe
 final class XdsLoadReportStore {
 
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
@@ -186,8 +191,47 @@ final class XdsLoadReportStore {
     counter.getAndIncrement();
   }
 
+  /**
+   * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
+   * {@link ClientLoadCounter} object.
+   */
+  @ThreadSafe
+  static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+
+    private final ClientStreamTracer.Factory delegate;
+    private final ClientLoadCounter counter;
+
+    XdsClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
+      this.counter = checkNotNull(counter, "counter");
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+      counter.incrementCallsInProgress();
+      final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
+      return new ForwardingClientStreamTracer() {
+        @Override
+        protected ClientStreamTracer delegate() {
+          return delegateTracer;
+        }
+
+        @Override
+        public void streamClosed(Status status) {
+          counter.incrementCallsFinished();
+          counter.decrementCallsInProgress();
+          if (!status.isOk()) {
+            counter.incrementCallsFailed();
+          }
+          delegate().streamClosed(status);
+        }
+      };
+    }
+  }
+
   // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
   // interfaces.
+  @ThreadSafe
   static class MetricListener {
     private final ClientLoadCounter counter;
 
