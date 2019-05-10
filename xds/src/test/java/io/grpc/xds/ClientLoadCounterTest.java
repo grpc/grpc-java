@@ -77,14 +77,12 @@ public class ClientLoadCounterTest {
     assertThat(snapshot.callsInProgress).isEqualTo(numInProgressCalls);
     assertThat(snapshot.callsFailed).isEqualTo(numFailedCalls);
     assertThat(snapshot.metricValues.get("test-metric-1").numReports).isEqualTo(4);
-    assertThat(Double.doubleToLongBits(snapshot.metricValues.get("test-metric-1").totalValue))
-        .isEqualTo(Double.doubleToLongBits(0.75 + 0.543 + 4.412 + 100.353));
+    assertThat(snapshot.metricValues.get("test-metric-1").totalValue)
+        .isEqualTo(0.75 + 0.543 + 4.412 + 100.353);
     assertThat(snapshot.metricValues.get("test-metric-2").numReports).isEqualTo(1);
-    assertThat(Double.doubleToLongBits(snapshot.metricValues.get("test-metric-2").totalValue))
-        .isEqualTo(Double.doubleToLongBits(0.342));
+    assertThat(snapshot.metricValues.get("test-metric-2").totalValue).isEqualTo(0.342);
     assertThat(snapshot.metricValues.get("test-metric-3").numReports).isEqualTo(1);
-    assertThat(Double.doubleToLongBits(snapshot.metricValues.get("test-metric-3").totalValue))
-        .isEqualTo(Double.doubleToLongBits(0.512));
+    assertThat(snapshot.metricValues.get("test-metric-3").totalValue).isEqualTo(0.512);
 
     // Snapshot only accounts for stats happening after previous snapshot.
     snapshot = counter.snapshot();
