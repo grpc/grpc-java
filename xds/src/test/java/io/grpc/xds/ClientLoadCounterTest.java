@@ -22,7 +22,11 @@ import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+/** Unit tests for {@link ClientLoadCounter}. */
+@RunWith(JUnit4.class)
 public class ClientLoadCounterTest {
   private long numInProgressCalls;
   private long numFinishedCalls;
