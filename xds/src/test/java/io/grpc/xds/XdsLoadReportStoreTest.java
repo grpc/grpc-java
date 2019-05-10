@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.Nullable;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -76,6 +77,64 @@ public class XdsLoadReportStoreTest {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
     loadStore = new XdsLoadReportStore(SERVICE_NAME, localityLoadCounters, dropCounters);
+  }
+
+  @Test
+  public void addAndGetAndRemoveLocality() {
+    Locality locality1 =
+        Locality.newBuilder()
+            .setRegion("test_region1")
+            .setZone("test_zone")
+            .setSubZone("test_subzone")
+            .build();
+    loadStore.addLocality(locality1);
+    assertThat(localityLoadCounters).containsKey(locality1);
+
+    // Adding the same locality counter again causes an exception.
+    try {
+      loadStore.addLocality(locality1);
+      Assert.fail();
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("An active ClientLoadCounter for locality " + locality1 + " already exists");
+    }
+
+    assertThat(loadStore.getLocalityCounter(locality1))
+        .isSameInstanceAs(localityLoadCounters.get(locality1));
+
+    Locality locality2 =
+        Locality.newBuilder()
+            .setRegion("test_region2")
+            .setZone("test_zone")
+            .setSubZone("test_subzone")
+            .build();
+    assertThat(loadStore.getLocalityCounter(locality2)).isNull();
+
+    // Removing an non-existing locality counter causes an exception.
+    try {
+      loadStore.removeLocality(locality2);
+      Assert.fail();
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("No active ClientLoadCounter for locality " + locality2 + " exists");
+    }
+
+    // Removing the locality counter only mark it as inactive, but not throw it away.
+    loadStore.removeLocality(locality1);
+    assertThat(localityLoadCounters.get(locality1).isActive()).isFalse();
+
+    // Removing an inactive locality counter causes an exception.
+    try {
+      loadStore.removeLocality(locality1);
+      Assert.fail();
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("No active ClientLoadCounter for locality " + locality1 + " exists");
+    }
+
+    // Adding it back simply mark it as active again.
+    loadStore.addLocality(locality1);
+    assertThat(localityLoadCounters.get(locality1).isActive()).isTrue();
   }
 
   @Test
