@@ -70,4 +70,25 @@ public class ClientLoadCounterTest {
     assertThat(snapshot.callsFailed).isEqualTo(0);
     assertThat(snapshot.metricValues).isEmpty();
   }
+
+  @Test
+  public void normalCountingOperations() {
+    ClientLoadSnapshot preSnapshot = counter.snapshot();
+    counter.incrementCallsInProgress();
+    ClientLoadSnapshot afterSnapshot = counter.snapshot();
+    assertThat(afterSnapshot.callsInProgress).isEqualTo(preSnapshot.callsInProgress + 1);
+    counter.decrementCallsInProgress();
+    afterSnapshot = counter.snapshot();
+    assertThat(afterSnapshot.callsInProgress).isEqualTo(preSnapshot.callsInProgress);
+
+    counter.incrementCallsFinished();
+    afterSnapshot = counter.snapshot();
+    assertThat(afterSnapshot.callsSucceed).isEqualTo(1);
+
+    counter.incrementCallsFinished();
+    counter.incrementCallsFailed();
+    afterSnapshot = counter.snapshot();
+    assertThat(afterSnapshot.callsFailed).isEqualTo(1);
+    assertThat(afterSnapshot.callsSucceed).isEqualTo(0);
+  }
 }
