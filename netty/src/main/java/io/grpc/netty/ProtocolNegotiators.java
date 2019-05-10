@@ -89,20 +89,20 @@ final class ProtocolNegotiators {
   private static ChannelLogger negotiationLogger(AttributeMap attributeMap) {
     Attribute<ChannelLogger> attr = attributeMap.attr(NettyClientTransport.LOGGER_KEY);
     final ChannelLogger channelLogger = attr.get();
-    if (channelLogger == null) {
-      // This is only for tests where there may not be a valid logger.
-      final class NoopChannelLogger extends ChannelLogger {
-
-        @Override
-        public void log(ChannelLogLevel level, String message) {}
-
-        @Override
-        public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
-      }
-
-      return new NoopChannelLogger();
+    if (channelLogger != null) {
+      return  channelLogger;
     }
-    return channelLogger;
+    // This is only for tests where there may not be a valid logger.
+    final class NoopChannelLogger extends ChannelLogger {
+
+      @Override
+      public void log(ChannelLogLevel level, String message) {}
+
+      @Override
+      public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+    }
+
+    return new NoopChannelLogger();
   }
 
   /**
