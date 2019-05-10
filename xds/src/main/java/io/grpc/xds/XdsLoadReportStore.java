@@ -29,7 +29,6 @@ import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
@@ -48,16 +47,6 @@ import javax.annotation.concurrent.ThreadSafe;
 @NotThreadSafe
 final class XdsLoadReportStore {
 
-  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
-      new ClientStreamTracer() {
-      };
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return NOOP_CLIENT_STREAM_TRACER;
-        }
-      };
   private final String clusterName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
@@ -155,25 +144,6 @@ final class XdsLoadReportStore {
    */
   ClientLoadCounter getLocalityCounter(final Locality locality) {
     return localityLoadCounters.get(locality);
-  }
-
-  /**
-   * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
-   */
-  PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    if (counter == null) {
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 
   /**

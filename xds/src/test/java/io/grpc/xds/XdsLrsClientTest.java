@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -43,8 +44,12 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -94,6 +99,14 @@ public class XdsLrsClientTest {
           return command.toString().contains(XdsLrsClient.LrsRpcRetryTask.class.getSimpleName());
         }
       };
+  private static final Locality TEST_LOCALITY =
+      Locality.newBuilder()
+          .setRegion("test_region")
+          .setZone("test_zone")
+          .setSubZone("test_subzone")
+          .build();
+  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
+      ClientStreamTracer.StreamInfo.newBuilder().build();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -139,6 +152,10 @@ public class XdsLrsClientTest {
   private XdsLrsClient lrsClient;
   @Mock
   private BackoffPolicy backoffPolicy2;
+  @Mock
+  private Subchannel mockSubchannel;
+  private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  private ConcurrentMap<String, AtomicLong> dropCounters;
 
   private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
@@ -191,8 +208,12 @@ public class XdsLrsClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     logs.clear();
-    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
-        backoffPolicyProvider, new XdsLoadReportStore(SERVICE_AUTHORITY));
+    localityLoadCounters = new ConcurrentHashMap<>();
+    dropCounters = new ConcurrentHashMap<>();
+    lrsClient =
+        new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
+            backoffPolicyProvider,
+            new XdsLoadReportStore(SERVICE_AUTHORITY, localityLoadCounters, dropCounters));
     lrsClient.startLoadReporting();
   }
 
@@ -231,6 +252,47 @@ public class XdsLrsClientTest {
         new HashSet<>(stats2.getUpstreamLocalityStatsList()));
     assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
         new HashSet<>(stats2.getDroppedRequestsList()));
+  }
+
+  @Test
+  public void loadNotRecordedForUntrackedLocality() {
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
+    // If the per-locality ClientLoadCounter does not exist, nothing should happen.
+    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
+    assertThat(localityLoadCounters).hasSize(0);
+    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
+  public void invalidPickResultNotIntercepted() {
+    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
+    PickResult emptyResult = PickResult.withNoResult();
+    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
+    PickResult interceptedErrorResult = lrsClient.interceptPickResult(errorResult, TEST_LOCALITY);
+    PickResult interceptedEmptyResult = lrsClient.interceptPickResult(emptyResult, TEST_LOCALITY);
+    PickResult interceptedDroppedResult =
+        lrsClient.interceptPickResult(droppedResult, TEST_LOCALITY);
+    assertThat(localityLoadCounters).hasSize(0);
+    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedEmptyResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
+  public void interceptPreservesOriginStreamTracer() {
+    localityLoadCounters.put(TEST_LOCALITY, new ClientLoadCounter());
+    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    when(mockFactory
+        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+        .thenReturn(mockTracer);
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
+    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
+    Metadata metadata = new Metadata();
+    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
+        .streamClosed(Status.OK);
+    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
+    verify(mockTracer).streamClosed(Status.OK);
   }
 
   @Test
@@ -288,37 +350,19 @@ public class XdsLrsClientTest {
 
   @Test
   public void reportRecordedLoadData() {
-    lrsClient.stopLoadReporting();
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
-    lrsRequestObservers.clear();
-
-    ConcurrentMap<Locality, ClientLoadCounter> localityCounters =
-        new ConcurrentHashMap<>();
-    ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
-    XdsLoadReportStore loadReportStore =
-        new XdsLoadReportStore(SERVICE_AUTHORITY, localityCounters, dropCounters);
-    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
-        backoffPolicyProvider, loadReportStore);
-    lrsClient.startLoadReporting();
-
-    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
     InOrder inOrder = inOrder(requestObserver);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
-    Locality locality = Locality.newBuilder()
-        .setRegion("test_region")
-        .setZone("test_zone")
-        .setSubZone("test_subzone")
-        .build();
     Random rand = new Random();
     // Integer range is large enough for testing.
     long callsInProgress1 = rand.nextInt(Integer.MAX_VALUE);
     long callsFinished1 = rand.nextInt(Integer.MAX_VALUE);
     long callsFailed1 = callsFinished1 - rand.nextInt((int) callsFinished1);
-    localityCounters.put(locality,
+    localityLoadCounters.put(TEST_LOCALITY,
         new ClientLoadCounter(callsInProgress1, callsFinished1, callsFailed1));
 
     long numLbDrops = rand.nextLong();
@@ -332,7 +376,7 @@ public class XdsLrsClientTest {
         .setClusterName(SERVICE_AUTHORITY)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
+            .setLocality(TEST_LOCALITY)
             .setTotalRequestsInProgress(callsInProgress1)
             .setTotalSuccessfulRequests(callsFinished1 - callsFailed1)
             .setTotalErrorRequests(callsFailed1))
@@ -351,7 +395,7 @@ public class XdsLrsClientTest {
         .setClusterName(SERVICE_AUTHORITY)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
+            .setLocality(TEST_LOCALITY)
             .setTotalRequestsInProgress(callsInProgress1))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")

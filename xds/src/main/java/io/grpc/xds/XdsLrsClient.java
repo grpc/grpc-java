@@ -33,15 +33,19 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.XdsLoadReportStore.XdsClientLoadRecorder;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -60,6 +64,14 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
+  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+      new ClientStreamTracer.Factory() {
+        @Override
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+          return new ClientStreamTracer() {};
+        }
+      };
+
   private final String serviceName;
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
@@ -145,7 +157,19 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   @Override
   public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
     checkState(started, "load reporting must be started first");
-    return loadReportStore.interceptPickResult(pickResult, locality);
+    if (!pickResult.getStatus().isOk()) {
+      return pickResult;
+    }
+    ClientLoadCounter counter = loadReportStore.getLocalityCounter(locality);
+    if (counter == null) {
+      return pickResult;
+    }
+    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
+    if (originFactory == null) {
+      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+    }
+    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
+    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 
   @VisibleForTesting
