@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -27,7 +26,9 @@ import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
+import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
@@ -35,8 +36,10 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -140,7 +143,7 @@ public class XdsLoadReportStoreTest {
             .newClientStreamTracer(STREAM_INFO, new Metadata());
     Duration interval = Duration.newBuilder().setNanos(342).build();
     ClusterStats expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 1)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 1, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // Make another load report should not reset count for calls in progress.
@@ -148,12 +151,12 @@ public class XdsLoadReportStoreTest {
 
     tracer.streamClosed(Status.OK);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 1, 0, 0)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 1, 0, 0, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // Make another load report should reset finished calls count for calls finished.
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     // PickResult within the same locality should aggregate to the same counter.
@@ -169,11 +172,11 @@ public class XdsLoadReportStoreTest {
         .newClientStreamTracer(STREAM_INFO, new Metadata())
         .streamClosed(Status.CANCELLED);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 2, 0)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 2, 0, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(locality1, 0, 0, 0, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     Locality locality2 =
@@ -191,8 +194,8 @@ public class XdsLoadReportStoreTest {
         .getStreamTracerFactory()
         .newClientStreamTracer(STREAM_INFO, new Metadata());
     List<UpstreamLocalityStats> upstreamLocalityStatsList =
-        Arrays.asList(buildUpstreamLocalityStats(locality1, 0, 0, 0),
-            buildUpstreamLocalityStats(locality2, 0, 0, 1));
+        Arrays.asList(buildUpstreamLocalityStats(locality1, 0, 0, 0, null),
+            buildUpstreamLocalityStats(locality2, 0, 0, 1, null));
     expectedLoadReport = buildClusterStats(interval, upstreamLocalityStatsList, null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
   }
@@ -209,19 +212,19 @@ public class XdsLoadReportStoreTest {
 
     Duration interval = Duration.newBuilder().setNanos(342).build();
     ClusterStats expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
     // Remote balancer instructs to remove the locality while client has in-progress calls
     // to backends in the locality, the XdsClientLoadStore continues tracking its load stats.
     loadStore.removeLocality(TEST_LOCALITY);
     assertThat(localityLoadCounters).containsKey(TEST_LOCALITY);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 1, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
 
     tracer.streamClosed(Status.OK);
     expectedLoadReport = buildClusterStats(interval,
-        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 1, 0, 0)), null);
+        Collections.singletonList(buildUpstreamLocalityStats(TEST_LOCALITY, 1, 0, 0, null)), null);
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
     assertThat(localityLoadCounters).doesNotContainKey(TEST_LOCALITY);
   }
@@ -251,18 +254,76 @@ public class XdsLoadReportStoreTest {
                 .build()
         ));
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
-    assertEquals(0, dropCounters.get("lb").get());
-    assertEquals(0, dropCounters.get("throttle").get());
+    assertThat(dropCounters.get("lb").get()).isEqualTo(0);
+    assertThat(dropCounters.get("throttle").get()).isEqualTo(0);
   }
 
-  private UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality, long callsSucceed,
-      long callsFailed, long callsInProgress) {
-    return UpstreamLocalityStats.newBuilder()
-        .setLocality(locality)
-        .setTotalSuccessfulRequests(callsSucceed)
-        .setTotalErrorRequests(callsFailed)
-        .setTotalRequestsInProgress(callsInProgress)
-        .build();
+  @Test
+  public void recordingMetricAggregation() {
+    loadStore.addLocality(TEST_LOCALITY);
+    XdsLoadReportStore.MetricListener listener =
+        new XdsLoadReportStore.MetricListener(loadStore.getLocalityCounter(TEST_LOCALITY));
+    Random rand = new Random();
+    double cpuUtilization = rand.nextDouble();
+    double memUtilization = rand.nextDouble();
+    double namedCostOrUtil1 = rand.nextDouble() * rand.nextInt(Integer.MAX_VALUE);
+    double namedCostOrUtil2 = rand.nextDouble() * rand.nextInt(Integer.MAX_VALUE);
+    OrcaLoadReport report =
+        OrcaLoadReport.newBuilder()
+            .setCpuUtilization(cpuUtilization)
+            .setMemUtilization(memUtilization)
+            .putRequestCostOrUtilization("named-cost-or-utilization-1", namedCostOrUtil1)
+            .putRequestCostOrUtilization("named-cost-or-utilization-2", namedCostOrUtil2)
+            .build();
+    listener.onLoadReport(report);
+
+    listener.onLoadReport(OrcaLoadReport.getDefaultInstance());
+
+    Duration interval = Duration.newBuilder().setNanos(342).build();
+    ClusterStats expectedLoadReport = buildClusterStats(interval,
+        Arrays.asList(buildUpstreamLocalityStats(TEST_LOCALITY, 0, 0, 0,
+            Arrays.asList(
+                EndpointLoadMetricStats.newBuilder()
+                    .setMetricName("cpu_utilization")
+                    .setNumRequestsFinishedWithMetric(2)
+                    .setTotalMetricValue(cpuUtilization)
+                    .build(),
+                EndpointLoadMetricStats.newBuilder()
+                    .setMetricName("mem_utilization")
+                    .setNumRequestsFinishedWithMetric(2)
+                    .setTotalMetricValue(memUtilization)
+                    .build(),
+                EndpointLoadMetricStats.newBuilder()
+                    .setMetricName("named-cost-or-utilization-1")
+                    .setNumRequestsFinishedWithMetric(1)
+                    .setTotalMetricValue(namedCostOrUtil1)
+                    .build(),
+                EndpointLoadMetricStats.newBuilder()
+                    .setMetricName("named-cost-or-utilization-2")
+                    .setNumRequestsFinishedWithMetric(1)
+                    .setTotalMetricValue(namedCostOrUtil2)
+                    .build()
+            ))
+        ),
+        null);
+    assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
+  }
+
+  private UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
+      long callsSucceed,
+      long callsFailed,
+      long callsInProgress,
+      @Nullable List<EndpointLoadMetricStats> metrics) {
+    UpstreamLocalityStats.Builder builder =
+        UpstreamLocalityStats.newBuilder()
+            .setLocality(locality)
+            .setTotalSuccessfulRequests(callsSucceed)
+            .setTotalErrorRequests(callsFailed)
+            .setTotalRequestsInProgress(callsInProgress);
+    if (metrics != null) {
+      builder.addAllLoadMetricStats(metrics);
+    }
+    return builder.build();
   }
 
   private ClusterStats buildClusterStats(Duration interval,
@@ -285,14 +346,39 @@ public class XdsLoadReportStoreTest {
     return clusterStatsBuilder.build();
   }
 
-  private void assertClusterStatsEqual(ClusterStats stats1, ClusterStats stats2) {
-    assertEquals(stats1.getClusterName(), stats2.getClusterName());
-    assertEquals(stats1.getLoadReportInterval(), stats2.getLoadReportInterval());
-    assertEquals(stats1.getUpstreamLocalityStatsCount(), stats2.getUpstreamLocalityStatsCount());
-    assertEquals(stats1.getDroppedRequestsCount(), stats2.getDroppedRequestsCount());
-    assertEquals(new HashSet<>(stats1.getUpstreamLocalityStatsList()),
-        new HashSet<>(stats2.getUpstreamLocalityStatsList()));
-    assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
-        new HashSet<>(stats2.getDroppedRequestsList()));
+  private void assertClusterStatsEqual(ClusterStats expected, ClusterStats actual) {
+    assertThat(actual.getClusterName()).isEqualTo(expected.getClusterName());
+    assertThat(actual.getLoadReportInterval()).isEqualTo(expected.getLoadReportInterval());
+    assertThat(actual.getDroppedRequestsCount()).isEqualTo(expected.getDroppedRequestsCount());
+    assertThat(new HashSet<>(actual.getDroppedRequestsList()))
+        .isEqualTo(new HashSet<>(expected.getDroppedRequestsList()));
+    assertUpstreamLocalityStatsListsEqual(actual.getUpstreamLocalityStatsList(),
+        expected.getUpstreamLocalityStatsList());
+  }
+
+  private void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
+      List<UpstreamLocalityStats> actual) {
+    assertThat(actual.size()).isEqualTo(expected.size());
+    Map<Locality, UpstreamLocalityStats> expectedLocalityStats = new HashMap<>();
+    for (UpstreamLocalityStats stats : expected) {
+      expectedLocalityStats.put(stats.getLocality(), stats);
+    }
+    for (UpstreamLocalityStats stats : actual) {
+      UpstreamLocalityStats expectedStats = expectedLocalityStats.get(stats.getLocality());
+      assertThat(expectedStats).isNotNull();
+      assertUpstreamLocalityStatsEqual(stats, expectedStats);
+    }
+  }
+
+  private void assertUpstreamLocalityStatsEqual(UpstreamLocalityStats expected,
+      UpstreamLocalityStats actual) {
+    assertThat(actual.getLocality()).isEqualTo(expected.getLocality());
+    assertThat(actual.getTotalSuccessfulRequests())
+        .isEqualTo(expected.getTotalSuccessfulRequests());
+    assertThat(actual.getTotalRequestsInProgress())
+        .isEqualTo(expected.getTotalRequestsInProgress());
+    assertThat(actual.getTotalErrorRequests()).isEqualTo(expected.getTotalErrorRequests());
+    assertThat(new HashSet<>(actual.getLoadMetricStatsList()))
+        .isEqualTo(new HashSet<>(expected.getLoadMetricStatsList()));
   }
 }

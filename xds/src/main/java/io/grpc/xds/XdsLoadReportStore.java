@@ -24,12 +24,15 @@ import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
+import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.MetricValue;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -70,22 +73,30 @@ final class XdsLoadReportStore {
   }
 
   /**
-   * Generates a {@link ClusterStats} containing load stats in locality granularity.
+   * Generates a {@link ClusterStats} containing client side load stats and backend metrics
+   * (if any) in locality granularity.
    * This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
         .setLoadReportInterval(interval);
-    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters
-        .entrySet()) {
+    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
-      statsBuilder
-          .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
-              .setLocality(entry.getKey())
-              .setTotalSuccessfulRequests(snapshot.callsSucceed)
-              .setTotalErrorRequests(snapshot.callsFailed)
-              .setTotalRequestsInProgress(snapshot.callsInProgress));
+      UpstreamLocalityStats.Builder localityStatsBuilder =
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
+      localityStatsBuilder
+          .setTotalSuccessfulRequests(snapshot.callsSucceed)
+          .setTotalErrorRequests(snapshot.callsFailed)
+          .setTotalRequestsInProgress(snapshot.callsInProgress);
+      for (Map.Entry<String, MetricValue> metric : snapshot.metricValues.entrySet()) {
+        localityStatsBuilder.addLoadMetricStats(
+            EndpointLoadMetricStats.newBuilder()
+                .setMetricName(metric.getKey())
+                .setNumRequestsFinishedWithMetric(metric.getValue().numReports)
+                .setTotalMetricValue(metric.getValue().totalValue));
+      }
+      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
       if (!entry.getValue().isActive() && snapshot.callsInProgress == 0) {
@@ -134,6 +145,14 @@ final class XdsLoadReportStore {
   }
 
   /**
+   * Returns the {@link ClientLoadCounter} instance that is responsible for aggregating load
+   * stats for the provided locality, or {@code null} if the locality is untracked.
+   */
+  ClientLoadCounter getLocalityCounter(final Locality locality) {
+    return localityLoadCounters.get(locality);
+  }
+
+  /**
    * Intercepts a in-locality PickResult with load recording {@link ClientStreamTracer.Factory}.
    */
   PickResult interceptPickResult(PickResult pickResult, Locality locality) {
@@ -165,5 +184,24 @@ final class XdsLoadReportStore {
       }
     }
     counter.getAndIncrement();
+  }
+
+  // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
+  // interfaces.
+  static class MetricListener {
+    private final ClientLoadCounter counter;
+
+    MetricListener(ClientLoadCounter counter) {
+      this.counter = checkNotNull(counter, "counter");
+    }
+
+    // TODO (chengyuanzhang): @Override
+    void onLoadReport(OrcaLoadReport report) {
+      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
+      counter.recordMetric("mem_utilization", report.getMemUtilization());
+      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
+        counter.recordMetric(entry.getKey(), entry.getValue());
+      }
+    }
   }
 }
