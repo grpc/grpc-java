@@ -53,6 +53,7 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.handler.codec.http2.StreamBufferingEncoder.Http2ChannelClosedException;
 import io.netty.util.AsciiString;
+import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.net.SocketAddress;
@@ -66,6 +67,8 @@ import javax.annotation.Nullable;
  * A Netty-based {@link ConnectionClientTransport} implementation.
  */
 class NettyClientTransport implements ConnectionClientTransport {
+  static final AttributeKey<ChannelLogger> LOGGER_KEY = AttributeKey.newInstance("channelLogger");
+
   private final InternalLogId logId;
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final SocketAddress remoteAddress;
@@ -217,6 +220,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
