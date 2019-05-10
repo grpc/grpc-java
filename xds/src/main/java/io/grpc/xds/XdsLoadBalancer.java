@@ -65,6 +65,7 @@ final class XdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError() {
+      // TODO: backoff and retry
       fallbackManager.balancerWorking = false;
       fallbackManager.maybeUseFallbackPolicy();
     }
