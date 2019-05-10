@@ -694,6 +694,10 @@ public abstract class LoadBalancer {
      * Equivalent to {@link #updateSubchannelAddresses(io.grpc.LoadBalancer.Subchannel, List)} with
      * the given single {@code EquivalentAddressGroup}.
      *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
+     *
      * @since 1.4.0
      */
     public final void updateSubchannelAddresses(
@@ -706,6 +710,10 @@ public abstract class LoadBalancer {
      * Replaces the existing addresses used with {@code subchannel}. This method is superior to
      * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
      * continue using an existing connection.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel} or {@code addrs} is empty
@@ -776,6 +784,10 @@ public abstract class LoadBalancer {
      * updateBalancingState()} has never been called, the channel will buffer all RPCs until a
      * picker is provided.
      *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
+     *
      * <p>The passed state will be the channel's new state. The SHUTDOWN state should not be passed
      * and its behavior is undefined.
      *
@@ -786,6 +798,10 @@ public abstract class LoadBalancer {
 
     /**
      * Call {@link NameResolver#refresh} on the channel's resolver.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.18.0
      */
@@ -903,12 +919,20 @@ public abstract class LoadBalancer {
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
      * be returned by the latest {@link SubchannelPicker picker}, and can be safely discarded.
      *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
+     *
      * @since 1.2.0
      */
     public abstract void shutdown();
 
     /**
      * Asks the Subchannel to create a connection (aka transport), if there isn't an active one.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.2.0
      */
@@ -918,6 +942,10 @@ public abstract class LoadBalancer {
      * Returns the addresses that this Subchannel is bound to.  This can be called only if
      * the Subchannel has only one {@link EquivalentAddressGroup}.  Under the hood it calls
      * {@link #getAllAddresses}.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @throws IllegalStateException if this subchannel has more than one EquivalentAddressGroup.
      *         Use {@link #getAllAddresses} instead
@@ -931,6 +959,10 @@ public abstract class LoadBalancer {
 
     /**
      * Returns the addresses that this Subchannel is bound to. The returned list will not be empty.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.14.0
      */

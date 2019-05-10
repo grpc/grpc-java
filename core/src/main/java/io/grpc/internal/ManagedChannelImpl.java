@@ -1048,14 +1048,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
-      try {
-        syncContext.throwIfNotInThisSynchronizationContext();
-      } catch (IllegalStateException e) {
-        logger.log(Level.WARNING,
-            "We sugguest you call createSubchannel() from SynchronizationContext."
-            + " Otherwise, it may race with handleSubchannelState()."
-            + " See https://github.com/grpc/grpc-java/issues/5015", e);
-      }
+      logWarningIfNotInSyncContext("createSubchannel()");
       checkNotNull(addressGroups, "addressGroups");
       checkNotNull(attrs, "attrs");
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
@@ -1149,6 +1142,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         final ConnectivityState newState, final SubchannelPicker newPicker) {
       checkNotNull(newState, "newState");
       checkNotNull(newPicker, "newPicker");
+      logWarningIfNotInSyncContext("updateBalancingState()");
       final class UpdateBalancingState implements Runnable {
         @Override
         public void run() {
@@ -1170,6 +1164,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void refreshNameResolution() {
+      logWarningIfNotInSyncContext("refreshNameResolution()");
       final class LoadBalancerRefreshNameResolution implements Runnable {
         @Override
         public void run() {
@@ -1185,6 +1180,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         LoadBalancer.Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
       checkArgument(subchannel instanceof SubchannelImpl,
           "subchannel must have been returned from createSubchannel");
+      logWarningIfNotInSyncContext("updateSubchannelAddresses()");
       ((SubchannelImpl) subchannel).subchannel.updateAddresses(addrs);
     }
 
@@ -1478,6 +1474,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void shutdown() {
+      logWarningIfNotInSyncContext("Subchannel.shutdown()");
       synchronized (shutdownLock) {
         if (shutdownRequested) {
           if (terminating && delayedShutdownTask != null) {
@@ -1521,11 +1518,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void requestConnection() {
+      logWarningIfNotInSyncContext("Subchannel.requestConnection()");
       subchannel.obtainActiveTransport();
     }
 
     @Override
     public List<EquivalentAddressGroup> getAllAddresses() {
+      logWarningIfNotInSyncContext("Subchannel.getAllAddresses()");
       return subchannel.getAddressGroups();
     }
 
@@ -1782,6 +1781,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
         return ConfigOrError.fromError(
             Status.UNKNOWN.withDescription("failed to parse service config").withCause(e));
       }
+    }
+  }
+
+  private void logWarningIfNotInSyncContext(String method) {
+    try {
+      syncContext.throwIfNotInThisSynchronizationContext();
+    } catch (IllegalStateException e) {
+      logger.log(Level.WARNING,
+          method + " should be called from SynchronizationContext. "
+          + "This warning will become an exception in a future release. "
+          + "See https://github.com/grpc/grpc-java/issues/5015 for more details", e);
     }
   }
 }
