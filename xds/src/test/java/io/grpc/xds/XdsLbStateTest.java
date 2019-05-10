@@ -28,6 +28,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
+import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
+import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -40,17 +44,23 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.testing.StreamRecorder;
+import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsLbState.LbEndpoint;
-import io.grpc.xds.XdsLbState.Locality;
-import io.grpc.xds.XdsLbState.LocalityInfo;
+import io.grpc.xds.XdsComms.LbEndpoint;
+import io.grpc.xds.XdsComms.Locality;
+import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,6 +80,7 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class XdsLbStateTest {
+  private static final String BALANCER_NAME = "balancerName";
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   @Mock
@@ -127,6 +138,11 @@ public class XdsLbStateTest {
         }
       });
 
+  private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
+  private StreamObserver<DiscoveryResponse> responseWriter;
+  private ManagedChannel channel;
+
+
   private static final class FakeInterLocalityPickerFactory implements PickerFactory {
     int totalReadyLocalities;
     int nextIndex;
@@ -152,7 +168,7 @@ public class XdsLbStateTest {
       = new FakeInterLocalityPickerFactory();
 
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
@@ -160,6 +176,46 @@ public class XdsLbStateTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     lbRegistry.register(childLbProvider);
     localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry);
+
+    String serverName = InProcessServerBuilder.generateName();
+
+    AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
+      @Override
+      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
+          final StreamObserver<DiscoveryResponse> responseObserver) {
+        responseWriter = responseObserver;
+
+        return new StreamObserver<DiscoveryRequest>() {
+
+          @Override
+          public void onNext(DiscoveryRequest value) {
+            streamRecorder.onNext(value);
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            streamRecorder.onError(t);
+          }
+
+          @Override
+          public void onCompleted() {
+            streamRecorder.onCompleted();
+            responseObserver.onCompleted();
+          }
+        };
+      }
+    };
+
+    cleanupRule.register(
+        InProcessServerBuilder
+            .forName(serverName)
+            .addService(serviceImpl)
+            .directExecutor()
+            .build()
+            .start());
+    channel =
+        cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
   }
 
   @Test
@@ -233,5 +289,22 @@ public class XdsLbStateTest {
     assertThat(interLocalityPickerFactory.totalReadyLocalities).isEqualTo(1);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isSameInstanceAs(pickResult1);
+  }
+
+  @Test
+  public void handleResolvedAddressGroupsThenShutdown() throws Exception {
+    localityStore = mock(LocalityStore.class);
+    XdsLbState xdsLbState =
+        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback);
+    xdsLbState.handleResolvedAddressGroups(
+        Collections.<EquivalentAddressGroup>emptyList(), Attributes.EMPTY);
+
+    assertThat(streamRecorder.firstValue().get().getTypeUrl())
+        .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
+
+    xdsLbState.shutdown();
+    verify(localityStore).reset();
+
+    channel.shutdownNow();
   }
 }

@@ -41,11 +41,12 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
-import io.grpc.xds.XdsLbState.Locality;
-import io.grpc.xds.XdsLbState.LocalityInfo;
+import io.grpc.xds.XdsComms.Locality;
+import io.grpc.xds.XdsComms.LocalityInfo;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -138,10 +139,13 @@ interface LocalityStore {
       Set<Locality> oldLocalities = localityMap.keySet();
       Set<Locality> newLocalities = localityInfoMap.keySet();
 
-      for (Locality oldLocality : oldLocalities) {
+      Iterator<Locality> iterator = oldLocalities.iterator();
+      while (iterator.hasNext()) {
+        Locality oldLocality = iterator.next();
         if (!newLocalities.contains(oldLocality)) {
           // No graceful transition until a high-level lb graceful transition design is available.
-          localityMap.remove(oldLocality).shutdown();
+          localityMap.get(oldLocality).shutdown();
+          iterator.remove();
           if (localityMap.isEmpty()) {
             // down-size the map
             localityMap = new HashMap<>();
@@ -188,21 +192,8 @@ interface LocalityStore {
         newState = aggregateState(newState, childHelper.currentChildState);
       }
 
-      childPickers = Collections.unmodifiableList(childPickers);
+      updatePicker(newState, childPickers);
 
-      SubchannelPicker newXdsPicker;
-      if (childPickers.isEmpty()) {
-        if (newState == TRANSIENT_FAILURE) {
-          newXdsPicker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
-        } else {
-          newXdsPicker = BUFFER_PICKER;
-        }
-      } else {
-        newXdsPicker = pickerFactory.picker(childPickers);
-      }
-      if (newState != null) {
-        updatePicker(newState, newXdsPicker);
-      }
     }
 
     private static final class ErrorPicker extends SubchannelPicker {
@@ -276,14 +267,25 @@ interface LocalityStore {
         }
       }
 
-      updatePicker(overallState, pickerFactory.picker(childPickers));
+      updatePicker(overallState, childPickers);
       this.overallState = overallState;
     }
 
-    private void updatePicker(ConnectivityState state, SubchannelPicker picker) {
-      helper.getChannelLogger().log(
-            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
+    private void updatePicker(ConnectivityState state,  List<WeightedChildPicker> childPickers) {
+      childPickers = Collections.unmodifiableList(childPickers);
+      SubchannelPicker picker;
+      if (childPickers.isEmpty()) {
+        if (state == TRANSIENT_FAILURE) {
+          picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
+        } else {
+          picker = BUFFER_PICKER;
+        }
+      } else {
+        picker = pickerFactory.picker(childPickers);
+      }
       if (state != null) {
+        helper.getChannelLogger().log(
+            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
         helper.updateBalancingState(state, picker);
       }
     }

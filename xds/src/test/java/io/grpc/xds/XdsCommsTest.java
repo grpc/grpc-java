@@ -50,7 +50,7 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsLbState.LocalityInfo;
+import io.grpc.xds.XdsComms.LocalityInfo;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
@@ -77,7 +77,7 @@ public class XdsCommsTest {
   @Mock
   private LocalityStore localityStore;
   @Captor
-  private ArgumentCaptor<Map<XdsLbState.Locality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<Map<XdsComms.Locality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -244,18 +244,18 @@ public class XdsCommsTest {
         .build();
     responseWriter.onNext(edsResponse);
 
-    XdsLbState.Locality locality1 = new XdsLbState.Locality(localityProto1);
+    XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
-            new XdsLbState.LbEndpoint(endpoint11),
-            new XdsLbState.LbEndpoint(endpoint12)),
+            new XdsComms.LbEndpoint(endpoint11),
+            new XdsComms.LbEndpoint(endpoint12)),
         1);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
-            new XdsLbState.LbEndpoint(endpoint21),
-            new XdsLbState.LbEndpoint(endpoint22)),
+            new XdsComms.LbEndpoint(endpoint21),
+            new XdsComms.LbEndpoint(endpoint22)),
         2);
-    XdsLbState.Locality locality2 = new XdsLbState.Locality(localityProto2);
+    XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
 
     verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
@@ -282,6 +282,15 @@ public class XdsCommsTest {
     verify(localityStore, times(2)).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
+
+    xdsComms.shutdownChannel();
+  }
+
+  @Test
+  public void serverOnCompleteShouldFailClient() {
+    responseWriter.onCompleted();
+
+    verify(adsStreamCallback).onError();
 
     xdsComms.shutdownChannel();
   }
