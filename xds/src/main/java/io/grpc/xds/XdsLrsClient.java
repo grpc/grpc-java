@@ -23,11 +23,13 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
+import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
@@ -80,7 +82,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final XdsLoadReportStore loadReportStore;
+  private final StatsStore loadReportStore;
   private boolean started;
 
   @Nullable
@@ -103,7 +105,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadReportStore loadReportStore) {
+      StatsStore loadReportStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -371,5 +373,20 @@ final class XdsLrsClient implements XdsLoadStatsManager {
         lrsStream = null;
       }
     }
+  }
+
+  /**
+   * Interface for client side load stats store.
+   */
+  interface StatsStore {
+    ClusterStats generateLoadReport(Duration interval);
+
+    void addLocality(Locality locality);
+
+    void removeLocality(Locality locality);
+
+    ClientLoadCounter getLocalityCounter(Locality locality);
+
+    void recordDroppedRequest(String category);
   }
 }

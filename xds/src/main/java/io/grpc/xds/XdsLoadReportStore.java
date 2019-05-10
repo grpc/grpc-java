@@ -34,6 +34,7 @@ import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.XdsLrsClient.StatsStore;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -45,7 +46,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
  */
 @NotThreadSafe
-final class XdsLoadReportStore {
+final class XdsLoadReportStore implements StatsStore {
 
   private final String clusterName;
   private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
@@ -72,7 +73,8 @@ final class XdsLoadReportStore {
    * This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
-  ClusterStats generateLoadReport(Duration interval) {
+  @Override
+  public ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
         .setLoadReportInterval(interval);
     for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
@@ -112,7 +114,8 @@ final class XdsLoadReportStore {
    * This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
-  void addLocality(final Locality locality) {
+  @Override
+  public void addLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active ClientLoadCounter for locality %s already exists", locality);
@@ -131,7 +134,8 @@ final class XdsLoadReportStore {
    * This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
-  void removeLocality(final Locality locality) {
+  @Override
+  public void removeLocality(final Locality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active ClientLoadCounter for locality %s exists", locality);
@@ -142,7 +146,8 @@ final class XdsLoadReportStore {
    * Returns the {@link ClientLoadCounter} instance that is responsible for aggregating load
    * stats for the provided locality, or {@code null} if the locality is untracked.
    */
-  ClientLoadCounter getLocalityCounter(final Locality locality) {
+  @Override
+  public ClientLoadCounter getLocalityCounter(final Locality locality) {
     return localityLoadCounters.get(locality);
   }
 
@@ -150,7 +155,8 @@ final class XdsLoadReportStore {
    * Record that a request has been dropped by drop overload policy with the provided category
    * instructed by the remote balancer.
    */
-  void recordDroppedRequest(String category) {
+  @Override
+  public void recordDroppedRequest(String category) {
     AtomicLong counter = dropCounters.get(category);
     if (counter == null) {
       counter = dropCounters.putIfAbsent(category, new AtomicLong());
