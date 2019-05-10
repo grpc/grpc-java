@@ -47,7 +47,8 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.XdsLoadReportStore.XdsClientLoadRecorder;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
+import io.grpc.xds.XdsLoadReportStore.StatsCounter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -162,7 +163,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
-    ClientLoadCounter counter = loadReportStore.getLocalityCounter(locality);
+    StatsCounter counter = loadReportStore.getLocalityCounter(locality);
     if (counter == null) {
       return pickResult;
     }
@@ -385,7 +386,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
 
     void removeLocality(Locality locality);
 
-    ClientLoadCounter getLocalityCounter(Locality locality);
+    StatsCounter getLocalityCounter(Locality locality);
 
     void recordDroppedRequest(String category);
   }

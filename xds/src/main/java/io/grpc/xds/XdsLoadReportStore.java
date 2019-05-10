@@ -26,12 +26,6 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.Metadata;
-import io.grpc.Status;
-import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLrsClient.StatsStore;
@@ -40,7 +34,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
@@ -49,18 +42,18 @@ import javax.annotation.concurrent.ThreadSafe;
 final class XdsLoadReportStore implements StatsStore {
 
   private final String clusterName;
-  private final ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
+  private final ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
   XdsLoadReportStore(String clusterName) {
-    this(clusterName, new ConcurrentHashMap<Locality, ClientLoadCounter>(),
+    this(clusterName, new ConcurrentHashMap<Locality, StatsCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
   XdsLoadReportStore(String clusterName,
-      ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters,
+      ConcurrentMap<Locality, StatsCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
@@ -77,7 +70,7 @@ final class XdsLoadReportStore implements StatsStore {
   public ClusterStats generateLoadReport(Duration interval) {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
         .setLoadReportInterval(interval);
-    for (Map.Entry<Locality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
+    for (Map.Entry<Locality, StatsCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
@@ -116,7 +109,7 @@ final class XdsLoadReportStore implements StatsStore {
    */
   @Override
   public void addLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
+    StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active ClientLoadCounter for locality %s already exists", locality);
     if (counter == null) {
@@ -136,18 +129,18 @@ final class XdsLoadReportStore implements StatsStore {
    */
   @Override
   public void removeLocality(final Locality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
+    StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active ClientLoadCounter for locality %s exists", locality);
     counter.setActive(false);
   }
 
   /**
-   * Returns the {@link ClientLoadCounter} instance that is responsible for aggregating load
+   * Returns the {@link StatsCounter} instance that is responsible for aggregating load
    * stats for the provided locality, or {@code null} if the locality is untracked.
    */
   @Override
-  public ClientLoadCounter getLocalityCounter(final Locality locality) {
+  public StatsCounter getLocalityCounter(final Locality locality) {
     return localityLoadCounters.get(locality);
   }
 
@@ -168,60 +161,31 @@ final class XdsLoadReportStore implements StatsStore {
   }
 
   /**
-   * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
-   * {@link ClientLoadCounter} object.
+   * Blueprint for counters that can can record number of calls in-progress, finished, failed and
+   * metrics values.
    */
-  @ThreadSafe
-  static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+  abstract static class StatsCounter {
 
-    private final ClientStreamTracer.Factory delegate;
-    private final ClientLoadCounter counter;
+    private boolean active = true;
 
-    XdsClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
-      this.counter = checkNotNull(counter, "counter");
-      this.delegate = checkNotNull(delegate, "delegate");
+    abstract void incrementCallsInProgress();
+
+    abstract void decrementCallsInProgress();
+
+    abstract void incrementCallsFinished();
+
+    abstract void incrementCallsFailed();
+
+    abstract void recordMetric(String name, double value);
+
+    abstract ClientLoadSnapshot snapshot();
+
+    boolean isActive() {
+      return active;
     }
 
-    @Override
-    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      counter.incrementCallsInProgress();
-      final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
-      return new ForwardingClientStreamTracer() {
-        @Override
-        protected ClientStreamTracer delegate() {
-          return delegateTracer;
-        }
-
-        @Override
-        public void streamClosed(Status status) {
-          counter.incrementCallsFinished();
-          counter.decrementCallsInProgress();
-          if (!status.isOk()) {
-            counter.incrementCallsFailed();
-          }
-          delegate().streamClosed(status);
-        }
-      };
-    }
-  }
-
-  // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
-  // interfaces.
-  @ThreadSafe
-  static class MetricListener {
-    private final ClientLoadCounter counter;
-
-    MetricListener(ClientLoadCounter counter) {
-      this.counter = checkNotNull(counter, "counter");
-    }
-
-    // TODO (chengyuanzhang): @Override
-    void onLoadReport(OrcaLoadReport report) {
-      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
-      counter.recordMetric("mem_utilization", report.getMemUtilization());
-      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
-        counter.recordMetric(entry.getKey(), entry.getValue());
-      }
+    void setActive(boolean value) {
+      active = value;
     }
   }
 }

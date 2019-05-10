@@ -16,12 +16,22 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.Metadata;
+import io.grpc.Status;
+import io.grpc.util.ForwardingClientStreamTracer;
+import io.grpc.xds.XdsLoadReportStore.StatsCounter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Client side aggregator for load stats.
@@ -29,13 +39,12 @@ import javax.annotation.concurrent.NotThreadSafe;
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
 @NotThreadSafe
-final class ClientLoadCounter {
+final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
   private static final int THREAD_BALANCING_FACTOR = 64;
   private final AtomicLong callsInProgress = new AtomicLong();
   private final AtomicLong callsFinished = new AtomicLong();
   private final AtomicLong callsFailed = new AtomicLong();
   private final MetricRecorder[] metricRecorders = new MetricRecorder[THREAD_BALANCING_FACTOR];
-  private boolean active = true;
 
   ClientLoadCounter() {
     for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
@@ -51,34 +60,31 @@ final class ClientLoadCounter {
     this.callsFailed.set(callsFailed);
   }
 
+  @Override
   void incrementCallsInProgress() {
     callsInProgress.getAndIncrement();
   }
 
+  @Override
   void decrementCallsInProgress() {
     callsInProgress.getAndDecrement();
   }
 
+  @Override
   void incrementCallsFinished() {
     callsFinished.getAndIncrement();
   }
 
+  @Override
   void incrementCallsFailed() {
     callsFailed.getAndIncrement();
   }
 
+  @Override
   void recordMetric(String name, double value) {
     MetricRecorder recorder =
         metricRecorders[(int) (Thread.currentThread().getId() % THREAD_BALANCING_FACTOR)];
     recorder.addValue(name, value);
-  }
-
-  boolean isActive() {
-    return active;
-  }
-
-  void setActive(boolean value) {
-    active = value;
   }
 
   /**
@@ -87,7 +93,8 @@ final class ClientLoadCounter {
    * <p>This method is not thread-safe and must be called from {@link
    * io.grpc.LoadBalancer.Helper#getSynchronizationContext()}.
    */
-  ClientLoadSnapshot snapshot() {
+  @Override
+  public ClientLoadSnapshot snapshot() {
     ClientLoadSnapshot res = new ClientLoadSnapshot();
     long numFailed = callsFailed.getAndSet(0);
     res.callsSucceed = callsFinished.getAndSet(0) - numFailed;
@@ -119,6 +126,8 @@ final class ClientLoadCounter {
    */
   static final class ClientLoadSnapshot {
 
+    @VisibleForTesting
+    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot();
     long callsSucceed;
     long callsInProgress;
     long callsFailed;
@@ -139,6 +148,16 @@ final class ClientLoadCounter {
   static final class MetricValue {
     int numReports;
     double totalValue;
+
+    private MetricValue() {
+      this(0, 0);
+    }
+
+    @VisibleForTesting
+    MetricValue(int numReports, double totalValue) {
+      this.numReports = numReports;
+      this.totalValue = totalValue;
+    }
 
     @Override
     public String toString() {
@@ -166,6 +185,65 @@ final class ClientLoadCounter {
       Map<String, MetricValue> ret = metricValues;
       metricValues = new HashMap<>();
       return ret;
+    }
+  }
+
+  /**
+   * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
+   * {@link ClientLoadCounter} object.
+   */
+  @ThreadSafe
+  static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+
+    private final ClientStreamTracer.Factory delegate;
+    private final StatsCounter counter;
+
+    XdsClientLoadRecorder(StatsCounter counter, ClientStreamTracer.Factory delegate) {
+      this.counter = checkNotNull(counter, "counter");
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+      counter.incrementCallsInProgress();
+      final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
+      return new ForwardingClientStreamTracer() {
+        @Override
+        protected ClientStreamTracer delegate() {
+          return delegateTracer;
+        }
+
+        @Override
+        public void streamClosed(Status status) {
+          counter.incrementCallsFinished();
+          counter.decrementCallsInProgress();
+          if (!status.isOk()) {
+            counter.incrementCallsFailed();
+          }
+          delegate().streamClosed(status);
+        }
+      };
+    }
+  }
+
+  // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
+  // interfaces.
+  @ThreadSafe
+  static class MetricListener {
+
+    private final ClientLoadCounter counter;
+
+    MetricListener(ClientLoadCounter counter) {
+      this.counter = checkNotNull(counter, "counter");
+    }
+
+    // TODO (chengyuanzhang): @Override
+    void onLoadReport(OrcaLoadReport report) {
+      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
+      counter.recordMetric("mem_utilization", report.getMemUtilization());
+      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
+        counter.recordMetric(entry.getKey(), entry.getValue());
+      }
     }
   }
 }
