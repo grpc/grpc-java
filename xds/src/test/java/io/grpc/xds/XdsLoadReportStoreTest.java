@@ -208,7 +208,7 @@ public class XdsLoadReportStoreTest {
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
-          .contains("An active ClientLoadCounter for locality " + LOCALITY1 + " already exists");
+          .contains("An active counter for locality " + LOCALITY1 + " already exists");
     }
 
     assertThat(loadStore.getLocalityCounter(LOCALITY1))
@@ -221,7 +221,7 @@ public class XdsLoadReportStoreTest {
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
-          .contains("No active ClientLoadCounter for locality " + LOCALITY2 + " exists");
+          .contains("No active counter for locality " + LOCALITY2 + " exists");
     }
 
     // Removing the locality counter only mark it as inactive, but not throw it away.
@@ -234,7 +234,7 @@ public class XdsLoadReportStoreTest {
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
-          .contains("No active ClientLoadCounter for locality " + LOCALITY1 + " exists");
+          .contains("No active counter for locality " + LOCALITY1 + " exists");
     }
 
     // Adding it back simply mark it as active again.

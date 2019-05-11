@@ -111,7 +111,7 @@ final class XdsLoadReportStore implements StatsStore {
   public void addLocality(final Locality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
-        "An active ClientLoadCounter for locality %s already exists", locality);
+        "An active counter for locality %s already exists", locality);
     if (counter == null) {
       localityLoadCounters.put(locality, new ClientLoadCounter());
     } else {
@@ -120,8 +120,8 @@ final class XdsLoadReportStore implements StatsStore {
   }
 
   /**
-   * Deactivate the {@link ClientLoadCounter} for the provided locality in by this
-   * {@link XdsLoadReportStore}. Inactive {@link ClientLoadCounter}s are for localities
+   * Deactivate the {@link StatsCounter} for the provided locality in by this
+   * {@link XdsLoadReportStore}. Inactive {@link StatsCounter}s are for localities
    * no longer exposed by the remote balancer. This method needs to be called at
    * locality updates only for localities newly removed from balancer discovery responses.
    * This method should be called in the same synchronized context that
@@ -131,7 +131,7 @@ final class XdsLoadReportStore implements StatsStore {
   public void removeLocality(final Locality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
-        "No active ClientLoadCounter for locality %s exists", locality);
+        "No active counter for locality %s exists", locality);
     counter.setActive(false);
   }
 

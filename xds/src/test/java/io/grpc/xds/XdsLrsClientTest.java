@@ -258,7 +258,7 @@ public class XdsLrsClientTest {
   public void loadNotRecordedForUntrackedLocality() {
     when(loadReportStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(null);
     PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
-    // If the per-locality ClientLoadCounter does not exist, nothing should happen.
+    // If the per-locality counter does not exist, nothing should happen.
     PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
     verify(loadReportStore).getLocalityCounter(TEST_LOCALITY);
     assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
