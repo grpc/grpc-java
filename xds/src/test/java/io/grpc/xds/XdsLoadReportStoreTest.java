@@ -29,9 +29,6 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.Metadata;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLoadReportStore.StatsCounter;
@@ -58,16 +55,6 @@ import org.mockito.MockitoAnnotations;
 @RunWith(JUnit4.class)
 public class XdsLoadReportStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
-  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      ClientStreamTracer.StreamInfo.newBuilder().build();
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return new ClientStreamTracer() {
-          };
-        }
-      };
   private static final Locality LOCALITY1 =
       Locality.newBuilder()
           .setRegion("test_region1")
