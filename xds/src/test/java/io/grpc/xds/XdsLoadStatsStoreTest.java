@@ -28,7 +28,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.XdsLoadReportStore.StatsCounter;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -45,9 +45,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link XdsLoadReportStore}. */
+/** Unit tests for {@link XdsLoadStatsStore}. */
 @RunWith(JUnit4.class)
-public class XdsLoadReportStoreTest {
+public class XdsLoadStatsStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
   private static final Locality LOCALITY1 =
       Locality.newBuilder()
@@ -63,13 +63,13 @@ public class XdsLoadReportStoreTest {
           .build();
   private ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
-  private XdsLoadReportStore loadStore;
+  private XdsLoadStatsStore loadStore;
 
   @Before
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStore = new XdsLoadReportStore(SERVICE_NAME, localityLoadCounters, dropCounters);
+    loadStore = new XdsLoadStatsStore(SERVICE_NAME, localityLoadCounters, dropCounters);
   }
 
   private static ClientLoadSnapshot makeClientLoadSnapshot(long callsSucceed,

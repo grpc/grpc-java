@@ -33,23 +33,23 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadReportStore} instance holds the client side load stats for a cluster.
+ * An {@link XdsLoadStatsStore} instance holds the client side load stats for a cluster.
  */
 @NotThreadSafe
-final class XdsLoadReportStore implements StatsStore {
+final class XdsLoadStatsStore implements StatsStore {
 
   private final String clusterName;
   private final ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  XdsLoadReportStore(String clusterName) {
+  XdsLoadStatsStore(String clusterName) {
     this(clusterName, new ConcurrentHashMap<Locality, StatsCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadReportStore(String clusterName,
+  XdsLoadStatsStore(String clusterName,
       ConcurrentMap<Locality, StatsCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
@@ -91,7 +91,7 @@ final class XdsLoadReportStore implements StatsStore {
 
   /**
    * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadReportStore}. This method needs to be called at locality updates only for
+   * this {@link XdsLoadStatsStore}. This method needs to be called at locality updates only for
    * newly assigned localities in balancer discovery responses.
    * This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
@@ -110,7 +110,7 @@ final class XdsLoadReportStore implements StatsStore {
 
   /**
    * Deactivate the {@link StatsCounter} for the provided locality in by this
-   * {@link XdsLoadReportStore}. Inactive {@link StatsCounter}s are for localities
+   * {@link XdsLoadStatsStore}. Inactive {@link StatsCounter}s are for localities
    * no longer exposed by the remote balancer. This method needs to be called at
    * locality updates only for localities newly removed from balancer discovery responses.
    * This method should be called in the same synchronized context that

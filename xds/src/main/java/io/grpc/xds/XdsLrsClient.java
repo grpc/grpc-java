@@ -47,7 +47,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
-import io.grpc.xds.XdsLoadReportStore.StatsCounter;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -97,7 +97,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadReportStore(checkNotNull(helper, "helper").getAuthority()));
+        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
   }
 
   @VisibleForTesting

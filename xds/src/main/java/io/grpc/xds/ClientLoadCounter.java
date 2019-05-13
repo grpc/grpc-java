@@ -25,7 +25,7 @@ import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
-import io.grpc.xds.XdsLoadReportStore.StatsCounter;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -36,7 +36,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
 @NotThreadSafe
-final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
+final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   private final AtomicLong callsInProgress = new AtomicLong();
   private final AtomicLong callsFinished = new AtomicLong();
   private final AtomicLong callsFailed = new AtomicLong();
