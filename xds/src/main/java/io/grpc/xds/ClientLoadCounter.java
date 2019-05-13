@@ -20,15 +20,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.XdsLoadReportStore.StatsCounter;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
@@ -40,21 +37,15 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @NotThreadSafe
 final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
-  private static final int THREAD_BALANCING_FACTOR = 64;
   private final AtomicLong callsInProgress = new AtomicLong();
   private final AtomicLong callsFinished = new AtomicLong();
   private final AtomicLong callsFailed = new AtomicLong();
-  private final MetricRecorder[] metricRecorders = new MetricRecorder[THREAD_BALANCING_FACTOR];
 
   ClientLoadCounter() {
-    for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
-      metricRecorders[i] = new MetricRecorder();
-    }
   }
 
   @VisibleForTesting
   ClientLoadCounter(long callsInProgress, long callsFinished, long callsFailed) {
-    this();
     this.callsInProgress.set(callsInProgress);
     this.callsFinished.set(callsFinished);
     this.callsFailed.set(callsFailed);
@@ -80,13 +71,6 @@ final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
     callsFailed.getAndIncrement();
   }
 
-  @Override
-  void recordMetric(String name, double value) {
-    MetricRecorder recorder =
-        metricRecorders[(int) (Thread.currentThread().getId() % THREAD_BALANCING_FACTOR)];
-    recorder.addValue(name, value);
-  }
-
   /**
    * Generate snapshot for recorded query counts and metrics since previous snapshot.
    *
@@ -100,23 +84,6 @@ final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
     res.callsSucceed = callsFinished.getAndSet(0) - numFailed;
     res.callsInProgress = callsInProgress.get();
     res.callsFailed = numFailed;
-    Map<String, MetricValue> aggregatedValues = new HashMap<>();
-    for (MetricRecorder recorder : metricRecorders) {
-      Map<String, MetricValue> map = recorder.takeAll();
-      for (Map.Entry<String, MetricValue> entry : map.entrySet()) {
-        MetricValue curr = aggregatedValues.get(entry.getKey());
-        if (curr == null) {
-          curr = new MetricValue();
-          aggregatedValues.put(entry.getKey(), curr);
-        }
-        MetricValue diff = entry.getValue();
-        curr.numReports += diff.numReports;
-        curr.totalValue += diff.totalValue;
-      }
-    }
-    for (Map.Entry<String, MetricValue> entry : aggregatedValues.entrySet()) {
-      res.metricValues.put(entry.getKey(), entry.getValue());
-    }
     return res;
   }
 
@@ -131,7 +98,6 @@ final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
     long callsSucceed;
     long callsInProgress;
     long callsFailed;
-    Map<String, MetricValue> metricValues = new HashMap<>();
 
     @Override
     public String toString() {
@@ -139,52 +105,7 @@ final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
           .add("callsSucceed", callsSucceed)
           .add("callsInProgress", callsInProgress)
           .add("callsFailed", callsFailed)
-          .add("metricValues", metricValues)
           .toString();
-    }
-  }
-
-  /** Atomic unit of recording for metric data. */
-  static final class MetricValue {
-    int numReports;
-    double totalValue;
-
-    private MetricValue() {
-      this(0, 0);
-    }
-
-    @VisibleForTesting
-    MetricValue(int numReports, double totalValue) {
-      this.numReports = numReports;
-      this.totalValue = totalValue;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("numReports", numReports)
-          .add("totalValue", totalValue)
-          .toString();
-    }
-  }
-
-  private static class MetricRecorder {
-    Map<String, MetricValue> metricValues = new HashMap<>();
-
-    synchronized void addValue(String metricName, double value) {
-      MetricValue currValue = metricValues.get(metricName);
-      if (currValue == null) {
-        currValue = new MetricValue();
-      }
-      currValue.numReports++;
-      currValue.totalValue += value;
-      metricValues.put(metricName, currValue);
-    }
-
-    synchronized Map<String, MetricValue> takeAll() {
-      Map<String, MetricValue> ret = metricValues;
-      metricValues = new HashMap<>();
-      return ret;
     }
   }
 
@@ -223,27 +144,6 @@ final class ClientLoadCounter extends XdsLoadReportStore.StatsCounter {
           delegate().streamClosed(status);
         }
       };
-    }
-  }
-
-  // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
-  // interfaces.
-  @ThreadSafe
-  static class MetricListener {
-
-    private final ClientLoadCounter counter;
-
-    MetricListener(ClientLoadCounter counter) {
-      this.counter = checkNotNull(counter, "counter");
-    }
-
-    // TODO (chengyuanzhang): @Override
-    void onLoadReport(OrcaLoadReport report) {
-      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
-      counter.recordMetric("mem_utilization", report.getMemUtilization());
-      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
-        counter.recordMetric(entry.getKey(), entry.getValue());
-      }
     }
   }
 }

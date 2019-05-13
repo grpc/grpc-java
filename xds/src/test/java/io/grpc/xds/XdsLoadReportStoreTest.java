@@ -30,11 +30,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLoadReportStore.StatsCounter;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -79,27 +76,12 @@ public class XdsLoadReportStoreTest {
 
   private static ClientLoadSnapshot makeClientLoadSnapshot(long callsSucceed,
       long callsInProgress,
-      long callsFailed,
-      Map<String, MetricValue> metricValues) {
+      long callsFailed) {
     ClientLoadSnapshot snapshot = new ClientLoadSnapshot();
     snapshot.callsSucceed = callsSucceed;
     snapshot.callsInProgress = callsInProgress;
     snapshot.callsFailed = callsFailed;
-    snapshot.metricValues = metricValues;
     return snapshot;
-  }
-
-  private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
-      Map<String, MetricValue> metrics) {
-    List<EndpointLoadMetricStats> res = new ArrayList<>();
-    for (Map.Entry<String, MetricValue> entry : metrics.entrySet()) {
-      res.add(EndpointLoadMetricStats.newBuilder()
-          .setMetricName(entry.getKey())
-          .setNumRequestsFinishedWithMetric(entry.getValue().numReports)
-          .setTotalMetricValue(entry.getValue().totalValue)
-          .build());
-    }
-    return res;
   }
 
   private static UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
@@ -243,25 +225,15 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void loadReportMatchesSnapshots() {
     StatsCounter counter1 = mock(StatsCounter.class);
-    Map<String, MetricValue> metrics1 = new HashMap<>();
-    metrics1.put("cpu_utilization", new MetricValue(15, 12.5435));
-    metrics1.put("mem_utilization", new MetricValue(8, 0.421));
-    metrics1.put("named_cost_or_utilization", new MetricValue(3, 2.5435));
     when(counter1.isActive()).thenReturn(true);
     when(counter1.snapshot())
-        .thenReturn(makeClientLoadSnapshot(4315, 3421, 23, metrics1),
-            makeClientLoadSnapshot(0, 543, 0, Collections.EMPTY_MAP));
+        .thenReturn(makeClientLoadSnapshot(4315, 3421, 23),
+            makeClientLoadSnapshot(0, 543, 0));
     StatsCounter counter2 = mock(StatsCounter.class);
-    Map<String, MetricValue> metrics2 = new HashMap<>();
-    metrics2.put("cpu_utilization", new MetricValue(344, 132.74));
-    metrics2.put("mem_utilization", new MetricValue(41, 23.453));
-    metrics2.put("named_cost_or_utilization", new MetricValue(12, 423));
-    when(counter2.snapshot())
-        .thenReturn(makeClientLoadSnapshot(41234, 432, 431, metrics2),
-            makeClientLoadSnapshot(0, 432, 0, Collections.EMPTY_MAP));
+    when(counter2.snapshot()).thenReturn(makeClientLoadSnapshot(41234, 432, 431),
+        makeClientLoadSnapshot(0, 432, 0));
     when(counter2.isActive()).thenReturn(true);
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
@@ -269,10 +241,8 @@ public class XdsLoadReportStoreTest {
     ClusterStats expectedReport =
         buildClusterStats(Durations.fromNanos(5346),
             Arrays.asList(
-                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23,
-                    buildEndpointLoadMetricStatsList(metrics1)),
-                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431,
-                    buildEndpointLoadMetricStatsList(metrics2))
+                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, null),
+                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, null)
             ),
             null
         );
@@ -286,9 +256,9 @@ public class XdsLoadReportStoreTest {
         buildClusterStats(Durations.fromNanos(5346),
             Arrays.asList(
                 buildUpstreamLocalityStats(LOCALITY1, 0, 543, 0,
-                    buildEndpointLoadMetricStatsList(Collections.EMPTY_MAP)),
+                    null),
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0,
-                    buildEndpointLoadMetricStatsList(Collections.EMPTY_MAP))
+                    null)
             ),
             null
         );

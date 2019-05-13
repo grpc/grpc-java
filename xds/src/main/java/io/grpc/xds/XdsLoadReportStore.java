@@ -24,10 +24,8 @@ import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLrsClient.StatsStore;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -78,13 +76,6 @@ final class XdsLoadReportStore implements StatsStore {
           .setTotalSuccessfulRequests(snapshot.callsSucceed)
           .setTotalErrorRequests(snapshot.callsFailed)
           .setTotalRequestsInProgress(snapshot.callsInProgress);
-      for (Map.Entry<String, MetricValue> metric : snapshot.metricValues.entrySet()) {
-        localityStatsBuilder.addLoadMetricStats(
-            EndpointLoadMetricStats.newBuilder()
-                .setMetricName(metric.getKey())
-                .setNumRequestsFinishedWithMetric(metric.getValue().numReports)
-                .setTotalMetricValue(metric.getValue().totalValue));
-      }
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
@@ -161,8 +152,7 @@ final class XdsLoadReportStore implements StatsStore {
   }
 
   /**
-   * Blueprint for counters that can can record number of calls in-progress, finished, failed and
-   * metrics values.
+   * Blueprint for counters that can can record number of calls in-progress, finished, failed.
    */
   abstract static class StatsCounter {
 
@@ -175,8 +165,6 @@ final class XdsLoadReportStore implements StatsStore {
     abstract void incrementCallsFinished();
 
     abstract void incrementCallsFailed();
-
-    abstract void recordMetric(String name, double value);
 
     abstract ClientLoadSnapshot snapshot();
 
