@@ -63,7 +63,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsLrsClient.StatsStore;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
-import java.util.HashSet;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -239,18 +238,7 @@ public class XdsLrsClientTest {
                 Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
         .build());
     assertEquals(1, report.getClusterStatsCount());
-    assertClusterStatsEqual(expectedStats, report.getClusterStats(0));
-  }
-
-  private void assertClusterStatsEqual(ClusterStats stats1, ClusterStats stats2) {
-    assertEquals(stats1.getClusterName(), stats2.getClusterName());
-    assertEquals(stats1.getLoadReportInterval(), stats2.getLoadReportInterval());
-    assertEquals(stats1.getUpstreamLocalityStatsCount(), stats2.getUpstreamLocalityStatsCount());
-    assertEquals(stats1.getDroppedRequestsCount(), stats2.getDroppedRequestsCount());
-    assertEquals(new HashSet<>(stats1.getUpstreamLocalityStatsList()),
-        new HashSet<>(stats2.getUpstreamLocalityStatsList()));
-    assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
-        new HashSet<>(stats2.getDroppedRequestsList()));
+    assertThat(report.getClusterStats(0)).isEqualTo(expectedStats);
   }
 
   @Test
