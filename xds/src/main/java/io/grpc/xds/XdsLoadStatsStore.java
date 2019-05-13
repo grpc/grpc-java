@@ -25,7 +25,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.XdsLoadReportClient.StatsStore;
+import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;

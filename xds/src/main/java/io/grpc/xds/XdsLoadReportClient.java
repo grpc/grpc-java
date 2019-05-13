@@ -16,382 +16,74 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Stopwatch;
-import com.google.common.base.Supplier;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
-import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
-import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
-import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
-import io.grpc.Status;
-import io.grpc.SynchronizationContext;
-import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.GrpcUtil;
-import io.grpc.stub.StreamObserver;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of XDS load reporting service. Methods in this class are expected to be called in
- * the same synchronized context that {@link XdsLoadBalancer#helper#getSynchronizationContext}
- * returns.
+ * An {@link XdsLoadReportClient} is in charge of recording client side load stats, collecting
+ * backend cost metrics and sending load reports to the remote balancer. It shares the same
+ * channel with {@link XdsLoadBalancer} and its lifecycle is managed by {@link XdsLoadBalancer}.
  */
 @NotThreadSafe
-final class XdsLoadReportClient implements XdsLoadStatsManager {
-
-  @VisibleForTesting
-  static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
-      = "com.googleapis.trafficdirector.grpc_hostname";
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return new ClientStreamTracer() {};
-        }
-      };
-
-  private final String serviceName;
-  private final ManagedChannel channel;
-  private final SynchronizationContext syncContext;
-  private final ScheduledExecutorService timerService;
-  private final Supplier<Stopwatch> stopwatchSupplier;
-  private final Stopwatch retryStopwatch;
-  private final ChannelLogger logger;
-  private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final StatsStore loadReportStore;
-  private boolean started;
-
-  @Nullable
-  private BackoffPolicy lrsRpcRetryPolicy;
-  @Nullable
-  private ScheduledHandle lrsRpcRetryTimer;
-
-  @Nullable
-  private LrsStream lrsStream;
-
-  XdsLoadReportClient(ManagedChannel channel,
-      Helper helper,
-      BackoffPolicy.Provider backoffPolicyProvider) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
-  }
-
-  @VisibleForTesting
-  XdsLoadReportClient(ManagedChannel channel,
-      Helper helper,
-      Supplier<Stopwatch> stopwatchSupplier,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore loadReportStore) {
-    this.channel = checkNotNull(channel, "channel");
-    this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
-    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.retryStopwatch = stopwatchSupplier.get();
-    this.logger = checkNotNull(helper.getChannelLogger(), "logger");
-    this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.loadReportStore = checkNotNull(loadReportStore, "loadReportStore");
-    started = false;
-  }
-
-  @Override
-  public void startLoadReporting() {
-    checkState(!started, "load reporting has already started");
-    started = true;
-    startLrsRpc();
-  }
-
-  @Override
-  public void stopLoadReporting() {
-    if (lrsRpcRetryTimer != null) {
-      lrsRpcRetryTimer.cancel();
-    }
-    if (lrsStream != null) {
-      lrsStream.close(null);
-    }
-    // Do not shutdown channel as it is not owned by LrsClient.
-  }
-
-  @Override
-  public void addLocality(Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.addLocality(locality);
-  }
-
-  @Override
-  public void removeLocality(final Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.removeLocality(locality);
-  }
-
-  @Override
-  public void recordDroppedRequest(String category) {
-    checkState(started, "load reporting must be started first");
-    loadReportStore.recordDroppedRequest(category);
-  }
-
-  @Override
-  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    checkState(started, "load reporting must be started first");
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    StatsCounter counter = loadReportStore.getLocalityCounter(locality);
-    if (counter == null) {
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
-  }
-
-  @VisibleForTesting
-  static class LoadReportingTask implements Runnable {
-    private final LrsStream stream;
-
-    LoadReportingTask(LrsStream stream) {
-      this.stream = stream;
-    }
-
-    @Override
-    public void run() {
-      stream.sendLoadReport();
-    }
-  }
-
-  @VisibleForTesting
-  class LrsRpcRetryTask implements Runnable {
-
-    @Override
-    public void run() {
-      startLrsRpc();
-    }
-  }
-
-  private void startLrsRpc() {
-    checkState(lrsStream == null, "previous lbStream has not been cleared yet");
-    LoadReportingServiceGrpc.LoadReportingServiceStub stub
-        = LoadReportingServiceGrpc.newStub(channel);
-    lrsStream = new LrsStream(stub, stopwatchSupplier.get());
-    retryStopwatch.reset().start();
-    lrsStream.start();
-  }
-
-  private class LrsStream implements StreamObserver<LoadStatsResponse> {
-
-    final LoadReportingServiceGrpc.LoadReportingServiceStub stub;
-    final Stopwatch reportStopwatch;
-    StreamObserver<LoadStatsRequest> lrsRequestWriter;
-    boolean initialResponseReceived;
-    boolean closed;
-    long loadReportIntervalNano = -1;
-    ScheduledHandle loadReportTimer;
-
-    LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
-      this.stub = checkNotNull(stub, "stub");
-      reportStopwatch = checkNotNull(stopwatch, "stopwatch");
-    }
-
-    void start() {
-      lrsRequestWriter = stub.withWaitForReady().streamLoadStats(this);
-      reportStopwatch.reset().start();
-      LoadStatsRequest initRequest =
-          LoadStatsRequest.newBuilder()
-              .setNode(Node.newBuilder()
-                  .setMetadata(Struct.newBuilder()
-                      .putFields(
-                          TRAFFICDIRECTOR_HOSTNAME_FIELD,
-                          Value.newBuilder().setStringValue(serviceName).build())))
-              .build();
-      lrsRequestWriter.onNext(initRequest);
-      logger.log(ChannelLogLevel.DEBUG, "Initial LRS request sent: {0}", initRequest);
-    }
-
-    @Override
-    public void onNext(final LoadStatsResponse response) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleResponse(response);
-        }
-      });
-    }
-
-    @Override
-    public void onError(final Throwable t) {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(Status.fromThrowable(t)
-              .augmentDescription("Stream to XDS management server had an error"));
-        }
-      });
-    }
-
-    @Override
-    public void onCompleted() {
-      syncContext.execute(new Runnable() {
-        @Override
-        public void run() {
-          handleStreamClosed(
-              Status.UNAVAILABLE.withDescription("Stream to XDS management server was closed"));
-        }
-      });
-    }
-
-    private void sendLoadReport() {
-      long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
-      reportStopwatch.reset().start();
-      ClusterStats report =
-          loadReportStore.generateLoadReport()
-              .toBuilder()
-              .setLoadReportInterval(Durations.fromNanos(interval))
-              .build();
-      lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
-          .setNode(Node.newBuilder()
-              .setMetadata(Struct.newBuilder()
-                  .putFields(
-                      TRAFFICDIRECTOR_HOSTNAME_FIELD,
-                      Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(report)
-          .build());
-      scheduleNextLoadReport();
-    }
-
-    private void scheduleNextLoadReport() {
-      // Cancel pending load report and reschedule with updated load reporting interval.
-      if (loadReportTimer != null && loadReportTimer.isPending()) {
-        loadReportTimer.cancel();
-        loadReportTimer = null;
-      }
-      if (loadReportIntervalNano > 0) {
-        loadReportTimer = syncContext.schedule(
-            new LoadReportingTask(this), loadReportIntervalNano, TimeUnit.NANOSECONDS,
-            timerService);
-      }
-    }
-
-    private void handleResponse(LoadStatsResponse response) {
-      if (closed) {
-        return;
-      }
-
-      if (!initialResponseReceived) {
-        logger.log(ChannelLogLevel.DEBUG, "Received LRS initial response: {0}", response);
-        initialResponseReceived = true;
-      } else {
-        logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
-      }
-      loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
-      List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
-      // For gRPC use case, LRS response will only contain one cluster, which is the same as in
-      // the EDS response.
-      if (serviceList.size() != 1 || !serviceList.get(0).equals(serviceName)) {
-        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): {0} with EDS response: {1}",
-            serviceList, serviceName);
-        return;
-      }
-      scheduleNextLoadReport();
-    }
-
-    private void handleStreamClosed(Status status) {
-      checkArgument(!status.isOk(), "unexpected OK status");
-      if (closed) {
-        return;
-      }
-      closed = true;
-      cleanUp();
-
-      long delayNanos = 0;
-      if (initialResponseReceived || lrsRpcRetryPolicy == null) {
-        // Reset the backoff sequence if balancer has sent the initial response, or backoff sequence
-        // has never been initialized.
-        lrsRpcRetryPolicy = backoffPolicyProvider.get();
-      }
-      // Backoff only when balancer wasn't working previously.
-      if (!initialResponseReceived) {
-        // The back-off policy determines the interval between consecutive RPC upstarts, thus the
-        // actual delay may be smaller than the value from the back-off policy, or even negative,
-        // depending how much time was spent in the previous RPC.
-        delayNanos =
-            lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
-      }
-      logger.log(ChannelLogLevel.DEBUG, "LRS stream closed, backoff in {0} second(s)",
-          TimeUnit.NANOSECONDS.toSeconds(delayNanos <= 0 ? 0 : delayNanos));
-      if (delayNanos <= 0) {
-        startLrsRpc();
-      } else {
-        lrsRpcRetryTimer =
-            syncContext.schedule(new LrsRpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS,
-                timerService);
-      }
-    }
-
-    private void close(@Nullable Exception error) {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      cleanUp();
-      if (error == null) {
-        lrsRequestWriter.onCompleted();
-      } else {
-        lrsRequestWriter.onError(error);
-      }
-    }
-
-    private void cleanUp() {
-      if (loadReportTimer != null) {
-        loadReportTimer.cancel();
-        loadReportTimer = null;
-      }
-      if (lrsStream == this) {
-        lrsStream = null;
-      }
-    }
-  }
+interface XdsLoadReportClient {
 
   /**
-   * Interface for client side load stats store.
+   * Establishes load reporting communication and negotiates with the remote balancer to report load
+   * stats periodically.
+   *
+   * <p>This method should be the first method to be called in the lifecycle of {@link
+   * XdsLoadReportClient} and should only be called once.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
    */
-  interface StatsStore {
-    ClusterStats generateLoadReport();
+  void startLoadReporting();
 
-    void addLocality(Locality locality);
+  /**
+   * Terminates load reporting.
+   *
+   * <p>No method in {@link XdsLoadReportClient} should be called after calling this method.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   */
+  void stopLoadReporting();
 
-    void removeLocality(Locality locality);
+  /**
+   * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker
+   * for the provided locality.
+   *
+   * <p>This method is thread-safe.
+   */
+  PickResult interceptPickResult(PickResult pickResult, Locality locality);
 
-    StatsCounter getLocalityCounter(Locality locality);
+  /**
+   * Tracks load stats for endpoints in the provided locality. To be called upon balancer locality
+   * updates only for newly assigned localities. Only load stats for endpoints in added localities
+   * will be reported to the remote balancer.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   */
+  void addLocality(Locality locality);
 
-    void recordDroppedRequest(String category);
-  }
+  /**
+   * Stops tracking load stats for endpoints in the provided locality. To be called upon balancer
+   * locality updates only for newly removed localities. Load stats for endpoints in removed
+   * localities will no longer be reported to the remote balancer when client stop sending loads to
+   * them.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context *
+   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   */
+  void removeLocality(Locality locality);
+
+  /**
+   * Records a client-side request drop with the provided category instructed by the remote
+   * balancer. Stats for dropped requests are aggregated in cluster level.
+   *
+   * <p>This method is thread-safe.
+   */
+  void recordDroppedRequest(String category);
 }
