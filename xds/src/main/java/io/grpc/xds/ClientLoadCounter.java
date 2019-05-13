@@ -99,10 +99,6 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    */
   @Override
   public ClientLoadSnapshot snapshot() {
-    ClientLoadSnapshot res =
-        new ClientLoadSnapshot(callsFinished.getAndSet(0),
-            callsInProgress.get(),
-            callsFailed.getAndSet(0));
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
     for (MetricRecorder recorder : metricRecorders) {
       Map<String, MetricValue> map = recorder.takeAll();
@@ -117,10 +113,10 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
         curr.totalValue += diff.totalValue;
       }
     }
-    for (Map.Entry<String, MetricValue> entry : aggregatedValues.entrySet()) {
-      res.metricValues.put(entry.getKey(), entry.getValue());
-    }
-    return res;
+    return new ClientLoadSnapshot(callsFinished.getAndSet(0),
+        callsInProgress.get(),
+        callsFailed.getAndSet(0),
+        aggregatedValues);
   }
 
   /**
@@ -130,20 +126,25 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   static final class ClientLoadSnapshot {
 
     @VisibleForTesting
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0);
+    static final ClientLoadSnapshot EMPTY_SNAPSHOT =
+        new ClientLoadSnapshot(0, 0, 0, new HashMap<String, MetricValue>());
     private final long callsFinished;
     private final long callsInProgress;
     private final long callsFailed;
-    private final Map<String, MetricValue> metricValues = new HashMap<>();
+    private final Map<String, MetricValue> metricValues;
 
     /**
      * External usage must only be for testing.
      */
     @VisibleForTesting
-    ClientLoadSnapshot(long callsFinished, long callsInProgress, long callsFailed) {
+    ClientLoadSnapshot(long callsFinished,
+        long callsInProgress,
+        long callsFailed,
+        Map<String, MetricValue> metricValues) {
       this.callsFinished = callsFinished;
       this.callsInProgress = callsInProgress;
       this.callsFailed = callsFailed;
+      this.metricValues = checkNotNull(metricValues, "metricValues");
     }
 
     long getCallsFinished() {
