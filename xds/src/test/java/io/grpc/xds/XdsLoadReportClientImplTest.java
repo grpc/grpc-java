@@ -157,7 +157,7 @@ public class XdsLoadReportClientImplTest {
   @Mock
   private Subchannel mockSubchannel;
   @Mock
-  private StatsStore loadReportStore;
+  private StatsStore statsStore;
 
   private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
@@ -212,7 +212,7 @@ public class XdsLoadReportClientImplTest {
     lrsClient =
         new XdsLoadReportClientImpl(channel, helper, fakeClock.getStopwatchSupplier(),
             backoffPolicyProvider,
-            loadReportStore);
+            statsStore);
     lrsClient.startLoadReporting();
   }
 
@@ -229,7 +229,7 @@ public class XdsLoadReportClientImplTest {
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));
     // A second load report is scheduled upon the first is sent.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
-    inOrder.verify(loadReportStore).generateLoadReport();
+    inOrder.verify(statsStore).generateLoadReport();
     ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(requestObserver).onNext(reportCaptor.capture());
     LoadStatsRequest report = reportCaptor.getValue();
@@ -245,11 +245,11 @@ public class XdsLoadReportClientImplTest {
 
   @Test
   public void loadNotRecordedForUntrackedLocality() {
-    when(loadReportStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(null);
+    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(null);
     PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
     // If the per-locality counter does not exist, nothing should happen.
     PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
-    verify(loadReportStore).getLocalityCounter(TEST_LOCALITY);
+    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
     assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
   }
 
@@ -263,7 +263,7 @@ public class XdsLoadReportClientImplTest {
         lrsClient.interceptPickResult(droppedResult, TEST_LOCALITY);
     assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
     assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
-    verifyZeroInteractions(loadReportStore);
+    verifyZeroInteractions(statsStore);
   }
 
   @Test
@@ -273,10 +273,10 @@ public class XdsLoadReportClientImplTest {
     when(mockFactory
         .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
         .thenReturn(mockTracer);
-    when(loadReportStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(new ClientLoadCounter());
+    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(new ClientLoadCounter());
     PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
     PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
-    verify(loadReportStore).getLocalityCounter(TEST_LOCALITY);
+    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
     Metadata metadata = new Metadata();
     interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
         .streamClosed(Status.OK);
@@ -302,9 +302,9 @@ public class XdsLoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    when(loadReportStore.generateLoadReport())
+    when(statsStore.generateLoadReport())
         .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
-    InOrder inOrder = inOrder(requestObserver, loadReportStore);
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -322,10 +322,10 @@ public class XdsLoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
-    when(loadReportStore.generateLoadReport())
+    when(statsStore.generateLoadReport())
         .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
 
-    InOrder inOrder = inOrder(requestObserver, loadReportStore);
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -349,7 +349,7 @@ public class XdsLoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver, loadReportStore);
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
@@ -386,7 +386,7 @@ public class XdsLoadReportClientImplTest {
             .setCategory("throttle")
             .setDroppedCount(0))
         .build();
-    when(loadReportStore.generateLoadReport())
+    when(statsStore.generateLoadReport())
         .thenReturn(expectedStats1, expectedStats2);
 
     responseObserver.onNext(buildLrsResponse(1362));

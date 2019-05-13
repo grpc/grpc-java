@@ -85,7 +85,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final StatsStore loadReportStore;
+  private final StatsStore statsStore;
   private boolean started;
 
   @Nullable
@@ -108,7 +108,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore loadReportStore) {
+      StatsStore statsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -117,7 +117,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.loadReportStore = checkNotNull(loadReportStore, "loadReportStore");
+    this.statsStore = checkNotNull(statsStore, "statsStore");
     started = false;
   }
 
@@ -143,20 +143,20 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   public void addLocality(Locality locality) {
     checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.addLocality(locality);
+    statsStore.addLocality(locality);
   }
 
   @Override
   public void removeLocality(final Locality locality) {
     checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.removeLocality(locality);
+    statsStore.removeLocality(locality);
   }
 
   @Override
   public void recordDroppedRequest(String category) {
     checkState(started, "load reporting must be started first");
-    loadReportStore.recordDroppedRequest(category);
+    statsStore.recordDroppedRequest(category);
   }
 
   @Override
@@ -165,7 +165,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
-    StatsCounter counter = loadReportStore.getLocalityCounter(locality);
+    StatsCounter counter = statsStore.getLocalityCounter(locality);
     if (counter == null) {
       return pickResult;
     }
@@ -275,7 +275,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       ClusterStats report =
-          loadReportStore.generateLoadReport()
+          statsStore.generateLoadReport()
               .toBuilder()
               .setLoadReportInterval(Durations.fromNanos(interval))
               .build();
