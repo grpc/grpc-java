@@ -207,7 +207,6 @@ public class XdsLrsClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
-    logs.clear();
     lrsClient =
         new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
             backoffPolicyProvider,

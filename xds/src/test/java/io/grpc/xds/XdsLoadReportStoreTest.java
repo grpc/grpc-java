@@ -49,7 +49,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.MockitoAnnotations;
 
 /** Unit tests for {@link XdsLoadReportStore}. */
 @RunWith(JUnit4.class)
@@ -73,7 +72,6 @@ public class XdsLoadReportStoreTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
     loadStore = new XdsLoadReportStore(SERVICE_NAME, localityLoadCounters, dropCounters);
@@ -230,7 +228,7 @@ public class XdsLoadReportStoreTest {
   }
 
   @Test
-  public void removesInactiveCountersAfterGeneratingLoadReport() {
+  public void removeInactiveCountersAfterGeneratingLoadReport() {
     StatsCounter counter1 = mock(StatsCounter.class);
     when(counter1.isActive()).thenReturn(true);
     when(counter1.snapshot()).thenReturn(ClientLoadSnapshot.EMPTY_SNAPSHOT);
