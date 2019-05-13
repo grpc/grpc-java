@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.Duration;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
@@ -65,9 +64,8 @@ final class XdsLoadReportStore implements StatsStore {
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   @Override
-  public ClusterStats generateLoadReport(Duration interval) {
-    ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName)
-        .setLoadReportInterval(interval);
+  public ClusterStats generateLoadReport() {
+    ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName);
     for (Map.Entry<Locality, StatsCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =

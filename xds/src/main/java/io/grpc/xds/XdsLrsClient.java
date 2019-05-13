@@ -23,7 +23,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
@@ -272,13 +271,18 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     private void sendLoadReport() {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
+      ClusterStats report =
+          loadReportStore.generateLoadReport()
+              .toBuilder()
+              .setLoadReportInterval(Durations.fromNanos(interval))
+              .build();
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
                       TRAFFICDIRECTOR_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(loadReportStore.generateLoadReport(Durations.fromNanos(interval)))
+          .addClusterStats(report)
           .build());
       scheduleNextLoadReport();
     }
@@ -380,7 +384,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
    * Interface for client side load stats store.
    */
   interface StatsStore {
-    ClusterStats generateLoadReport(Duration interval);
+    ClusterStats generateLoadReport();
 
     void addLocality(Locality locality);
 

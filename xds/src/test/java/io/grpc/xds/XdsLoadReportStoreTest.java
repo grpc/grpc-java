@@ -22,8 +22,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.google.protobuf.Duration;
-import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
@@ -108,12 +106,11 @@ public class XdsLoadReportStoreTest {
         .build();
   }
 
-  private static ClusterStats buildClusterStats(Duration interval,
+  private static ClusterStats buildClusterStats(
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
       @Nullable List<DroppedRequests> droppedRequestsList) {
     ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder()
-        .setClusterName(SERVICE_NAME)
-        .setLoadReportInterval(interval);
+        .setClusterName(SERVICE_NAME);
     if (upstreamLocalityStatsList != null) {
       clusterStatsBuilder.addAllUpstreamLocalityStats(upstreamLocalityStatsList);
     }
@@ -219,7 +216,7 @@ public class XdsLoadReportStoreTest {
     when(counter2.snapshot()).thenReturn(ClientLoadSnapshot.EMPTY_SNAPSHOT);
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
-    loadStore.generateLoadReport(Duration.getDefaultInstance());
+    loadStore.generateLoadReport();
     assertThat(localityLoadCounters).containsKey(LOCALITY1);
     assertThat(localityLoadCounters).doesNotContainKey(LOCALITY2);
   }
@@ -239,31 +236,27 @@ public class XdsLoadReportStoreTest {
     localityLoadCounters.put(LOCALITY2, counter2);
 
     ClusterStats expectedReport =
-        buildClusterStats(Durations.fromNanos(5346),
+        buildClusterStats(
             Arrays.asList(
                 buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, null),
                 buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, null)
             ),
-            null
-        );
+            null);
 
-    assertClusterStatsEqual(expectedReport,
-        loadStore.generateLoadReport(Durations.fromNanos(5346)));
+    assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
     verify(counter1).snapshot();
     verify(counter2).snapshot();
 
     expectedReport =
-        buildClusterStats(Durations.fromNanos(5346),
+        buildClusterStats(
             Arrays.asList(
                 buildUpstreamLocalityStats(LOCALITY1, 0, 543, 0,
                     null),
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0,
                     null)
             ),
-            null
-        );
-    assertClusterStatsEqual(expectedReport,
-        loadStore.generateLoadReport(Durations.fromNanos(5346)));
+            null);
+    assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
     verify(counter1, times(2)).snapshot();
     verify(counter2, times(2)).snapshot();
   }
@@ -281,12 +274,11 @@ public class XdsLoadReportStoreTest {
     }
     assertThat(dropCounters.get("lb").get()).isEqualTo(numLbDrop);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(numThrottleDrop);
-    Duration interval = Duration.newBuilder().setNanos(342).build();
-    ClusterStats expectedLoadReport = buildClusterStats(interval,
-        null,
-        Arrays.asList(buildDroppedRequests("lb", numLbDrop),
-            buildDroppedRequests("throttle", numThrottleDrop)));
-    assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport(interval));
+    ClusterStats expectedLoadReport =
+        buildClusterStats(null,
+            Arrays.asList(buildDroppedRequests("lb", numLbDrop),
+                buildDroppedRequests("throttle", numThrottleDrop)));
+    assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);
   }

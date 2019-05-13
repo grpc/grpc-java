@@ -33,7 +33,6 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
-import com.google.protobuf.Duration;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
@@ -226,8 +225,7 @@ public class XdsLrsClientTest {
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));
     // A second load report is scheduled upon the first is sent.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
-    inOrder.verify(loadReportStore)
-        .generateLoadReport(Durations.fromNanos(loadReportIntervalNanos));
+    inOrder.verify(loadReportStore).generateLoadReport();
     ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(requestObserver).onNext(reportCaptor.capture());
     LoadStatsRequest report = reportCaptor.getValue();
@@ -300,8 +298,8 @@ public class XdsLrsClientTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    when(loadReportStore.generateLoadReport(Durations.fromNanos(1453)))
-        .thenReturn(buildEmptyClusterStats(1453));
+    when(loadReportStore.generateLoadReport())
+        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
     InOrder inOrder = inOrder(requestObserver, loadReportStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
@@ -320,8 +318,8 @@ public class XdsLrsClientTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
-    when(loadReportStore.generateLoadReport(any(Duration.class)))
-        .thenReturn(buildEmptyClusterStats(1362), buildEmptyClusterStats(2183345));
+    when(loadReportStore.generateLoadReport())
+        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
 
     InOrder inOrder = inOrder(requestObserver, loadReportStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
@@ -352,9 +350,9 @@ public class XdsLrsClientTest {
 
     Random rand = new Random();
     // Integer range is large enough for testing.
-    long callsInProgress1 = rand.nextInt(Integer.MAX_VALUE);
-    long callsFinished1 = rand.nextInt(Integer.MAX_VALUE);
-    long callsFailed1 = callsFinished1 - rand.nextInt((int) callsFinished1);
+    long callsInProgress = rand.nextInt(Integer.MAX_VALUE);
+    long callsFinished = rand.nextInt(Integer.MAX_VALUE);
+    long callsFailed = callsFinished - rand.nextInt((int) callsFinished);
     long numLbDrops = rand.nextLong();
     long numThrottleDrops = rand.nextLong();
 
@@ -363,9 +361,9 @@ public class XdsLrsClientTest {
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
             .setLocality(TEST_LOCALITY)
-            .setTotalRequestsInProgress(callsInProgress1)
-            .setTotalSuccessfulRequests(callsFinished1 - callsFailed1)
-            .setTotalErrorRequests(callsFailed1))
+            .setTotalRequestsInProgress(callsInProgress)
+            .setTotalSuccessfulRequests(callsFinished - callsFailed)
+            .setTotalErrorRequests(callsFailed))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")
             .setDroppedCount(numLbDrops))
@@ -378,7 +376,7 @@ public class XdsLrsClientTest {
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
             .setLocality(TEST_LOCALITY)
-            .setTotalRequestsInProgress(callsInProgress1))
+            .setTotalRequestsInProgress(callsInProgress))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")
             .setDroppedCount(0))
@@ -386,14 +384,12 @@ public class XdsLrsClientTest {
             .setCategory("throttle")
             .setDroppedCount(0))
         .build();
-    when(loadReportStore.generateLoadReport(any(Duration.class)))
+    when(loadReportStore.generateLoadReport())
         .thenReturn(expectedStats1, expectedStats2);
 
     responseObserver.onNext(buildLrsResponse(1362));
     assertNextReport(inOrder, requestObserver, expectedStats1);
-
-    // No client load happens upon next load reporting, only number of in-progress
-    // calls are non-zero.
+    
     assertNextReport(inOrder, requestObserver, expectedStats2);
   }
 
