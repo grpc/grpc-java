@@ -71,13 +71,13 @@ final class XdsLoadStatsStore implements StatsStore {
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
       localityStatsBuilder
-          .setTotalSuccessfulRequests(snapshot.callsSucceed)
-          .setTotalErrorRequests(snapshot.callsFailed)
-          .setTotalRequestsInProgress(snapshot.callsInProgress);
+          .setTotalSuccessfulRequests(snapshot.getCallsFinished() - snapshot.getCallsFailed())
+          .setTotalErrorRequests(snapshot.getCallsFailed())
+          .setTotalRequestsInProgress(snapshot.getCallsInProgress());
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
-      if (!entry.getValue().isActive() && snapshot.callsInProgress == 0) {
+      if (!entry.getValue().isActive() && snapshot.getCallsInProgress() == 0) {
         localityLoadCounters.remove(entry.getKey());
       }
     }

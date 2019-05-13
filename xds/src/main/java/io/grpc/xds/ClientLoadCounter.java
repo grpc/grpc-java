@@ -44,10 +44,13 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   ClientLoadCounter() {
   }
 
+  /**
+   * Must only be used for testing.
+   */
   @VisibleForTesting
-  ClientLoadCounter(long callsInProgress, long callsFinished, long callsFailed) {
-    this.callsInProgress.set(callsInProgress);
+  ClientLoadCounter(long callsFinished, long callsInProgress, long callsFailed) {
     this.callsFinished.set(callsFinished);
+    this.callsInProgress.set(callsInProgress);
     this.callsFailed.set(callsFailed);
   }
 
@@ -79,12 +82,9 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    */
   @Override
   public ClientLoadSnapshot snapshot() {
-    ClientLoadSnapshot res = new ClientLoadSnapshot();
-    long numFailed = callsFailed.getAndSet(0);
-    res.callsSucceed = callsFinished.getAndSet(0) - numFailed;
-    res.callsInProgress = callsInProgress.get();
-    res.callsFailed = numFailed;
-    return res;
+    return new ClientLoadSnapshot(callsFinished.getAndSet(0),
+        callsInProgress.get(),
+        callsFailed.getAndSet(0));
   }
 
   /**
@@ -94,15 +94,37 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   static final class ClientLoadSnapshot {
 
     @VisibleForTesting
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot();
-    long callsSucceed;
-    long callsInProgress;
-    long callsFailed;
+    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0);
+    private long callsFinished;
+    private long callsInProgress;
+    private long callsFailed;
+
+    /**
+     * Must only be used for testing.
+     */
+    @VisibleForTesting
+    ClientLoadSnapshot(long callsFinished, long callsInProgress, long callsFailed) {
+      this.callsFinished = callsFinished;
+      this.callsInProgress = callsInProgress;
+      this.callsFailed = callsFailed;
+    }
+
+    long getCallsFinished() {
+      return callsFinished;
+    }
+
+    long getCallsInProgress() {
+      return callsInProgress;
+    }
+
+    long getCallsFailed() {
+      return callsFailed;
+    }
 
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("callsSucceed", callsSucceed)
+          .add("callsFinished", callsFinished)
           .add("callsInProgress", callsInProgress)
           .add("callsFailed", callsFailed)
           .toString();

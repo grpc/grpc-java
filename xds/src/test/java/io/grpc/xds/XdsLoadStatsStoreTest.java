@@ -72,16 +72,6 @@ public class XdsLoadStatsStoreTest {
     loadStore = new XdsLoadStatsStore(SERVICE_NAME, localityLoadCounters, dropCounters);
   }
 
-  private static ClientLoadSnapshot makeClientLoadSnapshot(long callsSucceed,
-      long callsInProgress,
-      long callsFailed) {
-    ClientLoadSnapshot snapshot = new ClientLoadSnapshot();
-    snapshot.callsSucceed = callsSucceed;
-    snapshot.callsInProgress = callsInProgress;
-    snapshot.callsFailed = callsFailed;
-    return snapshot;
-  }
-
   private static UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
       long callsSucceed,
       long callsInProgress,
@@ -226,11 +216,11 @@ public class XdsLoadStatsStoreTest {
     StatsCounter counter1 = mock(StatsCounter.class);
     when(counter1.isActive()).thenReturn(true);
     when(counter1.snapshot())
-        .thenReturn(makeClientLoadSnapshot(4315, 3421, 23),
-            makeClientLoadSnapshot(0, 543, 0));
+        .thenReturn(new ClientLoadSnapshot(4315, 3421, 23),
+            new ClientLoadSnapshot(0, 543, 0));
     StatsCounter counter2 = mock(StatsCounter.class);
-    when(counter2.snapshot()).thenReturn(makeClientLoadSnapshot(41234, 432, 431),
-        makeClientLoadSnapshot(0, 432, 0));
+    when(counter2.snapshot()).thenReturn(new ClientLoadSnapshot(41234, 432, 431),
+        new ClientLoadSnapshot(0, 432, 0));
     when(counter2.isActive()).thenReturn(true);
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
@@ -238,8 +228,8 @@ public class XdsLoadStatsStoreTest {
     ClusterStats expectedReport =
         buildClusterStats(
             Arrays.asList(
-                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, null),
-                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, null)
+                buildUpstreamLocalityStats(LOCALITY1, 4315 - 23, 3421, 23, null),
+                buildUpstreamLocalityStats(LOCALITY2, 41234 - 431, 432, 431, null)
             ),
             null);
 
