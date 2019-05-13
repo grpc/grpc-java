@@ -66,11 +66,14 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
+  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+      new ClientStreamTracer() {
+      };
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
       new ClientStreamTracer.Factory() {
         @Override
         public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return new ClientStreamTracer() {};
+          return NOOP_CLIENT_STREAM_TRACER;
         }
       };
 
