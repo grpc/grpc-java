@@ -21,19 +21,19 @@ import io.grpc.LoadBalancer.PickResult;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadStatsManager} is in charge of recording client side load stats, collecting
+ * An {@link XdsLoadReportClient} is in charge of recording client side load stats, collecting
  * backend cost metrics and sending load reports to the remote balancer. It shares the same
  * channel with {@link XdsLoadBalancer} and its lifecycle is managed by {@link XdsLoadBalancer}.
  */
 @NotThreadSafe
-interface XdsLoadStatsManager {
+interface XdsLoadReportClient {
 
   /**
    * Establishes load reporting communication and negotiates with the remote balancer to report load
    * stats periodically.
    *
    * <p>This method should be the first method to be called in the lifecycle of {@link
-   * XdsLoadStatsManager} and should only be called once.
+   * XdsLoadReportClient} and should only be called once.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
@@ -43,7 +43,7 @@ interface XdsLoadStatsManager {
   /**
    * Terminates load reporting.
    *
-   * <p>No method in {@link XdsLoadStatsManager} should be called after calling this method.
+   * <p>No method in {@link XdsLoadReportClient} should be called after calling this method.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
