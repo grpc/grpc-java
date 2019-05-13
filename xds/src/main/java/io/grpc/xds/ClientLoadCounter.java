@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
@@ -271,6 +272,26 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
           delegate().streamClosed(status);
         }
       };
+    }
+  }
+
+  // TODO (chengyuanzhang): implements OrcaPerRequestReportListener and OrcaOobReportListener
+  // interfaces.
+  @ThreadSafe
+  static class MetricListener {
+
+    private final ClientLoadCounter counter;
+
+    MetricListener(ClientLoadCounter counter) {
+      this.counter = checkNotNull(counter, "counter");
+    }
+
+    void onLoadReport(OrcaLoadReport report) {
+      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
+      counter.recordMetric("mem_utilization", report.getMemUtilization());
+      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
+        counter.recordMetric(entry.getKey(), entry.getValue());
+      }
     }
   }
 }
