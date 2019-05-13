@@ -95,12 +95,12 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
 
     @VisibleForTesting
     static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0);
-    private long callsFinished;
-    private long callsInProgress;
-    private long callsFailed;
+    private final long callsFinished;
+    private final long callsInProgress;
+    private final long callsFailed;
 
     /**
-     * Must only be used for testing.
+     * External usage must only be for testing.
      */
     @VisibleForTesting
     ClientLoadSnapshot(long callsFinished, long callsInProgress, long callsFailed) {
