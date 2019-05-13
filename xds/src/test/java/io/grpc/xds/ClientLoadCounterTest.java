@@ -59,18 +59,27 @@ public class ClientLoadCounterTest {
   public void snapshotContainsEverything() {
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFinishedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-    long numFailedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long numFailedCalls = ThreadLocalRandom.current().nextLong(numFinishedCalls);
     counter = new ClientLoadCounter(numInProgressCalls, numFinishedCalls, numFailedCalls);
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertThat(snapshot.callsSucceed).isEqualTo(numFinishedCalls - numFailedCalls);
     assertThat(snapshot.callsInProgress).isEqualTo(numInProgressCalls);
     assertThat(snapshot.callsFailed).isEqualTo(numFailedCalls);
+    String snapshotStr = snapshot.toString();
+    assertThat(snapshotStr).contains("callsSucceed=" + (numFinishedCalls - numFailedCalls));
+    assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
+    assertThat(snapshotStr).contains("callsFailed=" + numFailedCalls);
 
     // Snapshot only accounts for stats happening after previous snapshot.
     snapshot = counter.snapshot();
     assertThat(snapshot.callsSucceed).isEqualTo(0);
     assertThat(snapshot.callsInProgress).isEqualTo(numInProgressCalls);
     assertThat(snapshot.callsFailed).isEqualTo(0);
+
+    snapshotStr = snapshot.toString();
+    assertThat(snapshotStr).contains("callsSucceed=0");
+    assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
+    assertThat(snapshotStr).contains("callsFailed=0");
   }
 
   @Test
