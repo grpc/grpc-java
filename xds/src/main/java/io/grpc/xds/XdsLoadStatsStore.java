@@ -164,6 +164,8 @@ final class XdsLoadStatsStore implements StatsStore {
 
     abstract void incrementCallsFailed();
 
+    abstract void recordMetric(String name, double value);
+
     abstract ClientLoadSnapshot snapshot();
 
     boolean isActive() {

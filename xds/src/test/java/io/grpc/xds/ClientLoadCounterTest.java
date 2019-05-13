@@ -53,6 +53,7 @@ public class ClientLoadCounterTest {
     assertThat(emptySnapshot.getCallsInProgress()).isEqualTo(0);
     assertThat(emptySnapshot.getCallsFinished()).isEqualTo(0);
     assertThat(emptySnapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(emptySnapshot.getMetricValues()).isEmpty();
   }
 
   @Test
@@ -61,10 +62,24 @@ public class ClientLoadCounterTest {
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFailedCalls = ThreadLocalRandom.current().nextLong(numFinishedCalls);
     counter = new ClientLoadCounter(numFinishedCalls, numInProgressCalls, numFailedCalls);
+    counter.recordMetric("test-metric-1", 0.75);
+    counter.recordMetric("test-metric-2", 0.342);
+    counter.recordMetric("test-metric-3", 0.512);
+    counter.recordMetric("test-metric-1", 0.543);
+    counter.recordMetric("test-metric-1", 4.412);
+    counter.recordMetric("test-metric-1", 100.353);
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertThat(snapshot.getCallsFinished()).isEqualTo(numFinishedCalls);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(numInProgressCalls);
     assertThat(snapshot.getCallsFailed()).isEqualTo(numFailedCalls);
+    assertThat(snapshot.getMetricValues().get("test-metric-1").getNumReports()).isEqualTo(4);
+    assertThat(snapshot.getMetricValues().get("test-metric-1").getTotalValue())
+        .isEqualTo(0.75 + 0.543 + 4.412 + 100.353);
+    assertThat(snapshot.getMetricValues().get("test-metric-2").getNumReports()).isEqualTo(1);
+    assertThat(snapshot.getMetricValues().get("test-metric-2").getTotalValue()).isEqualTo(0.342);
+    assertThat(snapshot.getMetricValues().get("test-metric-3").getNumReports()).isEqualTo(1);
+    assertThat(snapshot.getMetricValues().get("test-metric-3").getTotalValue()).isEqualTo(0.512);
+
     String snapshotStr = snapshot.toString();
     assertThat(snapshotStr).contains("callsFinished=" + numFinishedCalls);
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
@@ -75,11 +90,13 @@ public class ClientLoadCounterTest {
     assertThat(snapshot.getCallsFinished()).isEqualTo(0);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(numInProgressCalls);
     assertThat(snapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(snapshot.getMetricValues()).isEmpty();
 
     snapshotStr = snapshot.toString();
     assertThat(snapshotStr).contains("callsFinished=0");
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
     assertThat(snapshotStr).contains("callsFailed=0");
+    assertThat(snapshotStr).contains("metricValues={}");
   }
 
   @Test
