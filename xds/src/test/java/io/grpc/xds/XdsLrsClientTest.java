@@ -62,7 +62,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsLrsClient.StatsStore;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Before;
@@ -348,13 +348,11 @@ public class XdsLrsClientTest {
     InOrder inOrder = inOrder(requestObserver, loadReportStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
-    Random rand = new Random();
-    // Integer range is large enough for testing.
-    long callsInProgress = rand.nextInt(Integer.MAX_VALUE);
-    long callsFinished = rand.nextInt(Integer.MAX_VALUE);
-    long callsFailed = callsFinished - rand.nextInt((int) callsFinished);
-    long numLbDrops = rand.nextLong();
-    long numThrottleDrops = rand.nextLong();
+    long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long callsFinished = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long callsFailed = callsFinished - ThreadLocalRandom.current().nextLong(callsFinished);
+    long numLbDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long numThrottleDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
 
     ClusterStats expectedStats1 = ClusterStats.newBuilder()
         .setClusterName(SERVICE_AUTHORITY)
@@ -389,7 +387,7 @@ public class XdsLrsClientTest {
 
     responseObserver.onNext(buildLrsResponse(1362));
     assertNextReport(inOrder, requestObserver, expectedStats1);
-    
+
     assertNextReport(inOrder, requestObserver, expectedStats2);
   }
 
