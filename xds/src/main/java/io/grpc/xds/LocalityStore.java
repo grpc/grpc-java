@@ -127,8 +127,8 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (LocalityLbInfo subchannels : localityMap.values()) {
-        subchannels.shutdown();
+      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
+        localityLbInfo.shutdown();
       }
       localityMap = new HashMap<>();
     }
@@ -291,7 +291,7 @@ interface LocalityStore {
     }
 
     /**
-     * State a single Locality.
+     * State of a single Locality.
      */
     static final class LocalityLbInfo {
 

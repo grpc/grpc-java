@@ -142,7 +142,6 @@ public class XdsLbStateTest {
   private StreamObserver<DiscoveryResponse> responseWriter;
   private ManagedChannel channel;
 
-
   private static final class FakeInterLocalityPickerFactory implements PickerFactory {
     int totalReadyLocalities;
     int nextIndex;
@@ -236,7 +235,6 @@ public class XdsLbStateTest {
     LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11);
     LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12);
     LocalityInfo localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
-
 
     Locality locality2 = new Locality("r2", "z2", "sz2");
     EquivalentAddressGroup eag21 = new EquivalentAddressGroup(new InetSocketAddress("addr21", 21));
