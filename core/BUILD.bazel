@@ -1,3 +1,16 @@
+PERFMARK_INTERNAL_ACCESSOR_SRCS = glob(
+    [
+        "src/main/java/io/grpc/perfmark/Internal*.java",
+    ],
+)
+
+PERFMARK_SRCS = glob(
+    [
+        "src/main/java/io/grpc/perfmark/*.java",
+    ],
+    exclude = PERFMARK_INTERNAL_ACCESSOR_SRCS,
+)
+
 java_library(
     name = "core",
     visibility = ["//visibility:public"],
@@ -65,11 +78,7 @@ java_library(
 
 java_library(
     name = "perfmark",
-    srcs = glob(
-        [
-            "src/main/java/io/grpc/perfmark/*.java",
-        ],
-    ),
+    srcs = PERFMARK_SRCS,
     visibility = ["//:__subpackages__"],
     deps = [
         "@com_google_code_findbugs_jsr305//jar",

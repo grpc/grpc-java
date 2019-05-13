@@ -79,7 +79,7 @@ public class OverrideAuthorityNameResolverTest {
     NameResolver overrideResolver =
         factory.newNameResolver(URI.create("dns:///localhost:443"), ARGS);
     assertNotNull(overrideResolver);
-    NameResolver.Observer listener = mock(NameResolver.Observer.class);
+    NameResolver.Listener2 listener = mock(NameResolver.Listener2.class);
 
     overrideResolver.start(listener);
     verify(mockResolver).start(listener);

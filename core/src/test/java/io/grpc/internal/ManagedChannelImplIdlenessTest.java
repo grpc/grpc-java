@@ -38,6 +38,7 @@ import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
+import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
@@ -140,7 +141,7 @@ public class ManagedChannelImplIdlenessTest {
   @Mock private NameResolver.Factory mockNameResolverFactory;
   @Mock private ClientCall.Listener<Integer> mockCallListener;
   @Mock private ClientCall.Listener<Integer> mockCallListener2;
-  @Captor private ArgumentCaptor<NameResolver.Observer> nameResolverObserverCaptor;
+  @Captor private ArgumentCaptor<NameResolver.Listener2> nameResolverListenerCaptor;
   private BlockingQueue<MockClientTransportInfo> newTransports;
 
   @Before
@@ -196,7 +197,7 @@ public class ManagedChannelImplIdlenessTest {
         any(ClientTransportFactory.ClientTransportOptions.class),
         any(ChannelLogger.class));
     verify(mockNameResolver, never()).start(any(NameResolver.Listener.class));
-    verify(mockNameResolver, never()).start(any(NameResolver.Observer.class));
+    verify(mockNameResolver, never()).start(any(NameResolver.Listener2.class));
   }
 
   @After
@@ -220,7 +221,7 @@ public class ManagedChannelImplIdlenessTest {
 
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
 
-    verify(mockNameResolver).start(nameResolverObserverCaptor.capture());
+    verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
     ResolutionResult resolutionResult =
@@ -228,7 +229,7 @@ public class ManagedChannelImplIdlenessTest {
             .setAddresses(servers)
             .setAttributes(Attributes.EMPTY)
             .build();
-    nameResolverObserverCaptor.getValue().onResult(resolutionResult);
+    nameResolverListenerCaptor.getValue().onResult(resolutionResult);
     verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
             .build());
@@ -310,14 +311,14 @@ public class ManagedChannelImplIdlenessTest {
 
     // Assume LoadBalancer has received an address, then create a subchannel.
     Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
-    subchannel.requestConnection();
+    requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
     SubchannelPicker mockPicker = mock(SubchannelPicker.class);
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel));
-    helper.updateBalancingState(READY, mockPicker);
+    updateBalancingStateSafely(helper, READY, mockPicker);
     // Delayed transport creates real streams in the app executor
     executor.runDueTasks();
 
@@ -350,13 +351,13 @@ public class ManagedChannelImplIdlenessTest {
     Helper helper = helperCaptor.getValue();
     Subchannel subchannel = createSubchannelSafely(helper, servers.get(0), Attributes.EMPTY);
 
-    subchannel.requestConnection();
+    requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
-    helper.updateSubchannelAddresses(subchannel, servers.get(1));
+    updateSubchannelAddressesSafely(helper, subchannel, servers.get(1));
 
-    subchannel.requestConnection();
+    requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo t1 = newTransports.poll();
     t1.listener.transportReady();
   }
@@ -370,15 +371,15 @@ public class ManagedChannelImplIdlenessTest {
     Helper helper = helperCaptor.getValue();
     Subchannel subchannel = createSubchannelSafely(helper, servers.get(0), Attributes.EMPTY);
 
-    subchannel.requestConnection();
+    requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
     List<SocketAddress> changedList = new ArrayList<>(servers.get(0).getAddresses());
     changedList.add(new FakeSocketAddress("aDifferentServer"));
-    helper.updateSubchannelAddresses(subchannel, new EquivalentAddressGroup(changedList));
+    updateSubchannelAddressesSafely(helper, subchannel, new EquivalentAddressGroup(changedList));
 
-    subchannel.requestConnection();
+    requestConnectionSafely(helper, subchannel);
     assertNull(newTransports.poll());
   }
 
@@ -397,7 +398,7 @@ public class ManagedChannelImplIdlenessTest {
     SubchannelPicker failingPicker = mock(SubchannelPicker.class);
     when(failingPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withError(Status.UNAVAILABLE));
-    helper.updateBalancingState(TRANSIENT_FAILURE, failingPicker);
+    updateBalancingStateSafely(helper, TRANSIENT_FAILURE, failingPicker);
     executor.runDueTasks();
     verify(mockCallListener).onClose(same(Status.UNAVAILABLE), any(Metadata.class));
 
@@ -499,7 +500,7 @@ public class ManagedChannelImplIdlenessTest {
     }
   }
 
-  // We need this because createSubchannel() should be called from the SynchronizationContext
+  // Helper methods to call methods from SynchronizationContext
   private static Subchannel createSubchannelSafely(
       final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs) {
     final AtomicReference<Subchannel> resultCapture = new AtomicReference<>();
@@ -511,5 +512,37 @@ public class ManagedChannelImplIdlenessTest {
           }
         });
     return resultCapture.get();
+  }
+
+  private static void requestConnectionSafely(Helper helper, final Subchannel subchannel) {
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            subchannel.requestConnection();
+          }
+        });
+  }
+
+  private static void updateBalancingStateSafely(
+      final Helper helper, final ConnectivityState state, final SubchannelPicker picker) {
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            helper.updateBalancingState(state, picker);
+          }
+        });
+  }
+
+  private static void updateSubchannelAddressesSafely(
+      final Helper helper, final Subchannel subchannel, final EquivalentAddressGroup addrs) {
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            helper.updateSubchannelAddresses(subchannel, addrs);
+          }
+        });
   }
 }

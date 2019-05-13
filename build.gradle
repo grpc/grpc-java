@@ -48,7 +48,7 @@ subprojects {
     }
 
     group = "io.grpc"
-    version = "1.21.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.22.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.7
     targetCompatibility = 1.7
@@ -112,7 +112,7 @@ subprojects {
         protobufVersion = '3.7.1'
         protocVersion = protobufVersion
         protobufNanoVersion = '3.0.0-alpha-5'
-        opencensusVersion = '0.19.2'
+        opencensusVersion = '0.21.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"

@@ -27,6 +27,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
+import io.grpc.NameResolverRegistry;
 import io.grpc.SynchronizationContext;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -105,6 +106,16 @@ public abstract class ForwardingLoadBalancerHelper extends LoadBalancer.Helper {
   @Override
   public ChannelLogger getChannelLogger() {
     return delegate().getChannelLogger();
+  }
+
+  @Override
+  public NameResolver.Args getNameResolverArgs() {
+    return delegate().getNameResolverArgs();
+  }
+
+  @Override
+  public NameResolverRegistry getNameResolverRegistry() {
+    return delegate().getNameResolverRegistry();
   }
 
   @Override

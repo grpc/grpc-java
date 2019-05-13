@@ -117,7 +117,7 @@ public class NameResolverRegistryTest {
         throw new UnsupportedOperationException();
       }
 
-      @Override public void start(Observer observer) {
+      @Override public void start(Listener2 listener) {
         throw new UnsupportedOperationException();
       }
 

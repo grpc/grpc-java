@@ -19,8 +19,6 @@ package io.grpc.testing.integration;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
-import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -1448,19 +1446,21 @@ public abstract class AbstractInteropTest {
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());
     Context ctx =
-        Context.ROOT.withValues(
-            TAG_CONTEXT_KEY,
-            tagger.emptyBuilder().put(
-                StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build(),
-            ContextUtils.CONTEXT_SPAN_KEY,
-            clientParentSpan);
+        io.opencensus.tags.unsafe.ContextUtils.withValue(
+            Context.ROOT,
+            tagger
+                .emptyBuilder()
+                .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                .build());
+    ctx = ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {
       blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
       Context serverCtx = contextCapture.get();
       assertNotNull(serverCtx);
 
-      FakeTagContext statsCtx = (FakeTagContext) TAG_CONTEXT_KEY.get(serverCtx);
+      FakeTagContext statsCtx =
+          (FakeTagContext) io.opencensus.tags.unsafe.ContextUtils.getValue(serverCtx);
       assertNotNull(statsCtx);
       Map<TagKey, TagValue> tags = statsCtx.getTags();
       boolean tagFound = false;
@@ -1472,7 +1472,7 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      Span span = CONTEXT_SPAN_KEY.get(serverCtx);
+      Span span = ContextUtils.getValue(serverCtx);
       assertNotNull(span);
       SpanContext spanContext = span.getContext();
       assertEquals(clientParentSpan.getContext().getTraceId(), spanContext.getTraceId());
