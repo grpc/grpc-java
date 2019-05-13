@@ -59,7 +59,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLrsClient.StatsStore;
+import io.grpc.xds.XdsLoadReportClient.StatsStore;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;
@@ -78,23 +78,27 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-/** Unit tests for {@link XdsLrsClient}. */
+/**
+ * Unit tests for {@link XdsLoadReportClient}.
+ */
 @RunWith(JUnit4.class)
-public class XdsLrsClientTest {
+public class XdsLoadReportClientTest {
 
   private static final String SERVICE_AUTHORITY = "api.google.com";
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsLrsClient.LoadReportingTask.class.getSimpleName());
+          return command.toString()
+              .contains(XdsLoadReportClient.LoadReportingTask.class.getSimpleName());
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsLrsClient.LrsRpcRetryTask.class.getSimpleName());
+          return command.toString()
+              .contains(XdsLoadReportClient.LrsRpcRetryTask.class.getSimpleName());
         }
       };
   private static final Locality TEST_LOCALITY =
@@ -141,13 +145,13 @@ public class XdsLrsClientTest {
       .setNode(Node.newBuilder()
           .setMetadata(Struct.newBuilder()
               .putFields(
-                  XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                  XdsLoadReportClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                   Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
       .build();
   @Mock
   private BackoffPolicy backoffPolicy1;
   private ManagedChannel channel;
-  private XdsLrsClient lrsClient;
+  private XdsLoadReportClient lrsClient;
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
@@ -206,7 +210,7 @@ public class XdsLrsClientTest {
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     lrsClient =
-        new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
+        new XdsLoadReportClient(channel, helper, fakeClock.getStopwatchSupplier(),
             backoffPolicyProvider,
             loadReportStore);
     lrsClient.startLoadReporting();
@@ -232,7 +236,7 @@ public class XdsLrsClientTest {
     assertEquals(report.getNode(), Node.newBuilder()
         .setMetadata(Struct.newBuilder()
             .putFields(
-                XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                XdsLoadReportClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                 Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
         .build());
     assertEquals(1, report.getClusterStatsCount());

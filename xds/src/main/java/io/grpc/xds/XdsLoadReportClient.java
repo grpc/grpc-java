@@ -61,7 +61,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * returns.
  */
 @NotThreadSafe
-final class XdsLrsClient implements XdsLoadStatsManager {
+final class XdsLoadReportClient implements XdsLoadStatsManager {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
@@ -93,7 +93,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   @Nullable
   private LrsStream lrsStream;
 
-  XdsLrsClient(ManagedChannel channel,
+  XdsLoadReportClient(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
@@ -101,7 +101,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   }
 
   @VisibleForTesting
-  XdsLrsClient(ManagedChannel channel,
+  XdsLoadReportClient(ManagedChannel channel,
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
