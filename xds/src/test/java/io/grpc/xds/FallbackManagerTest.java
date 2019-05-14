@@ -32,7 +32,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
+import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -58,7 +58,7 @@ public class FallbackManagerTest {
   private final FakeClock fakeClock = new FakeClock();
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
 
-  private final LoadBalancerProvider fakeLbProvider = new LoadBalancerProvider() {
+  private final LoadBalancerProvider fakeFallbackLbProvider = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
       return true;
@@ -76,7 +76,29 @@ public class FallbackManagerTest {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return fakeLb;
+      return fakeFallbackLb;
+    }
+  };
+
+  private final LoadBalancerProvider fakeRoundRonbinLbProvider = new LoadBalancerProvider() {
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return "round_robin";
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return fakeRoundRobinLb;
     }
   };
 
@@ -91,7 +113,9 @@ public class FallbackManagerTest {
   @Mock
   private Helper helper;
   @Mock
-  private LoadBalancer fakeLb;
+  private LoadBalancer fakeRoundRobinLb;
+  @Mock
+  private LoadBalancer fakeFallbackLb;
   @Mock
   private ChannelLogger channelLogger;
 
@@ -104,9 +128,11 @@ public class FallbackManagerTest {
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(channelLogger).when(helper).getChannelLogger();
-    fallbackManager = new FallbackManager(helper, new SubchannelStoreImpl(), lbRegistry);
+    lbRegistry.register(fakeRoundRonbinLbProvider);
+    lbRegistry.register(fakeFallbackLbProvider);
+    fallbackManager = new FallbackManager(
+        helper, new LocalityStoreImpl(helper, lbRegistry), lbRegistry);
     fallbackPolicy = new LbConfig("test_policy", new HashMap<String, Void>());
-    lbRegistry.register(fakeLbProvider);
   }
 
   @After
@@ -121,11 +147,12 @@ public class FallbackManagerTest {
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
 
-    verify(fakeLb, never()).handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
+    verify(fakeFallbackLb, never())
+        .handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
 
     fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-    verify(fakeLb).handleResolvedAddresses(
+    verify(fakeFallbackLb).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(eags)
             .setAttributes(
@@ -148,6 +175,7 @@ public class FallbackManagerTest {
 
     fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
-    verify(fakeLb, never()).handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
+    verify(fakeFallbackLb, never())
+        .handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
   }
 }
