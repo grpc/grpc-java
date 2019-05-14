@@ -73,7 +73,8 @@ final class XdsLoadStatsStore implements StatsStore {
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsFinished() - snapshot.getCallsFailed())
           .setTotalErrorRequests(snapshot.getCallsFailed())
-          .setTotalRequestsInProgress(snapshot.getCallsInProgress());
+          .setTotalRequestsInProgress(snapshot.getCallsInProgress())
+          .setTotalIssuedRequests(snapshot.getCallsIssued());
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
@@ -150,7 +151,8 @@ final class XdsLoadStatsStore implements StatsStore {
   }
 
   /**
-   * Blueprint for counters that can can record number of calls in-progress, finished, failed.
+   * Blueprint for counters that can can record number of calls in-progress, finished, failed and
+   * issued.
    */
   abstract static class StatsCounter {
 
@@ -163,6 +165,8 @@ final class XdsLoadStatsStore implements StatsStore {
     abstract void incrementCallsFinished();
 
     abstract void incrementCallsFailed();
+
+    abstract void incrementCallsIssued();
 
     abstract ClientLoadSnapshot snapshot();
 

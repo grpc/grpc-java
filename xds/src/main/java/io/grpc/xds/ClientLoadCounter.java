@@ -40,6 +40,7 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   private final AtomicLong callsInProgress = new AtomicLong();
   private final AtomicLong callsFinished = new AtomicLong();
   private final AtomicLong callsFailed = new AtomicLong();
+  private final AtomicLong callsIssued = new AtomicLong();
 
   ClientLoadCounter() {
   }
@@ -48,10 +49,11 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    * Must only be used for testing.
    */
   @VisibleForTesting
-  ClientLoadCounter(long callsFinished, long callsInProgress, long callsFailed) {
+  ClientLoadCounter(long callsFinished, long callsInProgress, long callsFailed, long callsIssued) {
     this.callsFinished.set(callsFinished);
     this.callsInProgress.set(callsInProgress);
     this.callsFailed.set(callsFailed);
+    this.callsIssued.set(callsIssued);
   }
 
   @Override
@@ -74,6 +76,11 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
     callsFailed.getAndIncrement();
   }
 
+  @Override
+  void incrementCallsIssued() {
+    callsIssued.getAndIncrement();
+  }
+
   /**
    * Generate snapshot for recorded query counts and metrics since previous snapshot.
    *
@@ -84,7 +91,8 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   public ClientLoadSnapshot snapshot() {
     return new ClientLoadSnapshot(callsFinished.getAndSet(0),
         callsInProgress.get(),
-        callsFailed.getAndSet(0));
+        callsFailed.getAndSet(0),
+        callsIssued.getAndSet(0));
   }
 
   /**
@@ -94,19 +102,24 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   static final class ClientLoadSnapshot {
 
     @VisibleForTesting
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0);
+    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0, 0);
     private final long callsFinished;
     private final long callsInProgress;
     private final long callsFailed;
+    private final long callsIssued;
 
     /**
      * External usage must only be for testing.
      */
     @VisibleForTesting
-    ClientLoadSnapshot(long callsFinished, long callsInProgress, long callsFailed) {
+    ClientLoadSnapshot(long callsFinished,
+        long callsInProgress,
+        long callsFailed,
+        long callsIssued) {
       this.callsFinished = callsFinished;
       this.callsInProgress = callsInProgress;
       this.callsFailed = callsFailed;
+      this.callsIssued = callsIssued;
     }
 
     long getCallsFinished() {
@@ -121,12 +134,17 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
       return callsFailed;
     }
 
+    long getCallsIssued() {
+      return callsIssued;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
           .add("callsFinished", callsFinished)
           .add("callsInProgress", callsInProgress)
           .add("callsFailed", callsFailed)
+          .add("callsIssued", callsIssued)
           .toString();
     }
   }
@@ -148,6 +166,7 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
 
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+      counter.incrementCallsIssued();
       counter.incrementCallsInProgress();
       final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
       return new ForwardingClientStreamTracer() {

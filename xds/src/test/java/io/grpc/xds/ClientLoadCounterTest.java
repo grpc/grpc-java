@@ -53,6 +53,7 @@ public class ClientLoadCounterTest {
     assertThat(emptySnapshot.getCallsInProgress()).isEqualTo(0);
     assertThat(emptySnapshot.getCallsFinished()).isEqualTo(0);
     assertThat(emptySnapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(emptySnapshot.getCallsIssued()).isEqualTo(0);
   }
 
   @Test
@@ -60,7 +61,9 @@ public class ClientLoadCounterTest {
     long numFinishedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFailedCalls = ThreadLocalRandom.current().nextLong(numFinishedCalls);
-    counter = new ClientLoadCounter(numFinishedCalls, numInProgressCalls, numFailedCalls);
+    long numIssuedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    counter =
+        new ClientLoadCounter(numFinishedCalls, numInProgressCalls, numFailedCalls, numIssuedCalls);
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertThat(snapshot.getCallsFinished()).isEqualTo(numFinishedCalls);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(numInProgressCalls);
@@ -69,17 +72,20 @@ public class ClientLoadCounterTest {
     assertThat(snapshotStr).contains("callsFinished=" + numFinishedCalls);
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
     assertThat(snapshotStr).contains("callsFailed=" + numFailedCalls);
+    assertThat(snapshotStr).contains("callsIssued=" + numIssuedCalls);
 
     // Snapshot only accounts for stats happening after previous snapshot.
     snapshot = counter.snapshot();
     assertThat(snapshot.getCallsFinished()).isEqualTo(0);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(numInProgressCalls);
     assertThat(snapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(0);
 
     snapshotStr = snapshot.toString();
     assertThat(snapshotStr).contains("callsFinished=0");
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
     assertThat(snapshotStr).contains("callsFailed=0");
+    assertThat(snapshotStr).contains("callsIssued=0");
   }
 
   @Test
@@ -99,6 +105,10 @@ public class ClientLoadCounterTest {
     counter.incrementCallsFailed();
     afterSnapshot = counter.snapshot();
     assertThat(afterSnapshot.getCallsFailed()).isEqualTo(1);
+
+    counter.incrementCallsIssued();
+    afterSnapshot = counter.snapshot();
+    assertThat(afterSnapshot.getCallsIssued()).isEqualTo(1);
   }
 
   @Test
@@ -110,11 +120,13 @@ public class ClientLoadCounterTest {
     assertThat(snapshot.getCallsFinished()).isEqualTo(0);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(1);
     assertThat(snapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(1);
     tracer.streamClosed(Status.OK);
     snapshot = counter.snapshot();
     assertThat(snapshot.getCallsFinished()).isEqualTo(1);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(0);
     assertThat(snapshot.getCallsFailed()).isEqualTo(0);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(0);
 
     // Create a second XdsClientLoadRecorder with the same counter, stats are aggregated together.
     XdsClientLoadRecorder recorder2 =
@@ -125,5 +137,6 @@ public class ClientLoadCounterTest {
     assertThat(snapshot.getCallsFinished()).isEqualTo(2);
     assertThat(snapshot.getCallsInProgress()).isEqualTo(0);
     assertThat(snapshot.getCallsFailed()).isEqualTo(2);
+    assertThat(snapshot.getCallsIssued()).isEqualTo(2);
   }
 }

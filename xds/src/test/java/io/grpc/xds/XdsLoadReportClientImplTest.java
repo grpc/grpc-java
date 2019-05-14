@@ -355,6 +355,7 @@ public class XdsLoadReportClientImplTest {
     long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long callsFinished = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long callsFailed = callsFinished - ThreadLocalRandom.current().nextLong(callsFinished);
+    long callsIssued = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numLbDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numThrottleDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
 
@@ -365,7 +366,8 @@ public class XdsLoadReportClientImplTest {
             .setLocality(TEST_LOCALITY)
             .setTotalRequestsInProgress(callsInProgress)
             .setTotalSuccessfulRequests(callsFinished - callsFailed)
-            .setTotalErrorRequests(callsFailed))
+            .setTotalErrorRequests(callsFailed)
+            .setTotalIssuedRequests(callsIssued))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")
             .setDroppedCount(numLbDrops))
