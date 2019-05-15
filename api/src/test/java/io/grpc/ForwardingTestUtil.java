@@ -97,7 +97,8 @@ public final class ForwardingTestUtil {
       try {
         method.invoke(verify(mockDelegate), args);
       } catch (InvocationTargetException e) {
-        throw new RuntimeException(String.format("Method was not forwarded: %s", method), e);
+        throw new AssertionException(
+            String.format("Method was not forwarded: %s", method)).initCause(e);
       }
     }
 

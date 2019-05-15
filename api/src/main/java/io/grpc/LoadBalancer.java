@@ -331,8 +331,8 @@ public abstract class LoadBalancer {
    * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
    * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The other
    * is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has already
-   * terminated, thus there won't be further requests to LoadBalancer.  Therefore, SHUTDOWN can be
-   * safely ignored.
+   * terminated, thus there won't be further requests to LoadBalancer.  Therefore, the LoadBalancer
+   * usually don't need to react to a SHUTDOWN state.
    *
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
@@ -1305,9 +1305,8 @@ public abstract class LoadBalancer {
      * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
      * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The
      * other is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has
-     * already terminated, thus there won't be further requests to LoadBalancer.  Therefore,
-     * SHUTDOWN can be safely ignored.
-     *
+     * already terminated, thus there won't be further requests to LoadBalancer.  Therefore, the
+     * LoadBalancer usually don't need to react to a SHUTDOWN state.
      * @param newState the new state
      *
      * @since 1.22.0

@@ -1084,7 +1084,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       return createSubchannelInternal(args);
     }
 
-    private AbstractSubchannel createSubchannelInternal(final CreateSubchannelArgs args) {
+    private AbstractSubchannel createSubchannelInternal(CreateSubchannelArgs args) {
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
       return new SubchannelImpl(args, this);
