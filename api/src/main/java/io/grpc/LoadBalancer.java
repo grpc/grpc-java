@@ -338,8 +338,8 @@ public abstract class LoadBalancer {
    * @param stateInfo the new state
    * @since 1.2.0
    * @deprecated This method will be removed.  Stop overriding it.  Instead, pass {@link
-   *             SubchannelStateListener} to {@link Helper#createSubchannel(CreateSubchannelArgs)}
-   *             to receive Subchannel state updates
+   *             SubchannelStateListener} to {@link Subchannel#start} to receive Subchannel state
+   *             updates
    */
   @Deprecated
   public void handleSubchannelState(
@@ -661,7 +661,7 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * Arguments for {@link Helper#createSubchannel(CreateSubchannelArgs)}.
+   * Arguments for creating a {@link Subchannel}.
    *
    * @since 1.22.0
    */
@@ -885,9 +885,9 @@ public abstract class LoadBalancer {
      * EquivalentAddressGroup}.
      *
      * @since 1.2.0
-     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
-     *             must be called from {@link #getSynchronizationContext the Synchronization
-     *             Context}.
+     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
+     *             instead. Note the new API must be called from {@link #getSynchronizationContext
+     *             the Synchronization Context}.
      */
     @Deprecated
     public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
@@ -910,9 +910,9 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
-     *             must be called from {@link #getSynchronizationContext the Synchronization
-     *             Context}.
+     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
+     *             instead. Note the new API must be called from {@link #getSynchronizationContext
+     *             the Synchronization Context}.
      */
     @Deprecated
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
@@ -927,6 +927,8 @@ public abstract class LoadBalancer {
      *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
+     *
+     * <p>It must be called from {@link #getSynchronizationContext the Synchronization Context}
      *
      * @since 1.22.0
      */
@@ -1167,7 +1169,7 @@ public abstract class LoadBalancer {
      * <p>Must be called prior to any other method on this class, except for {@link #shutdown} which
      * may be called at any time.
      *
-     * <p>Must be called from the {@link #getSynchronizationContext Synchronization Context},
+     * <p>Must be called from the {@link Helper#getSynchronizationContext Synchronization Context},
      * otherwise it may throw.  See <a href="https://github.com/grpc/grpc-java/issues/5015">
      * #5015</a> for more discussions.
      *
