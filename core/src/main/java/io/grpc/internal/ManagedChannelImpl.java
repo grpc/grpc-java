@@ -1496,16 +1496,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     ClientTransport obtainActiveTransport() {
+      checkState(started, "Subchannel is not started");
       return subchannel.obtainActiveTransport();
     }
 
     @Override
     InternalInstrumented<ChannelStats> getInternalSubchannel() {
+      checkState(started, "not started");
       return subchannel;
     }
 
     @Override
     public void shutdown() {
+      // TODO(zhangkun83): replace shutdown() with internalShutdown() to turn the warning into an
+      // exception.
       logWarningIfNotInSyncContext("Subchannel.shutdown()");
       syncContext.execute(new Runnable() {
           @Override
@@ -1565,24 +1569,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public void requestConnection() {
       logWarningIfNotInSyncContext("Subchannel.requestConnection()");
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            internalRequestConnection();
-          }
-        });
-    }
-
-    private void internalRequestConnection() {
-      if (!started) {
-        return;
-      }
+      checkState(started, "not started");
       subchannel.obtainActiveTransport();
     }
 
     @Override
     public List<EquivalentAddressGroup> getAllAddresses() {
       logWarningIfNotInSyncContext("Subchannel.getAllAddresses()");
+      checkState(started, "not started");
       return subchannel.getAddressGroups();
     }
 

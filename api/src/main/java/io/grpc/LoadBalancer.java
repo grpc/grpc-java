@@ -533,7 +533,7 @@ public abstract class LoadBalancer {
      *       {@code handleSubchannelState}'s javadoc for more details.</li>
      * </ol>
      *
-     * @param subchannel the picked Subchannel
+     * @param subchannel the picked Subchannel.  It must have been {@link Subchannel#start started}
      * @param streamTracerFactory if not null, will be used to trace the activities of the stream
      *                            created as a result of this pick. Note it's possible that no
      *                            stream is created at all in some cases.
@@ -1155,8 +1155,7 @@ public abstract class LoadBalancer {
    * there isn't any.
    *
    * <p>{@link #start} must be called prior to calling any other methods, with the exception of
-   * {@link #shutdown}.  Whereas {@link #shutdown} must not be followed by any other methods, but
-   * can be called more than once, while only the first one has effect.
+   * {@link #shutdown}, which can be called at any time.
    *
    * @since 1.2.0
    */
@@ -1182,8 +1181,7 @@ public abstract class LoadBalancer {
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
      * be returned by the latest {@link SubchannelPicker picker}, and can be safely discarded.
      *
-     * <p>No other methods on this class can be called after this method has been called.  Calling
-     * it on an already shut-down Subchannel has no effect.
+     * <p>Calling it on an already shut-down Subchannel has no effect.
      *
      * <p>It should be called from the Synchronization Context.  Currently will log a warning if
      * violated.  It will become an exception eventually.  See <a
