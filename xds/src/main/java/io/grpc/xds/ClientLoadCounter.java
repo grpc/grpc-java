@@ -38,8 +38,9 @@ import javax.annotation.concurrent.ThreadSafe;
 @NotThreadSafe
 final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   private final AtomicLong callsInProgress = new AtomicLong();
-  private final AtomicLong callsFinished = new AtomicLong();
+  private final AtomicLong callsSucceeded = new AtomicLong();
   private final AtomicLong callsFailed = new AtomicLong();
+  private final AtomicLong callsIssued = new AtomicLong();
 
   ClientLoadCounter() {
   }
@@ -48,30 +49,27 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    * Must only be used for testing.
    */
   @VisibleForTesting
-  ClientLoadCounter(long callsFinished, long callsInProgress, long callsFailed) {
-    this.callsFinished.set(callsFinished);
+  ClientLoadCounter(long callsSucceeded, long callsInProgress, long callsFailed, long callsIssued) {
+    this.callsSucceeded.set(callsSucceeded);
     this.callsInProgress.set(callsInProgress);
     this.callsFailed.set(callsFailed);
+    this.callsIssued.set(callsIssued);
   }
 
   @Override
-  void incrementCallsInProgress() {
+  void recordCallStarted() {
+    callsIssued.getAndIncrement();
     callsInProgress.getAndIncrement();
   }
 
   @Override
-  void decrementCallsInProgress() {
+  void recordCallFinished(Status status) {
     callsInProgress.getAndDecrement();
-  }
-
-  @Override
-  void incrementCallsFinished() {
-    callsFinished.getAndIncrement();
-  }
-
-  @Override
-  void incrementCallsFailed() {
-    callsFailed.getAndIncrement();
+    if (status.isOk()) {
+      callsSucceeded.getAndIncrement();
+    } else {
+      callsFailed.getAndIncrement();
+    }
   }
 
   /**
@@ -82,9 +80,10 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    */
   @Override
   public ClientLoadSnapshot snapshot() {
-    return new ClientLoadSnapshot(callsFinished.getAndSet(0),
+    return new ClientLoadSnapshot(callsSucceeded.getAndSet(0),
         callsInProgress.get(),
-        callsFailed.getAndSet(0));
+        callsFailed.getAndSet(0),
+        callsIssued.getAndSet(0));
   }
 
   /**
@@ -94,23 +93,28 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   static final class ClientLoadSnapshot {
 
     @VisibleForTesting
-    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0);
-    private final long callsFinished;
+    static final ClientLoadSnapshot EMPTY_SNAPSHOT = new ClientLoadSnapshot(0, 0, 0, 0);
+    private final long callsSucceeded;
     private final long callsInProgress;
     private final long callsFailed;
+    private final long callsIssued;
 
     /**
      * External usage must only be for testing.
      */
     @VisibleForTesting
-    ClientLoadSnapshot(long callsFinished, long callsInProgress, long callsFailed) {
-      this.callsFinished = callsFinished;
+    ClientLoadSnapshot(long callsSucceeded,
+        long callsInProgress,
+        long callsFailed,
+        long callsIssued) {
+      this.callsSucceeded = callsSucceeded;
       this.callsInProgress = callsInProgress;
       this.callsFailed = callsFailed;
+      this.callsIssued = callsIssued;
     }
 
-    long getCallsFinished() {
-      return callsFinished;
+    long getCallsSucceeded() {
+      return callsSucceeded;
     }
 
     long getCallsInProgress() {
@@ -121,12 +125,17 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
       return callsFailed;
     }
 
+    long getCallsIssued() {
+      return callsIssued;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("callsFinished", callsFinished)
+          .add("callsSucceeded", callsSucceeded)
           .add("callsInProgress", callsInProgress)
           .add("callsFailed", callsFailed)
+          .add("callsIssued", callsIssued)
           .toString();
     }
   }
@@ -148,7 +157,7 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
 
     @Override
     public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-      counter.incrementCallsInProgress();
+      counter.recordCallStarted();
       final ClientStreamTracer delegateTracer = delegate.newClientStreamTracer(info, headers);
       return new ForwardingClientStreamTracer() {
         @Override
@@ -158,11 +167,7 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
 
         @Override
         public void streamClosed(Status status) {
-          counter.incrementCallsFinished();
-          counter.decrementCallsInProgress();
-          if (!status.isOk()) {
-            counter.incrementCallsFailed();
-          }
+          counter.recordCallFinished(status);
           delegate().streamClosed(status);
         }
       };

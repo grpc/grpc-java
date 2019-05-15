@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
 import java.util.Map;
@@ -71,9 +72,10 @@ final class XdsLoadStatsStore implements StatsStore {
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
       localityStatsBuilder
-          .setTotalSuccessfulRequests(snapshot.getCallsFinished() - snapshot.getCallsFailed())
+          .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
-          .setTotalRequestsInProgress(snapshot.getCallsInProgress());
+          .setTotalRequestsInProgress(snapshot.getCallsInProgress())
+          .setTotalIssuedRequests(snapshot.getCallsIssued());
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
@@ -150,19 +152,16 @@ final class XdsLoadStatsStore implements StatsStore {
   }
 
   /**
-   * Blueprint for counters that can can record number of calls in-progress, finished, failed.
+   * Blueprint for counters that can can record number of calls in-progress, succeeded, failed and
+   * issued.
    */
   abstract static class StatsCounter {
 
     private boolean active = true;
 
-    abstract void incrementCallsInProgress();
+    abstract void recordCallStarted();
 
-    abstract void decrementCallsInProgress();
-
-    abstract void incrementCallsFinished();
-
-    abstract void incrementCallsFailed();
+    abstract void recordCallFinished(Status status);
 
     abstract ClientLoadSnapshot snapshot();
 
