@@ -28,20 +28,26 @@ import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -55,11 +61,22 @@ import javax.annotation.concurrent.NotThreadSafe;
  * returns.
  */
 @NotThreadSafe
-final class XdsLrsClient implements XdsLoadStatsManager {
+final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
+  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+      new ClientStreamTracer() {
+      };
+  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+      new ClientStreamTracer.Factory() {
+        @Override
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+          return NOOP_CLIENT_STREAM_TRACER;
+        }
+      };
+
   private final String serviceName;
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
@@ -68,7 +85,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final XdsLoadReportStore loadReportStore;
+  private final StatsStore statsStore;
   private boolean started;
 
   @Nullable
@@ -79,19 +96,19 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   @Nullable
   private LrsStream lrsStream;
 
-  XdsLrsClient(ManagedChannel channel,
+  XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider) {
     this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadReportStore(checkNotNull(helper, "helper").getAuthority()));
+        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
   }
 
   @VisibleForTesting
-  XdsLrsClient(ManagedChannel channel,
+  XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadReportStore loadReportStore) {
+      StatsStore statsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -100,7 +117,7 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.loadReportStore = checkNotNull(loadReportStore, "loadReportStore");
+    this.statsStore = checkNotNull(statsStore, "statsStore");
     started = false;
   }
 
@@ -126,26 +143,38 @@ final class XdsLrsClient implements XdsLoadStatsManager {
   public void addLocality(Locality locality) {
     checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.addLocality(locality);
+    statsStore.addLocality(locality);
   }
 
   @Override
   public void removeLocality(final Locality locality) {
     checkState(started, "load reporting must be started first");
     syncContext.throwIfNotInThisSynchronizationContext();
-    loadReportStore.removeLocality(locality);
+    statsStore.removeLocality(locality);
   }
 
   @Override
   public void recordDroppedRequest(String category) {
     checkState(started, "load reporting must be started first");
-    loadReportStore.recordDroppedRequest(category);
+    statsStore.recordDroppedRequest(category);
   }
 
   @Override
   public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
     checkState(started, "load reporting must be started first");
-    return loadReportStore.interceptPickResult(pickResult, locality);
+    if (!pickResult.getStatus().isOk()) {
+      return pickResult;
+    }
+    StatsCounter counter = statsStore.getLocalityCounter(locality);
+    if (counter == null) {
+      return pickResult;
+    }
+    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
+    if (originFactory == null) {
+      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+    }
+    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
+    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 
   @VisibleForTesting
@@ -245,13 +274,18 @@ final class XdsLrsClient implements XdsLoadStatsManager {
     private void sendLoadReport() {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
+      ClusterStats report =
+          statsStore.generateLoadReport()
+              .toBuilder()
+              .setLoadReportInterval(Durations.fromNanos(interval))
+              .build();
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
                       TRAFFICDIRECTOR_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(loadReportStore.generateLoadReport(Durations.fromNanos(interval)))
+          .addClusterStats(report)
           .build());
       scheduleNextLoadReport();
     }
@@ -347,5 +381,20 @@ final class XdsLrsClient implements XdsLoadStatsManager {
         lrsStream = null;
       }
     }
+  }
+
+  /**
+   * Interface for client side load stats store.
+   */
+  interface StatsStore {
+    ClusterStats generateLoadReport();
+
+    void addLocality(Locality locality);
+
+    void removeLocality(Locality locality);
+
+    StatsCounter getLocalityCounter(Locality locality);
+
+    void recordDroppedRequest(String category);
   }
 }

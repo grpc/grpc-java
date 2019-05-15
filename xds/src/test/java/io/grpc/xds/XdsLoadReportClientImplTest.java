@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -28,6 +29,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
@@ -43,8 +45,12 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -53,15 +59,11 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsClientLoadRecorder.ClientLoadCounter;
+import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
-import java.util.HashSet;
-import java.util.Random;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -76,25 +78,37 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-/** Unit tests for {@link XdsLrsClient}. */
+/**
+ * Unit tests for {@link XdsLoadReportClientImpl}.
+ */
 @RunWith(JUnit4.class)
-public class XdsLrsClientTest {
+public class XdsLoadReportClientImplTest {
 
   private static final String SERVICE_AUTHORITY = "api.google.com";
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsLrsClient.LoadReportingTask.class.getSimpleName());
+          return command.toString()
+              .contains(XdsLoadReportClientImpl.LoadReportingTask.class.getSimpleName());
         }
       };
   private static final FakeClock.TaskFilter LRS_RPC_RETRY_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
         public boolean shouldAccept(Runnable command) {
-          return command.toString().contains(XdsLrsClient.LrsRpcRetryTask.class.getSimpleName());
+          return command.toString()
+              .contains(XdsLoadReportClientImpl.LrsRpcRetryTask.class.getSimpleName());
         }
       };
+  private static final Locality TEST_LOCALITY =
+      Locality.newBuilder()
+          .setRegion("test_region")
+          .setZone("test_zone")
+          .setSubZone("test_subzone")
+          .build();
+  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
+      ClientStreamTracer.StreamInfo.newBuilder().build();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -131,15 +145,19 @@ public class XdsLrsClientTest {
       .setNode(Node.newBuilder()
           .setMetadata(Struct.newBuilder()
               .putFields(
-                  XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                  XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                   Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
       .build();
   @Mock
   private BackoffPolicy backoffPolicy1;
   private ManagedChannel channel;
-  private XdsLrsClient lrsClient;
+  private XdsLoadReportClientImpl lrsClient;
   @Mock
   private BackoffPolicy backoffPolicy2;
+  @Mock
+  private Subchannel mockSubchannel;
+  @Mock
+  private StatsStore statsStore;
 
   private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
@@ -191,9 +209,10 @@ public class XdsLrsClientTest {
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
     when(backoffPolicy2.nextBackoffNanos())
         .thenReturn(TimeUnit.SECONDS.toNanos(1L), TimeUnit.SECONDS.toNanos(10L));
-    logs.clear();
-    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
-        backoffPolicyProvider, new XdsLoadReportStore(SERVICE_AUTHORITY));
+    lrsClient =
+        new XdsLoadReportClientImpl(channel, helper, fakeClock.getStopwatchSupplier(),
+            backoffPolicyProvider,
+            statsStore);
     lrsClient.startLoadReporting();
   }
 
@@ -210,28 +229,59 @@ public class XdsLrsClientTest {
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));
     // A second load report is scheduled upon the first is sent.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    inOrder.verify(statsStore).generateLoadReport();
     ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(requestObserver).onNext(reportCaptor.capture());
     LoadStatsRequest report = reportCaptor.getValue();
     assertEquals(report.getNode(), Node.newBuilder()
         .setMetadata(Struct.newBuilder()
             .putFields(
-                XdsLrsClient.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
                 Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
         .build());
     assertEquals(1, report.getClusterStatsCount());
-    assertClusterStatsEqual(expectedStats, report.getClusterStats(0));
+    assertThat(report.getClusterStats(0)).isEqualTo(expectedStats);
   }
 
-  private void assertClusterStatsEqual(ClusterStats stats1, ClusterStats stats2) {
-    assertEquals(stats1.getClusterName(), stats2.getClusterName());
-    assertEquals(stats1.getLoadReportInterval(), stats2.getLoadReportInterval());
-    assertEquals(stats1.getUpstreamLocalityStatsCount(), stats2.getUpstreamLocalityStatsCount());
-    assertEquals(stats1.getDroppedRequestsCount(), stats2.getDroppedRequestsCount());
-    assertEquals(new HashSet<>(stats1.getUpstreamLocalityStatsList()),
-        new HashSet<>(stats2.getUpstreamLocalityStatsList()));
-    assertEquals(new HashSet<>(stats1.getDroppedRequestsList()),
-        new HashSet<>(stats2.getDroppedRequestsList()));
+  @Test
+  public void loadNotRecordedForUntrackedLocality() {
+    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(null);
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
+    // If the per-locality counter does not exist, nothing should happen.
+    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
+    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
+    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
+  public void invalidPickResultNotIntercepted() {
+    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
+    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
+    // TODO (chengyuanzhang): for NoResult PickResult, do we still intercept?
+    PickResult interceptedErrorResult = lrsClient.interceptPickResult(errorResult, TEST_LOCALITY);
+    PickResult interceptedDroppedResult =
+        lrsClient.interceptPickResult(droppedResult, TEST_LOCALITY);
+    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
+    verifyZeroInteractions(statsStore);
+  }
+
+  @Test
+  public void interceptPreservesOriginStreamTracer() {
+    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    when(mockFactory
+        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+        .thenReturn(mockTracer);
+    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(new ClientLoadCounter());
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
+    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
+    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
+    Metadata metadata = new Metadata();
+    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
+        .streamClosed(Status.OK);
+    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
+    verify(mockTracer).streamClosed(Status.OK);
   }
 
   @Test
@@ -252,7 +302,9 @@ public class XdsLrsClientTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver);
+    when(statsStore.generateLoadReport())
+        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -269,7 +321,11 @@ public class XdsLrsClientTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver);
+
+    when(statsStore.generateLoadReport())
+        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
+
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -289,54 +345,27 @@ public class XdsLrsClientTest {
 
   @Test
   public void reportRecordedLoadData() {
-    lrsClient.stopLoadReporting();
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
-    lrsRequestObservers.clear();
-
-    ConcurrentMap<Locality, XdsClientLoadRecorder.ClientLoadCounter> localityCounters =
-        new ConcurrentHashMap<>();
-    ConcurrentMap<String, AtomicLong> dropCounters = new ConcurrentHashMap<>();
-    XdsLoadReportStore loadReportStore =
-        new XdsLoadReportStore(SERVICE_AUTHORITY, localityCounters, dropCounters);
-    lrsClient = new XdsLrsClient(channel, helper, fakeClock.getStopwatchSupplier(),
-        backoffPolicyProvider, loadReportStore);
-    lrsClient.startLoadReporting();
-
-    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver);
+    InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
-    Locality locality = Locality.newBuilder()
-        .setRegion("test_region")
-        .setZone("test_zone")
-        .setSubZone("test_subzone")
-        .build();
-    Random rand = new Random();
-    // Integer range is large enough for testing.
-    long callsInProgress1 = rand.nextInt(Integer.MAX_VALUE);
-    long callsFinished1 = rand.nextInt(Integer.MAX_VALUE);
-    long callsFailed1 = callsFinished1 - rand.nextInt((int) callsFinished1);
-    localityCounters.put(locality,
-        new ClientLoadCounter(callsInProgress1, callsFinished1, callsFailed1));
+    long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long callsFinished = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long callsFailed = callsFinished - ThreadLocalRandom.current().nextLong(callsFinished);
+    long numLbDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+    long numThrottleDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
 
-    long numLbDrops = rand.nextLong();
-    long numThrottleDrops = rand.nextLong();
-    dropCounters.put("lb", new AtomicLong(numLbDrops));
-    dropCounters.put("throttle", new AtomicLong(numThrottleDrops));
-
-    responseObserver.onNext(buildLrsResponse(1362));
-
-    ClusterStats expectedStats = ClusterStats.newBuilder()
+    ClusterStats expectedStats1 = ClusterStats.newBuilder()
         .setClusterName(SERVICE_AUTHORITY)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
-            .setTotalRequestsInProgress(callsInProgress1)
-            .setTotalSuccessfulRequests(callsFinished1 - callsFailed1)
-            .setTotalErrorRequests(callsFailed1))
+            .setLocality(TEST_LOCALITY)
+            .setTotalRequestsInProgress(callsInProgress)
+            .setTotalSuccessfulRequests(callsFinished - callsFailed)
+            .setTotalErrorRequests(callsFailed))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")
             .setDroppedCount(numLbDrops))
@@ -344,16 +373,12 @@ public class XdsLrsClientTest {
             .setCategory("throttle")
             .setDroppedCount(numThrottleDrops))
         .build();
-    assertNextReport(inOrder, requestObserver, expectedStats);
-
-    // No client load happens upon next load reporting, only number of in-progress
-    // calls are non-zero.
-    expectedStats = ClusterStats.newBuilder()
+    ClusterStats expectedStats2 = ClusterStats.newBuilder()
         .setClusterName(SERVICE_AUTHORITY)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
-            .setTotalRequestsInProgress(callsInProgress1))
+            .setLocality(TEST_LOCALITY)
+            .setTotalRequestsInProgress(callsInProgress))
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("lb")
             .setDroppedCount(0))
@@ -361,7 +386,13 @@ public class XdsLrsClientTest {
             .setCategory("throttle")
             .setDroppedCount(0))
         .build();
-    assertNextReport(inOrder, requestObserver, expectedStats);
+    when(statsStore.generateLoadReport())
+        .thenReturn(expectedStats1, expectedStats2);
+
+    responseObserver.onNext(buildLrsResponse(1362));
+    assertNextReport(inOrder, requestObserver, expectedStats1);
+
+    assertNextReport(inOrder, requestObserver, expectedStats2);
   }
 
   @Test

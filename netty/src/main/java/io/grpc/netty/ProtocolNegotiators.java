@@ -22,6 +22,8 @@ import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
 import io.grpc.InternalChannelz.Security;
@@ -56,6 +58,8 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import io.netty.util.AsciiString;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeMap;
 import io.netty.util.ReferenceCountUtil;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -76,6 +80,29 @@ final class ProtocolNegotiators {
   private static final Logger log = Logger.getLogger(ProtocolNegotiators.class.getName());
 
   private ProtocolNegotiators() {
+  }
+
+  static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
+    return negotiationLogger(ctx.channel());
+  }
+
+  private static ChannelLogger negotiationLogger(AttributeMap attributeMap) {
+    Attribute<ChannelLogger> attr = attributeMap.attr(NettyClientTransport.LOGGER_KEY);
+    final ChannelLogger channelLogger = attr.get();
+    if (channelLogger != null) {
+      return  channelLogger;
+    }
+    // This is only for tests where there may not be a valid logger.
+    final class NoopChannelLogger extends ChannelLogger {
+
+      @Override
+      public void log(ChannelLogLevel level, String message) {}
+
+      @Override
+      public void log(ChannelLogLevel level, String messageFormat, Object... args) {}
+    }
+
+    return new NoopChannelLogger();
   }
 
   /**
@@ -312,6 +339,7 @@ final class ProtocolNegotiators {
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "ClientTls started");
       SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
@@ -348,6 +376,7 @@ final class ProtocolNegotiators {
     }
 
     private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx, SSLSession session) {
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "ClientTls finished");
       Security security = new Security(new Tls(session));
       Attributes attrs = pne.getAttributes().toBuilder()
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
@@ -446,6 +475,7 @@ final class ProtocolNegotiators {
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "Http2Upgrade started");
       HttpClientCodec httpClientCodec = new HttpClientCodec();
       ctx.pipeline().addBefore(ctx.name(), null, httpClientCodec);
 
@@ -469,6 +499,7 @@ final class ProtocolNegotiators {
       if (evt instanceof ProtocolNegotiationEvent) {
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
+        negotiationLogger(ctx).log(ChannelLogLevel.INFO, "Http2Upgrade finished");
         ctx.pipeline().remove(ctx.name());
         next.handleProtocolNegotiationCompleted(pne.getAttributes(), pne.getSecurity());
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_REJECTED) {
@@ -825,6 +856,7 @@ final class ProtocolNegotiators {
 
     @Override
     public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "WaitUntilActive started");
       // This should be a noop, but just in case...
       super.handlerAdded(ctx);
       if (ctx.channel().isActive()) {
@@ -851,6 +883,7 @@ final class ProtocolNegotiators {
     }
 
     private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx) {
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "WaitUntilActive finished");
       Attributes attrs = pne.getAttributes().toBuilder()
           .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
           .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())
