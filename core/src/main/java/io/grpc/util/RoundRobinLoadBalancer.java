@@ -64,7 +64,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
       Attributes.Key.create("state-info");
-  // package-private to avoid synthetic accessnnnnnnnn
+  // package-private to avoid synthetic access
   static final Attributes.Key<Ref<Subchannel>> STICKY_REF = Attributes.Key.create("sticky-ref");
 
   private final Helper helper;
