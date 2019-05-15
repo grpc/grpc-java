@@ -311,7 +311,7 @@ public class ManagedChannelImplIdlenessTest {
 
     // Assume LoadBalancer has received an address, then create a subchannel.
     Subchannel subchannel = createSubchannelSafely(helper, addressGroup, Attributes.EMPTY);
-    requestConnectionSafely(helper, subchannel);
+    subchannel.requestConnection();
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
@@ -351,13 +351,13 @@ public class ManagedChannelImplIdlenessTest {
     Helper helper = helperCaptor.getValue();
     Subchannel subchannel = createSubchannelSafely(helper, servers.get(0), Attributes.EMPTY);
 
-    requestConnectionSafely(helper, subchannel);
+    subchannel.requestConnection();
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
     updateSubchannelAddressesSafely(helper, subchannel, servers.get(1));
 
-    requestConnectionSafely(helper, subchannel);
+    subchannel.requestConnection();
     MockClientTransportInfo t1 = newTransports.poll();
     t1.listener.transportReady();
   }
@@ -371,7 +371,7 @@ public class ManagedChannelImplIdlenessTest {
     Helper helper = helperCaptor.getValue();
     Subchannel subchannel = createSubchannelSafely(helper, servers.get(0), Attributes.EMPTY);
 
-    requestConnectionSafely(helper, subchannel);
+    subchannel.requestConnection();
     MockClientTransportInfo t0 = newTransports.poll();
     t0.listener.transportReady();
 
@@ -379,7 +379,7 @@ public class ManagedChannelImplIdlenessTest {
     changedList.add(new FakeSocketAddress("aDifferentServer"));
     updateSubchannelAddressesSafely(helper, subchannel, new EquivalentAddressGroup(changedList));
 
-    requestConnectionSafely(helper, subchannel);
+    subchannel.requestConnection();
     assertNull(newTransports.poll());
   }
 
@@ -512,16 +512,6 @@ public class ManagedChannelImplIdlenessTest {
           }
         });
     return resultCapture.get();
-  }
-
-  private static void requestConnectionSafely(Helper helper, final Subchannel subchannel) {
-    helper.getSynchronizationContext().execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            subchannel.requestConnection();
-          }
-        });
   }
 
   private static void updateBalancingStateSafely(
