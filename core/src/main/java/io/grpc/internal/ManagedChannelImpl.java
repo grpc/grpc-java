@@ -1506,6 +1506,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.throwIfNotInThisSynchronizationContext();
       if (subchannel == null) {
         // start() was not successful
+        shutdown = true;
         return;
       }
       if (shutdown) {
