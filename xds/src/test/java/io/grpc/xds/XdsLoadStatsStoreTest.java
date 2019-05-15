@@ -230,8 +230,8 @@ public class XdsLoadStatsStoreTest {
     ClusterStats expectedReport =
         buildClusterStats(
             Arrays.asList(
-                buildUpstreamLocalityStats(LOCALITY1, 4315 - 23, 3421, 23, 593, null),
-                buildUpstreamLocalityStats(LOCALITY2, 41234 - 431, 432, 431, 702, null)
+                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, 593, null),
+                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, 702, null)
             ),
             null);
 
