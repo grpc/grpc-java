@@ -1119,18 +1119,23 @@ public abstract class LoadBalancer {
    * #requestConnection requestConnection()} can be used to ask Subchannel to create a transport if
    * there isn't any.
    *
+   * <p>{@link #start} must be called prior to calling any other methods, with the exception of
+   * {@link #shutdown}.  Whereas {@link #shutdown} must not be followed by any other methods, but
+   * can be called more than once, while only the first one has effect.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Subchannel {
     /**
      * Starts the Subchannel.  Can only be called once.
      *
-     * <p>This method <strong>must be called from the {@link #getSynchronizationContext
-     * Synchronization Context}</strong>, otherwise it may throw. This is to avoid the race between
-     * the caller and {@link SubchannelStateListener#onSubchannelState}.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
+     * <p>Must be called prior to any other method on this class, except for {@link #shutdown} which
+     * may be called at any time.
+     *
+     * <p>Must be called from the {@link #getSynchronizationContext Synchronization Context},
+     * otherwise it may throw.  See <a href="https://github.com/grpc/grpc-java/issues/5015">
+     * #5015</a> for more discussions.
      *
      * @param listener receives state updates for this Subchannel.
      */
@@ -1142,13 +1147,15 @@ public abstract class LoadBalancer {
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
      * be returned by the latest {@link SubchannelPicker picker}, and can be safely discarded.
      *
+     * <p>No other methods on this class can be called after this method has been called.  Calling
+     * it on an already shut-down Subchannel has no effect.
+     *
      * @since 1.2.0
      */
     public abstract void shutdown();
 
     /**
      * Asks the Subchannel to create a connection (aka transport), if there isn't an active one.
-     * Has no effect if {@link #start} has not been called or {@link #shutdown} has been called.
      *
      * @since 1.2.0
      */
