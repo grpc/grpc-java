@@ -159,12 +159,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     @Override
     public void start(final SubchannelStateListener listener) {
       hcState.init(listener);
-      delegate().start(new SubchannelStateListener() {
-          @Override
-          public void onSubchannelState(ConnectivityStateInfo state) {
-            hcState.onSubchannelState(state);
-          }
-        });
+      delegate().start(hcState);
     }
   }
 
@@ -216,7 +211,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
   
   // All methods are run from syncContext
-  private final class HealthCheckState {
+  private final class HealthCheckState implements SubchannelStateListener {
     private final Runnable retryTask = new Runnable() {
         @Override
         public void run() {
@@ -279,6 +274,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       adjustHealthCheck();
     }
 
+    @Override
     public void onSubchannelState(ConnectivityStateInfo rawState) {
       if (Objects.equal(this.rawState.getState(), READY)
           && !Objects.equal(rawState.getState(), READY)) {
