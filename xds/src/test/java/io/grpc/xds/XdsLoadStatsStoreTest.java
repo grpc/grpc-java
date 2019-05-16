@@ -129,7 +129,7 @@ public class XdsLoadStatsStoreTest {
 
   private static void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
       List<UpstreamLocalityStats> actual) {
-    assertThat(actual.size()).isEqualTo(expected.size());
+    assertThat(actual).hasSize(expected.size());
     Map<Locality, UpstreamLocalityStats> expectedLocalityStats = new HashMap<>();
     for (UpstreamLocalityStats stats : expected) {
       expectedLocalityStats.put(stats.getLocality(), stats);
