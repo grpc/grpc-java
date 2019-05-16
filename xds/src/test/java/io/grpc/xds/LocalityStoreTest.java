@@ -65,6 +65,8 @@ import org.mockito.junit.MockitoRule;
  * Tests for {@link LocalityStore}.
  */
 @RunWith(JUnit4.class)
+// TODO(dapengzhang0): remove this after switching to Subchannel.start().
+@SuppressWarnings("deprecation")
 public class LocalityStoreTest {
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
