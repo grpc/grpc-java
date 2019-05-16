@@ -24,7 +24,7 @@ Running the hello world with TLS is the same as the normal hello world, but take
 **hello-world-tls-server**:
 
 ```text
-USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [trustCertCollectionFilePath]
+USAGE: HelloWorldServerTls port certChainFilePath privateKeyFilePath [trustCertCollectionFilePath]
   Note: You only need to supply trustCertCollectionFilePath if you want to enable Mutual TLS.
 ```
 
@@ -82,7 +82,7 @@ popd
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
 # In another terminal run the client
 ./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
 ```
@@ -91,7 +91,7 @@ popd
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem /tmp/sslcert/ca.crt
+./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem /tmp/sslcert/ca.crt
 # In another terminal run the client
 ./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt /tmp/sslcert/client.crt /tmp/sslcert/client.pem
 ```
@@ -108,7 +108,7 @@ If you prefer to use Maven:
 ```
 $ mvn verify
 $ # Run the server
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem"
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem"
 $ # In another terminal run the client
 $ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldClientTls -Dexec.args="localhost 50440 /tmp/sslcert/ca.crt"
 ```
@@ -119,7 +119,7 @@ If you prefer to use Bazel:
 ```
 $ bazel build :hello-world-tls-server :hello-world-tls-client
 $ # Run the server
-$ ../bazel-bin/hello-world-tls-server localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+$ ../bazel-bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
 $ # In another terminal run the client
 $ ../bazel-bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
 ```
