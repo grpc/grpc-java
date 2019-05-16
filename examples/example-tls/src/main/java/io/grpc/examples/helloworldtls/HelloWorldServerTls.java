@@ -65,12 +65,11 @@ public class HelloWorldServerTls {
             sslClientContextBuilder.trustManager(new File(trustCertCollectionFilePath));
             sslClientContextBuilder.clientAuth(ClientAuth.REQUIRE);
         }
-        return GrpcSslContexts.configure(sslClientContextBuilder,
-                SslProvider.OPENSSL);
+        return GrpcSslContexts.configure(sslClientContextBuilder);
     }
 
     private void start() throws IOException {
-        server = NettyServerBuilder.forAddress(new InetSocketAddress(host, port))
+        server = NettyServerBuilder.forPort(port)
                 .addService(new GreeterImpl())
                 .sslContext(getSslContextBuilder().build())
                 .build()
