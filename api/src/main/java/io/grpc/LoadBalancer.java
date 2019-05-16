@@ -363,6 +363,19 @@ public abstract class LoadBalancer {
   }
 
   /**
+   * The channel asks the LoadBalancer to establish connections now (if applicable) so that the
+   * upcoming RPC may then just pick a ready connection without waiting for connections.  This
+   * is triggered by {@link ManagedChannel#getState ManagedChannel.getState(true)}.
+   *
+   * <p>If LoadBalancer doesn't override it, this is no-op.  If it infeasible to create connections
+   * given the current state, e.g. no Subchannel has been created yet, LoadBalancer can ignore this
+   * request.
+   *
+   * @since 1.22.0
+   */
+  public void requestConnection() {}
+
+  /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
    * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
    *
@@ -385,8 +398,10 @@ public abstract class LoadBalancer {
      *
      * <p>No-op if unsupported.
      *
+     * @deprecated override {@link LoadBalancer#requestConnection} instead.
      * @since 1.11.0
      */
+    @Deprecated
     public void requestConnection() {}
   }
 

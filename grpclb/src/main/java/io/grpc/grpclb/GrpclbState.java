@@ -224,6 +224,14 @@ final class GrpclbState {
     maybeUpdatePicker();
   }
 
+  void requestConnection() {
+    for (RoundRobinEntry entry : currentPicker.pickList) {
+      if (entry instanceof IdleSubchannelEntry) {
+        ((IdleSubchannelEntry) entry).subchannel.requestConnection();
+      }
+    }
+  }
+
   private void maybeUseFallbackBackends() {
     if (balancerWorking) {
       return;
@@ -1025,13 +1033,5 @@ final class GrpclbState {
       }
     }
 
-    @Override
-    public void requestConnection() {
-      for (RoundRobinEntry entry : pickList) {
-        if (entry instanceof IdleSubchannelEntry) {
-          ((IdleSubchannelEntry) entry).subchannel.requestConnection();
-        }
-      }
-    }
   }
 }

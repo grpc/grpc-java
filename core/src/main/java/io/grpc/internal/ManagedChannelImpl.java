@@ -882,6 +882,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public ConnectivityState getState(boolean requestConnection) {
     ConnectivityState savedChannelState = channelStateManager.getState();
     if (requestConnection && savedChannelState == IDLE) {
@@ -891,6 +892,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           exitIdleMode();
           if (subchannelPicker != null) {
             subchannelPicker.requestConnection();
+          }
+          if (lbHelper != null) {
+            lbHelper.lb.requestConnection();
           }
         }
       }

@@ -110,6 +110,13 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     }
   }
 
+  @Override
+  public void requestConnection() {
+    if (subchannel != null) {
+      subchannel.requestConnection();
+    }
+  }
+
   /**
    * No-op picker which doesn't add any custom picking logic. It just passes already known result
    * received in constructor.
@@ -139,11 +146,6 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     public PickResult pickSubchannel(PickSubchannelArgs args) {
       subchannel.requestConnection();
       return PickResult.withNoResult();
-    }
-
-    @Override
-    public void requestConnection() {
-      subchannel.requestConnection();
     }
   }
 }

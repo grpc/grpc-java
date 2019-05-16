@@ -71,7 +71,6 @@ import io.grpc.grpclb.GrpclbState.DropEntry;
 import io.grpc.grpclb.GrpclbState.ErrorEntry;
 import io.grpc.grpclb.GrpclbState.IdleSubchannelEntry;
 import io.grpc.grpclb.GrpclbState.Mode;
-import io.grpc.grpclb.GrpclbState.RoundRobinEntry;
 import io.grpc.grpclb.GrpclbState.RoundRobinPicker;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -453,26 +452,6 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel).requestConnection();
     assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
     verify(subchannel, times(2)).requestConnection();
-  }
-
-  @Test
-  public void roundRobinPicker_requestConnection() {
-    // requestConnection() on RoundRobinPicker is only passed to IdleSubchannelEntry
-
-    Subchannel subchannel1 = mock(Subchannel.class);
-    Subchannel subchannel2 = mock(Subchannel.class);
-
-    RoundRobinPicker picker = new RoundRobinPicker(
-        Collections.<DropEntry>emptyList(),
-        Arrays.<RoundRobinEntry>asList(
-            new BackendEntry(subchannel1), new IdleSubchannelEntry(subchannel2),
-            new ErrorEntry(Status.UNAVAILABLE)));
-
-    verify(subchannel2, never()).requestConnection();
-
-    picker.requestConnection();
-    verify(subchannel2).requestConnection();
-    verify(subchannel1, never()).requestConnection();
   }
 
   @Test
@@ -1815,7 +1794,7 @@ public class GrpclbLoadBalancerTest {
     verify(subchannel).requestConnection();
 
     // ... or requested by application
-    picker5.requestConnection();
+    balancer.requestConnection();
     verify(subchannel, times(2)).requestConnection();
 
     // PICK_FIRST doesn't use subchannelPool
