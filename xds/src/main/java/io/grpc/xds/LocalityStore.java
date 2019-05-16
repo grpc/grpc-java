@@ -73,9 +73,9 @@ interface LocalityStore {
 
     private final Helper helper;
     private final PickerFactory pickerFactory;
+    private final LoadBalancerProvider loadBalancerProvider;
 
     private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
-    private LoadBalancerProvider loadBalancerProvider;
     private ConnectivityState overallState;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
