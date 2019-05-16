@@ -60,7 +60,6 @@ import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -139,7 +138,6 @@ public class XdsLbStateTest {
       });
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
-  private StreamObserver<DiscoveryResponse> responseWriter;
   private ManagedChannel channel;
 
   private static final class FakeInterLocalityPickerFactory implements PickerFactory {
@@ -182,8 +180,6 @@ public class XdsLbStateTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
-        responseWriter = responseObserver;
-
         return new StreamObserver<DiscoveryRequest>() {
 
           @Override
@@ -295,7 +291,7 @@ public class XdsLbStateTest {
     XdsLbState xdsLbState =
         new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback);
     xdsLbState.handleResolvedAddressGroups(
-        Collections.<EquivalentAddressGroup>emptyList(), Attributes.EMPTY);
+        ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
 
     assertThat(streamRecorder.firstValue().get().getTypeUrl())
         .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");

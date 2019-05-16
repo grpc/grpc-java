@@ -101,7 +101,6 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.StringMarshaller;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientTransportFactory.ClientTransportOptions;
 import io.grpc.internal.InternalSubchannel.TransportLogger;
 import io.grpc.internal.ManagedChannelImpl.ScParser;
@@ -1609,7 +1608,7 @@ public class ManagedChannelImplTest {
       ses.shutdownNow();
       fail("Should throw");
     } catch (UnsupportedOperationException e) {
-      // exepcted
+      // expected
     }
   }
 
@@ -3397,10 +3396,6 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverHelper_emptyConfigSucceeds() {
-    int defaultPort = 1;
-    ProxyDetector proxyDetector =  GrpcUtil.getDefaultProxyDetector();
-    SynchronizationContext syncCtx =
-        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
@@ -3423,10 +3418,6 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverHelper_badConfigFails() {
-    int defaultPort = 1;
-    ProxyDetector proxyDetector = GrpcUtil.getDefaultProxyDetector();
-    SynchronizationContext syncCtx =
-        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
@@ -3450,10 +3441,6 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverHelper_noConfigChosen() {
-    int defaultPort = 1;
-    ProxyDetector proxyDetector = GrpcUtil.getDefaultProxyDetector();
-    SynchronizationContext syncCtx =
-        new SynchronizationContext(Thread.currentThread().getUncaughtExceptionHandler());
     boolean retryEnabled = false;
     int maxRetryAttemptsLimit = 2;
     int maxHedgedAttemptsLimit = 3;
