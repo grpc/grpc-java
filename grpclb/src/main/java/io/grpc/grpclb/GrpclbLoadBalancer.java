@@ -115,6 +115,13 @@ class GrpclbLoadBalancer extends LoadBalancer {
     grpclbState.handleAddresses(newLbAddressGroups, newBackendServers);
   }
 
+  @Override
+  public void requestConnection() {
+    if (grpclbState != null) {
+      grpclbState.requestConnection();
+    }
+  }
+
   @VisibleForTesting
   static Mode retrieveModeFromLbConfig(
       @Nullable Map<String, ?> rawLbConfigValue, ChannelLogger channelLogger) {

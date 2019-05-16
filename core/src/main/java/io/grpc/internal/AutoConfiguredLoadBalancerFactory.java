@@ -176,6 +176,11 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     }
 
     @Override
+    public void requestConnection() {
+      getDelegate().requestConnection();
+    }
+
+    @Override
     public void shutdown() {
       delegate.shutdown();
       delegate = null;
