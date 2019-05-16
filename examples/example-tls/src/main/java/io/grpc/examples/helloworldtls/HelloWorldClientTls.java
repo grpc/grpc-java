@@ -22,7 +22,6 @@ import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.netty.GrpcSslContexts;
-import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
@@ -63,7 +62,6 @@ public class HelloWorldClientTls {
                                SslContext sslContext) throws SSLException {
 
         this(NettyChannelBuilder.forAddress(host, port)
-                .negotiationType(NegotiationType.TLS)
                 .sslContext(sslContext)
                 .build());
     }
