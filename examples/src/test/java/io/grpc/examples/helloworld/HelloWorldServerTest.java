@@ -32,6 +32,10 @@ import org.junit.runners.JUnit4;
  * For demonstrating how to write gRPC unit test only.
  * Not intended to provide a high code coverage or to test every major usecase.
  *
+ * directExecutor() makes it easier to have deterministic tests.
+ * However, if your implementation uses another thread and uses streaming it is better to use
+ * the default executor, to avoid hitting bug #3084.
+ *
  * <p>For more unit test examples see {@link io.grpc.examples.routeguide.RouteGuideClientTest} and
  * {@link io.grpc.examples.routeguide.RouteGuideServerTest}.
  */

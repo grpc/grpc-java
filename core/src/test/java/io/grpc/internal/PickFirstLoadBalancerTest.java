@@ -281,8 +281,13 @@ public class PickFirstLoadBalancerTest {
 
   @Test
   public void requestConnection() {
+    loadBalancer.requestConnection();
+
+    verify(mockSubchannel, never()).requestConnection();
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    verify(mockSubchannel).requestConnection();
+
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
     verify(mockSubchannel).start(stateListenerCaptor.capture());
     CreateSubchannelArgs args = createArgsCaptor.getValue();
@@ -290,11 +295,10 @@ public class PickFirstLoadBalancerTest {
     SubchannelStateListener stateListener = stateListenerCaptor.getValue();
 
     stateListener.onSubchannelState(ConnectivityStateInfo.forNonError(IDLE));
-    verify(mockHelper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
-    SubchannelPicker picker = pickerCaptor.getValue();
+    verify(mockHelper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
 
     verify(mockSubchannel).requestConnection();
-    picker.requestConnection();
+    loadBalancer.requestConnection();
     verify(mockSubchannel, times(2)).requestConnection();
   }
 

@@ -94,6 +94,14 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
 7. Move items out of the release milestone that didn't make the cut. Issues that
    may be backported should stay in the release milestone. Treat issues with the
    'release blocker' label with special care.
+8. Begin compiling release notes. This produces a starting point:
+
+   ```bash
+   $ echo "## gRPC Java $MAJOR.$MINOR.0 Release Notes" && echo && \
+     git shortlog "$(git merge-base upstream/v$MAJOR.$((MINOR-1)).x upstream/v$MAJOR.$MINOR.x)"..upstream/v$MAJOR.$MINOR.x | cat && \
+     echo && echo && echo "Backported commits in previous release:" && \
+     git cherry -v v$MAJOR.$((MINOR-1)).0 upstream/v$MAJOR.$MINOR.x | grep ^-
+   ```
 
 Tagging the Release
 -------------------

@@ -1981,6 +1981,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void getState_withRequestConnect_IdleWithLbRunning() {
     channelBuilder.nameResolverFactory(
@@ -1993,6 +1994,7 @@ public class ManagedChannelImplTest {
     assertEquals(IDLE, channel.getState(true));
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     verify(mockPicker).requestConnection();
+    verify(mockLoadBalancer).requestConnection();
   }
 
   @Test
