@@ -927,7 +927,6 @@ public abstract class LoadBalancer {
    *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Subchannel {
     /**
@@ -945,8 +944,7 @@ public abstract class LoadBalancer {
     /**
      * Asks the Subchannel to create a connection (aka transport), if there isn't an active one.
      *
-     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
-     * violated.  It will become an exception eventually.  See <a
+     * <p>It should be called from the Synchronization Context.  See <a
      * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.2.0
