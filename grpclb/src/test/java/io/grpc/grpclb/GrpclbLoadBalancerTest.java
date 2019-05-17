@@ -418,7 +418,7 @@ public class GrpclbLoadBalancerTest {
   @Test
   public void roundRobinPickerWithIdleEntry_noDrop() {
     Subchannel subchannel = mock(Subchannel.class);
-    IdleSubchannelEntry entry = new IdleSubchannelEntry(subchannel);
+    IdleSubchannelEntry entry = new IdleSubchannelEntry(subchannel, syncContext);
 
     RoundRobinPicker picker =
         new RoundRobinPicker(Collections.<DropEntry>emptyList(), Collections.singletonList(entry));
@@ -426,6 +426,9 @@ public class GrpclbLoadBalancerTest {
 
     verify(subchannel, never()).requestConnection();
     assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
+    verify(subchannel).requestConnection();
+    assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
+    // Only the first pick triggers requestConnection()
     verify(subchannel).requestConnection();
   }
 
@@ -438,7 +441,7 @@ public class GrpclbLoadBalancerTest {
     List<DropEntry> dropList = Arrays.asList(null, d);
 
     Subchannel subchannel = mock(Subchannel.class);
-    IdleSubchannelEntry entry = new IdleSubchannelEntry(subchannel);
+    IdleSubchannelEntry entry = new IdleSubchannelEntry(subchannel, syncContext);
 
     RoundRobinPicker picker = new RoundRobinPicker(dropList, Collections.singletonList(entry));
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
@@ -451,7 +454,8 @@ public class GrpclbLoadBalancerTest {
 
     verify(subchannel).requestConnection();
     assertThat(picker.pickSubchannel(args)).isSameInstanceAs(PickResult.withNoResult());
-    verify(subchannel, times(2)).requestConnection();
+    // Only the first pick triggers requestConnection()
+    verify(subchannel).requestConnection();
   }
 
   @Test
@@ -1725,7 +1729,7 @@ public class GrpclbLoadBalancerTest {
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
     assertThat(picker0.dropList).containsExactly(null, null);
-    assertThat(picker0.pickList).containsExactly(new IdleSubchannelEntry(subchannel));
+    assertThat(picker0.pickList).containsExactly(new IdleSubchannelEntry(subchannel, syncContext));
 
     // PICK_FIRST doesn't eagerly connect
     verify(subchannel, never()).requestConnection();
@@ -1848,7 +1852,7 @@ public class GrpclbLoadBalancerTest {
         new BackendEntry(subchannel, new TokenAttachingTracerFactory(null)));
 
     assertThat(picker0.dropList).containsExactly(null, null);
-    assertThat(picker0.pickList).containsExactly(new IdleSubchannelEntry(subchannel));
+    assertThat(picker0.pickList).containsExactly(new IdleSubchannelEntry(subchannel, syncContext));
 
 
     // Finally, an LB response, which brings us out of fallback
