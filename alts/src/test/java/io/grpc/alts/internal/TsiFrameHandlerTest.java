@@ -49,8 +49,9 @@ public class TsiFrameHandlerTest {
     ByteBuf msg = Unpooled.copiedBuffer("message after handshake finished", CharsetUtil.UTF_8);
 
     channel.writeAndFlush(msg);
+    Object actual = channel.readOutbound();
 
-    assertThat(channel.readOutbound()).isEqualTo(msg);
+    assertThat(actual).isEqualTo(msg);
     channel.close().sync();
     channel.checkException();
   }
@@ -79,9 +80,9 @@ public class TsiFrameHandlerTest {
     assertThat(channel.outboundMessages()).isEmpty();
 
     channel.close().sync();
+    Object actual = channel.readOutbound();
 
-    assertWithMessage("pending write should be flushed on close")
-        .that(channel.readOutbound()).isEqualTo(msg);
+    assertWithMessage("pending write should be flushed on close").that(actual).isEqualTo(msg);
     channel.checkException();
   }
 
