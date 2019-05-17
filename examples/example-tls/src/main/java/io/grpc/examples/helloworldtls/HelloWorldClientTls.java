@@ -25,12 +25,11 @@ import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-
-import javax.net.ssl.SSLException;
 import java.io.File;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLException;
 
 /**
  * A simple client that requests a greeting from the {@link HelloWorldServerTls} with TLS.
@@ -100,26 +99,20 @@ public class HelloWorldClientTls {
      */
     public static void main(String[] args) throws Exception {
 
-        if (args.length < 2 || args.length == 4 || args.length > 5) {
-            System.out.println("USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath] " +
+        if (args.length < 3 || args.length == 4 || args.length > 5) {
+            System.out.println("USAGE: HelloWorldClientTls host port trustCertCollectionFilePath " +
                     "[clientCertChainFilePath clientPrivateKeyFilePath]\n  Note: clientCertChainFilePath and " +
                     "clientPrivateKeyFilePath are only needed if mutual auth is desired.");
             System.exit(0);
         }
 
         HelloWorldClientTls client;
-        switch (args.length) {
-            case 2:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(null, null, null));
-                break;
-            case 3:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], null, null));
-                break;
-            default:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], args[3], args[4]));
+        if (args.length == 3) {
+            client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
+                buildSslContext(args[2], null, null));
+        } else {
+            client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
+                buildSslContext(args[2], args[3], args[4]));
         }
 
         try {
