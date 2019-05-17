@@ -19,9 +19,6 @@ in the
 `build/install/example-tls/bin/` directory that run the example. The
 example requires the server to be running before starting the client.
 
-
-## How to run
-
 Running the hello world with TLS is the same as the normal hello world, but takes additional args:
 
 **hello-world-tls-server**:
@@ -39,8 +36,8 @@ USAGE: HelloWorldClientTls host port trustCertCollectionFilePath [clientCertChai
 ```
 
 We provide a set of self-signed client/server keys and certificates to run the hello world with TLS examples on 
-`localhost`. They can be found in `src/main/resources/certs`. You will need to generate/supply your own 
-client/server keys and certificates with Subject Alternative Names in other domains.
+`localhost`. They can be found in `src/main/resources/certs`. You can provide your own keys and certificates
+but be aware that the system may require a valid Subject Alternative Names.
 
 
 #### Hello world example with TLS (no mutual auth):
@@ -73,9 +70,9 @@ If you prefer to use Maven:
 ```
 $ mvn verify
 $ # Run the server
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem"
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="50440 ./src/main/resources/certs/server.pem ./src/main/resources/certs/server.key"
 $ # In another terminal run the client
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldClientTls -Dexec.args="localhost 50440 /tmp/sslcert/ca.crt"
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldClientTls -Dexec.args="localhost 50440 ./src/main/resources/certs/ca.pem"
 ```
 
 ## Bazel
@@ -84,7 +81,7 @@ If you prefer to use Bazel:
 ```
 $ bazel build :hello-world-tls-server :hello-world-tls-client
 $ # Run the server
-$ ../bazel-bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+$ ../bazel-bin/hello-world-tls-server 50440 ./src/main/resources/certs/server.pem ./src/main/resources/certs/server.key
 $ # In another terminal run the client
-$ ../bazel-bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
+$ ../bazel-bin/hello-world-tls-client localhost 50440 ./src/main/resources/certs/ca.pem
 ```
