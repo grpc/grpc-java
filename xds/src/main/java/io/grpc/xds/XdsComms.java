@@ -181,7 +181,7 @@ final class XdsComms {
     final StreamObserver<DiscoveryResponse> xdsResponseReader =
         new StreamObserver<DiscoveryResponse>() {
 
-          boolean firstResponseReceived;
+          boolean firstEdsResponseReceived;
 
           @Override
           public void onNext(final DiscoveryResponse value) {
@@ -190,10 +190,6 @@ final class XdsComms {
 
               @Override
               public void run() {
-                if (!firstResponseReceived) {
-                  firstResponseReceived = true;
-                  adsStreamCallback.onWorking();
-                }
                 String typeUrl = value.getTypeUrl();
                 if (EDS_TYPE_URL.equals(typeUrl)) {
                   // Assuming standard mode.
@@ -205,9 +201,13 @@ final class XdsComms {
                         value.getResources(0).unpack(ClusterLoadAssignment.class);
                   } catch (InvalidProtocolBufferException | NullPointerException e) {
                     cancelRpc("Received invalid EDS response", e);
+                    adsStreamCallback.onError();
                     return;
                   }
-
+                  if (!firstEdsResponseReceived) {
+                    firstEdsResponseReceived = true;
+                    adsStreamCallback.onWorking();
+                  }
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
                   Map<Locality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
                   for (LocalityLbEndpoints localityLbEndpoints : localities) {
@@ -242,6 +242,7 @@ final class XdsComms {
                 new Runnable() {
                   @Override
                   public void run() {
+                    // TODO: schedule retry
                     closed = true;
                     if (cancelled) {
                       return;
@@ -249,7 +250,6 @@ final class XdsComms {
                     adsStreamCallback.onError();
                   }
                 });
-            // TODO: more impl
           }
 
           @Override

@@ -142,7 +142,7 @@ public class FallbackManagerTest {
 
   @Test
   public void useFallbackWhenTimeout() {
-    fallbackManager.maybeStartFallbackTimer();
+    fallbackManager.startFallbackTimer();
     List<EquivalentAddressGroup> eags = new ArrayList<>();
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
@@ -166,7 +166,7 @@ public class FallbackManagerTest {
 
   @Test
   public void cancelFallback() {
-    fallbackManager.maybeStartFallbackTimer();
+    fallbackManager.startFallbackTimer();
     List<EquivalentAddressGroup> eags = new ArrayList<>();
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);

@@ -58,8 +58,6 @@ import java.util.Set;
 // Must be accessed/run in SynchronizedContext.
 interface LocalityStore {
 
-  boolean hasReadyBackends();
-
   boolean hasNonDropBackends();
 
   void reset();
@@ -103,11 +101,6 @@ interface LocalityStore {
             return new InterLocalityPicker(childPickers);
           }
         };
-
-    @Override
-    public boolean hasReadyBackends() {
-      return overallState == READY;
-    }
 
     @Override
     public boolean hasNonDropBackends() {
@@ -196,9 +189,9 @@ interface LocalityStore {
 
     }
 
-    private static final class ErrorPicker extends SubchannelPicker {
+    static final class ErrorPicker extends SubchannelPicker {
 
-      final Status error;
+      private final Status error;
 
       ErrorPicker(Status error) {
         this.error = checkNotNull(error, "error");
@@ -210,7 +203,7 @@ interface LocalityStore {
       }
     }
 
-    private static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
+    static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         return PickResult.withNoResult();
