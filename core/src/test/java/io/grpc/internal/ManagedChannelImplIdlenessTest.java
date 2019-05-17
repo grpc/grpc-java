@@ -42,12 +42,14 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.IntegerMarshaller;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
@@ -114,6 +116,7 @@ public class ManagedChannelImplIdlenessTest {
 
   @Mock private ClientTransportFactory mockTransportFactory;
   @Mock private LoadBalancer mockLoadBalancer;
+  @Mock private SubchannelStateListener subchannelStateListener;
   private final LoadBalancerProvider mockLoadBalancerProvider =
       mock(LoadBalancerProvider.class, delegatesTo(new LoadBalancerProvider() {
           @Override
@@ -501,14 +504,19 @@ public class ManagedChannelImplIdlenessTest {
   }
 
   // Helper methods to call methods from SynchronizationContext
-  private static Subchannel createSubchannelSafely(
+  private Subchannel createSubchannelSafely(
       final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs) {
     final AtomicReference<Subchannel> resultCapture = new AtomicReference<>();
     helper.getSynchronizationContext().execute(
         new Runnable() {
           @Override
           public void run() {
-            resultCapture.set(helper.createSubchannel(addressGroup, attrs));
+            Subchannel s = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                .setAddresses(addressGroup)
+                .setAttributes(attrs)
+                .build());
+            s.start(subchannelStateListener);
+            resultCapture.set(s);
           }
         });
     return resultCapture.get();

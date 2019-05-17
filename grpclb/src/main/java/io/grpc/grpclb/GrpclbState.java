@@ -371,6 +371,7 @@ final class GrpclbState {
   /**
    * Populate the round-robin lists with the given values.
    */
+  @SuppressWarnings("deprecation")
   private void useRoundRobinLists(
       List<DropEntry> newDropList, List<BackendAddressGroup> newBackendAddrList,
       @Nullable GrpclbClientLoadRecorder loadRecorder) {
@@ -430,6 +431,8 @@ final class GrpclbState {
         }
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
+          // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+          // the new createSubchannel().
           subchannel = helper.createSubchannel(eagList, createSubchannelAttrs());
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
