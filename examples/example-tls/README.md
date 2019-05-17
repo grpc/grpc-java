@@ -19,6 +19,9 @@ in the
 `build/install/example-tls/bin/` directory that run the example. The
 example requires the server to be running before starting the client.
 
+
+## How to run
+
 Running the hello world with TLS is the same as the normal hello world, but takes additional args:
 
 **hello-world-tls-server**:
@@ -35,65 +38,27 @@ USAGE: HelloWorldClientTls host port trustCertCollectionFilePath [clientCertChai
   Note: clientCertChainFilePath and clientPrivateKeyFilePath are only needed if mutual auth is desired.
 ```
 
-#### Generating self-signed certificates for use with grpc
+We provide a set of self-signed client/server keys and certificates to run the hello world with TLS examples on 
+`localhost`. They can be found in `src/main/resources/certs`. You will need to generate/supply your own 
+client/server keys and certificates with Subject Alternative Names in other domains.
 
-You can use the following script to generate self-signed certificates for grpc-java including the hello world with TLS examples:
-
-```bash
-mkdir -p /tmp/sslcert
-pushd /tmp/sslcert
-# Change these CN's to match your hosts in your environment if needed.
-SERVER_CA_CN=localhost-ca
-SERVER_CN=localhost
-CLIENT_CN=localhost # Used when doing mutual TLS
-
-echo Generate CA key:
-openssl genrsa -passout pass:1111 -des3 -out ca.key 4096
-echo Generate CA certificate:
-# Generates ca.crt which is the trustCertCollectionFile
-openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${SERVER_CA_CN}"
-echo Generate server key:
-openssl genrsa -passout pass:1111 -des3 -out server.key 4096
-echo Generate server signing request:
-openssl req -passin pass:1111 -new -key server.key -out server.csr -subj "/CN=${SERVER_CN}"
-echo Self-signed server certificate:
-# Generates server.crt which is the certChainFile for the server
-openssl x509 -req -passin pass:1111 -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt 
-echo Remove passphrase from server key:
-openssl rsa -passin pass:1111 -in server.key -out server.key
-echo Generate client key
-openssl genrsa -passout pass:1111 -des3 -out client.key 4096
-echo Generate client signing request:
-openssl req -passin pass:1111 -new -key client.key -out client.csr -subj "/CN=${CLIENT_CN}"
-echo Self-signed client certificate:
-# Generates client.crt which is the clientCertChainFile for the client (need for mutual TLS only)
-openssl x509 -passin pass:1111 -req -days 365 -in client.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out client.crt
-echo Remove passphrase from client key:
-openssl rsa -passin pass:1111 -in client.key -out client.key
-echo Converting the private keys to X.509:
-# Generates client.pem which is the clientPrivateKeyFile for the Client (needed for mutual TLS only)
-openssl pkcs8 -topk8 -nocrypt -in client.key -out client.pem
-# Generates server.pem which is the privateKeyFile for the Server
-openssl pkcs8 -topk8 -nocrypt -in server.key -out server.pem
-popd
-```
 
 #### Hello world example with TLS (no mutual auth):
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+./build/install/example-tls/bin/hello-world-tls-server 50440 ./src/main/resources/certs/server.pem ./src/main/resources/certs/server.key
 # In another terminal run the client
-./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
+./build/install/example-tls/bin/hello-world-tls-client localhost 50440 ./src/main/resources/certs/ca.pem
 ```
 
 #### Hello world example with TLS with mutual auth:
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem /tmp/sslcert/ca.crt
+./build/install/example-tls/bin/hello-world-tls-server 50440 ./src/main/resources/certs/server.pem ./src/main/resources/certs/server.key ./src/main/resources/certs/ca.pem
 # In another terminal run the client
-./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt /tmp/sslcert/client.crt /tmp/sslcert/client.pem
+./build/install/example-tls/bin/hello-world-tls-client localhost 50440 ./src/main/resources/certs/ca.pem ./src/main/resources/certs/client.pem ./src/main/resources/certs/client.key
 ```
 
 That's it!
