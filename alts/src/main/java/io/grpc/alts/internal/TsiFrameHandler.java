@@ -122,7 +122,12 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   @SuppressWarnings("FutureReturnValueIgnored") // for aggregatePromise.doneAllocatingPromises
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
-    checkState(protector != null, "flush() called after close()");
+    if (protector == null) {
+      // TODO(carl-mastrangelo): this should be a checkState.  AbstractNettyHandler.exceptionCaught
+      // transitively calls flush even after closed, for some reason.
+      logger.warning("flush() called after close()");
+      return;
+    }
     if (pendingUnprotectedWrites.isEmpty()) {
       // Return early if there's nothing to write. Otherwise protector.protectFlush() below may
       // not check for "no-data" and go on writing the 0-byte "data" to the socket with the
