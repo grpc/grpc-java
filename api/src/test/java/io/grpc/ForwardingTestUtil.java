@@ -97,7 +97,10 @@ public final class ForwardingTestUtil {
       try {
         method.invoke(verify(mockDelegate), args);
       } catch (InvocationTargetException e) {
-        throw new AssertionError(String.format("Method was not forwarded: %s", method));
+        AssertionError ae =
+            new AssertionError(String.format("Method was not forwarded: %s", method));
+        ae.initCause(e);
+        throw ae;
       }
     }
 
@@ -126,7 +129,7 @@ public final class ForwardingTestUtil {
      * method once.  It is recommended that each invocation returns a distinctive object for the
      * same type, in order to verify that arguments are passed by the tested class correctly.
      *
-     * @return a value to be passed as an argument.  If {@code null}, {@link Default#defaultValue}
+     * @return a value to be passed as an argument.  If {@code null}, {@link Defaults#defaultValue}
      *         will be used.
      */
     @Nullable Object get(Method method, int argPos, Class<?> clazz);

@@ -40,18 +40,15 @@ public class HelloWorldServerTls {
 
     private Server server;
 
-    private final String host;
     private final int port;
     private final String certChainFilePath;
     private final String privateKeyFilePath;
     private final String trustCertCollectionFilePath;
 
-    public HelloWorldServerTls(String host,
-                               int port,
+    public HelloWorldServerTls(int port,
                                String certChainFilePath,
                                String privateKeyFilePath,
                                String trustCertCollectionFilePath) {
-        this.host = host;
         this.port = port;
         this.certChainFilePath = certChainFilePath;
         this.privateKeyFilePath = privateKeyFilePath;
@@ -65,12 +62,11 @@ public class HelloWorldServerTls {
             sslClientContextBuilder.trustManager(new File(trustCertCollectionFilePath));
             sslClientContextBuilder.clientAuth(ClientAuth.REQUIRE);
         }
-        return GrpcSslContexts.configure(sslClientContextBuilder,
-                SslProvider.OPENSSL);
+        return GrpcSslContexts.configure(sslClientContextBuilder);
     }
 
     private void start() throws IOException {
-        server = NettyServerBuilder.forAddress(new InetSocketAddress(host, port))
+        server = NettyServerBuilder.forPort(port)
                 .addService(new GreeterImpl())
                 .sslContext(getSslContextBuilder().build())
                 .build()
@@ -107,19 +103,19 @@ public class HelloWorldServerTls {
      */
     public static void main(String[] args) throws IOException, InterruptedException {
 
-        if (args.length < 4 || args.length > 5) {
+        if (args.length < 3 || args.length > 4) {
             System.out.println(
-                    "USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath " +
+                    "USAGE: HelloWorldServerTls port certChainFilePath privateKeyFilePath " +
                     "[trustCertCollectionFilePath]\n  Note: You only need to supply trustCertCollectionFilePath if you want " +
                     "to enable Mutual TLS.");
             System.exit(0);
         }
 
-        final HelloWorldServerTls server = new HelloWorldServerTls(args[0],
-                Integer.parseInt(args[1]),
+        final HelloWorldServerTls server = new HelloWorldServerTls(
+                Integer.parseInt(args[0]),
+                args[1],
                 args[2],
-                args[3],
-                args.length == 5 ? args[4] : null);
+                args.length == 4 ? args[3] : null);
         server.start();
         server.blockUntilShutdown();
     }

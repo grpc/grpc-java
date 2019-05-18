@@ -33,10 +33,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
@@ -129,8 +126,18 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<>(null));
       }
 
-      Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
+      final Subchannel subchannel = checkNotNull(
+          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroup)
+              .setAttributes(subchannelAttrs.build())
+              .build()),
+          "subchannel");
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo state) {
+            processSubchannelState(subchannel, state);
+          }
+        });
       if (stickyRef != null) {
         stickyRef.value = subchannel;
       }
@@ -160,8 +167,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(subchannel.getAddresses()) != subchannel) {
       return;
     }
