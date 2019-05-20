@@ -21,16 +21,11 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
-import io.grpc.Attributes;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
 
@@ -51,7 +46,17 @@ final class PickFirstLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (subchannel == null) {
-      subchannel = helper.createSubchannel(servers, Attributes.EMPTY);
+      final Subchannel subchannel = helper.createSubchannel(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(servers)
+              .build());
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+            processSubchannelState(subchannel, stateInfo);
+          }
+        });
+      this.subchannel = subchannel;
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
@@ -73,10 +78,9 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState currentState = stateInfo.getState();
-    if (subchannel != this.subchannel || currentState == SHUTDOWN) {
+    if (currentState == SHUTDOWN) {
       return;
     }
 
@@ -99,7 +103,6 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       default:
         throw new IllegalArgumentException("Unsupported state:" + currentState);
     }
-
     helper.updateBalancingState(currentState, picker);
   }
 

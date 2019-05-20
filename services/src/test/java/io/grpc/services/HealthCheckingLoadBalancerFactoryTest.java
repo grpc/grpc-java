@@ -24,7 +24,6 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
-import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -32,6 +31,7 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -47,11 +47,13 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.NameResolver;
 import io.grpc.Server;
@@ -68,13 +70,13 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
+import io.grpc.services.HealthCheckingLoadBalancerFactory.SubchannelImpl;
 import io.grpc.stub.StreamObserver;
 import java.net.SocketAddress;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Queue;
@@ -108,6 +110,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
   private final EquivalentAddressGroup[] eags = new EquivalentAddressGroup[NUM_SUBCHANNELS];
   @SuppressWarnings({"rawtypes", "unchecked"})
   private final List<EquivalentAddressGroup>[] eagLists = new List[NUM_SUBCHANNELS];
+  private final SubchannelStateListener[] mockStateListeners =
+      new SubchannelStateListener[NUM_SUBCHANNELS];
   private List<EquivalentAddressGroup> resolvedAddressList;
   private final FakeSubchannel[] subchannels = new FakeSubchannel[NUM_SUBCHANNELS];
   private final ManagedChannel[] channels = new ManagedChannel[NUM_SUBCHANNELS];
@@ -139,7 +143,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   private LoadBalancer origLb;
   private LoadBalancer hcLb;
   @Captor
-  ArgumentCaptor<Attributes> attrsCaptor;
+  ArgumentCaptor<CreateSubchannelArgs> createArgsCaptor;
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
@@ -171,6 +175,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
       eags[i] = eag;
       List<EquivalentAddressGroup> eagList = Arrays.asList(eag);
       eagLists[i] = eagList;
+      mockStateListeners[i] = mock(SubchannelStateListener.class);
     }
     resolvedAddressList = Arrays.asList(eags);
 
@@ -194,19 +199,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
               public void run() {
                 if (!shutdown) {
                   hcLb.handleResolvedAddresses(resolvedAddresses);
-                }
-              }
-            });
-        }
-
-        @Override
-        public void handleSubchannelState(
-            final Subchannel subchannel, final ConnectivityStateInfo stateInfo) {
-          syncContext.execute(new Runnable() {
-              @Override
-              public void run() {
-                if (!shutdown) {
-                  hcLb.handleSubchannelState(subchannel, stateInfo);
                 }
               }
             });
@@ -237,7 +229,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
   public void teardown() throws Exception {
     // All scheduled tasks have been accounted for
     assertThat(clock.getPendingTasks()).isEmpty();
-    // Health-check streams are usually not closed in the tests because handleSubchannelState() is
+    // Health-check streams are usually not closed in the tests because onSubchannelState() is
     // faked.  Force closing for clean up.
     for (Server server : servers) {
       server.shutdownNow();
@@ -249,16 +241,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     }
     for (HealthImpl impl : healthImpls) {
       assertThat(impl.checkCalled).isFalse();
-    }
-  }
-
-  @Test
-  public void createSubchannelThrowsIfCalledOutsideSynchronizationContext() {
-    try {
-      wrappedHelper.createSubchannel(eagLists[0], Attributes.EMPTY);
-      fail("Should throw");
-    } catch (IllegalStateException e) {
-      assertThat(e.getMessage()).isEqualTo("Not called from the SynchronizationContext");
     }
   }
 
@@ -284,42 +266,42 @@ public class HealthCheckingLoadBalancerFactoryTest {
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
       // We don't wrap Subchannels, thus origLb gets the original Subchannels.
-      assertThat(createSubchannel(i, attrs)).isSameInstanceAs(subchannels[i]);
-      verify(origHelper).createSubchannel(same(eagLists[i]), attrsCaptor.capture());
-      assertThat(attrsCaptor.getValue().get(SUBCHANNEL_ATTR_KEY)).isEqualTo(subchannelAttrValue);
+      assertThat(unwrap(createSubchannel(i, attrs))).isSameInstanceAs(subchannels[i]);
+      verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
+      assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
+      assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
+          .isEqualTo(subchannelAttrValue);
     }
 
     for (int i = NUM_SUBCHANNELS - 1; i >= 0; i--) {
       // Not starting health check until underlying Subchannel is READY
       FakeSubchannel subchannel = subchannels[i];
       HealthImpl healthImpl = healthImpls[i];
-      InOrder inOrder = inOrder(origLb);
-      hcLbEventDelivery.handleSubchannelState(
-          subchannel, ConnectivityStateInfo.forNonError(CONNECTING));
-      hcLbEventDelivery.handleSubchannelState(
-          subchannel, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
-      hcLbEventDelivery.handleSubchannelState(
-          subchannel, ConnectivityStateInfo.forNonError(IDLE));
+      SubchannelStateListener mockStateListener = mockStateListeners[i];
+      InOrder inOrder = inOrder(mockStateListener);
+      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(CONNECTING));
+      deliverSubchannelState(i, ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE));
+      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(IDLE));
 
-      inOrder.verify(origLb).handleSubchannelState(
-          same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-      inOrder.verify(origLb).handleSubchannelState(
-          same(subchannel), eq(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)));
-      inOrder.verify(origLb).handleSubchannelState(
-          same(subchannel), eq(ConnectivityStateInfo.forNonError(IDLE)));
-      verifyNoMoreInteractions(origLb);
+      inOrder.verify(mockStateListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+      inOrder.verify(mockStateListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forTransientFailure(Status.UNAVAILABLE)));
+      inOrder.verify(mockStateListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(IDLE)));
+      verifyNoMoreInteractions(mockStateListener);
 
       assertThat(subchannel.logs).isEmpty();
       assertThat(healthImpl.calls).isEmpty();
-      hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
       assertThat(healthImpl.calls).hasSize(1);
       ServerSideCall serverCall = healthImpl.calls.peek();
       assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
 
       // Starting the health check will make the Subchannel appear CONNECTING to the origLb.
-      inOrder.verify(origLb).handleSubchannelState(
-          same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-      verifyNoMoreInteractions(origLb);
+      inOrder.verify(mockStateListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+      verifyNoMoreInteractions(mockStateListener);
 
       assertThat(subchannel.logs).containsExactly(
           "INFO: CONNECTING: Starting health-check for \"FooService\"");
@@ -333,36 +315,37 @@ public class HealthCheckingLoadBalancerFactoryTest {
         serverCall.responseObserver.onNext(makeResponse(servingStatus));
         // SERVING is mapped to READY, while other statuses are mapped to TRANSIENT_FAILURE
         if (servingStatus == ServingStatus.SERVING) {
-          inOrder.verify(origLb).handleSubchannelState(
-              same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+          inOrder.verify(mockStateListener).onSubchannelState(
+              eq(ConnectivityStateInfo.forNonError(READY)));
           assertThat(subchannel.logs).containsExactly(
               "INFO: READY: health-check responded SERVING");
         } else {
-          inOrder.verify(origLb).handleSubchannelState(
-              same(subchannel),unavailableStateWithMsg(
+          inOrder.verify(mockStateListener).onSubchannelState(
+              unavailableStateWithMsg(
                   "Health-check service responded " + servingStatus + " for 'FooService'"));
           assertThat(subchannel.logs).containsExactly(
               "INFO: TRANSIENT_FAILURE: health-check responded " + servingStatus);
         }
         subchannel.logs.clear();
-        verifyNoMoreInteractions(origLb);
+        verifyNoMoreInteractions(mockStateListener);
       }
     }
 
     // origLb shuts down Subchannels
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       FakeSubchannel subchannel = subchannels[i];
+      SubchannelStateListener mockStateListener = mockStateListeners[i];
 
       ServerSideCall serverCall = healthImpls[i].calls.peek();
       assertThat(serverCall.cancelled).isFalse();
-      verifyNoMoreInteractions(origLb);
+      verifyNoMoreInteractions(mockStateListener);
 
       // Subchannel enters SHUTDOWN state as a response to shutdown(), and that will cancel the
       // health check RPC
       subchannel.shutdown();
       assertThat(serverCall.cancelled).isTrue();
-      verify(origLb).handleSubchannelState(
-          same(subchannel), eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
+      verify(mockStateListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
       assertThat(subchannel.logs).isEmpty();
     }
 
@@ -390,14 +373,13 @@ public class HealthCheckingLoadBalancerFactoryTest {
       createSubchannel(i, Attributes.EMPTY);
     }
 
-    InOrder inOrder = inOrder(origLb);
+    InOrder inOrder = inOrder(mockStateListeners[0], mockStateListeners[1]);
 
     for (int i = 0; i < 2; i++) {
-      hcLbEventDelivery.handleSubchannelState(
-          subchannels[i], ConnectivityStateInfo.forNonError(READY));
+      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
       assertThat(healthImpls[i].calls).hasSize(1);
-      inOrder.verify(origLb).handleSubchannelState(
-          same(subchannels[i]), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+      inOrder.verify(mockStateListeners[i]).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     }
 
     ServerSideCall serverCall0 = healthImpls[0].calls.poll();
@@ -409,40 +391,37 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // In reality UNIMPLEMENTED is generated by GRPC server library, but the client can't tell
     // whether it's the server library or the service implementation that returned this status.
     serverCall0.responseObserver.onError(Status.UNIMPLEMENTED.asException());
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
     assertThat(subchannels[0].logs).containsExactly(
         "ERROR: Health-check disabled: " + Status.UNIMPLEMENTED,
         "INFO: READY (no health-check)").inOrder();
 
     // subchannels[1] has normal health checking
     serverCall1.responseObserver.onNext(makeResponse(ServingStatus.NOT_SERVING));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannels[1]),
+    inOrder.verify(mockStateListeners[1]).onSubchannelState(
         unavailableStateWithMsg("Health-check service responded NOT_SERVING for 'BarService'"));
 
-    // Without health checking, states from underlying Subchannel are delivered directly to origLb
-    hcLbEventDelivery.handleSubchannelState(
-        subchannels[0], ConnectivityStateInfo.forNonError(IDLE));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(IDLE)));
+    // Without health checking, states from underlying Subchannel are delivered directly to the mock
+    // listeners.
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(IDLE));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(IDLE)));
 
     // Re-connecting on a Subchannel will reset the "disabled" flag.
     assertThat(healthImpls[0].calls).hasSize(0);
-    hcLbEventDelivery.handleSubchannelState(
-        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     assertThat(healthImpls[0].calls).hasSize(1);
     serverCall0 = healthImpls[0].calls.poll();
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     // Health check now works as normal
     serverCall0.responseObserver.onNext(makeResponse(ServingStatus.SERVICE_UNKNOWN));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannels[0]),
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
         unavailableStateWithMsg("Health-check service responded SERVICE_UNKNOWN for 'BarService'"));
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockStateListeners[0], mockStateListeners[1]);
     verifyZeroInteractions(backoffPolicyProvider);
   }
 
@@ -458,13 +437,14 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
-    FakeSubchannel subchannel = (FakeSubchannel) createSubchannel(0, Attributes.EMPTY);
+    FakeSubchannel subchannel = unwrap(createSubchannel(0, Attributes.EMPTY));
     assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    InOrder inOrder = inOrder(mockListener, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
     assertThat(clock.getPendingTasks()).isEmpty();
@@ -474,8 +454,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.poll().responseObserver.onCompleted();
 
     // which results in TRANSIENT_FAILURE
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
     assertThat(subchannel.logs).containsExactly(
@@ -487,7 +466,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, mockListener, subchannel, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
 
     subchannel.logs.clear();
@@ -495,8 +474,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
 
     // which also results in TRANSIENT_FAILURE, with a different description
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with "
             + Status.CANCELLED + " for 'TeeService'"));
@@ -507,15 +485,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Retry with backoff
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
 
-    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 21);
+    verifyRetryAfterNanos(inOrder, mockListener, subchannel, healthImpl, 21);
 
     // Server responds this time
     healthImpl.calls.poll().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
 
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
-    verifyNoMoreInteractions(origLb, backoffPolicyProvider, backoffPolicy1);
+    verifyNoMoreInteractions(origLb, mockListener, backoffPolicyProvider, backoffPolicy1);
   }
 
   @Test
@@ -530,13 +508,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
 
+    SubchannelStateListener mockStateListener = mockStateListeners[0];
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder =
+        inOrder(mockStateListener, backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockStateListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
     assertThat(clock.getPendingTasks()).isEmpty();
@@ -545,8 +525,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     healthImpl.calls.poll().responseObserver.onError(Status.CANCELLED.asException());
 
     // which results in TRANSIENT_FAILURE
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockStateListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with "
             + Status.CANCELLED + " for 'TeeService'"));
@@ -556,20 +535,19 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, mockStateListener, subchannel, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
 
     // Server responds
     healthImpl.calls.peek().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockStateListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(mockStateListener);
 
     // then closes the stream
     healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockStateListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with "
             + Status.UNAVAILABLE + " for 'TeeService'"));
@@ -577,16 +555,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Because server has responded, the first retry is not subject to backoff.
     // But the backoff policy has been reset.  A new backoff policy will be used for
     // the next backed-off retry.
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verify(mockStateListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     assertThat(healthImpl.calls).hasSize(1);
     assertThat(clock.getPendingTasks()).isEmpty();
     inOrder.verifyNoMoreInteractions();
 
     // then closes the stream for this retry
     healthImpl.calls.poll().responseObserver.onError(Status.UNAVAILABLE.asException());
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockStateListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with "
             + Status.UNAVAILABLE + " for 'TeeService'"));
@@ -596,19 +573,19 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Retry with a new backoff policy
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
 
-    verifyRetryAfterNanos(inOrder, subchannel, healthImpl, 12);
+    verifyRetryAfterNanos(inOrder, mockStateListener, subchannel, healthImpl, 12);
   }
 
   private void verifyRetryAfterNanos(
-      InOrder inOrder, Subchannel subchannel, HealthImpl impl, long nanos) {
+      InOrder inOrder, SubchannelStateListener listener, Subchannel subchannel, HealthImpl impl,
+      long nanos) {
     assertThat(impl.calls).isEmpty();
     clock.forwardNanos(nanos - 1);
     assertThat(impl.calls).isEmpty();
     inOrder.verifyNoMoreInteractions();
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(listener);
     clock.forwardNanos(1);
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verify(listener).onSubchannelState(eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     assertThat(impl.calls).hasSize(1);
   }
 
@@ -628,13 +605,11 @@ public class HealthCheckingLoadBalancerFactoryTest {
     createSubchannel(0, Attributes.EMPTY);
 
     // No health check activity.  Underlying Subchannel states are directly propagated
-    hcLbEventDelivery.handleSubchannelState(
-        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     assertThat(healthImpls[0].calls).isEmpty();
-    verify(origLb).handleSubchannelState(
-        same(subchannels[0]), eq(ConnectivityStateInfo.forNonError(READY)));
+    verify(mockStateListeners[0]).onSubchannelState(eq(ConnectivityStateInfo.forNonError(READY)));
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(mockStateListeners[0]);
 
     // Service config enables health check
     Attributes resolutionAttrs = attrsWithHealthCheckService("FooService");
@@ -649,13 +624,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(healthImpls[0].calls).hasSize(1);
 
     // State stays in READY, instead of switching to CONNECTING.
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(mockStateListeners[0]);
 
     // Start Subchannel 1, which will have health check
     createSubchannel(1, Attributes.EMPTY);
     assertThat(healthImpls[1].calls).isEmpty();
-    hcLbEventDelivery.handleSubchannelState(
-        subchannels[1], ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(1, ConnectivityStateInfo.forNonError(READY));
     assertThat(healthImpls[1].calls).hasSize(1);
   }
 
@@ -672,12 +646,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     inOrder.verifyNoMoreInteractions();
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
@@ -694,12 +668,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Health check RPC cancelled.
     assertThat(serverCall.cancelled).isTrue();
     // Subchannel uses original state
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
     inOrder.verify(origLb).handleResolvedAddresses(result2);
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockStateListeners[0]);
     assertThat(healthImpl.calls).isEmpty();
   }
 
@@ -716,12 +690,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     inOrder.verifyNoMoreInteractions();
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
@@ -730,8 +704,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(clock.getPendingTasks()).isEmpty();
     healthImpl.calls.poll().responseObserver.onCompleted();
     assertThat(clock.getPendingTasks()).hasSize(1);
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
 
@@ -749,12 +722,12 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(healthImpl.calls).isEmpty();
 
     // Subchannel uses original state
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
     inOrder.verify(origLb).handleResolvedAddresses(result2);
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockStateListeners[0]);
   }
 
   @Test
@@ -770,15 +743,15 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockStateListeners[0]);
 
     // Underlying subchannel is not READY initially
     ConnectivityStateInfo underlyingErrorState =
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("connection refused"));
-    hcLbEventDelivery.handleSubchannelState(subchannel, underlyingErrorState);
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), same(underlyingErrorState));
+    deliverSubchannelState(0, underlyingErrorState);
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(same(underlyingErrorState));
     inOrder.verifyNoMoreInteractions();
 
     // NameResolver gives an update without service config, thus health check will be disabled
@@ -791,16 +764,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleResolvedAddresses(result2);
 
     // Underlying subchannel is now ready
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
     // Since health check is disabled, READY state is propagated directly.
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockStateListeners[0]).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
     // and there is no health check activity.
     assertThat(healthImpls[0].calls).isEmpty();
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockStateListeners[0]);
   }
 
   @Test
@@ -816,12 +789,13 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockListener);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
@@ -831,14 +805,14 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     // Health check responded
     serverCall.responseObserver.onNext(makeResponse(ServingStatus.SERVING));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(READY)));
 
     // Service config returns with the same health check name.
     hcLbEventDelivery.handleResolvedAddresses(result1);
     // It's delivered to origLb, but nothing else happens
     inOrder.verify(origLb).handleResolvedAddresses(result1);
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
 
     // Service config returns a different health check name.
     resolutionAttrs = attrsWithHealthCheckService("FooService");
@@ -859,7 +833,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
 
     // State stays in READY, instead of switching to CONNECTING.
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
   }
 
   @Test
@@ -875,12 +849,13 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockListener);
 
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
@@ -893,8 +868,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     serverCall.responseObserver.onCompleted();
     assertThat(clock.getPendingTasks()).hasSize(1);
     assertThat(healthImpl.calls).isEmpty();
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel),
+    inOrder.verify(mockListener).onSubchannelState(
         unavailableStateWithMsg(
             "Health-check stream unexpectedly closed with " + Status.OK + " for 'TeeService'"));
 
@@ -903,7 +877,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     hcLbEventDelivery.handleResolvedAddresses(result1);
     // It's delivered to origLb, but nothing else happens
     inOrder.verify(origLb).handleResolvedAddresses(result1);
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
     assertThat(clock.getPendingTasks()).hasSize(1);
     assertThat(healthImpl.calls).isEmpty();
 
@@ -916,8 +890,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     hcLbEventDelivery.handleResolvedAddresses(result2);
 
     // Concluded CONNECTING state
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     inOrder.verify(origLb).handleResolvedAddresses(result2);
 
@@ -930,7 +904,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // with the new service name
     assertThat(serverCall.request).isEqualTo(makeRequest("FooService"));
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
   }
 
   @Test
@@ -946,16 +920,17 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
-    InOrder inOrder = inOrder(origLb);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    InOrder inOrder = inOrder(origLb, mockListener);
     HealthImpl healthImpl = healthImpls[0];
 
     // Underlying subchannel is not READY initially
     ConnectivityStateInfo underlyingErrorState =
         ConnectivityStateInfo.forTransientFailure(
             Status.UNAVAILABLE.withDescription("connection refused"));
-    hcLbEventDelivery.handleSubchannelState(subchannel, underlyingErrorState);
-    inOrder.verify(origLb).handleSubchannelState(same(subchannel), same(underlyingErrorState));
+    deliverSubchannelState(0, underlyingErrorState);
+    inOrder.verify(mockListener).onSubchannelState(same(underlyingErrorState));
     inOrder.verifyNoMoreInteractions();
 
     // Service config returns with the same health check name.
@@ -976,18 +951,18 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(origLb).handleResolvedAddresses(result2);
 
     // Underlying subchannel is now ready
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
     // Concluded CONNECTING state
-    inOrder.verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    inOrder.verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     // Health check RPC is started
     assertThat(healthImpl.calls).hasSize(1);
     // with the new service name
     assertThat(healthImpl.calls.poll().request).isEqualTo(makeRequest("FooService"));
 
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
   }
 
   @Test
@@ -1031,18 +1006,19 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
 
     Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    assertThat(subchannel).isSameInstanceAs(subchannels[0]);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
 
     // Trigger the health check
-    hcLbEventDelivery.handleSubchannelState(subchannel, ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
     HealthImpl healthImpl = healthImpls[0];
     assertThat(healthImpl.calls).hasSize(1);
     ServerSideCall serverCall = healthImpl.calls.poll();
     assertThat(serverCall.cancelled).isFalse();
 
-    verify(origLb).handleSubchannelState(
-        same(subchannel), eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     // Shut down the balancer
     hcLbEventDelivery.shutdown();
@@ -1052,7 +1028,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     assertThat(serverCall.cancelled).isTrue();
 
     // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
-    verifyNoMoreInteractions(origLb);
+    verifyNoMoreInteractions(origLb, mockListener);
 
     // No more health check call is made or scheduled
     assertThat(healthImpl.calls).isEmpty();
@@ -1085,8 +1061,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origLb).handleResolvedAddresses(result);
     createSubchannel(0, Attributes.EMPTY);
     assertThat(healthImpls[0].calls).isEmpty();
-    hcLbEventDelivery.handleSubchannelState(
-        subchannels[0], ConnectivityStateInfo.forNonError(READY));
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
     assertThat(healthImpls[0].calls).hasSize(1);
   }
 
@@ -1179,6 +1154,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     final Attributes attrs;
     final Channel channel;
     final ArrayList<String> logs = new ArrayList<>();
+    final int index;
+    SubchannelStateListener listener;
     private final ChannelLogger logger = new ChannelLogger() {
         @Override
         public void log(ChannelLogLevel level, String msg) {
@@ -1191,15 +1168,22 @@ public class HealthCheckingLoadBalancerFactoryTest {
         }
       };
 
-    FakeSubchannel(List<EquivalentAddressGroup> eagList, Attributes attrs, Channel channel) {
-      this.eagList = Collections.unmodifiableList(eagList);
-      this.attrs = checkNotNull(attrs);
+    FakeSubchannel(int index, CreateSubchannelArgs args, Channel channel) {
+      this.index = index;
+      this.eagList = args.getAddresses();
+      this.attrs = args.getAttributes();
       this.channel = checkNotNull(channel);
     }
 
     @Override
+    public void start(SubchannelStateListener listener) {
+      checkState(this.listener == null);
+      this.listener = listener;
+    }
+
+    @Override
     public void shutdown() {
-      hcLbEventDelivery.handleSubchannelState(this, ConnectivityStateInfo.forNonError(SHUTDOWN));
+      deliverSubchannelState(index, ConnectivityStateInfo.forNonError(SHUTDOWN));
     }
 
     @Override
@@ -1230,16 +1214,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
   private class FakeHelper extends Helper {
     @Override
-    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
       int index = -1;
       for (int i = 0; i < NUM_SUBCHANNELS; i++) {
-        if (eagLists[i] == addrs) {
+        if (eagLists[i].equals(args.getAddresses())) {
           index = i;
           break;
         }
       }
-      checkState(index >= 0, "addrs " + addrs + " not found");
-      FakeSubchannel subchannel = new FakeSubchannel(addrs, attrs, channels[index]);
+      checkState(index >= 0, "addrs " + args.getAddresses() + " not found");
+      FakeSubchannel subchannel = new FakeSubchannel(index, args, channels[index]);
       checkState(subchannels[index] == null, "subchannels[" + index + "] already created");
       subchannels[index] = subchannel;
       return subchannel;
@@ -1297,9 +1281,27 @@ public class HealthCheckingLoadBalancerFactoryTest {
     syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          returnedSubchannel.set(wrappedHelper.createSubchannel(eagLists[index], attrs));
+          Subchannel s = wrappedHelper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(eagLists[index])
+              .setAttributes(attrs)
+              .build());
+          s.start(mockStateListeners[index]);
+          returnedSubchannel.set(s);
         }
       });
     return returnedSubchannel.get();
+  }
+
+  private void deliverSubchannelState(final int index, final ConnectivityStateInfo newState) {
+    syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          subchannels[index].listener.onSubchannelState(newState);
+        }
+      });
+  }
+
+  private static FakeSubchannel unwrap(Subchannel s) {
+    return (FakeSubchannel) ((SubchannelImpl) s).delegate();
   }
 }

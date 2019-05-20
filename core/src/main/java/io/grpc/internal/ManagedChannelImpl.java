@@ -53,10 +53,12 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -228,8 +230,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
   // Must only be mutated and read from syncContext
   private boolean shutdownNowed;
-  // Must be mutated from syncContext
-  private volatile boolean terminating;
+  // Must only be mutated and read from syncContext
+  private boolean terminating;
   // Must be mutated from syncContext
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -881,6 +883,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
+  // Must be called from syncContext
+  private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
+    if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
+      refreshAndResetNameResolution();
+    }
+  }
+
   @Override
   @SuppressWarnings("deprecation")
   public ConnectivityState getState(boolean requestConnection) {
@@ -1042,103 +1051,47 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private class LbHelperImpl extends LoadBalancer.Helper {
     LoadBalancer lb;
 
-    // Must be called from syncContext
-    private void handleInternalSubchannelState(ConnectivityStateInfo newState) {
-      if (newState.getState() == TRANSIENT_FAILURE || newState.getState() == IDLE) {
-        refreshAndResetNameResolution();
-      }
-    }
-
+    @Deprecated
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
       logWarningIfNotInSyncContext("createSubchannel()");
+      // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkNotNull(addressGroups, "addressGroups");
       checkNotNull(attrs, "attrs");
+      final AbstractSubchannel subchannel = createSubchannelInternal(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroups)
+              .setAttributes(attrs)
+              .build());
+
+      final SubchannelStateListener listener =
+          new LoadBalancer.SubchannelStateListener() {
+            @Override
+            public void onSubchannelState(ConnectivityStateInfo newState) {
+              lb.handleSubchannelState(subchannel, newState);
+            }
+          };
+
+      syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            subchannel.start(listener);
+          }
+        });
+      return subchannel;
+    }
+
+    @Override
+    public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      return createSubchannelInternal(args);
+    }
+
+    private AbstractSubchannel createSubchannelInternal(CreateSubchannelArgs args) {
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
-      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
-      long subchannelCreationTime = timeProvider.currentTimeNanos();
-      InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ null);
-      ChannelTracer subchannelTracer =
-          new ChannelTracer(
-              subchannelLogId, maxTraceEvents, subchannelCreationTime,
-              "Subchannel for " + addressGroups);
-
-      final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
-        // All callbacks are run in syncContext
-        @Override
-        void onTerminated(InternalSubchannel is) {
-          subchannels.remove(is);
-          channelz.removeSubchannel(is);
-          maybeTerminateChannel();
-        }
-
-        @Override
-        void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
-          handleInternalSubchannelState(newState);
-          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (LbHelperImpl.this == ManagedChannelImpl.this.lbHelper) {
-            lb.handleSubchannelState(subchannel, newState);
-          }
-        }
-
-        @Override
-        void onInUse(InternalSubchannel is) {
-          inUseStateAggregator.updateObjectInUse(is, true);
-        }
-
-        @Override
-        void onNotInUse(InternalSubchannel is) {
-          inUseStateAggregator.updateObjectInUse(is, false);
-        }
-      }
-
-      final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroups,
-          authority(),
-          userAgent,
-          backoffPolicyProvider,
-          transportFactory,
-          transportFactory.getScheduledExecutorService(),
-          stopwatchSupplier,
-          syncContext,
-          new ManagedInternalSubchannelCallback(),
-          channelz,
-          callTracerFactory.create(),
-          subchannelTracer,
-          subchannelLogId,
-          timeProvider);
-      channelTracer.reportEvent(new ChannelTrace.Event.Builder()
-          .setDescription("Child Subchannel created")
-          .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-          .setTimestampNanos(subchannelCreationTime)
-          .setSubchannelRef(internalSubchannel)
-          .build());
-      channelz.addSubchannel(internalSubchannel);
-      subchannel.subchannel = internalSubchannel;
-
-      final class AddSubchannel implements Runnable {
-        @Override
-        public void run() {
-          if (terminating) {
-            // Because SynchronizationContext doesn't guarantee the runnable has been executed upon
-            // when returning, the subchannel may still be returned to the balancer without being
-            // shutdown even if "terminating" is already true.  The subchannel will not be used in
-            // this case, because delayed transport has terminated when "terminating" becomes true,
-            // and no more requests will be sent to balancer beyond this point.
-            internalSubchannel.shutdown(SHUTDOWN_STATUS);
-          }
-          if (!terminated) {
-            // If channel has not terminated, it will track the subchannel and block termination
-            // for it.
-            subchannels.add(internalSubchannel);
-          }
-        }
-      }
-
-      syncContext.execute(new AddSubchannel());
-      return subchannel;
+      return new SubchannelImpl(args, this);
     }
 
     @Override
@@ -1452,68 +1405,165 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private final class SubchannelImpl extends AbstractSubchannel {
-    // Set right after SubchannelImpl is created.
+    final CreateSubchannelArgs args;
+    final LbHelperImpl helper;
+    SubchannelStateListener listener;
     InternalSubchannel subchannel;
-    final Object shutdownLock = new Object();
-    final Attributes attrs;
+    boolean started;
+    boolean shutdown;
+    ScheduledHandle delayedShutdownTask;
 
-    @GuardedBy("shutdownLock")
-    boolean shutdownRequested;
-    @GuardedBy("shutdownLock")
-    ScheduledFuture<?> delayedShutdownTask;
+    SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
+      this.args = checkNotNull(args, "args");
+      this.helper = checkNotNull(helper, "helper");
+    }
 
-    SubchannelImpl(Attributes attrs) {
-      this.attrs = checkNotNull(attrs, "attrs");
+    @Override
+    public void start(final SubchannelStateListener listener) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      checkState(!started, "already started");
+      checkState(!shutdown, "already shutdown");
+      started = true;
+      this.listener = listener;
+      if (terminating) {
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              listener.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+            }
+          });
+        return;
+      }
+      final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
+        // All callbacks are run in syncContext
+        @Override
+        void onTerminated(InternalSubchannel is) {
+          subchannels.remove(is);
+          channelz.removeSubchannel(is);
+          maybeTerminateChannel();
+        }
+
+        @Override
+        void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
+          handleInternalSubchannelState(newState);
+          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+          if (helper == ManagedChannelImpl.this.lbHelper) {
+            checkState(listener != null, "listener is null");
+            listener.onSubchannelState(newState);
+          }
+        }
+
+        @Override
+        void onInUse(InternalSubchannel is) {
+          inUseStateAggregator.updateObjectInUse(is, true);
+        }
+
+        @Override
+        void onNotInUse(InternalSubchannel is) {
+          inUseStateAggregator.updateObjectInUse(is, false);
+        }
+      }
+
+      long subchannelCreationTime = timeProvider.currentTimeNanos();
+      InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ null);
+      ChannelTracer subchannelTracer =
+          new ChannelTracer(
+              subchannelLogId, maxTraceEvents, subchannelCreationTime,
+              "Subchannel for " + args.getAddresses());
+      InternalSubchannel internalSubchannel = new InternalSubchannel(
+          args.getAddresses(),
+          authority(),
+          userAgent,
+          backoffPolicyProvider,
+          transportFactory,
+          transportFactory.getScheduledExecutorService(),
+          stopwatchSupplier,
+          syncContext,
+          new ManagedInternalSubchannelCallback(),
+          channelz,
+          callTracerFactory.create(),
+          subchannelTracer,
+          subchannelLogId,
+          timeProvider);
+
+      channelTracer.reportEvent(new ChannelTrace.Event.Builder()
+          .setDescription("Child Subchannel started")
+          .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
+          .setTimestampNanos(subchannelCreationTime)
+          .setSubchannelRef(internalSubchannel)
+          .build());
+
+      channelz.addSubchannel(internalSubchannel);
+      this.subchannel = internalSubchannel;
+      subchannels.add(internalSubchannel);
     }
 
     @Override
     ClientTransport obtainActiveTransport() {
+      checkState(started, "Subchannel is not started");
       return subchannel.obtainActiveTransport();
     }
 
     @Override
     InternalInstrumented<ChannelStats> getInternalSubchannel() {
+      checkState(started, "not started");
       return subchannel;
     }
 
     @Override
     public void shutdown() {
+      // TODO(zhangkun83): replace shutdown() with internalShutdown() to turn the warning into an
+      // exception.
       logWarningIfNotInSyncContext("Subchannel.shutdown()");
-      synchronized (shutdownLock) {
-        if (shutdownRequested) {
-          if (terminating && delayedShutdownTask != null) {
-            // shutdown() was previously called when terminating == false, thus a delayed shutdown()
-            // was scheduled.  Now since terminating == true, We should expedite the shutdown.
-            delayedShutdownTask.cancel(false);
-            delayedShutdownTask = null;
-            // Will fall through to the subchannel.shutdown() at the end.
-          } else {
-            return;
+      syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            internalShutdown();
           }
-        } else {
-          shutdownRequested = true;
-        }
-        // Add a delay to shutdown to deal with the race between 1) a transport being picked and
-        // newStream() being called on it, and 2) its Subchannel is shut down by LoadBalancer (e.g.,
-        // because of address change, or because LoadBalancer is shutdown by Channel entering idle
-        // mode). If (2) wins, the app will see a spurious error. We work around this by delaying
-        // shutdown of Subchannel for a few seconds here.
-        //
-        // TODO(zhangkun83): consider a better approach
-        // (https://github.com/grpc/grpc-java/issues/2562).
-        if (!terminating) {
-          final class ShutdownSubchannel implements Runnable {
-            @Override
-            public void run() {
-              subchannel.shutdown(SUBCHANNEL_SHUTDOWN_STATUS);
-            }
-          }
+        });
+    }
 
-          delayedShutdownTask = transportFactory.getScheduledExecutorService().schedule(
-              new LogExceptionRunnable(
-                  new ShutdownSubchannel()), SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
+    private void internalShutdown() {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      if (subchannel == null) {
+        // start() was not successful
+        shutdown = true;
+        return;
+      }
+      if (shutdown) {
+        if (terminating && delayedShutdownTask != null) {
+          // shutdown() was previously called when terminating == false, thus a delayed shutdown()
+          // was scheduled.  Now since terminating == true, We should expedite the shutdown.
+          delayedShutdownTask.cancel();
+          delayedShutdownTask = null;
+          // Will fall through to the subchannel.shutdown() at the end.
+        } else {
           return;
         }
+      } else {
+        shutdown = true;
+      }
+      // Add a delay to shutdown to deal with the race between 1) a transport being picked and
+      // newStream() being called on it, and 2) its Subchannel is shut down by LoadBalancer (e.g.,
+      // because of address change, or because LoadBalancer is shutdown by Channel entering idle
+      // mode). If (2) wins, the app will see a spurious error. We work around this by delaying
+      // shutdown of Subchannel for a few seconds here.
+      //
+      // TODO(zhangkun83): consider a better approach
+      // (https://github.com/grpc/grpc-java/issues/2562).
+      if (!terminating) {
+        final class ShutdownSubchannel implements Runnable {
+          @Override
+          public void run() {
+            subchannel.shutdown(SUBCHANNEL_SHUTDOWN_STATUS);
+          }
+        }
+
+        delayedShutdownTask = syncContext.schedule(
+            new LogExceptionRunnable(new ShutdownSubchannel()),
+            SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS,
+            transportFactory.getScheduledExecutorService());
+        return;
       }
       // When terminating == true, no more real streams will be created. It's safe and also
       // desirable to shutdown timely.
@@ -1522,18 +1572,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void requestConnection() {
+      checkState(started, "not started");
       subchannel.obtainActiveTransport();
     }
 
     @Override
     public List<EquivalentAddressGroup> getAllAddresses() {
       logWarningIfNotInSyncContext("Subchannel.getAllAddresses()");
+      checkState(started, "not started");
       return subchannel.getAddressGroups();
     }
 
     @Override
     public Attributes getAttributes() {
-      return attrs;
+      return args.getAttributes();
     }
 
     @Override

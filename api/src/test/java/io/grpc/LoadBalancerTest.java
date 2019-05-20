@@ -17,11 +17,14 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -35,6 +38,8 @@ import org.junit.runners.JUnit4;
 public class LoadBalancerTest {
   private final Subchannel subchannel = mock(Subchannel.class);
   private final Subchannel subchannel2 = mock(Subchannel.class);
+  private final SubchannelStateListener subchannelStateListener =
+      mock(SubchannelStateListener.class);
   private final ClientStreamTracer.Factory tracerFactory = mock(ClientStreamTracer.Factory.class);
   private final Status status = Status.UNAVAILABLE.withDescription("for test");
   private final Status status2 = Status.UNAVAILABLE.withDescription("for test 2");
@@ -120,8 +125,9 @@ public class LoadBalancerTest {
     assertThat(error1).isNotEqualTo(drop1);
   }
 
+  @Deprecated
   @Test
-  public void helper_createSubchannel_delegates() {
+  public void helper_createSubchannel_old_delegates() {
     class OverrideCreateSubchannel extends NoopHelper {
       boolean ran;
 
@@ -140,9 +146,28 @@ public class LoadBalancerTest {
     assertThat(helper.ran).isTrue();
   }
 
-  @Test(expected = UnsupportedOperationException.class)
+  @Test
+  @SuppressWarnings("deprecation")
+  public void helper_createSubchannelList_oldApi_throws() {
+    try {
+      new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
+  }
+
+  @Test
   public void helper_createSubchannelList_throws() {
-    new NoopHelper().createSubchannel(Arrays.asList(eag), attrs);
+    try {
+      new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
+          .setAddresses(eag)
+          .setAttributes(attrs)
+          .build());
+      fail("Should throw");
+    } catch (UnsupportedOperationException e) {
+      // expected
+    }
   }
 
   @Test
@@ -197,6 +222,75 @@ public class LoadBalancerTest {
         return Arrays.asList(eag, eag);
       }
     }.getAddresses();
+  }
+
+  @Test
+  public void createSubchannelArgs_option_keyOps() {
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    String testValue = "test-value";
+    CreateSubchannelArgs.Key<String> testWithDefaultKey = CreateSubchannelArgs.Key
+        .createWithDefault("test-key", testValue);
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .build();
+    assertThat(args.getOption(testKey)).isNull();
+    assertThat(args.getOption(testWithDefaultKey)).isSameInstanceAs(testValue);
+  }
+
+  @Test
+  public void createSubchannelArgs_option_addGet() {
+    String testValue = "test-value";
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .addOption(testKey, testValue)
+        .build();
+    assertThat(args.getOption(testKey)).isEqualTo(testValue);
+  }
+
+  @Test
+  public void createSubchannelArgs_option_lastOneWins() {
+    String testValue1 = "test-value-1";
+    String testValue2 = "test-value-2";
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .addOption(testKey, testValue1)
+        .addOption(testKey, testValue2)
+        .build();
+    assertThat(args.getOption(testKey)).isEqualTo(testValue2);
+  }
+
+  @Test
+  public void createSubchannelArgs_build() {
+    CreateSubchannelArgs.Key<Object> testKey = CreateSubchannelArgs.Key.create("test-key");
+    Object testValue = new Object();
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .addOption(testKey, testValue)
+        .build();
+    CreateSubchannelArgs rebuildedArgs = args.toBuilder().build();
+    assertThat(rebuildedArgs.getAddresses()).containsExactly(eag);
+    assertThat(rebuildedArgs.getAttributes()).isSameInstanceAs(attrs);
+    assertThat(rebuildedArgs.getOption(testKey)).isSameInstanceAs(testValue);
+  }
+
+  @Test
+  public void createSubchannelArgs_toString() {
+    CreateSubchannelArgs.Key<String> testKey = CreateSubchannelArgs.Key.create("test-key");
+    CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
+        .setAddresses(eag)
+        .setAttributes(attrs)
+        .addOption(testKey, "test-value")
+        .build();
+    String str = args.toString();
+    assertThat(str).contains("addrs=");
+    assertThat(str).contains("attrs=");
+    assertThat(str).contains("customOptions=");
   }
 
   @Deprecated

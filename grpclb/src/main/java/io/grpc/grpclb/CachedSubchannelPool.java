@@ -51,11 +51,14 @@ final class CachedSubchannelPool implements SubchannelPool {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public Subchannel takeOrCreateSubchannel(
       EquivalentAddressGroup eag, Attributes defaultAttributes) {
     final CacheEntry entry = cache.remove(eag);
     final Subchannel subchannel;
     if (entry == null) {
+      // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the
+      // new createSubchannel().
       subchannel = helper.createSubchannel(eag, defaultAttributes);
     } else {
       subchannel = entry.subchannel;

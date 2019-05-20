@@ -193,7 +193,7 @@ public class GrpclbLoadBalancerTest {
   private BackoffPolicy backoffPolicy2;
   private GrpclbLoadBalancer balancer;
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "deprecation"})
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
@@ -262,6 +262,8 @@ public class GrpclbLoadBalancerTest {
           unpooledSubchannelTracker.add(subchannel);
           return subchannel;
         }
+        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+        // the new createSubchannel().
       }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
     when(helper.getSynchronizationContext()).thenReturn(syncContext);
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
@@ -1680,7 +1682,7 @@ public class GrpclbLoadBalancerTest {
     verify(helper, times(4)).refreshNameResolution();
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void grpclbWorking_pickFirstMode() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -1711,6 +1713,8 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildInitialResponse());
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
         eq(Arrays.asList(
                 new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
@@ -1804,7 +1808,7 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void pickFirstMode_fallback() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -1828,6 +1832,8 @@ public class GrpclbLoadBalancerTest {
     fakeClock.forwardTime(GrpclbState.FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     // Entering fallback mode
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
         eq(Arrays.asList(grpclbResolutionList.get(0), grpclbResolutionList.get(2))),
         any(Attributes.class));
@@ -1883,6 +1889,7 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void switchMode() throws Exception {
     InOrder inOrder = inOrder(helper);
@@ -1960,6 +1967,8 @@ public class GrpclbLoadBalancerTest {
     lbResponseObserver.onNext(buildLbResponse(backends1));
 
     // PICK_FIRST Subchannel
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
         eq(Arrays.asList(
                 new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
@@ -2044,11 +2053,14 @@ public class GrpclbLoadBalancerTest {
     assertThat(mode).isEqualTo(Mode.ROUND_ROBIN);
   }
 
+  @SuppressWarnings("deprecation")
   private void deliverSubchannelState(
       final Subchannel subchannel, final ConnectivityStateInfo newState) {
     syncContext.execute(new Runnable() {
         @Override
         public void run() {
+          // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+          // the new API.
           balancer.handleSubchannelState(subchannel, newState);
         }
       });

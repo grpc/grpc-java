@@ -93,7 +93,7 @@ public class CachedSubchannelPoolTest {
   private final ArrayList<Subchannel> mockSubchannels = new ArrayList<>();
 
   @Before
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "deprecation"})
   public void setUp() {
     doAnswer(new Answer<Subchannel>() {
         @Override
@@ -107,6 +107,8 @@ public class CachedSubchannelPoolTest {
           mockSubchannels.add(subchannel);
           return subchannel;
         }
+        // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+        // the new createSubchannel().
       }).when(helper).createSubchannel(any(List.class), any(Attributes.class));
     doAnswer(new Answer<Void>() {
         @Override
@@ -122,20 +124,26 @@ public class CachedSubchannelPoolTest {
   }
 
   @After
+  @SuppressWarnings("deprecation")
   public void wrapUp() {
     // Sanity checks
     for (Subchannel subchannel : mockSubchannels) {
       verify(subchannel, atMost(1)).shutdown();
     }
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new API.
     verify(balancer, atLeast(0))
         .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
     verifyNoMoreInteractions(balancer);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void subchannelExpireAfterReturned() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
     assertThat(subchannel1).isNotNull();
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the new
+    // createSubchannel().
     verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
@@ -162,10 +170,13 @@ public class CachedSubchannelPoolTest {
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void subchannelReused() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
     assertThat(subchannel1).isNotNull();
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the new
+    // createSubchannel().
     verify(helper).createSubchannel(eq(Arrays.asList(EAG1)), same(ATTRS1));
 
     Subchannel subchannel2 = pool.takeOrCreateSubchannel(EAG2, ATTRS2);
@@ -205,6 +216,7 @@ public class CachedSubchannelPoolTest {
     assertThat(clock.numPendingTasks()).isEqualTo(0);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void updateStateWhileInPool() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
@@ -217,6 +229,8 @@ public class CachedSubchannelPoolTest {
 
     pool.handleSubchannelState(subchannel1, anotherFailureState);
 
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the new
+    // createSubchannel().
     verify(balancer, never())
         .handleSubchannelState(any(Subchannel.class), any(ConnectivityStateInfo.class));
 
@@ -229,11 +243,14 @@ public class CachedSubchannelPoolTest {
     verifyNoMoreInteractions(balancer);
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void updateStateWhileInPool_notSameObject() {
     Subchannel subchannel1 = pool.takeOrCreateSubchannel(EAG1, ATTRS1);
     pool.returnSubchannel(subchannel1, READY_STATE);
 
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to the new
+    // createSubchannel().
     Subchannel subchannel2 = helper.createSubchannel(EAG1, ATTRS1);
     Subchannel subchannel3 = helper.createSubchannel(EAG2, ATTRS2);
 
