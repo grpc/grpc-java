@@ -74,7 +74,6 @@ interface LocalityStore {
 
     private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     private LoadBalancerProvider loadBalancerProvider;
-    private ConnectivityState overallState;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry);
@@ -261,7 +260,6 @@ interface LocalityStore {
       }
 
       updatePicker(overallState, childPickers);
-      this.overallState = overallState;
     }
 
     private void updatePicker(ConnectivityState state,  List<WeightedChildPicker> childPickers) {
