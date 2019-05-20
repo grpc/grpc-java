@@ -62,6 +62,7 @@ public class HelloWorldClientTls {
                                SslContext sslContext) throws SSLException {
 
         this(NettyChannelBuilder.forAddress(host, port)
+                .overrideAuthority("foo.test.google.fr")  /* Only for using provided test certs. */
                 .sslContext(sslContext)
                 .build());
     }
@@ -108,27 +109,16 @@ public class HelloWorldClientTls {
         }
 
         HelloWorldClientTls client;
-        switch (args.length) {
-            case 2:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(null, null, null));
-                break;
-            case 3:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], null, null));
-                break;
-            default:
-                client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
-                        buildSslContext(args[2], args[3], args[4]));
+        if (args.length == 3) {
+            client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
+                buildSslContext(args[2], null, null));
+        } else {
+            client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
+                buildSslContext(args[2], args[3], args[4]));
         }
 
         try {
-            /* Access a service running on the local machine on port 50051 */
-            String user = "world";
-            if (args.length > 0) {
-                user = args[0]; /* Use the arg as the name to greet if provided */
-            }
-            client.greet(user);
+            client.greet(args[0]);
         } finally {
             client.shutdown();
         }
