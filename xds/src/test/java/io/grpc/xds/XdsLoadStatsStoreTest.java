@@ -34,7 +34,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -253,9 +252,8 @@ public class XdsLoadStatsStoreTest {
 
   @Test
   public void recordingDroppedRequests() {
-    Random rand = new Random();
-    int numLbDrop = rand.nextInt(1000);
-    int numThrottleDrop = rand.nextInt(1000);
+    int numLbDrop = 123;
+    int numThrottleDrop = 456;
     for (int i = 0; i < numLbDrop; i++) {
       loadStore.recordDroppedRequest("lb");
     }

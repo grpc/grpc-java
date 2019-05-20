@@ -71,6 +71,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -741,7 +742,7 @@ final class GrpclbState {
               break;
             default:
               pickList = Collections.<RoundRobinEntry>singletonList(
-                  new IdleSubchannelEntry(onlyEntry.subchannel));
+                  new IdleSubchannelEntry(onlyEntry.subchannel, syncContext));
           }
         }
         break;
@@ -924,15 +925,25 @@ final class GrpclbState {
 
   @VisibleForTesting
   static final class IdleSubchannelEntry implements RoundRobinEntry {
+    private final SynchronizationContext syncContext;
     private final Subchannel subchannel;
+    private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
 
-    IdleSubchannelEntry(Subchannel subchannel) {
+    IdleSubchannelEntry(Subchannel subchannel, SynchronizationContext syncContext) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.syncContext = checkNotNull(syncContext, "syncContext");
     }
 
     @Override
     public PickResult picked(Metadata headers) {
-      subchannel.requestConnection();
+      if (connectionRequested.compareAndSet(false, true)) {
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              subchannel.requestConnection();
+            }
+          });
+      }
       return PickResult.withNoResult();
     }
 
@@ -944,7 +955,7 @@ final class GrpclbState {
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(subchannel);
+      return Objects.hashCode(subchannel, syncContext);
     }
 
     @Override
@@ -953,7 +964,8 @@ final class GrpclbState {
         return false;
       }
       IdleSubchannelEntry that = (IdleSubchannelEntry) other;
-      return Objects.equal(subchannel, that.subchannel);
+      return Objects.equal(subchannel, that.subchannel)
+          && Objects.equal(syncContext, that.syncContext);
     }
   }
 
