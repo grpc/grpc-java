@@ -52,6 +52,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.InterLocalityPicker.ThreadSafeRandom;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -88,6 +89,8 @@ public class XdsLbStateTest {
   private AdsStreamCallback adsStreamCallback;
   @Mock
   private PickSubchannelArgs pickSubchannelArgs;
+  @Mock
+  private ThreadSafeRandom random;
   @Captor
   private ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor;
   @Captor
@@ -172,7 +175,7 @@ public class XdsLbStateTest {
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     lbRegistry.register(childLbProvider);
-    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry);
+    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry, random);
 
     String serverName = InProcessServerBuilder.generateName();
 

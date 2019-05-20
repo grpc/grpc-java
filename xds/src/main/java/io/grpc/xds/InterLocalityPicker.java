@@ -58,8 +58,8 @@ final class InterLocalityPicker extends SubchannelPicker {
     int nextInt(int bound);
   }
 
-  private static final class ThreadSafeRadomImpl implements ThreadSafeRandom {
-    static final ThreadSafeRandom instance = new ThreadSafeRadomImpl();
+  static final class ThreadSafeRandomImpl implements ThreadSafeRandom {
+    static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();
 
     @Override
     public int nextInt(int bound) {
@@ -68,7 +68,7 @@ final class InterLocalityPicker extends SubchannelPicker {
   }
 
   InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
-    this(weightedChildPickers, ThreadSafeRadomImpl.instance);
+    this(weightedChildPickers, ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting
