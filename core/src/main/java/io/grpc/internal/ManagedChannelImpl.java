@@ -1572,6 +1572,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public void requestConnection() {
+      logWarningIfNotInSyncContext("Subchannel.requestConnection()");
       checkState(started, "not started");
       subchannel.obtainActiveTransport();
     }

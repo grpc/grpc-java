@@ -28,6 +28,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
@@ -137,9 +138,10 @@ final class PickFirstLoadBalancer extends LoadBalancer {
     }
   }
 
-  /** Picker that requests connection during pick, and returns noResult. */
-  private static final class RequestConnectionPicker extends SubchannelPicker {
+  /** Picker that requests connection during the first pick, and returns noResult. */
+  private final class RequestConnectionPicker extends SubchannelPicker {
     private final Subchannel subchannel;
+    private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
 
     RequestConnectionPicker(Subchannel subchannel) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
@@ -147,7 +149,14 @@ final class PickFirstLoadBalancer extends LoadBalancer {
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      subchannel.requestConnection();
+      if (connectionRequested.compareAndSet(false, true)) {
+        helper.getSynchronizationContext().execute(new Runnable() {
+            @Override
+            public void run() {
+              subchannel.requestConnection();
+            }
+          });
+      }
       return PickResult.withNoResult();
     }
   }
