@@ -40,6 +40,8 @@ You can run this example with our [test credentials](../../testing/src/main/reso
 in the test certificates. You can generate your own self-signed certificates with commands in the test certs
 [README](../../testing/src/main/resources/certs/README).
 
+- Note you can use system default certificate authority if you are using a real server certificate.
+
 #### Hello world example with TLS (no mutual auth):
 
 ```bash
