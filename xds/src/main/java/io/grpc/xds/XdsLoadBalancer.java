@@ -66,7 +66,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     @Override
     public void onWorking() {
       if (fallbackManager.isAfterStartup) {
-        // cancel Fallback-After-Startup time if there's any
+        // cancel Fallback-After-Startup timer if there's any
         fallbackManager.cancelFallbackTimer();
       }
 
