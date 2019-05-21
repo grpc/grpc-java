@@ -143,10 +143,6 @@ public abstract class OrcaOobUtil {
     /**
      * Invoked when an out-of-band ORCA report is received.
      *
-     * <p>The {@code Subchannel} instance passed here must be the same one as returned by
-     * {@link LoadBalancer.Helper#createSubchannel(CreateSubchannelArgs)} for
-     * {@link OrcaReportingHelperWrapper#asHelper()}, in which the listener is registered.
-     *
      * @param report load report in the format of ORCA protocol.
      */
     void onLoadReport(OrcaLoadReport report);
