@@ -59,7 +59,7 @@ public abstract class OrcaPerRequestUtil {
       };
 
   /**
-   * Gets an {@ocde OrcaPerRequestUtil} instance that provides actual implementation of
+   * Gets an {@code OrcaPerRequestUtil} instance that provides actual implementation of
    * {@link #newOrcaClientStreamTracerFactory}.
    */
   public static OrcaPerRequestUtil getInstance() {
@@ -71,6 +71,22 @@ public abstract class OrcaPerRequestUtil {
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
    *
+   * <p>Example usages for leaf level policy (e.g., WRR policy)
+   *
+   * <pre>
+   *   {@code
+   *   class WrrPicker extends SubchannelPicker {
+   *
+   *     public PickResult pickSubchannel(PickSubchannelArgs args) {
+   *       Subchannel subchannel = ...  // WRR picking logic
+   *       return PickResult.withSubchannel(
+   *           subchannel,
+   *           OrcaPerRequestReportUtil.getInstance().newOrcaClientStreamTracerFactory(listener));
+   *     }
+   *   }
+   *   }
+   * </pre>
+   *
    * @param listener contains the callback to be invoked when a per-request ORCA report is received.
    */
   public abstract ClientStreamTracer.Factory newOrcaClientStreamTracerFactory(
@@ -80,6 +96,67 @@ public abstract class OrcaPerRequestUtil {
    * Creates a new {@link ClientStreamTracer.Factory} with provided {@link
    * OrcaPerRequestReportListener} installed to receive callback when a per-request ORCA report is
    * received.
+   *
+   * <p>Example usages:
+   *
+   * <ul>
+   *   <li> Delegating policy (e.g., xDS)
+   *     <pre>
+   *       {@code
+   *       class XdsPicker extends SubchannelPicker {
+   *
+   *         public PickResult pickSubchannel(PickSubchannelArgs args) {
+   *           SubchannelPicker perLocalityPicker = ...  // locality picking logic
+   *           Result result = perLocalityPicker.pickSubchannel(args);
+   *           return PickResult.withSubchannel(
+   *               result.getSubchannel(),
+   *               OrcaPerRequestReportUtil.getInstance().newOrcaClientTracerFactory(
+   *                   result.getStreamTracerFactory(), listener));
+   *
+   *         }
+   *       }
+   *       }
+   *     </pre>
+   *   </li>
+   *   <li> Delegating policy with additional tracing logic
+   *     <pre>
+   *       {@code
+   *       class WrappingPicker extends SubchannelPicker {
+   *
+   *         public PickResult pickSubchannel(PickSubchannelArgs args) {
+   *           Result result = delegate.pickSubchannel(args);
+   *           return PickResult.withSubchannel(
+   *               result.getSubchannel(),
+   *               new ClientStreamTracer.Factory() {
+   *                 public ClientStreamTracer newClientStreamTracer(
+   *                     StreamInfo info, Metadata metadata) {
+   *                   ClientStreamTracer.Factory orcaTracerFactory =
+   *                       OrcaPerRequestReportUtil.getInstance().newOrcaClientStreamTracerFactory(
+   *                           result.getStreamTracerFactory(), listener);
+   *
+   *                   // Wrap the tracer from the delegate factory if you need to trace the
+   *                   // stream for your own.
+   *                   final ClientStreamTracer orcaTracer =
+   *                       orcaTracerFactory.newClientStreamTracer(info, metadata);
+   *
+   *                   return ForwardingClientStreamTracer() {
+   *                     protected ClientStreamTracer delegate() {
+   *                       return orcaTracer;
+   *                     }
+   *
+   *                     public void inboundMessage(int seqNo) {
+   *                       // Handle this event.
+   *                       ...
+   *                     }
+   *                   };
+   *                 }
+   *               });
+   *         }
+   *       }
+   *       }
+   *     </pre>
+   *   </li>
+   * </ul>
    *
    * @param delegate the delegate factory to produce other client stream tracing.
    * @param listener contains the callback to be invoked when a per-request ORCA report is received.

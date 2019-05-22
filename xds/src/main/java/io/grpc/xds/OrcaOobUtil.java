@@ -98,8 +98,53 @@ public abstract class OrcaOobUtil {
    * Creates a new {@link LoadBalancer.Helper} with provided {@link OrcaOobReportListener} installed
    * to receive callback when an out-of-band ORCA report is received.
    *
-   * <p>Note the original {@code LoadBalancer} must call returned helper's {@code
-   * Helper.createSubchannel()} from its SynchronizationContext, or it will throw.
+   * <p>Example usages:
+   *
+   * <ul>
+   *   <li> Leaf policy (e.g., WRR policy)
+   *     <pre>
+   *       {@code
+   *       class WrrLoadbalancer extends LoadBalancer {
+   *         private final Helper originHelper;  // the original Helper
+   *
+   *         public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+   *           // listener implements the logic for WRR's usage of backend metrics.
+   *           OrcaReportingHelperWrapper orcaWrapper =
+   *               OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(originHelper, listener);
+   *           orcaWrapper.setReportingConfig(
+   *               OrcaRerportingConfig.newBuilder().setReportInterval(30, SECOND).build());
+   *           Subchannel subchannel =
+   *               orcaWrapper.asHelper().createSubchannel(CreateSubchannelArgs.newBuilder()...);
+   *           ...
+   *         }
+   *       }
+   *       }
+   *     </pre>
+   *   </li>
+   *   <li> Delegating policy doing per-child-policy aggregation
+   *     <pre>
+   *       {@code
+   *       class XdsLoadBalancer extends LoadBalancer {
+   *         private final Helper originHelper;  // the original Helper
+   *
+   *         private void createChildPolicy(
+   *             Locality locality, LoadBalancerProvider childPolicyProvider) {
+   *           // Each Locality has a child policy, and the parent does per-locality aggregation by
+   *           // summing everything up.
+   *
+   *           // Create an OrcaReportingHelperWrapper for each Locality.
+   *           // listener implements the logic for locality-level backend metric aggregation.
+   *           OrcaReportingHelperWrapper orcaWrapper =
+   *               OrcaOobUtil.getInstance().newOrcaReportingHelperWrapper(originHelper, listener);
+   *           orcaWrapper.setReportingConfig(
+   *               OrcaRerportingConfig.newBuilder().setReportInterval(30, SECOND).build());
+   *           LoadBalancer childLb = childPolicyProvider.newLoadBalancer(orcaWrapper.asHelper());
+   *         }
+   *       }
+   *       }
+   *     </pre>
+   *   </li>
+   * </ul>
    *
    * @param delegate the delegate helper that provides essentials for establishing subchannels to
    *     backends.
