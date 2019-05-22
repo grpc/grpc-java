@@ -490,8 +490,11 @@ public abstract class LoadBalancer {
     /**
      * A decision to proceed the RPC on a Subchannel.
      *
-     * <p>Only Subchannels returned by {@link Helper#createSubchannel Helper.createSubchannel()}
-     * will work.  DO NOT try to use your own implementations of Subchannels, as they won't work.
+     * <p>The Subchannel should either be an original Subchannel returned by {@link
+     * Helper#createSubchannel Helper.createSubchannel()}, or a wrapper of it preferrably based on
+     * {@code ForwardingSubchannel}.  At the very least its {@link Subchannel#getInternalSubchannel
+     * getInternalSubchannel()} must return the same object as the one returned by the original.
+     * Otherwise the Channel cannot use it for the RPC.
      *
      * <p>When the RPC tries to use the return Subchannel, which is briefly after this method
      * returns, the state of the Subchannel will decide where the RPC would go:
@@ -1295,6 +1298,21 @@ public abstract class LoadBalancer {
      * @since 1.17.0
      */
     public ChannelLogger getChannelLogger() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * (Internal use only) returns an object that represents the underlying subchannel that is used
+     * by the Channel for sending RPCs when this {@link Subchannel} is picked.  This is an opaque
+     * object that is both provided and consumed by the Channel.  Its type <strong>is not</strong>
+     * {@code Subchannel}.
+     *
+     * <p>Warning: this is INTERNAL API, is not supposed to be used by external users, and may
+     * change without notice. If you think you must use it, please file an issue and we can consider
+     * removing its "internal" status.
+     */
+    @Internal
+    public Object getInternalSubchannel() {
       throw new UnsupportedOperationException();
     }
   }

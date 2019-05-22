@@ -689,7 +689,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
+      transport = ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     } else {
       transport = null;
     }

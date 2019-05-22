@@ -75,6 +75,7 @@ public class DelayedClientTransportTest {
   @Mock private ManagedClientTransport.Listener transportListener;
   @Mock private SubchannelPicker mockPicker;
   @Mock private AbstractSubchannel mockSubchannel;
+  @Mock private TransportProvider mockInternalSubchannel;
   @Mock private ClientTransport mockRealTransport;
   @Mock private ClientTransport mockRealTransport2;
   @Mock private ClientStream mockRealStream;
@@ -119,7 +120,8 @@ public class DelayedClientTransportTest {
   @Before public void setUp() {
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(mockSubchannel));
-    when(mockSubchannel.obtainActiveTransport()).thenReturn(mockRealTransport);
+    when(mockSubchannel.getInternalSubchannel()).thenReturn(mockInternalSubchannel);
+    when(mockInternalSubchannel.obtainActiveTransport()).thenReturn(mockRealTransport);
     when(mockRealTransport.newStream(same(method), same(headers), same(callOptions)))
         .thenReturn(mockRealStream);
     when(mockRealTransport2.newStream(same(method2), same(headers2), same(callOptions2)))
@@ -308,9 +310,9 @@ public class DelayedClientTransportTest {
         any(CallOptions.class))).thenReturn(mockRealStream);
     when(mockRealTransport2.newStream(any(MethodDescriptor.class), any(Metadata.class),
         any(CallOptions.class))).thenReturn(mockRealStream2);
-    when(subchannel1.obtainActiveTransport()).thenReturn(mockRealTransport);
-    when(subchannel2.obtainActiveTransport()).thenReturn(mockRealTransport2);
-    when(subchannel3.obtainActiveTransport()).thenReturn(null);
+    when(subchannel1.getInternalSubchannel()).thenReturn(newTransportProvider(mockRealTransport));
+    when(subchannel2.getInternalSubchannel()).thenReturn(newTransportProvider(mockRealTransport2));
+    when(subchannel3.getInternalSubchannel()).thenReturn(newTransportProvider(null));
 
     // Fail-fast streams
     DelayedStream ff1 = (DelayedStream) delayedTransport.newStream(
@@ -465,7 +467,7 @@ public class DelayedClientTransportTest {
   public void reprocess_NoPendingStream() {
     SubchannelPicker picker = mock(SubchannelPicker.class);
     AbstractSubchannel subchannel = mock(AbstractSubchannel.class);
-    when(subchannel.obtainActiveTransport()).thenReturn(mockRealTransport);
+    when(subchannel.getInternalSubchannel()).thenReturn(mockInternalSubchannel);
     when(picker.pickSubchannel(any(PickSubchannelArgs.class))).thenReturn(
         PickResult.withSubchannel(subchannel));
     when(mockRealTransport.newStream(any(MethodDescriptor.class), any(Metadata.class),
@@ -477,7 +479,7 @@ public class DelayedClientTransportTest {
     // Though picker was not originally used, it will be saved and serve future streams.
     ClientStream stream = delayedTransport.newStream(method, headers, CallOptions.DEFAULT);
     verify(picker).pickSubchannel(new PickSubchannelArgsImpl(method, headers, CallOptions.DEFAULT));
-    verify(subchannel).obtainActiveTransport();
+    verify(mockInternalSubchannel).obtainActiveTransport();
     assertSame(mockRealStream, stream);
   }
 
@@ -598,5 +600,14 @@ public class DelayedClientTransportTest {
     stream.start(streamListener);
     assertTrue(delayedTransport.hasPendingStreams());
     verify(transportListener).transportInUse(true);
+  }
+
+  private static TransportProvider newTransportProvider(final ClientTransport transport) {
+    return new TransportProvider() {
+      @Override
+      public ClientTransport obtainActiveTransport() {
+        return transport;
+      }
+    };
   }
 }

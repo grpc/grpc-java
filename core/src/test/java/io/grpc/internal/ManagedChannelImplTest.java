@@ -475,9 +475,12 @@ public class ManagedChannelImplTest {
         (AbstractSubchannel) createSubchannelSafely(
             helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     // subchannels are not root channels
-    assertNull(channelz.getRootChannel(subchannel.getInternalSubchannel().getLogId().getId()));
-    assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
-    assertThat(getStats(channel).subchannels).containsExactly(subchannel.getInternalSubchannel());
+    assertNull(
+        channelz.getRootChannel(subchannel.getInstrumentedInternalSubchannel().getLogId().getId()));
+    assertTrue(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
+    assertThat(getStats(channel).subchannels)
+        .containsExactly(subchannel.getInstrumentedInternalSubchannel());
 
     requestConnectionSafely(helper, subchannel);
     MockClientTransportInfo transportInfo = transports.poll();
@@ -489,11 +492,13 @@ public class ManagedChannelImplTest {
     assertFalse(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
     // terminate subchannel
-    assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
+    assertTrue(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
     shutdownSafely(helper, subchannel);
     timer.forwardTime(ManagedChannelImpl.SUBCHANNEL_SHUTDOWN_DELAY_SECONDS, TimeUnit.SECONDS);
     timer.runDueTasks();
-    assertFalse(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
+    assertFalse(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
     assertThat(getStats(channel).subchannels).isEmpty();
 
     // channel still appears
@@ -511,9 +516,12 @@ public class ManagedChannelImplTest {
     assertTrue(channelz.containsSubchannel(oob.getLogId()));
 
     AbstractSubchannel subchannel = (AbstractSubchannel) oob.getSubchannel();
-    assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
-    assertThat(getStats(oob).subchannels).containsExactly(subchannel.getInternalSubchannel());
-    assertTrue(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
+    assertTrue(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
+    assertThat(getStats(oob).subchannels)
+        .containsExactly(subchannel.getInstrumentedInternalSubchannel());
+    assertTrue(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
 
     oob.getSubchannel().requestConnection();
     MockClientTransportInfo transportInfo = transports.poll();
@@ -528,7 +536,8 @@ public class ManagedChannelImplTest {
     oob.shutdown();
     assertFalse(channelz.containsSubchannel(oob.getLogId()));
     assertThat(getStats(channel).subchannels).isEmpty();
-    assertFalse(channelz.containsSubchannel(subchannel.getInternalSubchannel().getLogId()));
+    assertFalse(
+        channelz.containsSubchannel(subchannel.getInstrumentedInternalSubchannel().getLogId()));
 
     // channel still appears
     assertNotNull(channelz.getRootChannel(channel.getLogId().getId()));
@@ -2571,7 +2580,7 @@ public class ManagedChannelImplTest {
         .setDescription("Child Subchannel started")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
         .setTimestampNanos(timer.getTicker().read())
-        .setSubchannelRef(subchannel.getInternalSubchannel())
+        .setSubchannelRef(subchannel.getInstrumentedInternalSubchannel())
         .build());
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("Subchannel for [[[test-addr]/{}]] created")
@@ -2742,7 +2751,7 @@ public class ManagedChannelImplTest {
         (AbstractSubchannel) createSubchannelSafely(
             helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     timer.forwardNanos(1234);
-    subchannel.obtainActiveTransport();
+    ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("CONNECTING as requested")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -3958,7 +3967,7 @@ public class ManagedChannelImplTest {
   }
 
   private static ChannelStats getStats(AbstractSubchannel subchannel) throws Exception {
-    return subchannel.getInternalSubchannel().getStats().get();
+    return subchannel.getInstrumentedInternalSubchannel().getStats().get();
   }
 
   private static ChannelStats getStats(
