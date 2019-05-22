@@ -1505,7 +1505,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    InternalInstrumented<ChannelStats> getInternalSubchannel() {
+    InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel() {
       checkState(started, "not started");
       return subchannel;
     }

@@ -153,7 +153,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
 
         @Override
-        InternalInstrumented<ChannelStats> getInternalSubchannel() {
+        InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel() {
           return subchannel;
         }
 

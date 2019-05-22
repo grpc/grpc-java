@@ -39,5 +39,5 @@ abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
    * unit tests.
    */
   @VisibleForTesting
-  abstract InternalInstrumented<ChannelStats> getInternalSubchannel();
+  abstract InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel();
 }
