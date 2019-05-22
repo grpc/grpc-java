@@ -66,20 +66,20 @@ final class XdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onWorking() {
-      if (fallbackManager.isAfterStartup) {
+      if (fallbackManager.childPolicyHasBeenReady) {
         // cancel Fallback-After-Startup timer if there's any
         fallbackManager.cancelFallbackTimer();
       }
 
-      fallbackManager.balancerWorked = true;
+      fallbackManager.childBalancerWorked = true;
     }
 
     @Override
     public void onError() {
-      if (!fallbackManager.balancerWorked) {
+      if (!fallbackManager.childBalancerWorked) {
         // start Fallback-at-Startup immediately
         fallbackManager.useFallbackPolicy();
-      } else if (fallbackManager.isAfterStartup) {
+      } else if (fallbackManager.childPolicyHasBeenReady) {
         // TODO: schedule a timer for Fallback-After-Startup
       } // else: the Fallback-at-Startup timer is still pending, noop and wait
     }
@@ -109,13 +109,13 @@ final class XdsLoadBalancer extends LoadBalancer {
 
       if (newState == READY) {
         checkState(
-            fallbackManager.balancerWorked,
+            fallbackManager.childBalancerWorked,
             "channel goes to READY before the load balancer even worked");
-        fallbackManager.isAfterStartup = true;
+        fallbackManager.childPolicyHasBeenReady = true;
         fallbackManager.cancelFallback();
       }
 
-      if (fallbackManager.fallbackBalancer == null) {
+      if (!fallbackManager.isInFallbackMode()) {
         helper.updateBalancingState(newState, newPicker);
       }
     }
@@ -183,10 +183,10 @@ final class XdsLoadBalancer extends LoadBalancer {
     if (xdsLbState != null) {
       xdsLbState.handleNameResolutionError(error);
     }
-    if (fallbackManager.fallbackBalancer != null) {
+    if (fallbackManager.isInFallbackMode()) {
       fallbackManager.fallbackBalancer.handleNameResolutionError(error);
     }
-    if (xdsLbState == null && fallbackManager.fallbackBalancer == null) {
+    if (xdsLbState == null && !fallbackManager.isInFallbackMode()) {
       helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
     }
   }
@@ -200,7 +200,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Deprecated
   @Override
   public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    if (fallbackManager.fallbackBalancer != null) {
+    if (fallbackManager.isInFallbackMode()) {
       fallbackManager.fallbackBalancer.handleSubchannelState(subchannel, newState);
     }
 
@@ -253,14 +253,22 @@ final class XdsLoadBalancer extends LoadBalancer {
     private Attributes fallbackAttributes;
 
     // allow value write by outer class
-    private boolean balancerWorked;
-    private boolean isAfterStartup;
+    private boolean childBalancerWorked;
+    private boolean childPolicyHasBeenReady;
 
     FallbackManager(
         Helper helper, LocalityStore localityStore, LoadBalancerRegistry lbRegistry) {
       this.helper = helper;
       this.localityStore = localityStore;
       this.lbRegistry = lbRegistry;
+    }
+
+    /**
+     * Fallback mode being on indicates that an update from child LBs will be ignored unless the
+     * update triggers turning off the fallback mode first.
+     */
+    boolean isInFallbackMode() {
+      return fallbackBalancer != null;
     }
 
     void cancelFallbackTimer() {
