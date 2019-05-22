@@ -549,7 +549,7 @@ public class ManagedChannelImplIdlenessTest {
         new Runnable() {
           @Override
           public void run() {
-            helper.updateSubchannelAddresses(subchannel, addrs);
+            subchannel.updateAddresses(Collections.singletonList(addrs));
           }
         });
   }

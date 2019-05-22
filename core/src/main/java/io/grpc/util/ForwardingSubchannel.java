@@ -75,6 +75,11 @@ public abstract class ForwardingSubchannel extends LoadBalancer.Subchannel {
   }
 
   @Override
+  public void updateAddresses(List<EquivalentAddressGroup> addrs) {
+    delegate().updateAddresses(addrs);
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

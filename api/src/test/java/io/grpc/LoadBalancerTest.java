@@ -170,6 +170,7 @@ public class LoadBalancerTest {
     }
   }
 
+  @Deprecated
   @Test
   public void helper_updateSubchannelAddresses_delegates() {
     class OverrideUpdateSubchannel extends NoopHelper {
@@ -190,6 +191,7 @@ public class LoadBalancerTest {
     assertThat(helper.ran).isTrue();
   }
 
+  @Deprecated
   @Test(expected = UnsupportedOperationException.class)
   public void helper_updateSubchannelAddressesList_throws() {
     new NoopHelper().updateSubchannelAddresses(null, Arrays.asList(eag));
