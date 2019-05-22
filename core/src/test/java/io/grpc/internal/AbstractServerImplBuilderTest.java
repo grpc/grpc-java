@@ -53,7 +53,7 @@ public class AbstractServerImplBuilderTest {
     assertEquals(3, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
     assertThat(factories.get(1)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
-    assertThat(factories.get(2)).isSameAs(DUMMY_USER_TRACER);
+    assertThat(factories.get(2)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
   @Test
@@ -65,7 +65,7 @@ public class AbstractServerImplBuilderTest {
 
     assertEquals(2, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusTracingModule.ServerTracerFactory.class);
-    assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
+    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
   @Test
@@ -77,7 +77,7 @@ public class AbstractServerImplBuilderTest {
 
     assertEquals(2, factories.size());
     assertThat(factories.get(0)).isInstanceOf(CensusStatsModule.ServerTracerFactory.class);
-    assertThat(factories.get(1)).isSameAs(DUMMY_USER_TRACER);
+    assertThat(factories.get(1)).isSameInstanceAs(DUMMY_USER_TRACER);
   }
 
   @Test

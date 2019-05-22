@@ -106,7 +106,7 @@ public final class ServerServiceDefinition {
     public <ReqT, RespT> Builder addMethod(ServerMethodDefinition<ReqT, RespT> def) {
       MethodDescriptor<ReqT, RespT> method = def.getMethodDescriptor();
       checkArgument(
-          serviceName.equals(MethodDescriptor.extractFullServiceName(method.getFullMethodName())),
+          serviceName.equals(method.getServiceName()),
           "Method name should be prefixed with service name and separated with '/'. "
                   + "Expected service name: '%s'. Actual fully qualifed method name: '%s'.",
           serviceName, method.getFullMethodName());

@@ -27,7 +27,6 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
 import io.grpc.xds.XdsLoadBalancer.XdsConfig;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +61,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer(helper, registry, new SubchannelStoreImpl());
+    return new XdsLoadBalancer(helper, registry);
   }
 
   @Override

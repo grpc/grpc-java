@@ -56,7 +56,7 @@ public final class ClientTransportFactoryTest {
     assertThat(cto.getAuthority()).isEqualTo(authority);
     assertThat(cto.getEagAttributes()).isEqualTo(eagAttributes);
     assertThat(cto.getUserAgent()).isEqualTo(userAgent);
-    assertThat(cto.getHttpConnectProxiedSocketAddress()).isSameAs(proxySocketAddress);
+    assertThat(cto.getHttpConnectProxiedSocketAddress()).isSameInstanceAs(proxySocketAddress);
   }
 
   @Test

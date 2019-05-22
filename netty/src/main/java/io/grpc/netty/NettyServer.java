@@ -45,7 +45,6 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Future;
@@ -157,10 +156,9 @@ class NettyServer implements InternalServer, InternalWithLogId {
     ServerBootstrap b = new ServerBootstrap();
     b.group(bossGroup, workerGroup);
     b.channel(channelType);
-    if (NioServerSocketChannel.class.isAssignableFrom(channelType)) {
-      b.option(SO_BACKLOG, 128);
-      b.childOption(SO_KEEPALIVE, true);
-    }
+    // For non-socket based channel, the option will be ignored.
+    b.option(SO_BACKLOG, 128);
+    b.childOption(SO_KEEPALIVE, true);
 
     if (channelOptions != null) {
       for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {

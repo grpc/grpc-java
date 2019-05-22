@@ -23,6 +23,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -159,6 +160,7 @@ public abstract class LoadBalancer {
    *
    * @since 1.21.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public static final class ResolvedAddresses {
     private final List<EquivalentAddressGroup> addresses;
     @NameResolver.ResolutionResultAttr
@@ -232,6 +234,7 @@ public abstract class LoadBalancer {
     /**
      * Builder for {@link ResolvedAddresses}.
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
       private List<EquivalentAddressGroup> addresses;
       @NameResolver.ResolutionResultAttr
@@ -328,16 +331,15 @@ public abstract class LoadBalancer {
    * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
    * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The other
    * is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has already
-   * terminated, thus there won't be further requests to LoadBalancer.  Therefore, SHUTDOWN can be
-   * safely ignored.
+   * terminated, thus there won't be further requests to LoadBalancer.  Therefore, the LoadBalancer
+   * usually don't need to react to a SHUTDOWN state.
    *
    * @param subchannel the involved Subchannel
    * @param stateInfo the new state
    * @since 1.2.0
    * @deprecated This method will be removed.  Stop overriding it.  Instead, pass {@link
-   *             SubchannelStateListener} to {@link Helper#createSubchannel(List, Attributes,
-   *             SubchannelStateListener)} or {@link Helper#createSubchannel(EquivalentAddressGroup,
-   *             Attributes, SubchannelStateListener)} to receive Subchannel state updates
+   *             SubchannelStateListener} to {@link Subchannel#start} to receive Subchannel state
+   *             updates
    */
   @Deprecated
   public void handleSubchannelState(
@@ -370,6 +372,19 @@ public abstract class LoadBalancer {
   }
 
   /**
+   * The channel asks the LoadBalancer to establish connections now (if applicable) so that the
+   * upcoming RPC may then just pick a ready connection without waiting for connections.  This
+   * is triggered by {@link ManagedChannel#getState ManagedChannel.getState(true)}.
+   *
+   * <p>If LoadBalancer doesn't override it, this is no-op.  If it infeasible to create connections
+   * given the current state, e.g. no Subchannel has been created yet, LoadBalancer can ignore this
+   * request.
+   *
+   * @since 1.22.0
+   */
+  public void requestConnection() {}
+
+  /**
    * The main balancing logic.  It <strong>must be thread-safe</strong>. Typically it should only
    * synchronize on its own state, and avoid synchronizing with the LoadBalancer's state.
    *
@@ -392,8 +407,10 @@ public abstract class LoadBalancer {
      *
      * <p>No-op if unsupported.
      *
+     * @deprecated override {@link LoadBalancer#requestConnection} instead.
      * @since 1.11.0
      */
+    @Deprecated
     public void requestConnection() {}
   }
 
@@ -531,7 +548,7 @@ public abstract class LoadBalancer {
      *       {@code handleSubchannelState}'s javadoc for more details.</li>
      * </ol>
      *
-     * @param subchannel the picked Subchannel
+     * @param subchannel the picked Subchannel.  It must have been {@link Subchannel#start started}
      * @param streamTracerFactory if not null, will be used to trace the activities of the stream
      *                            created as a result of this pick. Note it's possible that no
      *                            stream is created at all in some cases.
@@ -659,21 +676,21 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * Arguments for {@link Helper#createSubchannel(CreateSubchannelArgs)}.
+   * Arguments for creating a {@link Subchannel}.
    *
-   * @since 1.21.0
+   * @since 1.22.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public static final class CreateSubchannelArgs {
     private final List<EquivalentAddressGroup> addrs;
     private final Attributes attrs;
-    private final SubchannelStateListener stateListener;
+    private final Object[][] customOptions;
 
     private CreateSubchannelArgs(
-        List<EquivalentAddressGroup> addrs, Attributes attrs,
-        SubchannelStateListener stateListener) {
+        List<EquivalentAddressGroup> addrs, Attributes attrs, Object[][] customOptions) {
       this.addrs = checkNotNull(addrs, "addresses are not set");
       this.attrs = checkNotNull(attrs, "attrs");
-      this.stateListener = checkNotNull(stateListener, "SubchannelStateListener is not set");
+      this.customOptions = checkNotNull(customOptions, "customOptions");
     }
 
     /**
@@ -691,17 +708,26 @@ public abstract class LoadBalancer {
     }
 
     /**
-     * Returns the state listener.
+     * Get the value for a custom option or its inherent default.
+     *
+     * @param key Key identifying option
      */
-    public SubchannelStateListener getStateListener() {
-      return stateListener;
+    @SuppressWarnings("unchecked")
+    public <T> T getOption(Key<T> key) {
+      Preconditions.checkNotNull(key, "key");
+      for (int i = 0; i < customOptions.length; i++) {
+        if (key.equals(customOptions[i][0])) {
+          return (T) customOptions[i][1];
+        }
+      }
+      return key.defaultValue;
     }
 
     /**
      * Returns a builder with the same initial values as this object.
      */
     public Builder toBuilder() {
-      return newBuilder().setAddresses(addrs).setAttributes(attrs).setStateListener(stateListener);
+      return newBuilder().setAddresses(addrs).setAttributes(attrs).copyCustomOptions(customOptions);
     }
 
     /**
@@ -716,35 +742,54 @@ public abstract class LoadBalancer {
       return MoreObjects.toStringHelper(this)
           .add("addrs", addrs)
           .add("attrs", attrs)
-          .add("listener", stateListener)
+          .add("customOptions", Arrays.deepToString(customOptions))
           .toString();
     }
 
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(addrs, attrs, stateListener);
-    }
-
-    /**
-     * Returns true if the {@link Subchannel}, {@link Status}, and
-     * {@link ClientStreamTracer.Factory} all match.
-     */
-    @Override
-    public boolean equals(Object other) {
-      if (!(other instanceof CreateSubchannelArgs)) {
-        return false;
-      }
-      CreateSubchannelArgs that = (CreateSubchannelArgs) other;
-      return Objects.equal(addrs, that.addrs) && Objects.equal(attrs, that.attrs)
-          && Objects.equal(stateListener, that.stateListener);
-    }
-
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
     public static final class Builder {
+
       private List<EquivalentAddressGroup> addrs;
       private Attributes attrs = Attributes.EMPTY;
-      private SubchannelStateListener stateListener;
+      private Object[][] customOptions = new Object[0][2];
 
       Builder() {
+      }
+
+      private <T> Builder copyCustomOptions(Object[][] options) {
+        customOptions = new Object[options.length][2];
+        System.arraycopy(options, 0, customOptions, 0, options.length);
+        return this;
+      }
+
+      /**
+       * Add a custom option. Any existing value for the key is overwritten.
+       *
+       * <p>This is an <strong>optional</strong> property.
+       *
+       * @param key the option key
+       * @param value the option value
+       */
+      public <T> Builder addOption(Key<T> key, T value) {
+        Preconditions.checkNotNull(key, "key");
+        Preconditions.checkNotNull(value, "value");
+
+        int existingIdx = -1;
+        for (int i = 0; i < customOptions.length; i++) {
+          if (key.equals(customOptions[i][0])) {
+            existingIdx = i;
+            break;
+          }
+        }
+
+        if (existingIdx == -1) {
+          Object[][] newCustomOptions = new Object[customOptions.length + 1][2];
+          System.arraycopy(customOptions, 0, newCustomOptions, 0, customOptions.length);
+          customOptions = newCustomOptions;
+          existingIdx = customOptions.length - 1;
+        }
+        customOptions[existingIdx] = new Object[]{key, value};
+        return this;
       }
 
       /**
@@ -769,7 +814,7 @@ public abstract class LoadBalancer {
         this.addrs = Collections.unmodifiableList(new ArrayList<>(addrs));
         return this;
       }
-      
+
       /**
        * Attributes provided here will be included in {@link Subchannel#getAttributes}.
        *
@@ -781,22 +826,63 @@ public abstract class LoadBalancer {
       }
 
       /**
-       * Receives state changes of the created Subchannel.  The listener is called from
-       * the {@link #getSynchronizationContext Synchronization Context}.  It's safe to share the
-       * listener among multiple Subchannels.
-       *
-       * <p>This is a <strong>required</strong> property.
-       */
-      public Builder setStateListener(SubchannelStateListener listener) {
-        this.stateListener = checkNotNull(listener, "listener");
-        return this;
-      }
-
-      /**
        * Creates a new args object.
        */
       public CreateSubchannelArgs build() {
-        return new CreateSubchannelArgs(addrs, attrs, stateListener);
+        return new CreateSubchannelArgs(addrs, attrs, customOptions);
+      }
+    }
+
+    /**
+     * Key for a key-value pair. Uses reference equality.
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
+    public static final class Key<T> {
+
+      private final String debugString;
+      private final T defaultValue;
+
+      private Key(String debugString, T defaultValue) {
+        this.debugString = debugString;
+        this.defaultValue = defaultValue;
+      }
+
+      /**
+       * Factory method for creating instances of {@link Key}. The default value of the key is
+       * {@code null}.
+       *
+       * @param debugString a debug string that describes this key.
+       * @param <T> Key type
+       * @return Key object
+       */
+      public static <T> Key<T> create(String debugString) {
+        Preconditions.checkNotNull(debugString, "debugString");
+        return new Key<>(debugString, /*defaultValue=*/ null);
+      }
+
+      /**
+       * Factory method for creating instances of {@link Key}.
+       *
+       * @param debugString a debug string that describes this key.
+       * @param defaultValue default value to return when value for key not set
+       * @param <T> Key type
+       * @return Key object
+       */
+      public static <T> Key<T> createWithDefault(String debugString, T defaultValue) {
+        Preconditions.checkNotNull(debugString, "debugString");
+        return new Key<>(debugString, defaultValue);
+      }
+
+      /**
+       * Returns the user supplied default value for this key.
+       */
+      public T getDefault() {
+        return defaultValue;
+      }
+
+      @Override
+      public String toString() {
+        return debugString;
       }
     }
   }
@@ -814,9 +900,9 @@ public abstract class LoadBalancer {
      * EquivalentAddressGroup}.
      *
      * @since 1.2.0
-     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
-     *             must be called from {@link #getSynchronizationContext the Synchronization
-     *             Context}.
+     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
+     *             instead. Note the new API must be called from {@link #getSynchronizationContext
+     *             the Synchronization Context}.
      */
     @Deprecated
     public final Subchannel createSubchannel(EquivalentAddressGroup addrs, Attributes attrs) {
@@ -839,9 +925,9 @@ public abstract class LoadBalancer {
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.14.0
-     * @deprecated Use {@link #createSubchannel(CreateSubchannelArgs)} instead. Note the new API
-     *             must be called from {@link #getSynchronizationContext the Synchronization
-     *             Context}.
+     * @deprecated Use {@link #createSubchannel(io.grpc.LoadBalancer.CreateSubchannelArgs)}
+     *             instead. Note the new API must be called from {@link #getSynchronizationContext
+     *             the Synchronization Context}.
      */
     @Deprecated
     public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
@@ -854,15 +940,12 @@ public abstract class LoadBalancer {
      * Subchannel, and can be accessed later through {@link Subchannel#getAttributes
      * Subchannel.getAttributes()}.
      *
-     * <p>This method <strong>must be called from the {@link #getSynchronizationContext
-     * Synchronization Context}</strong>, otherwise it may throw. This is to avoid the race between
-     * the caller and {@link SubchannelStateListener#onSubchannelState}.  See <a
-     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for more discussions.
-     *
      * <p>The LoadBalancer is responsible for closing unused Subchannels, and closing all
      * Subchannels within {@link #shutdown}.
      *
-     * @since 1.21.0
+     * <p>It must be called from {@link #getSynchronizationContext the Synchronization Context}
+     *
+     * @since 1.22.0
      */
     public Subchannel createSubchannel(CreateSubchannelArgs args) {
       throw new UnsupportedOperationException();
@@ -871,6 +954,10 @@ public abstract class LoadBalancer {
     /**
      * Equivalent to {@link #updateSubchannelAddresses(io.grpc.LoadBalancer.Subchannel, List)} with
      * the given single {@code EquivalentAddressGroup}.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.4.0
      */
@@ -884,6 +971,10 @@ public abstract class LoadBalancer {
      * Replaces the existing addresses used with {@code subchannel}. This method is superior to
      * {@link #createSubchannel} when the new and old addresses overlap, since the subchannel can
      * continue using an existing connection.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel} or {@code addrs} is empty
@@ -954,6 +1045,10 @@ public abstract class LoadBalancer {
      * updateBalancingState()} has never been called, the channel will buffer all RPCs until a
      * picker is provided.
      *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
+     *
      * <p>The passed state will be the channel's new state. The SHUTDOWN state should not be passed
      * and its behavior is undefined.
      *
@@ -964,6 +1059,10 @@ public abstract class LoadBalancer {
 
     /**
      * Call {@link NameResolver#refresh} on the channel's resolver.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.18.0
      */
@@ -1039,6 +1138,25 @@ public abstract class LoadBalancer {
     public ChannelLogger getChannelLogger() {
       throw new UnsupportedOperationException();
     }
+
+    /**
+     * Returns the {@link NameResolver.Args} that the Channel uses to create {@link NameResolver}s.
+     *
+     * @since 1.22.0
+     */
+    public NameResolver.Args getNameResolverArgs() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns the {@link NameResolverRegistry} that the Channel uses to look for {@link
+     * NameResolver}s.
+     *
+     * @since 1.22.0
+     */
+    public NameResolverRegistry getNameResolverRegistry() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   /**
@@ -1053,14 +1171,38 @@ public abstract class LoadBalancer {
    * #requestConnection requestConnection()} can be used to ask Subchannel to create a transport if
    * there isn't any.
    *
+   * <p>{@link #start} must be called prior to calling any other methods, with the exception of
+   * {@link #shutdown}, which can be called at any time.
+   *
    * @since 1.2.0
    */
-  @ThreadSafe
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1771")
   public abstract static class Subchannel {
     /**
+     * Starts the Subchannel.  Can only be called once.
+     *
+     * <p>Must be called prior to any other method on this class, except for {@link #shutdown} which
+     * may be called at any time.
+     *
+     * <p>Must be called from the {@link Helper#getSynchronizationContext Synchronization Context},
+     * otherwise it may throw.  See <a href="https://github.com/grpc/grpc-java/issues/5015">
+     * #5015</a> for more discussions.
+     *
+     * @param listener receives state updates for this Subchannel.
+     */
+    public void start(SubchannelStateListener listener) {
+      throw new UnsupportedOperationException("Not implemented");
+    }
+
+    /**
      * Shuts down the Subchannel.  After this method is called, this Subchannel should no longer
      * be returned by the latest {@link SubchannelPicker picker}, and can be safely discarded.
+     *
+     * <p>Calling it on an already shut-down Subchannel has no effect.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.2.0
      */
@@ -1068,6 +1210,10 @@ public abstract class LoadBalancer {
 
     /**
      * Asks the Subchannel to create a connection (aka transport), if there isn't an active one.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.2.0
      */
@@ -1077,6 +1223,10 @@ public abstract class LoadBalancer {
      * Returns the addresses that this Subchannel is bound to.  This can be called only if
      * the Subchannel has only one {@link EquivalentAddressGroup}.  Under the hood it calls
      * {@link #getAllAddresses}.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @throws IllegalStateException if this subchannel has more than one EquivalentAddressGroup.
      *         Use {@link #getAllAddresses} instead
@@ -1090,6 +1240,10 @@ public abstract class LoadBalancer {
 
     /**
      * Returns the addresses that this Subchannel is bound to. The returned list will not be empty.
+     *
+     * <p>It should be called from the Synchronization Context.  Currently will log a warning if
+     * violated.  It will become an exception eventually.  See <a
+     * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.14.0
      */
@@ -1146,13 +1300,12 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * Receives state changes for one or more {@link Subchannel}s. All methods are run under {@link
+   * Receives state changes for one {@link Subchannel}. All methods are run under {@link
    * Helper#getSynchronizationContext}.
    *
-   * @since 1.21.0
+   * @since 1.22.0
    */
   public interface SubchannelStateListener {
-    
     /**
      * Handles a state change on a Subchannel.
      *
@@ -1167,15 +1320,13 @@ public abstract class LoadBalancer {
      * <p>SHUTDOWN can only happen in two cases.  One is that LoadBalancer called {@link
      * Subchannel#shutdown} earlier, thus it should have already discarded this Subchannel.  The
      * other is that Channel is doing a {@link ManagedChannel#shutdownNow forced shutdown} or has
-     * already terminated, thus there won't be further requests to LoadBalancer.  Therefore,
-     * SHUTDOWN can be safely ignored.
-     *
-     * @param subchannel the involved Subchannel
+     * already terminated, thus there won't be further requests to LoadBalancer.  Therefore, the
+     * LoadBalancer usually don't need to react to a SHUTDOWN state.
      * @param newState the new state
      *
-     * @since 1.21.0
+     * @since 1.22.0
      */
-    void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
+    void onSubchannelState(ConnectivityStateInfo newState);
   }
 
   /**

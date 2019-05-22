@@ -272,7 +272,7 @@ public class AbstractManagedChannelImplBuilderTest {
         .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
     assertThat(effectiveInterceptors.get(1))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(2)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -283,7 +283,7 @@ public class AbstractManagedChannelImplBuilderTest {
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
         .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -294,7 +294,7 @@ public class AbstractManagedChannelImplBuilderTest {
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test

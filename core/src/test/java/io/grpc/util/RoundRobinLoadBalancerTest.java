@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -131,10 +132,18 @@ public class RoundRobinLoadBalancerTest {
           @Override
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
-            Subchannel subchannel = subchannels.get(args.getAddresses());
+            final Subchannel subchannel = subchannels.get(args.getAddresses());
             when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
             when(subchannel.getAttributes()).thenReturn(args.getAttributes());
-            subchannelStateListeners.put(subchannel, args.getStateListener());
+            doAnswer(
+                new Answer<Void>() {
+                  @Override
+                  public Void answer(InvocationOnMock invocation) throws Throwable {
+                    subchannelStateListeners.put(
+                        subchannel, (SubchannelStateListener) invocation.getArguments()[0]);
+                    return null;
+                  }
+                }).when(subchannel).start(any(SubchannelStateListener.class));
             return subchannel;
           }
         });
@@ -163,7 +172,7 @@ public class RoundRobinLoadBalancerTest {
       capturedAddrs.add(arg.getAddresses());
     }
 
-    assertThat(capturedAddrs).containsAllIn(subchannels.keySet());
+    assertThat(capturedAddrs).containsAtLeastElementsIn(subchannels.keySet());
     for (Subchannel subchannel : subchannels.values()) {
       verify(subchannel).requestConnection();
       verify(subchannel, never()).shutdown();
@@ -793,7 +802,7 @@ public class RoundRobinLoadBalancerTest {
   }
 
   private void deliverSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-    subchannelStateListeners.get(subchannel).onSubchannelState(subchannel, newState);
+    subchannelStateListeners.get(subchannel).onSubchannelState(newState);
   }
 
   private static class FakeSocketAddress extends SocketAddress {

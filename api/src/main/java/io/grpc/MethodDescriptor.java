@@ -41,6 +41,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
   private final MethodType type;
   private final String fullMethodName;
+  @Nullable private final String serviceName;
   private final Marshaller<ReqT> requestMarshaller;
   private final Marshaller<RespT> responseMarshaller;
   private final @Nullable Object schemaDescriptor;
@@ -138,7 +139,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    * @param <T> type of serializable message
    * @since 1.0.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1777")
   public interface Marshaller<T> {
     /**
      * Given a message, produce an {@link InputStream} for it so that it can be written to the wire.
@@ -227,6 +227,7 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
+    this.serviceName = extractFullServiceName(fullMethodName);
     this.requestMarshaller = Preconditions.checkNotNull(requestMarshaller, "requestMarshaller");
     this.responseMarshaller = Preconditions.checkNotNull(responseMarshaller, "responseMarshaller");
     this.schemaDescriptor = schemaDescriptor;
@@ -253,6 +254,17 @@ public final class MethodDescriptor<ReqT, RespT> {
    */
   public String getFullMethodName() {
     return fullMethodName;
+  }
+
+  /**
+   * A convenience method for {@code extractFullServiceName(getFullMethodName())}.
+   *
+   * @since 1.21.0
+   */
+  @Nullable
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5635")
+  public String getServiceName() {
+    return serviceName;
   }
 
   /**

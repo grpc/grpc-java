@@ -53,17 +53,9 @@ public final class StatsTraceContext {
     if (factories.isEmpty()) {
       return NOOP;
     }
-    ClientStreamTracer.StreamInfo info = new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return transportAttrs;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return callOptions;
-        }
-      };
+    ClientStreamTracer.StreamInfo info =
+        ClientStreamTracer.StreamInfo.newBuilder()
+            .setTransportAttrs(transportAttrs).setCallOptions(callOptions).build();
     // This array will be iterated multiple times per RPC. Use primitive array instead of Collection
     // so that for-each doesn't create an Iterator every time.
     StreamTracer[] tracers = new StreamTracer[factories.size()];

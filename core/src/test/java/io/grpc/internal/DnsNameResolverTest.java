@@ -41,6 +41,7 @@ import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
+import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -106,22 +107,12 @@ public class DnsNameResolverTest {
           throw new AssertionError(e);
         }
       });
-  private final NameResolver.Helper helper = new NameResolver.Helper() {
-      @Override
-      public int getDefaultPort() {
-        return DEFAULT_PORT;
-      }
-
-      @Override
-      public ProxyDetector getProxyDetector() {
-        return GrpcUtil.getDefaultProxyDetector();
-      }
-
-      @Override
-      public SynchronizationContext getSynchronizationContext() {
-        return syncContext;
-      }
-    };
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(DEFAULT_PORT)
+      .setProxyDetector(GrpcUtil.getDefaultProxyDetector())
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .build();
 
   private final DnsNameResolverProvider provider = new DnsNameResolverProvider();
   private final FakeClock fakeClock = new FakeClock();
@@ -140,7 +131,7 @@ public class DnsNameResolverTest {
       };
 
   @Mock
-  private NameResolver.Observer mockObserver;
+  private NameResolver.Listener2 mockListener;
   @Captor
   private ArgumentCaptor<ResolutionResult> resultCaptor;
   @Nullable
@@ -175,22 +166,12 @@ public class DnsNameResolverTest {
     DnsNameResolver dnsResolver = new DnsNameResolver(
         null,
         name,
-        new NameResolver.Helper() {
-          @Override
-          public int getDefaultPort() {
-            return defaultPort;
-          }
-
-          @Override
-          public ProxyDetector getProxyDetector() {
-            return proxyDetector;
-          }
-
-          @Override
-          public SynchronizationContext getSynchronizationContext() {
-            return syncContext;
-          }
-        },
+        NameResolver.Args.newBuilder()
+            .setDefaultPort(defaultPort)
+            .setProxyDetector(proxyDetector)
+            .setSynchronizationContext(syncContext)
+            .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .build(),
         fakeExecutorResource,
         stopwatch,
         isAndroid);
@@ -293,15 +274,15 @@ public class DnsNameResolverTest {
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertAnswerMatches(answer2, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -320,12 +301,12 @@ public class DnsNameResolverTest {
       }
     });
 
-    nr.start(mockObserver);
+    nr.start(mockListener);
     assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
 
     ArgumentCaptor<Status> ac = ArgumentCaptor.forClass(Status.class);
-    verify(mockObserver).onError(ac.capture());
-    verifyNoMoreInteractions(mockObserver);
+    verify(mockListener).onError(ac.capture());
+    verifyNoMoreInteractions(mockListener);
     assertThat(ac.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(ac.getValue().getDescription()).contains("No DNS backend or balancer addresses");
   }
@@ -345,9 +326,9 @@ public class DnsNameResolverTest {
         .thenThrow(new AssertionError("should not called twice"));
     resolver.setAddressResolver(mockResolver);
 
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -355,7 +336,7 @@ public class DnsNameResolverTest {
     resolver.refresh();
     assertEquals(0, fakeExecutor.runDueTasks());
     assertEquals(0, fakeClock.numPendingTasks());
-    verifyNoMoreInteractions(mockObserver);
+    verifyNoMoreInteractions(mockListener);
 
     resolver.shutdown();
 
@@ -378,9 +359,9 @@ public class DnsNameResolverTest {
         .thenThrow(new AssertionError("should not reach here."));
     resolver.setAddressResolver(mockResolver);
 
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     assertAnswerMatches(answer, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -389,7 +370,7 @@ public class DnsNameResolverTest {
     resolver.refresh();
     assertEquals(0, fakeExecutor.runDueTasks());
     assertEquals(0, fakeClock.numPendingTasks());
-    verifyNoMoreInteractions(mockObserver);
+    verifyNoMoreInteractions(mockListener);
 
     resolver.shutdown();
 
@@ -412,16 +393,16 @@ public class DnsNameResolverTest {
         .thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
     fakeTicker.advance(ttl + 1, TimeUnit.SECONDS);
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertAnswerMatches(answer2, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -454,9 +435,9 @@ public class DnsNameResolverTest {
     when(mockResolver.resolveAddress(anyString())).thenReturn(answer1).thenReturn(answer2);
     resolver.setAddressResolver(mockResolver);
 
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     assertAnswerMatches(answer1, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -464,12 +445,12 @@ public class DnsNameResolverTest {
     resolver.refresh();
     assertEquals(0, fakeExecutor.runDueTasks());
     assertEquals(0, fakeClock.numPendingTasks());
-    verifyNoMoreInteractions(mockObserver);
+    verifyNoMoreInteractions(mockListener);
 
     fakeTicker.advance(1, TimeUnit.SECONDS);
     resolver.refresh();
     assertEquals(1, fakeExecutor.runDueTasks());
-    verify(mockObserver, times(2)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertAnswerMatches(answer2, 81, resultCaptor.getValue());
     assertEquals(0, fakeClock.numPendingTasks());
 
@@ -631,10 +612,10 @@ public class DnsNameResolverTest {
     AddressResolver mockAddressResolver = mock(AddressResolver.class);
     when(mockAddressResolver.resolveAddress(anyString())).thenThrow(new AssertionError());
     resolver.setAddressResolver(mockAddressResolver);
-    resolver.start(mockObserver);
+    resolver.start(mockListener);
     assertEquals(1, fakeExecutor.runDueTasks());
 
-    verify(mockObserver).onResult(resultCaptor.capture());
+    verify(mockListener).onResult(resultCaptor.capture());
     List<EquivalentAddressGroup> result = resultCaptor.getValue().getAddresses();
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
@@ -1046,7 +1027,7 @@ public class DnsNameResolverTest {
 
   private void testInvalidUri(URI uri) {
     try {
-      provider.newNameResolver(uri, helper);
+      provider.newNameResolver(uri, args);
       fail("Should have failed");
     } catch (IllegalArgumentException e) {
       // expected
@@ -1054,7 +1035,7 @@ public class DnsNameResolverTest {
   }
 
   private void testValidUri(URI uri, String exportedAuthority, int expectedPort) {
-    DnsNameResolver resolver = provider.newNameResolver(uri, helper);
+    DnsNameResolver resolver = provider.newNameResolver(uri, args);
     assertNotNull(resolver);
     assertEquals(expectedPort, resolver.getPort());
     assertEquals(exportedAuthority, resolver.getServiceAuthority());
@@ -1072,7 +1053,7 @@ public class DnsNameResolverTest {
 
   private static void assertAnswerMatches(
       List<InetAddress> addrs, int port, ResolutionResult resolutionResult) {
-    assertEquals(addrs.size(), resolutionResult.getAddresses().size());
+    assertThat(resolutionResult.getAddresses()).hasSize(addrs.size());
     for (int i = 0; i < addrs.size(); i++) {
       EquivalentAddressGroup addrGroup = resolutionResult.getAddresses().get(i);
       InetSocketAddress socketAddr =

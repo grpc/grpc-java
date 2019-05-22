@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.authentication;
-
-import io.grpc.Metadata;
-
-import static io.grpc.Metadata.ASCII_STRING_MARSHALLER;
+package io.grpc;
 
 /**
- *  Constants definition
+ * Internal accessor for {@link CallOptions}.
  */
-public final class Constant {
-    private Constant() {
-    }
+@Internal
+public final class InternalCallOptions {
+  private InternalCallOptions() {}
 
-    public static final Metadata.Key<String> JWT_METADATA_KEY = Metadata.Key.of("jwt", ASCII_STRING_MARSHALLER);
-
+  /**
+   * Gets the waitForReady bit or {@code null} if it was never set.
+   */
+  public static Boolean getWaitForReady(CallOptions callOptions) {
+    return callOptions.getWaitForReady();
+  }
 }

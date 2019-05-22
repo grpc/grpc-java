@@ -24,7 +24,7 @@ Running the hello world with TLS is the same as the normal hello world, but take
 **hello-world-tls-server**:
 
 ```text
-USAGE: HelloWorldServerTls host port certChainFilePath privateKeyFilePath [trustCertCollectionFilePath]
+USAGE: HelloWorldServerTls port certChainFilePath privateKeyFilePath [trustCertCollectionFilePath]
   Note: You only need to supply trustCertCollectionFilePath if you want to enable Mutual TLS.
 ```
 
@@ -42,7 +42,8 @@ You can use the following script to generate self-signed certificates for grpc-j
 ```bash
 mkdir -p /tmp/sslcert
 pushd /tmp/sslcert
-# Changes these CN's to match your hosts in your environment if needed.
+# Change these CN's to match your hosts in your environment if needed.
+SERVER_CA_CN=localhost-ca
 SERVER_CN=localhost
 CLIENT_CN=localhost # Used when doing mutual TLS
 
@@ -50,7 +51,7 @@ echo Generate CA key:
 openssl genrsa -passout pass:1111 -des3 -out ca.key 4096
 echo Generate CA certificate:
 # Generates ca.crt which is the trustCertCollectionFile
-openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${SERVER_CN}"
+openssl req -passin pass:1111 -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=${SERVER_CA_CN}"
 echo Generate server key:
 openssl genrsa -passout pass:1111 -des3 -out server.key 4096
 echo Generate server signing request:
@@ -81,7 +82,7 @@ popd
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
 # In another terminal run the client
 ./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
 ```
@@ -90,9 +91,9 @@ popd
 
 ```bash
 # Run the server:
-./build/install/example-tls/bin/hello-world-tls-server localhost 54440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem /tmp/sslcert/ca.crt
+./build/install/example-tls/bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem /tmp/sslcert/ca.crt
 # In another terminal run the client
-./build/install/example-tls/bin/hello-world-tls-client localhost 54440 /tmp/sslcert/ca.crt /tmp/sslcert/client.crt /tmp/sslcert/client.pem
+./build/install/example-tls/bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt /tmp/sslcert/client.crt /tmp/sslcert/client.pem
 ```
 
 That's it!
@@ -107,7 +108,7 @@ If you prefer to use Maven:
 ```
 $ mvn verify
 $ # Run the server
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem"
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldServerTls -Dexec.args="50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem"
 $ # In another terminal run the client
 $ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworldtls.HelloWorldClientTls -Dexec.args="localhost 50440 /tmp/sslcert/ca.crt"
 ```
@@ -118,7 +119,7 @@ If you prefer to use Bazel:
 ```
 $ bazel build :hello-world-tls-server :hello-world-tls-client
 $ # Run the server
-$ ../bazel-bin/hello-world-tls-server localhost 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
+$ ../bazel-bin/hello-world-tls-server 50440 /tmp/sslcert/server.crt /tmp/sslcert/server.pem
 $ # In another terminal run the client
 $ ../bazel-bin/hello-world-tls-client localhost 50440 /tmp/sslcert/ca.crt
 ```

@@ -13,17 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Only run this script on Linux environment.
+
 # Update VERSION then in this directory run ./import.sh
 
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=cdcdfa6914f88b537122ed039fd0de5f78c0f209
+VERSION=228a963d1308eb1b06e2e8b7387e0bfa72fe77ea
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
+udpa/data/orca/v1/orca_load_report.proto
+udpa/service/orca/v1/orca.proto
 envoy/api/v2/auth/cert.proto
 envoy/api/v2/cds.proto
 envoy/api/v2/cluster/circuit_breaker.proto
@@ -41,6 +45,7 @@ envoy/api/v2/endpoint/load_report.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/percent.proto
+envoy/type/range.proto
 )
 
 # clone the envoy github repo in a tmp directory
@@ -65,6 +70,8 @@ do
   cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
 
+# DO NOT TOUCH! The following section is upstreamed with an internal script.
+
 # See google internal third_party/envoy/envoy-update.sh
 # ===========================================================================
 # Fix up proto imports and remove references to gogoproto.
@@ -75,22 +82,19 @@ do
     # Import mangling.
     -e 's#import "gogoproto/gogo.proto";##'
     # Remove references to gogo.proto extensions.
-    -e 's#option \(gogoproto\.[a-z_]+\) = (true|false);##'
-    -e 's#(, )?\(gogoproto\.[a-z_]+\) = (true|false),?##'
+    -e 's#option (gogoproto\.[a-z_]\+) = \(true\|false\);##'
+    -e 's#\(, \)\?(gogoproto\.[a-z_]\+) = \(true\|false\),\?##'
     # gogoproto removal can result in empty brackets.
     -e 's# \[\]##'
     # gogoproto removal can result in four spaces on a line by itself.
     -e '/^    $/d'
   )
-  # Use a temp file to workaround `sed -i` cross-platform compatibility issue.
-  tmpfile="$(mktemp)"
-  sed -E "${commands[@]}" "$f" > "$tmpfile"
+  sed -i "${commands[@]}" "$f"
 
   # gogoproto removal can leave a comma on the last element in a list.
   # This needs to run separately after all the commands above have finished
   # since it is multi-line and rewrites the output of the above patterns.
-  sed -E -e '$!N; s#(.*),([[:space:]]*\];)#\1\2#; t' -e 'P; D;' "$tmpfile" > "$f"
-  rm "$tmpfile"
+  sed -i -e '$!N; s#\(.*\),\([[:space:]]*\];\)#\1\2#; t; P; D;' "$f"
 done
 popd
 

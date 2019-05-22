@@ -110,8 +110,7 @@ public final class ServiceDescriptor {
     Set<String> allNames = new HashSet<>(methods.size());
     for (MethodDescriptor<?, ?> method : methods) {
       checkNotNull(method, "method");
-      String methodServiceName =
-          MethodDescriptor.extractFullServiceName(method.getFullMethodName());
+      String methodServiceName = method.getServiceName();
       checkArgument(serviceName.equals(methodServiceName),
           "service names %s != %s", methodServiceName, serviceName);
       checkArgument(allNames.add(method.getFullMethodName()),
