@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.logging.Level.FINEST;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
@@ -24,10 +25,12 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.List;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -80,7 +83,25 @@ class XdsLbState {
     if (xdsComms != null) {
       xdsComms.refreshAdsStream();
     } else {
-      ManagedChannel oobChannel = helper.createResolvingOobChannel(balancerName);
+      ManagedChannel oobChannel;
+      try {
+        oobChannel = helper.createResolvingOobChannel(balancerName);
+      } catch (UnsupportedOperationException uoe) {
+        // Temporary solution until createResolvingOobChannel is implemented
+        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
+        Logger logger = Logger.getLogger(XdsLbState.class.getName());
+        if (logger.isLoggable(FINEST)) {
+          logger.log(
+              FINEST,
+              "createResolvingOobChannel() not supported by the helper: " + helper,
+              uoe);
+          logger.log(
+              FINEST,
+              "creating oob channel for target {0} using default ManagedChannelBuilder",
+              balancerName);
+        }
+        oobChannel = ManagedChannelBuilder.forTarget(balancerName).build();
+      }
       xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, localityStore);
     }
 
