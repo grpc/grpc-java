@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import io.grpc.ChannelLogger;
+import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
@@ -92,5 +93,10 @@ public final class InternalProtocolNegotiators {
    */
   public static ChannelHandler grpcNegotiationHandler(GrpcHttp2ConnectionHandler next) {
     return new GrpcNegotiationHandler(next);
+  }
+
+  public static ChannelHandler clientTlsHandler(
+      ChannelHandler next, SslContext sslContext, String authority) {
+    return new ClientTlsHandler(next, sslContext, authority);
   }
 }

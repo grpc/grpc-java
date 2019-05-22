@@ -18,18 +18,13 @@ package io.grpc.alts.internal;
 
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static org.junit.Assert.fail;
 
-import io.grpc.alts.internal.TsiFrameHandler.State;
-import io.grpc.alts.internal.TsiHandshakeHandler.TsiHandshakeCompletionEvent;
-import io.grpc.alts.internal.TsiPeer.Property;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.CharsetUtil;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
@@ -46,32 +41,17 @@ public class TsiFrameHandlerTest {
   @Rule
   public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(5));
 
-  private final TsiFrameHandler tsiFrameHandler = new TsiFrameHandler();
+  private final TsiFrameHandler tsiFrameHandler = new TsiFrameHandler(new IdentityFrameProtector());
   private final EmbeddedChannel channel = new EmbeddedChannel(tsiFrameHandler);
 
   @Test
-  public void writeAndFlush_beforeHandshakeEventShouldBeIgnored() {
-    ByteBuf msg = Unpooled.copiedBuffer("message before handshake finished", CharsetUtil.UTF_8);
-
-    channel.writeAndFlush(msg);
-
-    assertThat(channel.outboundMessages()).isEmpty();
-    try {
-      channel.checkException();
-      fail();
-    } catch (IllegalStateException e) {
-      assertThat(e).hasMessageThat().contains(State.HANDSHAKE_NOT_FINISHED.name());
-    }
-  }
-
-  @Test
   public void writeAndFlush_handshakeSucceed() throws InterruptedException {
-    channel.pipeline().fireUserEventTriggered(getHandshakeSuccessEvent());
     ByteBuf msg = Unpooled.copiedBuffer("message after handshake finished", CharsetUtil.UTF_8);
 
     channel.writeAndFlush(msg);
+    Object actual = channel.readOutbound();
 
-    assertThat((Object) channel.readOutbound()).isEqualTo(msg);
+    assertThat(actual).isEqualTo(msg);
     channel.close().sync();
     channel.checkException();
   }
@@ -93,37 +73,17 @@ public class TsiFrameHandlerTest {
   }
 
   @Test
-  public void writeAndFlush_handshakeFailed() throws InterruptedException {
-    channel.pipeline().fireUserEventTriggered(new TsiHandshakeCompletionEvent(new Exception()));
-    ByteBuf msg = Unpooled.copiedBuffer("message after handshake failed", CharsetUtil.UTF_8);
-
-    channel.writeAndFlush(msg);
-
-    assertThat(channel.outboundMessages()).isEmpty();
-    channel.close().sync();
-    channel.checkException();
-  }
-
-  @Test
   public void close_shouldFlushRemainingMessage() throws InterruptedException {
-    channel.pipeline().fireUserEventTriggered(getHandshakeSuccessEvent());
-
     ByteBuf msg = Unpooled.copiedBuffer("message after handshake failed", CharsetUtil.UTF_8);
     channel.write(msg);
 
     assertThat(channel.outboundMessages()).isEmpty();
 
     channel.close().sync();
+    Object actual = channel.readOutbound();
 
-    assertWithMessage("pending write should be flushed on close")
-        .that((Object) channel.readOutbound()).isEqualTo(msg);
+    assertWithMessage("pending write should be flushed on close").that(actual).isEqualTo(msg);
     channel.checkException();
-  }
-
-  private TsiHandshakeCompletionEvent getHandshakeSuccessEvent() {
-    TsiFrameProtector protector = new IdentityFrameProtector();
-    TsiPeer peer = new TsiPeer(new ArrayList<Property<?>>());
-    return new TsiHandshakeCompletionEvent(protector, peer, new Object());
   }
 
   private static final class IdentityFrameProtector implements TsiFrameProtector {

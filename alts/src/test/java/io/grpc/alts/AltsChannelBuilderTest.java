@@ -18,7 +18,6 @@ package io.grpc.alts;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.alts.internal.AltsProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -28,17 +27,14 @@ import org.junit.runners.JUnit4;
 public final class AltsChannelBuilderTest {
 
   @Test
-  public void buildsNettyChannel() throws Exception {
+  public void buildsNettyChannel() {
     AltsChannelBuilder builder =
         AltsChannelBuilder.forTarget("localhost:8080").enableUntrustedAltsForTesting();
 
     ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
-    assertThat(protocolNegotiator).isNull();
-
-    builder.build();
-
-    protocolNegotiator = builder.getProtocolNegotiatorForTest();
     assertThat(protocolNegotiator).isNotNull();
-    assertThat(protocolNegotiator).isInstanceOf(AltsProtocolNegotiator.class);
+    // Avoids exposing this class
+    assertThat(protocolNegotiator.getClass().getSimpleName())
+        .isEqualTo("ClientAltsProtocolNegotiator");
   }
 }

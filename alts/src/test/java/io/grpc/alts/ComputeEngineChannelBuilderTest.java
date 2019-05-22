@@ -18,7 +18,6 @@ package io.grpc.alts;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.grpc.alts.internal.GoogleDefaultProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -33,6 +32,7 @@ public final class ComputeEngineChannelBuilderTest {
     builder.build();
 
     ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
-    assertThat(protocolNegotiator).isInstanceOf(GoogleDefaultProtocolNegotiator.class);
+    assertThat(protocolNegotiator.getClass().getSimpleName())
+        .isEqualTo("GoogleDefaultProtocolNegotiator");
   }
 }
