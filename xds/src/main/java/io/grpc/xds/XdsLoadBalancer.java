@@ -19,7 +19,6 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.READY;
-import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -296,10 +295,13 @@ final class XdsLoadBalancer extends LoadBalancer {
           ChannelLogLevel.INFO, "Using fallback policy");
 
       final class FallbackBalancerHelper extends ForwardingLoadBalancerHelper {
+        LoadBalancer balancer;
 
         @Override
         public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-          if (newState == SHUTDOWN) {
+          checkNotNull(balancer, "there is a bug");
+          if (balancer != fallbackBalancer) {
+            // ignore updates from a misbehaving shutdown fallback balancer
             return;
           }
           super.updateBalancingState(newState, newPicker);
@@ -311,8 +313,10 @@ final class XdsLoadBalancer extends LoadBalancer {
         }
       }
 
+      FallbackBalancerHelper fallbackBalancerHelper = new FallbackBalancerHelper();
       fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
-          .newLoadBalancer(new FallbackBalancerHelper());
+          .newLoadBalancer(fallbackBalancerHelper);
+      fallbackBalancerHelper.balancer = fallbackBalancer;
       // TODO(carl-mastrangelo): propagate the load balancing config policy
       fallbackBalancer.handleResolvedAddresses(
           ResolvedAddresses.newBuilder()
