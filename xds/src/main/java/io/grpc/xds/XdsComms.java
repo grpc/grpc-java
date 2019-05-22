@@ -280,7 +280,6 @@ final class XdsComms {
                       .putFields(
                           "endpoints_required",
                           Value.newBuilder().setBoolValue(true).build())))
-              .addResourceNames(helper.getAuthority())
               .setTypeUrl(EDS_TYPE_URL).build());
     }
 

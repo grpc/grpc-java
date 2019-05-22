@@ -36,11 +36,11 @@ using namespace std;
 namespace java_grpc_generator {
 
 enum ProtoFlavor {
-  NORMAL, LITE, NANO
+  NORMAL, LITE
 };
 
 // Returns the package name of the gRPC services defined in the given file.
-string ServiceJavaPackage(const google::protobuf::FileDescriptor* file, bool nano);
+string ServiceJavaPackage(const google::protobuf::FileDescriptor* file);
 
 // Returns the name of the outer class that wraps in all the generated code for
 // the given service.

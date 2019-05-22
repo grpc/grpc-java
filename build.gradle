@@ -111,7 +111,6 @@ subprojects {
         guavaVersion = '26.0-android'
         protobufVersion = '3.7.1'
         protocVersion = protobufVersion
-        protobufNanoVersion = '3.0.0-alpha-5'
         opencensusVersion = '0.21.0'
 
         configureProtoCompilation = {
@@ -210,8 +209,6 @@ subprojects {
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
             protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
-            protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
-            protoc_nano: "com.google.protobuf:protoc:3.5.1-1",
             protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.8',
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
             lang: "org.apache.commons:commons-lang3:3.5",
@@ -386,7 +383,6 @@ subprojects {
                             "grpc-stub",
                             "grpc-protobuf",
                             "grpc-protobuf-lite",
-                            "grpc-protobuf-nano"
                         ])) {
                             asNode().dependencies.'*'.findAll() { dep ->
                                 dep.artifactId.text() in ['grpc-api', 'grpc-core']
@@ -461,7 +457,6 @@ def publicApiSubprojects = [
     ':grpc-okhttp',
     ':grpc-protobuf',
     ':grpc-protobuf-lite',
-    ':grpc-protobuf-nano',
     ':grpc-stub',
     ':grpc-testing',
 ]

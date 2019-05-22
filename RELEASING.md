@@ -70,7 +70,7 @@ would be used to create all `v1.7` tags (e.g. `v1.7.0`, `v1.7.1`).
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$((MINOR+1)).0'\1/' \
      "${VERSION_FILES[@]}"
    $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$((MINOR+1)).0/ \
-     compiler/src/test{,Lite,Nano}/golden/Test{,Deprecated}Service.java.txt
+     compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
    $ ./gradlew build
    $ git commit -a -m "Start $MAJOR.$((MINOR+1)).0 development cycle"
    ```
@@ -126,7 +126,7 @@ Tagging the Release
    ```bash
    # Change version to remove -SNAPSHOT
    $ sed -i 's/-SNAPSHOT\(.*CURRENT_GRPC_VERSION\)/\1/' "${VERSION_FILES[@]}"
-   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite,Nano}/golden/Test{,Deprecated}Service.java.txt
+   $ sed -i s/-SNAPSHOT// compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$PATCH"
    $ git tag -a v$MAJOR.$MINOR.$PATCH -m "Version $MAJOR.$MINOR.$PATCH"
@@ -139,7 +139,7 @@ Tagging the Release
    $ sed -i 's/[0-9]\+\.[0-9]\+\.[0-9]\+\(.*CURRENT_GRPC_VERSION\)/'$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT'\1/' \
      "${VERSION_FILES[@]}"
    $ sed -i s/$MAJOR.$MINOR.$PATCH/$MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT/ \
-     compiler/src/test{,Lite,Nano}/golden/Test{,Deprecated}Service.java.txt
+     compiler/src/test{,Lite}/golden/Test{,Deprecated}Service.java.txt
    $ ./gradlew build
    $ git commit -a -m "Bump version to $MAJOR.$MINOR.$((PATCH+1))-SNAPSHOT"
    ```

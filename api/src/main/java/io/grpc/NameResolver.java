@@ -71,10 +71,8 @@ public abstract class NameResolver {
    * Starts the resolution.
    *
    * @param listener used to receive updates on the target
-   * @deprecated override {@link #start(Listener2)} instead.
    * @since 1.0.0
    */
-  @Deprecated
   public void start(final Listener listener) {
     if (listener instanceof Listener2) {
       start((Listener2) listener);
@@ -94,7 +92,7 @@ public abstract class NameResolver {
   }
 
   /**
-   * Starts the resolution.  This method will become abstract in 1.21.0.
+   * Starts the resolution.
    *
    * @param listener used to receive updates on the target
    * @since 1.21.0
@@ -270,12 +268,10 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
-   * @deprecated use {@link Listener2} instead.
    * @since 1.0.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   @ThreadSafe
-  @Deprecated
   public interface Listener {
     /**
      * Handles updates on resolved addresses and attributes.
@@ -304,12 +300,15 @@ public abstract class NameResolver {
    *
    * <p>All methods are expected to return quickly.
    *
+   * <p>This is a replacement API of {@code Listener}. However, we think this new API may change
+   * again, so we aren't yet encouraging mass-migration to it. It is fine to use and works.
+   *
    * @since 1.21.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public abstract static class Listener2 implements Listener {
     /**
-     * @deprecated This will be removed in 1.21.0
+     * @deprecated This will be removed in 1.22.0
      */
     @Override
     @Deprecated

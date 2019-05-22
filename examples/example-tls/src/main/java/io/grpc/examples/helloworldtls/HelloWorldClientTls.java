@@ -25,12 +25,11 @@ import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
-
-import javax.net.ssl.SSLException;
 import java.io.File;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.net.ssl.SSLException;
 
 /**
  * A simple client that requests a greeting from the {@link HelloWorldServerTls} with TLS.
@@ -62,6 +61,7 @@ public class HelloWorldClientTls {
                                SslContext sslContext) throws SSLException {
 
         this(NettyChannelBuilder.forAddress(host, port)
+                .overrideAuthority("foo.test.google.fr")  /* Only for using provided test certs. */
                 .sslContext(sslContext)
                 .build());
     }
@@ -101,8 +101,8 @@ public class HelloWorldClientTls {
     public static void main(String[] args) throws Exception {
 
         if (args.length < 2 || args.length == 4 || args.length > 5) {
-            System.out.println("USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath] " +
-                    "[clientCertChainFilePath clientPrivateKeyFilePath]\n  Note: clientCertChainFilePath and " +
+            System.out.println("USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath " +
+                    "[clientCertChainFilePath clientPrivateKeyFilePath]]\n  Note: clientCertChainFilePath and " +
                     "clientPrivateKeyFilePath are only needed if mutual auth is desired.");
             System.exit(0);
         }
@@ -110,6 +110,7 @@ public class HelloWorldClientTls {
         HelloWorldClientTls client;
         switch (args.length) {
             case 2:
+                /* Use default CA. Only for real server certificates. */
                 client = new HelloWorldClientTls(args[0], Integer.parseInt(args[1]),
                         buildSslContext(null, null, null));
                 break;
@@ -123,12 +124,7 @@ public class HelloWorldClientTls {
         }
 
         try {
-            /* Access a service running on the local machine on port 50051 */
-            String user = "world";
-            if (args.length > 0) {
-                user = args[0]; /* Use the arg as the name to greet if provided */
-            }
-            client.greet(user);
+            client.greet(args[0]);
         } finally {
             client.shutdown();
         }
