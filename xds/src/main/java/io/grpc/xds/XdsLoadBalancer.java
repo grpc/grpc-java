@@ -248,8 +248,6 @@ final class XdsLoadBalancer extends LoadBalancer {
     // Scheduled only once.  Never reset.
     @CheckForNull
     private ScheduledHandle fallbackTimer;
-    @Nullable
-    private FallbackTask fallbackTask;
 
     private List<EquivalentAddressGroup> fallbackServers = ImmutableList.of();
     private Attributes fallbackAttributes;
@@ -267,7 +265,6 @@ final class XdsLoadBalancer extends LoadBalancer {
 
     void cancelFallbackTimer() {
       if (fallbackTimer != null) {
-        fallbackTask.cancelled = true;
         fallbackTimer.cancel();
       }
     }
@@ -344,23 +341,16 @@ final class XdsLoadBalancer extends LoadBalancer {
 
     void startFallbackTimer() {
       if (fallbackTimer == null) {
-        fallbackTask = new FallbackTask();
-        fallbackTimer = helper.getSynchronizationContext().schedule(
-            fallbackTask, FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
-            helper.getScheduledExecutorService());
-      }
-    }
-
-    // Must be accessed in SynchronizationContext
-    class FallbackTask implements Runnable {
-
-      boolean cancelled;
-
-      @Override
-      public void run() {
-        if (!cancelled) {
-          useFallbackPolicy();
+        class FallbackTask implements Runnable {
+          @Override
+          public void run() {
+            useFallbackPolicy();
+          }
         }
+
+        fallbackTimer = helper.getSynchronizationContext().schedule(
+            new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
+            helper.getScheduledExecutorService());
       }
     }
   }
