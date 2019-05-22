@@ -39,7 +39,6 @@ import javax.annotation.Nullable;
  */
 @Internal
 public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
-  private final LoadBalancerRegistry registry = LoadBalancerRegistry.getDefaultRegistry();
 
   private static final LbConfig DEFAULT_FALLBACK_POLICY =
       new LbConfig("round_robin", ImmutableMap.<String, Void>of());
@@ -61,13 +60,14 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer(helper, registry);
+    return new XdsLoadBalancer(helper, LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @Override
   public ConfigOrError parseLoadBalancingPolicyConfig(
       Map<String, ?> rawLoadBalancingPolicyConfig) {
-    return parseLoadBalancingConfigPolicy(rawLoadBalancingPolicyConfig, registry);
+    return parseLoadBalancingConfigPolicy(
+        rawLoadBalancingPolicyConfig, LoadBalancerRegistry.getDefaultRegistry());
   }
 
   static ConfigOrError parseLoadBalancingConfigPolicy(
