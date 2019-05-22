@@ -18,7 +18,6 @@ def grpc_java_repositories(
         omit_com_google_protobuf = False,
         omit_com_google_protobuf_java = False,
         omit_com_google_protobuf_javalite = False,
-        omit_com_google_protobuf_nano_protobuf_javanano = False,
         omit_com_google_truth_truth = False,
         omit_com_squareup_okhttp = False,
         omit_com_squareup_okio = False,
@@ -70,8 +69,6 @@ def grpc_java_repositories(
         fail("omit_com_google_protobuf_java is no longer supported and must be not be passed to grpc_java_repositories()")
     if not omit_com_google_protobuf_javalite:
         com_google_protobuf_javalite()
-    if not omit_com_google_protobuf_nano_protobuf_javanano:
-        com_google_protobuf_nano_protobuf_javanano()
     if not omit_com_google_truth_truth:
         com_google_truth_truth()
     if not omit_com_squareup_okhttp:
@@ -251,15 +248,6 @@ def com_google_protobuf_javalite():
         sha256 = "79d102c61e2a479a0b7e5fc167bcfaa4832a0c6aad4a75fa7da0480564931bcc",
         strip_prefix = "protobuf-384989534b2246d413dbcd750744faab2607b516",
         urls = ["https://github.com/google/protobuf/archive/384989534b2246d413dbcd750744faab2607b516.zip"],
-    )
-
-def com_google_protobuf_nano_protobuf_javanano():
-    jvm_maven_import_external(
-        name = "com_google_protobuf_nano_protobuf_javanano",
-        artifact = "com.google.protobuf.nano:protobuf-javanano:3.0.0-alpha-5",
-        server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "6d30f1e667a8952e1c90a0a125f0ce0edf84d6b1d51c91d8555c4fb549e3d7a1",
-        licenses = ["notice"],  # BSD 2-clause
     )
 
 def com_google_truth_truth():
