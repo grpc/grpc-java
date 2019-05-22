@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.SHUTDOWN;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -290,6 +291,14 @@ final class XdsLoadBalancer extends LoadBalancer {
           ChannelLogLevel.INFO, "Using fallback policy");
 
       final class FallbackBalancerHelper extends ForwardingLoadBalancerHelper {
+
+        @Override
+        public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+          if (newState == SHUTDOWN) {
+            return;
+          }
+          super.updateBalancingState(newState, newPicker);
+        }
 
         @Override
         protected Helper delegate() {
