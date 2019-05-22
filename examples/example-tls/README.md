@@ -31,9 +31,10 @@ USAGE: HelloWorldServerTls port certChainFilePath privateKeyFilePath [trustCertC
 **hello-world-tls-client**:
 
 ```text
-USAGE: HelloWorldClientTls host port trustCertCollectionFilePath [clientCertChainFilePath clientPrivateKeyFilePath]
+USAGE: HelloWorldClientTls host port [trustCertCollectionFilePath [clientCertChainFilePath clientPrivateKeyFilePath]]
   Note: clientCertChainFilePath and clientPrivateKeyFilePath are only needed if mutual auth is desired.
 ```
+- Note `trustCertCollectionFilePath` is not needed if you are using system default certificate authority.
 
 You can run this example with our [test credentials](../../testing/src/main/resources/certs) with 
 `.overrideAuthority("foo.test.google.fr")` for `ManagedChannelBuilder` to match the Subject Alternative Names
