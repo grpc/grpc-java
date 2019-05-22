@@ -22,7 +22,7 @@ import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
-import static junit.framework.TestCase.assertNotNull;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -535,6 +535,25 @@ public class XdsLoadBalancerTest {
     assertNull(childHelper);
     assertNull(fallbackHelper1);
     verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
+  }
+
+  @Test
+  public void resolutionErrorAtFallback() throws Exception {
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(standardModeWithFallback1Attributes())
+            .build());
+    // let fallback timer expire
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(fallbackBalancer1).handleResolvedAddresses(captor.capture());
+    assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .containsExactly("fallback_1_option", "yes");
+
+    Status status = Status.UNAVAILABLE.withDescription("resolution error");
+    lb.handleNameResolutionError(status);
+    verify(fallbackBalancer1).handleNameResolutionError(status);
   }
 
   @Test
