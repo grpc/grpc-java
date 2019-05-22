@@ -84,6 +84,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
       pendingUnprotectedWrites.removeAndFailAll(
           new ChannelException("Pending write on removal of TSI handler"));
     }
+    destroyProtector();
   }
 
   @Override
@@ -112,10 +113,7 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
       logger.log(Level.FINE, "Ignored error on flush before close", e);
     } finally {
       pendingUnprotectedWrites = null;
-      if (protector != null) {
-        protector.destroy();
-        protector = null;
-      }
+      destroyProtector();
     }
   }
 
@@ -125,7 +123,9 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
     if (protector == null) {
       // TODO(carl-mastrangelo): this should be a checkState.  AbstractNettyHandler.exceptionCaught
       // transitively calls flush even after closed, for some reason.
-      logger.warning("flush() called after close()");
+      pendingUnprotectedWrites.removeAndFailAll(
+          new ChannelException("Pending write on removal of TSI handler"));
+      logger.fine("flush() called after close()");
       return;
     }
     if (pendingUnprotectedWrites.isEmpty()) {
@@ -185,5 +185,15 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   public void read(ChannelHandlerContext ctx) {
     ctx.read();
+  }
+
+  private void destroyProtector() {
+    if (protector != null) {
+      try {
+        protector.destroy();
+      } finally {
+        protector = null;
+      }
+    }
   }
 }

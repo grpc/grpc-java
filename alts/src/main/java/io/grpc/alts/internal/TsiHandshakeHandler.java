@@ -124,17 +124,23 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       SecurityDetails details = handshakeValidator.validatePeerObject(authContext);
       // createFrameProtector must be called last.
       TsiFrameProtector protector = handshaker.createFrameProtector(ctx.alloc());
+      TsiFrameHandler framer;
       boolean success = false;
       try {
-        TsiFrameHandler framer = new TsiFrameHandler(protector);
-        ctx.pipeline().addBefore(ctx.name(), null, framer);
+        framer = new TsiFrameHandler(protector);
+        // replace the current handler with the framer (instead of adding before) since there may
+        // be pending data after the handshake frame.  The data will need to be decoded before
+        // being passed to the `next` handler.
+        ctx.pipeline().replace(ctx.name(), null, framer);
+        // Once the framer is in the pipeline, it will be cleaned up when the handler is removed.
         success = true;
       } finally {
         if (!success && protector != null) {
           protector.destroy();
         }
       }
-      ctx.pipeline().replace(ctx.name(), null, next);
+      // Add the `next` handler as late as possible, as it will issue writes on being added.
+      ctx.pipeline().addAfter(ctx.pipeline().context(framer).name(), null, next);
       fireProtocolNegotiationEvent(ctx, peer, authContext, details);
     }
   }
@@ -164,16 +170,12 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   /** Sends as many bytes as are available from the handshaker to the remote peer. */
   @SuppressWarnings("FutureReturnValueIgnored") // for addListener
-  private void sendHandshake(ChannelHandlerContext ctx) {
+  private void sendHandshake(ChannelHandlerContext ctx) throws GeneralSecurityException {
     while (true) {
       boolean written = false;
       ByteBuf buf = ctx.alloc().buffer(HANDSHAKE_FRAME_SIZE).retain(); // refcnt = 2
       try {
-        try {
-          handshaker.getBytesToSendToPeer(buf);
-        } catch (GeneralSecurityException e) {
-          throw new RuntimeException(e);
-        }
+        handshaker.getBytesToSendToPeer(buf);
         if (buf.isReadable()) {
           ctx.writeAndFlush(buf).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
           written = true;
