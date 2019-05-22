@@ -31,8 +31,6 @@ import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -43,6 +41,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -188,32 +187,6 @@ interface LocalityStore {
 
     }
 
-    static final class ErrorPicker extends SubchannelPicker {
-
-      private final Status error;
-
-      ErrorPicker(Status error) {
-        this.error = checkNotNull(error, "error");
-      }
-
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withError(error);
-      }
-    }
-
-    static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withNoResult();
-      }
-
-      @Override
-      public String toString() {
-        return "BUFFER_PICKER";
-      }
-    };
-
     private static ConnectivityState aggregateState(
         ConnectivityState overallState, ConnectivityState childState) {
       if (overallState == null) {
@@ -269,7 +242,7 @@ interface LocalityStore {
         if (state == TRANSIENT_FAILURE) {
           picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
         } else {
-          picker = BUFFER_PICKER;
+          picker = XdsSubchannelPickers.BUFFER_PICKER;
         }
       } else {
         picker = pickerFactory.picker(childPickers);
@@ -307,7 +280,7 @@ interface LocalityStore {
 
       private final Locality locality;
 
-      private SubchannelPicker currentChildPicker = BUFFER_PICKER;
+      private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
       ChildHelper(Locality locality) {
