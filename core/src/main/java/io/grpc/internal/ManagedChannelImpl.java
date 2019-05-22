@@ -1138,7 +1138,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkArgument(subchannel instanceof SubchannelImpl,
           "subchannel must have been returned from createSubchannel");
       logWarningIfNotInSyncContext("updateSubchannelAddresses()");
-      ((SubchannelImpl) subchannel).subchannel.updateAddresses(addrs);
+      ((InternalSubchannel) subchannel.getInternalSubchannel()).updateAddresses(addrs);
     }
 
     @Override
@@ -1499,12 +1499,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    ClientTransport obtainActiveTransport() {
-      checkState(started, "Subchannel is not started");
-      return subchannel.obtainActiveTransport();
-    }
-
-    @Override
     InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel() {
       checkState(started, "not started");
       return subchannel;
@@ -1600,6 +1594,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           subchannel, balancerRpcExecutorHolder.getExecutor(),
           transportFactory.getScheduledExecutorService(),
           callTracerFactory.create());
+    }
+
+    @Override
+    public Object getInternalSubchannel() {
+      checkState(started, "Subchannel is not started");
+      return subchannel;
     }
 
     @Override

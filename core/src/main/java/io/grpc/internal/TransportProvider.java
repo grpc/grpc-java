@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,19 @@
 
 package io.grpc.internal;
 
-import com.google.common.annotations.VisibleForTesting;
-import io.grpc.InternalChannelz.ChannelStats;
-import io.grpc.InternalInstrumented;
-import io.grpc.LoadBalancer;
+import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * The base interface of the Subchannels returned by {@link
- * io.grpc.LoadBalancer.Helper#createSubchannel}.
+ * Provides transports for sending RPCs.
  */
-abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
-
+@ThreadSafe
+interface TransportProvider {
   /**
-   * Returns the InternalSubchannel as an {@code Instrumented<T>} for the sole purpose of channelz
-   * unit tests.
+   * Returns a READY transport that will be used to create new streams.
+   *
+   * <p>Returns {@code null} if the state is not READY.  Will try to connect if state is IDLE.
    */
-  @VisibleForTesting
-  abstract InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel();
+  @Nullable
+  ClientTransport obtainActiveTransport();
 }

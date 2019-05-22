@@ -148,11 +148,6 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         }
 
         @Override
-        ClientTransport obtainActiveTransport() {
-          return subchannel.obtainActiveTransport();
-        }
-
-        @Override
         InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel() {
           return subchannel;
         }
@@ -170,6 +165,11 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
         @Override
         public Attributes getAttributes() {
           return Attributes.EMPTY;
+        }
+
+        @Override
+        public Object getInternalSubchannel() {
+          return subchannel;
         }
     };
 

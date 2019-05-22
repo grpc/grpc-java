@@ -70,6 +70,11 @@ public abstract class ForwardingSubchannel extends LoadBalancer.Subchannel {
   }
 
   @Override
+  public Object getInternalSubchannel() {
+    return delegate().getInternalSubchannel();
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

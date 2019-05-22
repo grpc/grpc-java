@@ -2751,7 +2751,7 @@ public class ManagedChannelImplTest {
         (AbstractSubchannel) createSubchannelSafely(
             helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
     timer.forwardNanos(1234);
-    subchannel.obtainActiveTransport();
+    ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     assertThat(getStats(subchannel).channelTrace.events).contains(new ChannelTrace.Event.Builder()
         .setDescription("CONNECTING as requested")
         .setSeverity(ChannelTrace.Event.Severity.CT_INFO)

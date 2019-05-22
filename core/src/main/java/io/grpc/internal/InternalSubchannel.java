@@ -65,7 +65,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
+final class InternalSubchannel implements InternalInstrumented<ChannelStats>, TransportProvider {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final InternalLogId logId;
@@ -192,13 +192,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     return channelLogger;
   }
 
-  /**
-   * Returns a READY transport that will be used to create new streams.
-   *
-   * <p>Returns {@code null} if the state is not READY.  Will try to connect if state is IDLE.
-   */
-  @Nullable
-  ClientTransport obtainActiveTransport() {
+  @Override
+  public ClientTransport obtainActiveTransport() {
     ClientTransport savedTransport = activeTransport;
     if (savedTransport != null) {
       return savedTransport;
