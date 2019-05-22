@@ -64,8 +64,6 @@ interface LocalityStore {
 
   boolean hasReadyBackends();
 
-  boolean hasNonDropBackends();
-
   void reset();
 
   void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
@@ -146,12 +144,6 @@ interface LocalityStore {
     @Override
     public boolean hasReadyBackends() {
       return overallState == READY;
-    }
-
-    @Override
-    public boolean hasNonDropBackends() {
-      // TODO: impl
-      return false;
     }
 
     // This is triggered by xdsLoadbalancer.handleSubchannelState
