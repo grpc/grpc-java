@@ -41,8 +41,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.InterLocalityPicker.ThreadSafeRandom;
-import io.grpc.xds.InterLocalityPicker.ThreadSafeRandomImpl;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.Locality;
@@ -90,7 +88,7 @@ interface LocalityStore {
     private ConnectivityState overallState;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandomImpl.instance);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
     }
 
     @VisibleForTesting

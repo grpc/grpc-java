@@ -24,7 +24,6 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
-import io.grpc.xds.InterLocalityPicker.ThreadSafeRandom;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
