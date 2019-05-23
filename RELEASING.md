@@ -187,8 +187,8 @@ releases. Generate one for the new release by following the
 Update README.md
 ----------------
 After waiting ~1 day and verifying that the release appears on [Maven
-Central](https://mvnrepository.com/), cherry-pick the commit that updated the
-README into the master branch and go through review process.
+Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
+that updated the README into the master branch and go through review process.
 
 ```
 $ git checkout -b bump-readme master
