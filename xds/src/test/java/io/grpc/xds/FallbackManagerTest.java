@@ -142,16 +142,18 @@ public class FallbackManagerTest {
 
   @Test
   public void useFallbackWhenTimeout() {
-    fallbackManager.maybeStartFallbackTimer();
+    fallbackManager.startFallbackTimer();
     List<EquivalentAddressGroup> eags = new ArrayList<>();
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
 
+    assertThat(fallbackManager.isInFallbackMode()).isFalse();
     verify(fakeFallbackLb, never())
         .handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
 
     fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
+    assertThat(fallbackManager.isInFallbackMode()).isTrue();
     verify(fakeFallbackLb).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(eags)
@@ -166,7 +168,7 @@ public class FallbackManagerTest {
 
   @Test
   public void cancelFallback() {
-    fallbackManager.maybeStartFallbackTimer();
+    fallbackManager.startFallbackTimer();
     List<EquivalentAddressGroup> eags = new ArrayList<>();
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
@@ -175,6 +177,7 @@ public class FallbackManagerTest {
 
     fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
+    assertThat(fallbackManager.isInFallbackMode()).isFalse();
     verify(fakeFallbackLb, never())
         .handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
   }
