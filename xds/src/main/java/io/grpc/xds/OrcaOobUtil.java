@@ -188,6 +188,9 @@ public abstract class OrcaOobUtil {
     /**
      * Invoked when an out-of-band ORCA report is received.
      *
+     * <p>Note this callback will be invoked from the {@link SynchronizationContext} of the
+     * delegated helper, implementations should not block.
+     *
      * @param report load report in the format of ORCA protocol.
      */
     void onLoadReport(OrcaLoadReport report);
@@ -203,6 +206,9 @@ public abstract class OrcaOobUtil {
     /**
      * Sets the configuration of receiving ORCA reports, such as the interval of receiving reports.
      *
+     * <p>This method needs to be called from the SynchronizationContext returned by the wrapped
+     * helper's {@link Helper#getSynchronizationContext()}.
+     *
      * <p>Each load balancing policy must call this method to configure the backend load reporting.
      * Otherwise, it will not receive ORCA reports.
      *
@@ -214,8 +220,8 @@ public abstract class OrcaOobUtil {
     public abstract void setReportingConfig(OrcaReportingConfig config);
 
     /**
-     * Returns a {@link LoadBalancer.Helper} that is backed by the Helper this {@code
-     * OrcaReportingHelperWrapper} delegates to.
+     * Returns a wrapped {@link LoadBalancer.Helper}. Subchannels created through it will retrieve
+     * ORCA load reports if the server supports it.
      */
     public abstract LoadBalancer.Helper asHelper();
   }
@@ -281,20 +287,16 @@ public abstract class OrcaOobUtil {
     }
 
     void setReportingConfig(final OrcaReportingConfig config) {
-      syncContext.execute(
-          new Runnable() {
-            @Override
-            public void run() {
-              orcaConfig = config;
-              for (OrcaReportingState state : orcaStates) {
-                state.setReportingConfig(OrcaReportingHelper.this, config);
-              }
-            }
-          });
+      syncContext.throwIfNotInThisSynchronizationContext();
+      orcaConfig = config;
+      for (OrcaReportingState state : orcaStates) {
+        state.setReportingConfig(OrcaReportingHelper.this, config);
+      }
     }
 
     @Override
     public void onLoadReport(OrcaLoadReport report) {
+      syncContext.throwIfNotInThisSynchronizationContext();
       if (orcaConfig != null) {
         listener.onLoadReport(report);
       }

@@ -175,6 +175,9 @@ public abstract class OrcaPerRequestUtil {
     /**
      * Invoked when an per-request ORCA report is received.
      *
+     * <p>Note this callback will be invoked from the network thread as the RPC finishes,
+     * implementations should not block.
+     *
      * @param report load report in the format of ORCA format.
      */
     void onLoadReport(OrcaLoadReport report);
