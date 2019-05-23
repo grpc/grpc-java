@@ -66,7 +66,10 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   @SuppressWarnings("FutureReturnValueIgnored") // for setSuccess
   public void write(ChannelHandlerContext ctx, Object message, ChannelPromise promise) {
-    checkState(protector != null, "write() called after close()");
+    if (protector == null) {
+      promise.setFailure(new IllegalStateException("write() called after close()"));
+      return;
+    }
     ByteBuf msg = (ByteBuf) message;
     if (!msg.isReadable()) {
       // Nothing to encode.
@@ -120,20 +123,14 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   @SuppressWarnings("FutureReturnValueIgnored") // for aggregatePromise.doneAllocatingPromises
   public void flush(final ChannelHandlerContext ctx) throws GeneralSecurityException {
-    if (protector == null) {
-      // TODO(carl-mastrangelo): this should be a checkState.  AbstractNettyHandler.exceptionCaught
-      // transitively calls flush even after closed, for some reason.
-      pendingUnprotectedWrites.removeAndFailAll(
-          new ChannelException("Pending write on removal of TSI handler"));
-      logger.fine("flush() called after close()");
-      return;
-    }
     if (pendingUnprotectedWrites.isEmpty()) {
       // Return early if there's nothing to write. Otherwise protector.protectFlush() below may
       // not check for "no-data" and go on writing the 0-byte "data" to the socket with the
       // protection framing.
       return;
     }
+    // Flushes can happen after close, but only when there are no pending writes.
+    checkState(protector != null, "flush() called after close()");
     final ProtectedPromise aggregatePromise =
         new ProtectedPromise(ctx.channel(), ctx.executor(), pendingUnprotectedWrites.size());
     List<ByteBuf> bufs = new ArrayList<>(pendingUnprotectedWrites.size());
