@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -269,6 +270,8 @@ public class LocalityStoreTest {
         .handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+
+    verify(random, never()).nextInt(1000_000);
   }
 
   @Test
@@ -319,18 +322,22 @@ public class LocalityStoreTest {
     doReturn(365, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
+    verify(random, times(2)).nextInt(1000_000);
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
+    verify(random, times(4)).nextInt(1000_000);
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
+    verify(random, times(5)).nextInt(1000_000);
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
+    verify(random, times(7)).nextInt(1000_000);
   }
 
   @Test

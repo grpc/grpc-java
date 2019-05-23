@@ -19,10 +19,10 @@ package io.grpc.xds;
 import java.util.concurrent.ThreadLocalRandom;
 import javax.annotation.concurrent.ThreadSafe;
 
+@ThreadSafe // Except for impls/mocks in tests
 interface ThreadSafeRandom {
   int nextInt(int bound);
 
-  @ThreadSafe
   final class ThreadSafeRandomImpl implements ThreadSafeRandom {
 
     static final ThreadSafeRandom instance = new ThreadSafeRandomImpl();

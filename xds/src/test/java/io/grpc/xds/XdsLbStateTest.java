@@ -26,6 +26,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -64,6 +65,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -213,6 +215,11 @@ public class XdsLbStateTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
+  }
+
+  @After
+  public void tearDown() {
+    verifyNoMoreInteractions(random);
   }
 
   @Test

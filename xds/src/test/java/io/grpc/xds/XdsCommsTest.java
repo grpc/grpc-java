@@ -353,14 +353,31 @@ public class XdsCommsTest {
                         .setDropPercentage(FractionalPercent.newBuilder()
                             .setNumerator(456).setDenominator(DenominatorType.TEN_THOUSAND).build())
                         .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(78).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category_2")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(789).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
                 .build())
             .build()))
         .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
         .build();
     responseWriter.onNext(edsResponseWithDrops);
 
-    verify(localityStore).updateDropPercentage(
-        ImmutableList.of(new DropOverload("throttle", 123), new DropOverload("lb", 45600)));
+    verify(localityStore).updateDropPercentage(ImmutableList.of(
+        new DropOverload("throttle", 123),
+        new DropOverload("lb", 456_00),
+        new DropOverload("fake_category", 78_00_00),
+        new DropOverload("fake_category_2", 1000_000)));
     verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
 
     XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
