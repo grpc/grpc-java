@@ -360,12 +360,13 @@ public abstract class OrcaOobUtil {
         } else {
           long minInterval = Long.MAX_VALUE;
           for (OrcaReportingConfig c : configs.values()) {
-            if (c.reportIntervalNanos < minInterval) {
-              minInterval = c.reportIntervalNanos;
+            if (c.getReportIntervalNanos() < minInterval) {
+              minInterval = c.getReportIntervalNanos();
             }
           }
-          if (overallConfig.reportIntervalNanos != minInterval) {
-            overallConfig.reportIntervalNanos = minInterval;
+          if (overallConfig.getReportIntervalNanos() != minInterval) {
+            overallConfig = overallConfig.toBuilder()
+                .setReportInterval(minInterval, TimeUnit.NANOSECONDS).build();
             reconfigured = true;
           }
         }
@@ -570,7 +571,7 @@ public abstract class OrcaOobUtil {
   /** Configuration for out-of-band ORCA reporting service RPC. */
   public static final class OrcaReportingConfig {
 
-    private long reportIntervalNanos;
+    private final long reportIntervalNanos;
 
     private OrcaReportingConfig(long reportIntervalNanos) {
       this.reportIntervalNanos = reportIntervalNanos;
