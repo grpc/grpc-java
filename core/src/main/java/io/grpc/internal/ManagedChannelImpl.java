@@ -1147,7 +1147,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       checkState(!terminated, "Channel is terminated");
       long oobChannelCreationTime = timeProvider.currentTimeNanos();
       InternalLogId oobLogId = InternalLogId.allocate("OobChannel", /*details=*/ null);
-      InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel-OOB", /*details=*/ null);
+      InternalLogId subchannelLogId =
+          InternalLogId.allocate("Subchannel-OOB", /*details=*/ authority);
       ChannelTracer oobChannelTracer =
           new ChannelTracer(
               oobLogId, maxTraceEvents, oobChannelCreationTime,
@@ -1164,6 +1165,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       ChannelTracer subchannelTracer =
           new ChannelTracer(subchannelLogId, maxTraceEvents, oobChannelCreationTime,
               "Subchannel for " + addressGroup);
+      ChannelLogger subchannelLogger = new ChannelLoggerImpl(subchannelTracer, timeProvider);
       final class ManagedOobChannelCallback extends InternalSubchannel.Callback {
         @Override
         void onTerminated(InternalSubchannel is) {
@@ -1190,7 +1192,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           callTracerFactory.create(),
           subchannelTracer,
           subchannelLogId,
-          timeProvider);
+          subchannelLogger);
       oobChannelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel created")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
@@ -1407,6 +1409,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final class SubchannelImpl extends AbstractSubchannel {
     final CreateSubchannelArgs args;
     final LbHelperImpl helper;
+    final InternalLogId subchannelLogId;
+    final ChannelLoggerImpl subchannelLogger;
+    final ChannelTracer subchannelTracer;
     SubchannelStateListener listener;
     InternalSubchannel subchannel;
     boolean started;
@@ -1416,6 +1421,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     SubchannelImpl(CreateSubchannelArgs args, LbHelperImpl helper) {
       this.args = checkNotNull(args, "args");
       this.helper = checkNotNull(helper, "helper");
+      subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ authority());
+      subchannelTracer = new ChannelTracer(
+          subchannelLogId, maxTraceEvents, timeProvider.currentTimeNanos(),
+          "Subchannel for " + args.getAddresses());
+      subchannelLogger = new ChannelLoggerImpl(subchannelTracer, timeProvider);
     }
 
     @Override
@@ -1464,12 +1474,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      long subchannelCreationTime = timeProvider.currentTimeNanos();
-      InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ null);
-      ChannelTracer subchannelTracer =
-          new ChannelTracer(
-              subchannelLogId, maxTraceEvents, subchannelCreationTime,
-              "Subchannel for " + args.getAddresses());
       InternalSubchannel internalSubchannel = new InternalSubchannel(
           args.getAddresses(),
           authority(),
@@ -1484,12 +1488,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
           callTracerFactory.create(),
           subchannelTracer,
           subchannelLogId,
-          timeProvider);
+          subchannelLogger);
 
       channelTracer.reportEvent(new ChannelTrace.Event.Builder()
           .setDescription("Child Subchannel started")
           .setSeverity(ChannelTrace.Event.Severity.CT_INFO)
-          .setTimestampNanos(subchannelCreationTime)
+          .setTimestampNanos(timeProvider.currentTimeNanos())
           .setSubchannelRef(internalSubchannel)
           .build());
 
@@ -1591,11 +1595,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public String toString() {
-      return subchannel.getLogId().toString();
+      return subchannelLogId.toString();
     }
 
     @Override
     public Channel asChannel() {
+      checkState(started, "not started");
       return new SubchannelChannel(
           subchannel, balancerRpcExecutorHolder.getExecutor(),
           transportFactory.getScheduledExecutorService(),
@@ -1604,7 +1609,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ChannelLogger getChannelLogger() {
-      return subchannel.getChannelLogger();
+      return subchannelLogger;
     }
   }
 
