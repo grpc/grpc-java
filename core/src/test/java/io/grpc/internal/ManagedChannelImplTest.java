@@ -1329,6 +1329,20 @@ public class ManagedChannelImplTest {
   }
 
   @Test
+  public void subchannelStringableBeforeStart() {
+    createChannel();
+    Subchannel subchannel = createUnstartedSubchannel(helper, addressGroup, Attributes.EMPTY);
+    assertThat(subchannel.toString()).isNotNull();
+  }
+
+  @Test
+  public void subchannelLoggerCreatedBeforeSubchannelStarted() {
+    createChannel();
+    Subchannel subchannel = createUnstartedSubchannel(helper, addressGroup, Attributes.EMPTY);
+    assertThat(subchannel.getChannelLogger()).isNotNull();
+  }
+
+  @Test
   public void subchannelsWhenChannelShutdownNow() {
     createChannel();
     Subchannel sub1 =
@@ -3995,6 +4009,23 @@ public class ManagedChannelImplTest {
                 .setAttributes(attrs)
                 .build());
             s.start(stateListener);
+            resultCapture.set(s);
+          }
+        });
+    return resultCapture.get();
+  }
+
+  private static Subchannel createUnstartedSubchannel(
+      final Helper helper, final EquivalentAddressGroup addressGroup, final Attributes attrs) {
+    final AtomicReference<Subchannel> resultCapture = new AtomicReference<>();
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            Subchannel s = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+                .setAddresses(addressGroup)
+                .setAttributes(attrs)
+                .build());
             resultCapture.set(s);
           }
         });

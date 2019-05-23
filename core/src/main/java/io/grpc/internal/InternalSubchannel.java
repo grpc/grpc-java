@@ -78,7 +78,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final InternalChannelz channelz;
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
-  private final ChannelLoggerImpl channelLogger;
+  private final ChannelLogger channelLogger;
 
   // File-specific convention: methods without GuardedBy("lock") MUST NOT be called under the lock.
   private final Object lock = new Object();
@@ -167,7 +167,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
       InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, TimeProvider timeProvider) {
+      InternalLogId logId, ChannelLogger channelLogger) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -184,8 +184,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     this.channelz = channelz;
     this.callsTracer = callsTracer;
     this.channelTracer = Preconditions.checkNotNull(channelTracer, "channelTracer");
-    this.logId = InternalLogId.allocate("Subchannel", authority);
-    this.channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
+    this.logId = Preconditions.checkNotNull(logId, "logId");
+    this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
   }
 
   ChannelLogger getChannelLogger() {

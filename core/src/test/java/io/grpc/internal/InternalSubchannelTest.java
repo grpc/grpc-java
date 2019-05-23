@@ -1274,13 +1274,16 @@ public class InternalSubchannelTest {
 
   private void createInternalSubchannel(EquivalentAddressGroup ... addrs) {
     List<EquivalentAddressGroup> addressGroups = Arrays.asList(addrs);
-    InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ null);
+    InternalLogId logId = InternalLogId.allocate("Subchannel", /*details=*/ AUTHORITY);
+    ChannelTracer subchannelTracer = new ChannelTracer(logId, 10,
+        fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel");
     internalSubchannel = new InternalSubchannel(addressGroups, AUTHORITY, USER_AGENT,
         mockBackoffPolicyProvider, mockTransportFactory, fakeClock.getScheduledExecutorService(),
         fakeClock.getStopwatchSupplier(), syncContext, mockInternalSubchannelCallback,
         channelz, CallTracer.getDefaultFactory().create(),
-        new ChannelTracer(logId, 10, fakeClock.getTimeProvider().currentTimeNanos(), "Subchannel"),
-        logId, fakeClock.getTimeProvider());
+        subchannelTracer,
+        logId,
+        new ChannelLoggerImpl(subchannelTracer, fakeClock.getTimeProvider()));
   }
 
   private void assertNoCallbackInvoke() {
