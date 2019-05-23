@@ -375,6 +375,25 @@ public class ManagedChannelImplTest {
 
   @Deprecated
   @Test
+  public void createSubchannel_old_insideSyncContextFollowedByRequestConnectionShouldSucceed() {
+    createChannel();
+    final AtomicReference<Throwable> error = new AtomicReference<>();
+    helper.getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          try {
+            Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
+            subchannel.requestConnection();
+          } catch (Throwable e) {
+            error.set(e);
+          }
+        }
+      });
+    assertThat(error.get()).isNull();
+  }
+
+  @Deprecated
+  @Test
   @SuppressWarnings("deprecation")
   public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
     createChannel();
