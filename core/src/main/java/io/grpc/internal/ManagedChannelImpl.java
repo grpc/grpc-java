@@ -230,8 +230,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final AtomicBoolean shutdown = new AtomicBoolean(false);
   // Must only be mutated and read from syncContext
   private boolean shutdownNowed;
-  // Must only be mutated and read from syncContext
-  private boolean terminating;
+  // Must only be mutated from syncContext
+  private volatile boolean terminating;
   // Must be mutated from syncContext
   private volatile boolean terminated;
   private final CountDownLatch terminatedLatch = new CountDownLatch(1);
@@ -1424,13 +1424,15 @@ final class ManagedChannelImpl extends ManagedChannel implements
       subchannelLogger = new ChannelLoggerImpl(subchannelTracer, timeProvider);
     }
 
-    // This can be called either in or outside of sync context
+    // This can be called either in or outside of syncContext
     // TODO(zhangkun83): merge it back into start() once the caller createSubchannel() is deleted.
     private void internalStart(final SubchannelStateListener listener) {
       checkState(!started, "already started");
       checkState(!shutdown, "already shutdown");
       started = true;
       this.listener = listener;
+      // TODO(zhangkun): possibly remove the volatile of terminating when this whole method is
+      // required to be called from syncContext
       if (terminating) {
         syncContext.execute(new Runnable() {
             @Override
@@ -1470,7 +1472,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         }
       }
 
-      InternalSubchannel internalSubchannel = new InternalSubchannel(
+      final InternalSubchannel internalSubchannel = new InternalSubchannel(
           args.getAddresses(),
           authority(),
           userAgent,
@@ -1493,9 +1495,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
           .setSubchannelRef(internalSubchannel)
           .build());
 
-      channelz.addSubchannel(internalSubchannel);
       this.subchannel = internalSubchannel;
-      subchannels.add(internalSubchannel);
+      // TODO(zhangkun83): no need to schedule on syncContext when this whole method is required
+      // to be called from syncContext
+      syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            channelz.addSubchannel(internalSubchannel);
+            subchannels.add(internalSubchannel);
+          }
+        });
     }
 
     @Override
