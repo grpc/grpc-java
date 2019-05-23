@@ -45,6 +45,7 @@ import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -61,8 +62,6 @@ import javax.annotation.Nullable;
  */
 // Must be accessed/run in SynchronizedContext.
 interface LocalityStore {
-
-  boolean hasReadyBackends();
 
   void reset();
 
@@ -81,9 +80,9 @@ interface LocalityStore {
     private final ThreadSafeRandom random;
 
     private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
+
     @CheckForNull
     private ImmutableList<DropOverload> dropOverloads;
-    private ConnectivityState overallState;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
@@ -140,11 +139,6 @@ interface LocalityStore {
             return new InterLocalityPicker(childPickers);
           }
         };
-
-    @Override
-    public boolean hasReadyBackends() {
-      return overallState == READY;
-    }
 
     // This is triggered by xdsLoadbalancer.handleSubchannelState
     @Override
@@ -232,32 +226,6 @@ interface LocalityStore {
       this.dropOverloads = dropOverloads;
     }
 
-    private static final class ErrorPicker extends SubchannelPicker {
-
-      final Status error;
-
-      ErrorPicker(Status error) {
-        this.error = checkNotNull(error, "error");
-      }
-
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withError(error);
-      }
-    }
-
-    private static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
-      @Override
-      public PickResult pickSubchannel(PickSubchannelArgs args) {
-        return PickResult.withNoResult();
-      }
-
-      @Override
-      public String toString() {
-        return "BUFFER_PICKER";
-      }
-    };
-
     private static ConnectivityState aggregateState(
         ConnectivityState overallState, ConnectivityState childState) {
       if (overallState == null) {
@@ -304,7 +272,6 @@ interface LocalityStore {
       }
 
       updatePicker(overallState, childPickers);
-      this.overallState = overallState;
     }
 
     private void updatePicker(ConnectivityState state,  List<WeightedChildPicker> childPickers) {
@@ -314,13 +281,13 @@ interface LocalityStore {
         if (state == TRANSIENT_FAILURE) {
           picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
         } else {
-          picker = BUFFER_PICKER;
+          picker = XdsSubchannelPickers.BUFFER_PICKER;
         }
       } else {
         picker = pickerFactory.picker(childPickers);
       }
 
-      if (dropOverloads != null) {
+      if (dropOverloads != null && !dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random);
       }
 
@@ -357,7 +324,7 @@ interface LocalityStore {
 
       private final Locality locality;
 
-      private SubchannelPicker currentChildPicker = BUFFER_PICKER;
+      private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
       ChildHelper(Locality locality) {

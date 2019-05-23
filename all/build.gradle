@@ -19,7 +19,6 @@ def subprojects = [
     project(':grpc-okhttp'),
     project(':grpc-protobuf'),
     project(':grpc-protobuf-lite'),
-    project(':grpc-protobuf-nano'),
     project(':grpc-stub'),
     project(':grpc-testing'),
 ]

@@ -125,7 +125,6 @@ model {
 
 configurations {
     testLiteCompile
-    testNanoCompile
 }
 
 dependencies {
@@ -135,16 +134,10 @@ dependencies {
     testLiteCompile project(':grpc-protobuf-lite'),
             project(':grpc-stub'),
             libraries.javax_annotation
-    testNanoCompile project(':grpc-protobuf-nano'),
-            project(':grpc-stub'),
-            libraries.javax_annotation
 }
 
 sourceSets {
     testLite {
-        proto { setSrcDirs(['src/test/proto']) }
-    }
-    testNano {
         proto { setSrcDirs(['src/test/proto']) }
     }
 }
@@ -167,20 +160,12 @@ compileTestLiteJava {
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
-compileTestNanoJava {
-    options.compilerArgs = compileTestJava.options.compilerArgs
-    options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
-}
-
 protobuf {
     protoc {
         if (project.hasProperty('protoc')) {
             path = project.protoc
         } else {
-            // Since nano is removed from newer versions of protoc, use an older version for the
-            // while. This means we won't be able to test any descriptor.proto additions, but that
-            // should be fine for a while.
-            artifact = libraries.protoc_nano
+            artifact = "com.google.protobuf:protoc:${protocVersion}"
         }
     }
     plugins {
@@ -206,18 +191,7 @@ protobuf {
                 grpc { option 'lite' }
             }
         }
-        ofSourceSet('testNano').each { task ->
-            task.builtins {
-                remove java
-                javanano { option 'ignore_services=true' }
-            }
-            task.plugins { grpc { option 'nano' } }
-        }
     }
-}
-
-checkstyleTestNano {
-    source = fileTree(dir: "src/testNano", include: "**/*.java")
 }
 
 println "*** Building codegen requires Protobuf version ${protocVersion}"
@@ -320,13 +294,9 @@ def configureTestTask(Task task, String dep, String extraPackage, String service
 
 task testGolden(type: Exec)
 task testLiteGolden(type: Exec)
-task testNanoGolden(type: Exec)
 task testDeprecatedGolden(type: Exec)
 task testDeprecatedLiteGolden(type: Exec)
-task testDeprecatedNanoGolden(type: Exec)
 configureTestTask(testGolden, '', '', 'TestService')
 configureTestTask(testLiteGolden, 'Lite', '', 'TestService')
-configureTestTask(testNanoGolden, 'Nano', '/nano', 'TestService')
 configureTestTask(testDeprecatedGolden, '', '', 'TestDeprecatedService')
 configureTestTask(testDeprecatedLiteGolden, 'Lite', '', 'TestDeprecatedService')
-configureTestTask(testDeprecatedNanoGolden, 'Nano', '/nano', 'TestDeprecatedService')

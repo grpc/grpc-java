@@ -27,6 +27,7 @@ import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
+import io.grpc.InternalChannelz.Security;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
@@ -80,6 +81,7 @@ import org.junit.runners.JUnit4;
 
 /** Tests for {@link AltsProtocolNegotiator}. */
 @RunWith(JUnit4.class)
+@SuppressWarnings("FutureReturnValueIgnored")
 public class AltsProtocolNegotiatorTest {
 
   private final CapturingGrpcHttp2ConnectionHandler grpcHandler = capturingGrpcHandler();
@@ -90,7 +92,6 @@ public class AltsProtocolNegotiatorTest {
   private EmbeddedChannel channel;
   private Throwable caughtException;
 
-  private volatile TsiHandshakeHandler.TsiHandshakeCompletionEvent tsiEvent;
   private ChannelHandler handler;
 
   private TsiPeer mockedTsiPeer = new TsiPeer(Collections.<Property<?>>emptyList());
@@ -102,12 +103,12 @@ public class AltsProtocolNegotiatorTest {
   private final TsiHandshaker mockHandshaker =
       new DelegatingTsiHandshaker(FakeTsiHandshaker.newFakeHandshakerServer()) {
         @Override
-        public TsiPeer extractPeer() throws GeneralSecurityException {
+        public TsiPeer extractPeer() {
           return mockedTsiPeer;
         }
 
         @Override
-        public Object extractPeerObject() throws GeneralSecurityException {
+        public Object extractPeerObject() {
           return mockedAltsContext;
         }
       };
@@ -115,24 +116,13 @@ public class AltsProtocolNegotiatorTest {
 
   @Before
   public void setup() throws Exception {
-    ChannelHandler userEventHandler =
-        new ChannelDuplexHandler() {
-          @Override
-          public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-            if (evt instanceof TsiHandshakeHandler.TsiHandshakeCompletionEvent) {
-              tsiEvent = (TsiHandshakeHandler.TsiHandshakeCompletionEvent) evt;
-            } else {
-              super.userEventTriggered(ctx, evt);
-            }
-          }
-        };
-
     ChannelHandler uncaughtExceptionHandler =
         new ChannelDuplexHandler() {
           @Override
           public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
             caughtException = cause;
             super.exceptionCaught(ctx, cause);
+            ctx.close();
           }
         };
 
@@ -157,9 +147,9 @@ public class AltsProtocolNegotiatorTest {
     ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
     LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
     handler =
-        AltsProtocolNegotiator.createServerNegotiator(handshakerFactory, lazyFakeChannel)
+        new AltsProtocolNegotiator.ServerAltsProtocolNegotiator(handshakerFactory, lazyFakeChannel)
             .newHandler(grpcHandler);
-    channel = new EmbeddedChannel(uncaughtExceptionHandler, handler, userEventHandler);
+    channel = new EmbeddedChannel(uncaughtExceptionHandler, handler);
   }
 
   @After
@@ -182,6 +172,8 @@ public class AltsProtocolNegotiatorTest {
   @Test
   @SuppressWarnings("unchecked") // List cast
   public void protectShouldRoundtrip() throws Exception {
+    doHandshake();
+
     // Write the message 1 character at a time. The message should be buffered
     // and not interfere with the handshake.
     final AtomicInteger writeCount = new AtomicInteger();
@@ -203,10 +195,6 @@ public class AltsProtocolNegotiatorTest {
                   });
     }
     channel.flush();
-
-    // Now do the handshake. The buffered message will automatically be protected
-    // and sent.
-    doHandshake();
 
     // Capture the protected data written to the wire.
     assertEquals(1, channel.outboundMessages().size());
@@ -351,7 +339,7 @@ public class AltsProtocolNegotiatorTest {
     doHandshake();
 
     assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.TSI_PEER_KEY)).isEqualTo(mockedTsiPeer);
-    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.ALTS_CONTEXT_KEY))
+    assertThat(grpcHandler.attrs.get(AltsProtocolNegotiator.AUTH_CONTEXT_KEY))
         .isEqualTo(mockedAltsContext);
     assertThat(grpcHandler.attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR).toString())
         .isEqualTo("embedded");
@@ -388,7 +376,7 @@ public class AltsProtocolNegotiatorTest {
     if (caughtException != null) {
       throw new RuntimeException(caughtException);
     }
-    assertNotNull(tsiEvent);
+    assertNotNull(grpcHandler.attrs);
   }
 
   private CapturingGrpcHttp2ConnectionHandler capturingGrpcHandler() {
@@ -408,6 +396,7 @@ public class AltsProtocolNegotiatorTest {
   private final class CapturingGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     private Attributes attrs;
+    private Security securityInfo;
 
     private CapturingGrpcHttp2ConnectionHandler(
         Http2ConnectionDecoder decoder,
@@ -422,6 +411,7 @@ public class AltsProtocolNegotiatorTest {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;
+      this.securityInfo = securityInfo;
     }
   }
 

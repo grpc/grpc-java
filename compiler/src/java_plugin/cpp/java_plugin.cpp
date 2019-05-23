@@ -39,17 +39,14 @@ class JavaGrpcGenerator : public google::protobuf::compiler::CodeGenerator {
 
     bool disable_version = false;
     for (size_t i = 0; i < options.size(); i++) {
-      if (options[i].first == "nano") {
-        flavor = java_grpc_generator::ProtoFlavor::NANO;
-      } else if (options[i].first == "lite") {
+      if (options[i].first == "lite") {
         flavor = java_grpc_generator::ProtoFlavor::LITE;
       } else if (options[i].first == "noversion") {
         disable_version = true;
       }
     }
 
-    string package_name = java_grpc_generator::ServiceJavaPackage(
-        file, flavor == java_grpc_generator::ProtoFlavor::NANO);
+    string package_name = java_grpc_generator::ServiceJavaPackage(file);
     string package_filename = JavaPackageToDir(package_name);
     for (int i = 0; i < file->service_count(); ++i) {
       const google::protobuf::ServiceDescriptor* service = file->service(i);

@@ -14,25 +14,35 @@
  * limitations under the License.
  */
 
-package io.grpc.alts;
+package io.grpc.util;
 
-import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
 
-import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.ForwardingTestUtil;
+import io.grpc.LoadBalancer.Subchannel;
+import java.util.Arrays;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+/** Unit tests for {@link ForwardingSubchannel}. */
 @RunWith(JUnit4.class)
-public final class GoogleDefaultChannelBuilderTest {
+public class ForwardingSubchannelTest {
+  private final Subchannel mockDelegate = mock(Subchannel.class);
+
+  private final class TestSubchannel extends ForwardingSubchannel {
+    @Override
+    protected Subchannel delegate() {
+      return mockDelegate;
+    }
+  }
 
   @Test
-  public void buildsNettyChannel() throws Exception {
-    GoogleDefaultChannelBuilder builder = GoogleDefaultChannelBuilder.forTarget("localhost:8080");
-    builder.build();
-
-    ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();
-    assertThat(protocolNegotiator.getClass().getSimpleName())
-        .isEqualTo("GoogleDefaultProtocolNegotiator");
+  public void allMethodsForwarded() throws Exception {
+    ForwardingTestUtil.testMethodsForwarded(
+        Subchannel.class,
+        mockDelegate,
+        new TestSubchannel(),
+        Arrays.asList(Subchannel.class.getMethod("getAddresses")));
   }
 }

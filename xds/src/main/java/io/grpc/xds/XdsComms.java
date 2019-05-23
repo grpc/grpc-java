@@ -219,7 +219,7 @@ final class XdsComms {
     final StreamObserver<DiscoveryResponse> xdsResponseReader =
         new StreamObserver<DiscoveryResponse>() {
 
-          boolean firstResponseReceived;
+          boolean firstEdsResponseReceived;
 
           @Override
           public void onNext(final DiscoveryResponse value) {
@@ -228,10 +228,6 @@ final class XdsComms {
 
               @Override
               public void run() {
-                if (!firstResponseReceived) {
-                  firstResponseReceived = true;
-                  adsStreamCallback.onWorking();
-                }
                 String typeUrl = value.getTypeUrl();
                 if (EDS_TYPE_URL.equals(typeUrl)) {
                   // Assuming standard mode.
@@ -243,7 +239,13 @@ final class XdsComms {
                         value.getResources(0).unpack(ClusterLoadAssignment.class);
                   } catch (InvalidProtocolBufferException | NullPointerException e) {
                     cancelRpc("Received invalid EDS response", e);
+                    adsStreamCallback.onError();
                     return;
+                  }
+
+                  if (!firstEdsResponseReceived) {
+                    firstEdsResponseReceived = true;
+                    adsStreamCallback.onWorking();
                   }
 
                   ImmutableList<DropOverload> dropOverloads = null;
@@ -299,6 +301,7 @@ final class XdsComms {
                 new Runnable() {
                   @Override
                   public void run() {
+                    // TODO: schedule retry
                     closed = true;
                     if (cancelled) {
                       return;
@@ -306,7 +309,6 @@ final class XdsComms {
                     adsStreamCallback.onError();
                   }
                 });
-            // TODO: more impl
           }
 
           @Override
@@ -337,7 +339,6 @@ final class XdsComms {
                       .putFields(
                           "endpoints_required",
                           Value.newBuilder().setBoolValue(true).build())))
-              .addResourceNames(helper.getAuthority())
               .setTypeUrl(EDS_TYPE_URL).build());
     }
 
