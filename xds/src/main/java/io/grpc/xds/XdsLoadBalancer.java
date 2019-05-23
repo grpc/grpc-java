@@ -82,6 +82,11 @@ final class XdsLoadBalancer extends LoadBalancer {
         // TODO: schedule a timer for Fallback-After-Startup
       } // else: the Fallback-at-Startup timer is still pending, noop and wait
     }
+
+    @Override
+    public void onAllDrop() {
+      fallbackManager.cancelFallback();
+    }
   };
 
   @Nullable

@@ -289,6 +289,9 @@ interface LocalityStore {
 
       if (dropOverloads != null && !dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random);
+        if (state == null) {
+          state = IDLE;
+        }
       }
 
       if (state != null) {

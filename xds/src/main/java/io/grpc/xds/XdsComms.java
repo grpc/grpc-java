@@ -258,9 +258,13 @@ final class XdsComms {
                           = ImmutableList.builder();
                       for (ClusterLoadAssignment.Policy.DropOverload dropOverload
                           : dropOverloadsProto) {
+                        int rateInMillion = rateInMillion(dropOverload.getDropPercentage());
                         dropOverloadsBuilder.add(new DropOverload(
-                            dropOverload.getCategory(),
-                            rateInMillion(dropOverload.getDropPercentage())));
+                            dropOverload.getCategory(), rateInMillion));
+                        if (rateInMillion == 1000_000) {
+                          adsStreamCallback.onAllDrop();
+                          break;
+                        }
                       }
 
                       dropOverloads = dropOverloadsBuilder.build();
@@ -426,5 +430,10 @@ final class XdsComms {
      * Once an error occurs in ADS stream.
      */
     void onError();
+
+    /**
+     * Once receives a response indicating that 100% of calls should be dropped.
+     */
+    void onAllDrop();
   }
 }

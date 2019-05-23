@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
@@ -49,6 +51,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
@@ -56,6 +60,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
@@ -580,6 +585,81 @@ public class XdsLoadBalancerTest {
     SubchannelPicker picker = mock(SubchannelPicker.class);
     fallbackHelper1.updateBalancingState(CONNECTING, picker);
     verify(helper).updateBalancingState(CONNECTING, picker);
+  }
+
+  @Test
+  public void allDropCancelsFallbackTimer() throws Exception {
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(standardModeWithFallback1Attributes())
+            .build());
+    DiscoveryResponse edsResponse = DiscoveryResponse.newBuilder()
+        .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto1)
+                .addLbEndpoints(endpoint11)
+                .setLoadBalancingWeight(UInt32Value.of(1)))
+            .setPolicy(Policy.newBuilder()
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("throttle")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(100).setDenominator(DenominatorType.HUNDRED).build())
+                        .build()))
+            .build()))
+        .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+        .build();
+    serverResponseWriter.onNext(edsResponse);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertNotNull(childHelper);
+    assertNull(fallbackHelper1);
+    verify(fallbackBalancer1, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
+
+  }
+
+  @Test
+  public void allDropExitFallbackMode() throws Exception {
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(standardModeWithFallback1Attributes())
+            .build());
+
+    // let the fallback timer expire
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertNull(childHelper);
+    assertNotNull(fallbackHelper1);
+
+    // receives EDS response with 100% drop
+    DiscoveryResponse edsResponse = DiscoveryResponse.newBuilder()
+        .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto1)
+                .addLbEndpoints(endpoint11)
+                .setLoadBalancingWeight(UInt32Value.of(1)))
+            .setPolicy(Policy.newBuilder()
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("throttle")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(100).setDenominator(DenominatorType.HUNDRED).build())
+                        .build()))
+            .build()))
+        .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+        .build();
+    serverResponseWriter.onNext(edsResponse);
+    verify(fallbackBalancer1).shutdown();
+    assertNotNull(childHelper);
+
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
+        .isDrop()).isTrue();
   }
 
   @Test
