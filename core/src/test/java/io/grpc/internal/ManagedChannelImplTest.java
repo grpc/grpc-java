@@ -109,6 +109,7 @@ import io.grpc.internal.ManagedChannelImpl.ScParser;
 import io.grpc.internal.TestUtils.MockClientTransportInfo;
 import io.grpc.stub.ClientCalls;
 import io.grpc.testing.TestMethodDescriptors;
+import io.grpc.util.ForwardingSubchannel;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.net.URI;
@@ -2449,6 +2450,40 @@ public class ManagedChannelImplTest {
 
     when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(PickResult.withSubchannel(subchannel2));
+    updateBalancingStateSafely(helper, READY, mockPicker);
+
+    executor.runDueTasks();
+    verify(mockTransport).newStream(same(method), any(Metadata.class), any(CallOptions.class));
+    verify(mockStream).start(any(ClientStreamListener.class));
+  }
+
+  @Test
+  public void updateBalancingState_withWrappedSubchannel() {
+    ClientStream mockStream = mock(ClientStream.class);
+    createChannel();
+
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    call.start(mockCallListener, new Metadata());
+
+    final Subchannel subchannel1 =
+        createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
+    requestConnectionSafely(helper, subchannel1);
+
+    MockClientTransportInfo transportInfo = transports.poll();
+    ConnectionClientTransport mockTransport = transportInfo.transport;
+    ManagedClientTransport.Listener transportListener = transportInfo.listener;
+    when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
+        .thenReturn(mockStream);
+    transportListener.transportReady();
+
+    Subchannel wrappedSubchannel1 = new ForwardingSubchannel() {
+        @Override
+        protected Subchannel delegate() {
+          return subchannel1;
+        }
+      };
+    when(mockPicker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(PickResult.withSubchannel(wrappedSubchannel1));
     updateBalancingStateSafely(helper, READY, mockPicker);
 
     executor.runDueTasks();
