@@ -340,6 +340,7 @@ public class ManagedChannelImplTest {
 
   @Deprecated
   @Test
+  @SuppressWarnings("deprecation")
   public void createSubchannel_old_outsideSynchronizationContextShouldLogWarning() {
     createChannel();
     final AtomicReference<LogRecord> logRef = new AtomicReference<>();
@@ -373,6 +374,7 @@ public class ManagedChannelImplTest {
 
   @Deprecated
   @Test
+  @SuppressWarnings("deprecation")
   public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
     createChannel();
     final AtomicReference<Subchannel> subchannelCapture = new AtomicReference<>();

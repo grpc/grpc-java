@@ -24,7 +24,6 @@ import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -38,8 +37,6 @@ import org.junit.runners.JUnit4;
 public class LoadBalancerTest {
   private final Subchannel subchannel = mock(Subchannel.class);
   private final Subchannel subchannel2 = mock(Subchannel.class);
-  private final SubchannelStateListener subchannelStateListener =
-      mock(SubchannelStateListener.class);
   private final ClientStreamTracer.Factory tracerFactory = mock(ClientStreamTracer.Factory.class);
   private final Status status = Status.UNAVAILABLE.withDescription("for test");
   private final Status status2 = Status.UNAVAILABLE.withDescription("for test 2");
@@ -127,6 +124,7 @@ public class LoadBalancerTest {
 
   @Deprecated
   @Test
+  @SuppressWarnings("deprecation")
   public void helper_createSubchannel_old_delegates() {
     class OverrideCreateSubchannel extends NoopHelper {
       boolean ran;
