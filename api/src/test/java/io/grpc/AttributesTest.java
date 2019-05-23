@@ -19,6 +19,7 @@ package io.grpc;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import org.junit.Test;
@@ -90,5 +91,41 @@ public class AttributesTest {
 
     assertEquals(attr1, attr2);
     assertEquals(attr1.hashCode(), attr2.hashCode());
+  }
+
+  @Test
+  public void discard_baseAttributes() {
+    Attributes attrs = Attributes.newBuilder().set(YOLO_KEY, "value").build();
+
+    Attributes newAttrs = attrs.toBuilder().discard(YOLO_KEY).build();
+    assertNull(newAttrs.get(YOLO_KEY));
+    assertThat(newAttrs.keysForTest()).doesNotContain(YOLO_KEY);
+  }
+
+  @Test
+  public void discard_noBase() {
+    Attributes.Builder attrs = Attributes.newBuilder().set(YOLO_KEY, "value");
+
+    Attributes newAttrs = attrs.discard(YOLO_KEY).build();
+    assertNull(newAttrs.get(YOLO_KEY));
+    assertThat(newAttrs.keysForTest()).doesNotContain(YOLO_KEY);
+  }
+
+  @Test
+  public void discard_baseAttributesAndBuilder() {
+    Attributes attrs = Attributes.newBuilder().set(YOLO_KEY, "value").build();
+
+    Attributes.Builder attrsBuilder = attrs.toBuilder().set(YOLO_KEY, "other value");
+    Attributes newAttrs = attrsBuilder.discard(YOLO_KEY).build();
+    assertNull(newAttrs.get(YOLO_KEY));
+    assertThat(newAttrs.keysForTest()).doesNotContain(YOLO_KEY);
+  }
+
+  @Test
+  public void discard_empty() {
+    Attributes newAttrs = Attributes.EMPTY.toBuilder().discard(YOLO_KEY).build();
+    
+    assertNull(newAttrs.get(YOLO_KEY));
+    assertThat(newAttrs.keysForTest()).doesNotContain(YOLO_KEY);
   }
 }
