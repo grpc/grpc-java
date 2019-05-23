@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -43,6 +44,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
+import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -159,6 +161,8 @@ public class LocalityStoreTest {
   private Helper helper;
   @Mock
   private PickSubchannelArgs pickSubchannelArgs;
+  @Mock
+  private ThreadSafeRandom random;
 
   private LocalityStore localityStore;
 
@@ -168,7 +172,7 @@ public class LocalityStoreTest {
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(
         ArgumentMatchers.<EquivalentAddressGroup>anyList(), any(Attributes.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry);
+    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random);
   }
 
   @Test
@@ -266,6 +270,74 @@ public class LocalityStoreTest {
         .handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+
+    verify(random, never()).nextInt(1000_000);
+  }
+
+  @Test
+  public void updateLoaclityStore_withDrop() {
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    LocalityInfo localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
+    Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+    localityStore.updateDropPercentage(ImmutableList.of(
+        new DropOverload("throttle", 365),
+        new DropOverload("lb", 1234)));
+
+    assertThat(loadBalancers).hasSize(3);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get(0)).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11, eag12);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get(1)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag21, eag22);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(loadBalancers.get(2)).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
+    assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    // subchannel12 goes to CONNECTING
+    final Subchannel subchannel12 =
+        helpers.get(0).createSubchannel(ImmutableList.of(eag12), Attributes.EMPTY);
+    verify(helper).createSubchannel(ImmutableList.of(eag12), Attributes.EMPTY);
+    SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel12);
+      }
+    };
+    helpers.get(0).updateBalancingState(CONNECTING, subchannelPicker12);
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor12 =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor12.capture());
+
+    doReturn(365, 1234).when(random).nextInt(1000_000);
+    assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
+        .isEqualTo(PickResult.withNoResult());
+    verify(random, times(2)).nextInt(1000_000);
+
+    doReturn(366, 1235).when(random).nextInt(1000_000);
+    assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
+        .isEqualTo(PickResult.withNoResult());
+    verify(random, times(4)).nextInt(1000_000);
+
+    doReturn(364, 1234).when(random).nextInt(1000_000);
+    assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
+        .isTrue();
+    verify(random, times(5)).nextInt(1000_000);
+
+    doReturn(365, 1233).when(random).nextInt(1000_000);
+    assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
+        .isTrue();
+    verify(random, times(7)).nextInt(1000_000);
   }
 
   @Test

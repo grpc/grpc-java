@@ -109,9 +109,7 @@ class XdsLbState {
   }
 
   final void handleNameResolutionError(Status error) {
-    if (!localityStore.hasNonDropBackends()) {
-      // TODO: maybe update picker with transient failure
-    }
+    // NO-OP?
   }
 
   final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {

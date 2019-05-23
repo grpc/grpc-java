@@ -25,12 +25,15 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.collect.ImmutableList;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
@@ -39,6 +42,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -49,6 +53,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 
 /**
  * Manages EAG and locality info for a collection of subchannels, not including subchannels
@@ -57,11 +63,11 @@ import java.util.Set;
 // Must be accessed/run in SynchronizedContext.
 interface LocalityStore {
 
-  boolean hasNonDropBackends();
-
   void reset();
 
   void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
+
+  void updateDropPercentage(@Nullable ImmutableList<DropOverload> dropOverloads);
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
@@ -71,25 +77,59 @@ interface LocalityStore {
     private final Helper helper;
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
+    private final ThreadSafeRandom random;
 
     private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
 
+    @CheckForNull
+    private ImmutableList<DropOverload> dropOverloads;
+
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
     }
 
     @VisibleForTesting
-    LocalityStoreImpl(Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry) {
+    LocalityStoreImpl(
+        Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
+        ThreadSafeRandom random) {
       this.helper = helper;
       this.pickerFactory = pickerFactory;
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
+      this.random = random;
     }
 
     @VisibleForTesting // Introduced for testing only.
     interface PickerFactory {
       SubchannelPicker picker(List<WeightedChildPicker> childPickers);
+    }
+
+    private static final class DroppablePicker extends SubchannelPicker {
+
+      final ImmutableList<DropOverload> dropOverloads;
+      final SubchannelPicker delegate;
+      final ThreadSafeRandom random;
+
+      DroppablePicker(
+          ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
+          ThreadSafeRandom random) {
+        this.dropOverloads = dropOverloads;
+        this.delegate = delegate;
+        this.random = random;
+      }
+
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        for (DropOverload dropOverload : dropOverloads) {
+          int rand = random.nextInt(1000_000);
+          if (rand < dropOverload.dropsPerMillion) {
+            return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
+                "dropped by loadbalancer: " + dropOverload.toString()));
+          }
+        }
+        return delegate.pickSubchannel(args);
+      }
     }
 
     private static final PickerFactory pickerFactoryImpl =
@@ -99,12 +139,6 @@ interface LocalityStore {
             return new InterLocalityPicker(childPickers);
           }
         };
-
-    @Override
-    public boolean hasNonDropBackends() {
-      // TODO: impl
-      return false;
-    }
 
     // This is triggered by xdsLoadbalancer.handleSubchannelState
     @Override
@@ -187,6 +221,11 @@ interface LocalityStore {
 
     }
 
+    @Override
+    public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
+      this.dropOverloads = dropOverloads;
+    }
+
     private static ConnectivityState aggregateState(
         ConnectivityState overallState, ConnectivityState childState) {
       if (overallState == null) {
@@ -247,6 +286,11 @@ interface LocalityStore {
       } else {
         picker = pickerFactory.picker(childPickers);
       }
+
+      if (dropOverloads != null && !dropOverloads.isEmpty()) {
+        picker = new DroppablePicker(dropOverloads, picker, random);
+      }
+
       if (state != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);

@@ -25,7 +25,6 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 final class InterLocalityPicker extends SubchannelPicker {
 
@@ -54,21 +53,8 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
   }
 
-  interface ThreadSafeRandom {
-    int nextInt(int bound);
-  }
-
-  private static final class ThreadSafeRadomImpl implements ThreadSafeRandom {
-    static final ThreadSafeRandom instance = new ThreadSafeRadomImpl();
-
-    @Override
-    public int nextInt(int bound) {
-      return ThreadLocalRandom.current().nextInt(bound);
-    }
-  }
-
   InterLocalityPicker(List<WeightedChildPicker> weightedChildPickers) {
-    this(weightedChildPickers, ThreadSafeRadomImpl.instance);
+    this(weightedChildPickers, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
   }
 
   @VisibleForTesting

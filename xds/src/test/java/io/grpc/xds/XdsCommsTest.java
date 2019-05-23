@@ -28,6 +28,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
@@ -37,6 +38,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -50,6 +53,7 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -186,7 +190,7 @@ public class XdsCommsTest {
   }
 
   @Test
-  public void standardMode_sendEdsRequest_getEdsResponse() {
+  public void standardMode_sendEdsRequest_getEdsResponse_withNoDrop() {
     assertThat(streamRecorder.getValues()).hasSize(1);
     DiscoveryRequest request = streamRecorder.getValues().get(0);
     assertThat(request.getTypeUrl())
@@ -257,6 +261,7 @@ public class XdsCommsTest {
         2);
     XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
 
+    verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
     verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
@@ -279,10 +284,110 @@ public class XdsCommsTest {
         .build();
     responseWriter.onNext(edsResponse);
 
+    verify(localityStore, times(2)).updateDropPercentage(ImmutableList.<DropOverload>of());
     verify(localityStore, times(2)).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
+    xdsComms.shutdownChannel();
+  }
+
+  @Test
+  public void standardMode_sendEdsRequest_getEdsResponse_withDrops() {
+    Locality localityProto1 = Locality.newBuilder()
+        .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
+    LbEndpoint endpoint11 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr11").setPortValue(11))))
+        .setLoadBalancingWeight(UInt32Value.of(11))
+        .build();
+    LbEndpoint endpoint12 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr12").setPortValue(12))))
+        .setLoadBalancingWeight(UInt32Value.of(12))
+        .build();
+    Locality localityProto2 = Locality.newBuilder()
+        .setRegion("region2").setZone("zone2").setSubZone("subzone2").build();
+    LbEndpoint endpoint21 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr21").setPortValue(21))))
+        .setLoadBalancingWeight(UInt32Value.of(21))
+        .build();
+    LbEndpoint endpoint22 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr22").setPortValue(22))))
+        .setLoadBalancingWeight(UInt32Value.of(22))
+        .build();
+
+
+    DiscoveryResponse edsResponseWithDrops = DiscoveryResponse.newBuilder()
+        .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto2)
+                .addLbEndpoints(endpoint21)
+                .setLoadBalancingWeight(UInt32Value.of(2)))
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto1)
+                .addLbEndpoints(endpoint11)
+                .setLoadBalancingWeight(UInt32Value.of(1)))
+            .setPolicy(Policy.newBuilder()
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("throttle")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(123).setDenominator(DenominatorType.MILLION).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("lb")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(456).setDenominator(DenominatorType.TEN_THOUSAND).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(78).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category_2")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(789).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
+                .build())
+            .build()))
+        .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+        .build();
+    responseWriter.onNext(edsResponseWithDrops);
+
+    verify(localityStore).updateDropPercentage(ImmutableList.of(
+        new DropOverload("throttle", 123),
+        new DropOverload("lb", 456_00),
+        new DropOverload("fake_category", 78_00_00),
+        new DropOverload("fake_category_2", 1000_000)));
+    verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+
+    XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
+    LocalityInfo localityInfo1 = new LocalityInfo(
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1);
+    LocalityInfo localityInfo2 = new LocalityInfo(
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2);
+    XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
+    assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
+        locality2, localityInfo2, locality1, localityInfo1).inOrder();
     xdsComms.shutdownChannel();
   }
 

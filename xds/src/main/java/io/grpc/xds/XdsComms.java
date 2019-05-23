@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -33,6 +34,8 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
@@ -168,6 +171,41 @@ final class XdsComms {
     }
   }
 
+  static final class DropOverload {
+    final String category;
+    final int dropsPerMillion;
+
+    DropOverload(String category, int dropsPerMillion) {
+      this.category = category;
+      this.dropsPerMillion = dropsPerMillion;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      DropOverload that = (DropOverload) o;
+      return dropsPerMillion == that.dropsPerMillion && Objects.equal(category, that.category);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(category, dropsPerMillion);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("category", category)
+          .add("dropsPerMillion", dropsPerMillion)
+          .toString();
+    }
+  }
+
   private final class AdsStream {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
@@ -204,10 +242,32 @@ final class XdsComms {
                     adsStreamCallback.onError();
                     return;
                   }
+
                   if (!firstEdsResponseReceived) {
                     firstEdsResponseReceived = true;
                     adsStreamCallback.onWorking();
                   }
+
+                  ImmutableList<DropOverload> dropOverloads = null;
+                  ClusterLoadAssignment.Policy policy = clusterLoadAssignment.getPolicy();
+                  if (policy != null) {
+                    List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
+                        policy.getDropOverloadsList();
+                    if (dropOverloadsProto != null) {
+                      ImmutableList.Builder<DropOverload> dropOverloadsBuilder
+                          = ImmutableList.builder();
+                      for (ClusterLoadAssignment.Policy.DropOverload dropOverload
+                          : dropOverloadsProto) {
+                        dropOverloadsBuilder.add(new DropOverload(
+                            dropOverload.getCategory(),
+                            rateInMillion(dropOverload.getDropPercentage())));
+                      }
+
+                      dropOverloads = dropOverloadsBuilder.build();
+                    }
+                  }
+                  localityStore.updateDropPercentage(dropOverloads);
+
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
                   Map<Locality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
                   for (LocalityLbEndpoints localityLbEndpoints : localities) {
@@ -227,7 +287,6 @@ final class XdsComms {
 
                   localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
 
-                  // TODO: parse drop_percentage, and also updateLoacalistyStore with dropPercentage
                   localityStore.updateLocalityStore(localityEndpointsMapping);
                 }
               }
@@ -295,6 +354,31 @@ final class XdsComms {
       xdsRequestWriter.onError(
           Status.CANCELLED.withDescription(message).withCause(cause).asRuntimeException());
     }
+  }
+
+  private static int rateInMillion(FractionalPercent fractionalPercent) {
+    int numerator = fractionalPercent.getNumerator();
+    checkArgument(numerator >= 0, "numerator shouldn't be negative in %s", fractionalPercent);
+
+    DenominatorType type = fractionalPercent.getDenominator();
+    switch (type) {
+      case TEN_THOUSAND:
+        numerator *= 100;
+        break;
+      case HUNDRED:
+        numerator *= 100_00;
+        break;
+      case MILLION:
+        break;
+      default:
+        throw new IllegalArgumentException("unknow denominator type of " + fractionalPercent);
+    }
+
+    if (numerator > 1000_000) {
+      numerator = 1000_000;
+    }
+
+    return numerator;
   }
 
   /**
