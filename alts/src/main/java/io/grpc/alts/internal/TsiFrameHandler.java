@@ -66,7 +66,10 @@ public final class TsiFrameHandler extends ByteToMessageDecoder implements Chann
   @Override
   @SuppressWarnings("FutureReturnValueIgnored") // for setSuccess
   public void write(ChannelHandlerContext ctx, Object message, ChannelPromise promise) {
-    checkState(protector != null, "write() called after close()");
+    if (protector == null) {
+      promise.setFailure(new IllegalStateException("write() called after close()"));
+      return;
+    }
     ByteBuf msg = (ByteBuf) message;
     if (!msg.isReadable()) {
       // Nothing to encode.
