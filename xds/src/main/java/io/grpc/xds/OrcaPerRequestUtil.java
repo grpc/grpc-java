@@ -23,6 +23,7 @@ import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.Metadata;
 import io.grpc.protobuf.ProtoUtils;
@@ -34,6 +35,7 @@ import java.util.List;
  * Utility class that provides method for {@link LoadBalancer} to install listeners to receive
  * per-request backend cost metrics in the format of Open Request Cost Aggregation (ORCA).
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5790")
 public abstract class OrcaPerRequestUtil {
   private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER = new ClientStreamTracer() {};
   private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
