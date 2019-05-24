@@ -62,36 +62,36 @@ public final class ClusterDiscoveryServiceGrpc {
      return getStreamClustersMethod;
   }
 
-  private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest,
-      io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse> getIncrementalClustersMethod;
+  private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+      io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaClustersMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
-      fullMethodName = SERVICE_NAME + '/' + "IncrementalClusters",
-      requestType = io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest.class,
-      responseType = io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse.class,
+      fullMethodName = SERVICE_NAME + '/' + "DeltaClusters",
+      requestType = io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.class,
+      responseType = io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.class,
       methodType = io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-  public static io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest,
-      io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse> getIncrementalClustersMethod() {
-    io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest, io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse> getIncrementalClustersMethod;
-    if ((getIncrementalClustersMethod = ClusterDiscoveryServiceGrpc.getIncrementalClustersMethod) == null) {
+  public static io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+      io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaClustersMethod() {
+    io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> getDeltaClustersMethod;
+    if ((getDeltaClustersMethod = ClusterDiscoveryServiceGrpc.getDeltaClustersMethod) == null) {
       synchronized (ClusterDiscoveryServiceGrpc.class) {
-        if ((getIncrementalClustersMethod = ClusterDiscoveryServiceGrpc.getIncrementalClustersMethod) == null) {
-          ClusterDiscoveryServiceGrpc.getIncrementalClustersMethod = getIncrementalClustersMethod = 
-              io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest, io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse>newBuilder()
+        if ((getDeltaClustersMethod = ClusterDiscoveryServiceGrpc.getDeltaClustersMethod) == null) {
+          ClusterDiscoveryServiceGrpc.getDeltaClustersMethod = getDeltaClustersMethod = 
+              io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
               .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.ClusterDiscoveryService", "IncrementalClusters"))
+                  "envoy.api.v2.ClusterDiscoveryService", "DeltaClusters"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest.getDefaultInstance()))
+                  io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("IncrementalClusters"))
+                  io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.getDefaultInstance()))
+                  .setSchemaDescriptor(new ClusterDiscoveryServiceMethodDescriptorSupplier("DeltaClusters"))
                   .build();
           }
         }
      }
-     return getIncrementalClustersMethod;
+     return getDeltaClustersMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -165,9 +165,9 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest> incrementalClusters(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse> responseObserver) {
-      return asyncUnimplementedStreamingCall(getIncrementalClustersMethod(), responseObserver);
+    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
+      return asyncUnimplementedStreamingCall(getDeltaClustersMethod(), responseObserver);
     }
 
     /**
@@ -187,12 +187,12 @@ public final class ClusterDiscoveryServiceGrpc {
                 io.envoyproxy.envoy.api.v2.DiscoveryResponse>(
                   this, METHODID_STREAM_CLUSTERS)))
           .addMethod(
-            getIncrementalClustersMethod(),
+            getDeltaClustersMethod(),
             asyncBidiStreamingCall(
               new MethodHandlers<
-                io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest,
-                io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse>(
-                  this, METHODID_INCREMENTAL_CLUSTERS)))
+                io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
+                io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>(
+                  this, METHODID_DELTA_CLUSTERS)))
           .addMethod(
             getFetchClustersMethod(),
             asyncUnaryCall(
@@ -235,10 +235,10 @@ public final class ClusterDiscoveryServiceGrpc {
 
     /**
      */
-    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryRequest> incrementalClusters(
-        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse> responseObserver) {
+    public io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest> deltaClusters(
+        io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse> responseObserver) {
       return asyncBidiStreamingCall(
-          getChannel().newCall(getIncrementalClustersMethod(), getCallOptions()), responseObserver);
+          getChannel().newCall(getDeltaClustersMethod(), getCallOptions()), responseObserver);
     }
 
     /**
@@ -311,7 +311,7 @@ public final class ClusterDiscoveryServiceGrpc {
 
   private static final int METHODID_FETCH_CLUSTERS = 0;
   private static final int METHODID_STREAM_CLUSTERS = 1;
-  private static final int METHODID_INCREMENTAL_CLUSTERS = 2;
+  private static final int METHODID_DELTA_CLUSTERS = 2;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -347,9 +347,9 @@ public final class ClusterDiscoveryServiceGrpc {
         case METHODID_STREAM_CLUSTERS:
           return (io.grpc.stub.StreamObserver<Req>) serviceImpl.streamClusters(
               (io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DiscoveryResponse>) responseObserver);
-        case METHODID_INCREMENTAL_CLUSTERS:
-          return (io.grpc.stub.StreamObserver<Req>) serviceImpl.incrementalClusters(
-              (io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.IncrementalDiscoveryResponse>) responseObserver);
+        case METHODID_DELTA_CLUSTERS:
+          return (io.grpc.stub.StreamObserver<Req>) serviceImpl.deltaClusters(
+              (io.grpc.stub.StreamObserver<io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>) responseObserver);
         default:
           throw new AssertionError();
       }
@@ -402,7 +402,7 @@ public final class ClusterDiscoveryServiceGrpc {
           serviceDescriptor = result = io.grpc.ServiceDescriptor.newBuilder(SERVICE_NAME)
               .setSchemaDescriptor(new ClusterDiscoveryServiceFileDescriptorSupplier())
               .addMethod(getStreamClustersMethod())
-              .addMethod(getIncrementalClustersMethod())
+              .addMethod(getDeltaClustersMethod())
               .addMethod(getFetchClustersMethod())
               .build();
         }

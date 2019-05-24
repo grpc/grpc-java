@@ -17,6 +17,7 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
 import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
@@ -489,6 +490,26 @@ public abstract class AbstractInteropTest {
         Status.Code.OK,
         Collections.singleton(responseShouldBeUncompressed),
         Collections.singleton(goldenResponse));
+  }
+
+  /**
+   * Assuming "pick_first" policy is used, tests that all requests are sent to the same server.
+   */
+  public void pickFirstUnary() throws Exception {
+    SimpleRequest request = SimpleRequest.newBuilder()
+        .setResponseSize(1)
+        .setFillServerId(true)
+        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[1])))
+        .build();
+
+    SimpleResponse firstResponse = blockingStub.unaryCall(request);
+    // Increase the chance of all servers are connected, in case the channel should be doing
+    // round_robin instead.
+    Thread.sleep(5000);
+    for (int i = 0; i < 100; i++) {
+      SimpleResponse response = blockingStub.unaryCall(request);
+      assertThat(response.getServerId()).isEqualTo(firstResponse.getServerId());
+    }
   }
 
   @Test
@@ -1206,7 +1227,7 @@ public abstract class AbstractInteropTest {
       fail();
     } catch (StatusRuntimeException ex) {
       Status s = ex.getStatus();
-      assertThat(s.getCode()).named(s.toString()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
+      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
       assertThat(Throwables.getStackTraceAsString(ex)).contains("exceeds maximum");
     }
   }
@@ -1262,7 +1283,7 @@ public abstract class AbstractInteropTest {
       fail();
     } catch (StatusRuntimeException ex) {
       Status s = ex.getStatus();
-      assertThat(s.getCode()).named(s.toString()).isEqualTo(Status.Code.CANCELLED);
+      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.CANCELLED);
       assertThat(Throwables.getStackTraceAsString(ex)).contains("message too large");
     }
   }

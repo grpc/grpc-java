@@ -90,12 +90,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void sendHeaders(Metadata headers) {
-    PerfMark.taskStart(
-        tag.getNumericTag(), Thread.currentThread().getName(), tag, "ServerCall.sendHeaders");
+    PerfMark.taskStart(tag, "ServerCall.sendHeaders");
     try {
       sendHeadersInternal(headers);
     } finally {
-      PerfMark.taskEnd(tag.getNumericTag(), Thread.currentThread().getName());
+      PerfMark.taskEnd();
     }
   }
 
@@ -140,12 +139,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void sendMessage(RespT message) {
-    PerfMark.taskStart(
-        tag.getNumericTag(), Thread.currentThread().getName(), tag, "ServerCall.sendMessage");
+    PerfMark.taskStart(tag, "ServerCall.sendMessage");
     try {
       sendMessageInternal(message);
     } finally {
-      PerfMark.taskEnd(tag.getNumericTag(), Thread.currentThread().getName());
+      PerfMark.taskEnd();
     }
   }
 
@@ -194,12 +192,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void close(Status status, Metadata trailers) {
-    PerfMark.taskStart(
-        tag.getNumericTag(), Thread.currentThread().getName(), tag, "ServerCall.close");
+    PerfMark.taskStart(tag, "ServerCall.close");
     try {
       closeInternal(status, trailers);
     } finally {
-      PerfMark.taskEnd(tag.getNumericTag(), Thread.currentThread().getName());
+      PerfMark.taskEnd();
     }
   }
 
@@ -263,7 +260,6 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
-    private final long listenerScopeId = PerfTag.allocateNumericId();
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -292,11 +288,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
-      PerfMark.taskStart(
-          listenerScopeId,
-          Thread.currentThread().getName(),
-          call.tag,
-          "ServerCall.messagesAvailable");
+      PerfMark.taskStart(call.tag, "ServerCall.messagesAvailable");
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
@@ -313,7 +305,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         MoreThrowables.throwIfUnchecked(t);
         throw new RuntimeException(t);
       } finally {
-        PerfMark.taskEnd(listenerScopeId, Thread.currentThread().getName());
+        PerfMark.taskEnd();
       }
     }
 
@@ -323,26 +315,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
-      PerfMark.taskStart(
-          listenerScopeId,
-          Thread.currentThread().getName(),
-          call.tag,
-          "ServerCall.halfClosed");
+      PerfMark.taskStart(call.tag, "ServerCall.halfClosed");
 
       try {
         listener.onHalfClose();
       } finally {
-        PerfMark.taskEnd(listenerScopeId, Thread.currentThread().getName());
+        PerfMark.taskEnd();
       }
     }
 
     @Override
     public void closed(Status status) {
-      PerfMark.taskStart(
-          listenerScopeId,
-          Thread.currentThread().getName(),
-          call.tag,
-          "ServerCall.closed");
+      PerfMark.taskStart(call.tag, "ServerCall.closed");
       try {
         try {
           if (status.isOk()) {
@@ -358,7 +342,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
         }
       } finally {
-        PerfMark.taskEnd(listenerScopeId, Thread.currentThread().getName());
+        PerfMark.taskEnd();
       }
     }
 
@@ -367,15 +351,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       if (call.cancelled) {
         return;
       }
-      PerfMark.taskStart(
-          listenerScopeId,
-          Thread.currentThread().getName(),
-          call.tag,
-          "ServerCall.closed");
+      PerfMark.taskStart(call.tag, "ServerCall.closed");
       try {
         listener.onReady();
       } finally {
-        PerfMark.taskEnd(listenerScopeId, Thread.currentThread().getName());
+        PerfMark.taskEnd();
       }
     }
   }

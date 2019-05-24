@@ -22,18 +22,18 @@ java_library(
     srcs = glob(
         ["src/main/java/**/*.java"],
     ),
+    runtime_deps = [
+        "@io_netty_netty_tcnative_boringssl_static//jar",
+    ],
     deps = [
         ":helloworld_java_grpc",
         ":helloworld_java_proto",
-        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//netty",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
         "@io_netty_netty_handler//jar",
     ],
-    runtime_deps = [
-        "@io_netty_netty_tcnative_boringssl_static//jar",
-    ]
 )
 
 java_binary(

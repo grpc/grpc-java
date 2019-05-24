@@ -18,12 +18,14 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=cdcdfa6914f88b537122ed039fd0de5f78c0f209
+VERSION=109d23a6648b1ac7723c4b2f125e913125bb9a84
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
+udpa/data/orca/v1/orca_load_report.proto
+udpa/service/orca/v1/orca.proto
 envoy/api/v2/auth/cert.proto
 envoy/api/v2/cds.proto
 envoy/api/v2/cluster/circuit_breaker.proto
@@ -41,6 +43,7 @@ envoy/api/v2/endpoint/load_report.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/percent.proto
+envoy/type/range.proto
 )
 
 # clone the envoy github repo in a tmp directory
@@ -75,19 +78,22 @@ do
     # Import mangling.
     -e 's#import "gogoproto/gogo.proto";##'
     # Remove references to gogo.proto extensions.
-    -e 's#option (gogoproto\.[a-z_]\+) = \(true\|false\);##'
-    -e 's#\(, \)\?(gogoproto\.[a-z_]\+) = \(true\|false\),\?##'
+    -e 's#option \(gogoproto\.[a-z_]+\) = (true|false);##'
+    -e 's#(, )?\(gogoproto\.[a-z_]+\) = (true|false),?##'
     # gogoproto removal can result in empty brackets.
     -e 's# \[\]##'
     # gogoproto removal can result in four spaces on a line by itself.
     -e '/^    $/d'
   )
-  sed -i "${commands[@]}" "$f"
+  # Use a temp file to workaround `sed -i` cross-platform compatibility issue.
+  tmpfile="$(mktemp)"
+  sed -E "${commands[@]}" "$f" > "$tmpfile"
 
   # gogoproto removal can leave a comma on the last element in a list.
   # This needs to run separately after all the commands above have finished
   # since it is multi-line and rewrites the output of the above patterns.
-  sed -i -e '$!N; s#\(.*\),\([[:space:]]*\];\)#\1\2#; t; P; D;' "$f"
+  sed -E -e '$!N; s#(.*),([[:space:]]*\];)#\1\2#; t' -e 'P; D;' "$tmpfile" > "$f"
+  rm "$tmpfile"
 done
 popd
 

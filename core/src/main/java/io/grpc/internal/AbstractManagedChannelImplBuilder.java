@@ -28,11 +28,10 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
-import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
@@ -86,7 +85,7 @@ public abstract class AbstractManagedChannelImplBuilder
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
   private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
-      NameResolverProvider.asFactory();
+      NameResolverRegistry.getDefaultRegistry().asFactory();
 
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
@@ -115,8 +114,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @VisibleForTesting
   @Nullable
   String authorityOverride;
-
-  @Nullable LoadBalancer.Factory loadBalancerFactory;
 
   String defaultLbPolicy = GrpcUtil.DEFAULT_LB_POLICY;
 
@@ -243,16 +240,6 @@ public abstract class AbstractManagedChannelImplBuilder
     } else {
       this.nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
     }
-    return thisT();
-  }
-
-  @Deprecated
-  @Override
-  public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
-    Preconditions.checkState(directServerAddress == null,
-        "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
-        directServerAddress);
-    this.loadBalancerFactory = loadBalancerFactory;
     return thisT();
   }
 
@@ -606,7 +593,7 @@ public abstract class AbstractManagedChannelImplBuilder
         public void start(Observer observer) {
           observer.onResult(
               ResolutionResult.newBuilder()
-                  .setServers(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
                   .setAttributes(Attributes.EMPTY)
                   .build());
         }

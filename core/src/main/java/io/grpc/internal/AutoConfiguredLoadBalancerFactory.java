@@ -31,7 +31,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
-import io.grpc.NameResolver.Helper.ConfigOrError;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.ArrayList;
@@ -78,9 +78,6 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     public void handleNameResolutionError(Status error) {}
 
     @Override
-    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {}
-
-    @Override
     public void shutdown() {}
   }
 
@@ -105,7 +102,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
     //  Must be run inside ChannelExecutor.
     @Override
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-      List<EquivalentAddressGroup> servers = resolvedAddresses.getServers();
+      List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
       if (attributes.get(ATTR_LOAD_BALANCING_CONFIG) != null) {
         throw new IllegalArgumentException(
@@ -154,7 +151,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       } else {
         delegate.handleResolvedAddresses(
             ResolvedAddresses.newBuilder()
-                .setServers(selection.serverList)
+                .setAddresses(selection.serverList)
                 .setAttributes(attributes)
                 .build());
       }
@@ -165,6 +162,7 @@ public final class AutoConfiguredLoadBalancerFactory extends LoadBalancer.Factor
       getDelegate().handleNameResolutionError(error);
     }
 
+    @Deprecated
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
       getDelegate().handleSubchannelState(subchannel, stateInfo);

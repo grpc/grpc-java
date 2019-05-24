@@ -39,7 +39,7 @@ import com.google.common.testing.FakeTicker;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.HttpConnectProxiedSocketAddress;
 import io.grpc.NameResolver;
-import io.grpc.NameResolver.Helper.ConfigOrError;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
@@ -635,7 +635,7 @@ public class DnsNameResolverTest {
     assertEquals(1, fakeExecutor.runDueTasks());
 
     verify(mockObserver).onResult(resultCaptor.capture());
-    List<EquivalentAddressGroup> result = resultCaptor.getValue().getServers();
+    List<EquivalentAddressGroup> result = resultCaptor.getValue().getAddresses();
     assertThat(result).hasSize(1);
     EquivalentAddressGroup eag = result.get(0);
     assertThat(eag.getAddresses()).hasSize(1);
@@ -1072,9 +1072,9 @@ public class DnsNameResolverTest {
 
   private static void assertAnswerMatches(
       List<InetAddress> addrs, int port, ResolutionResult resolutionResult) {
-    assertEquals(addrs.size(), resolutionResult.getServers().size());
+    assertThat(resolutionResult.getAddresses()).hasSize(addrs.size());
     for (int i = 0; i < addrs.size(); i++) {
-      EquivalentAddressGroup addrGroup = resolutionResult.getServers().get(i);
+      EquivalentAddressGroup addrGroup = resolutionResult.getAddresses().get(i);
       InetSocketAddress socketAddr =
           (InetSocketAddress) Iterables.getOnlyElement(addrGroup.getAddresses());
       assertEquals("Addr " + i, port, socketAddr.getPort());

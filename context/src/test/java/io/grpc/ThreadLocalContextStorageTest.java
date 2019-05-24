@@ -48,8 +48,8 @@ public final class ThreadLocalContextStorageTest {
   public void detach_threadLocalClearedOnRoot() {
     Context context = Context.ROOT.withValue(KEY, new Object());
     Context old = storage.doAttach(context);
-    assertThat(storage.current()).isSameAs(context);
-    assertThat(ThreadLocalContextStorage.localContext.get()).isSameAs(context);
+    assertThat(storage.current()).isSameInstanceAs(context);
+    assertThat(ThreadLocalContextStorage.localContext.get()).isSameInstanceAs(context);
     storage.detach(context, old);
     // thread local must contain null to avoid leaking our ClassLoader via ROOT
     assertThat(ThreadLocalContextStorage.localContext.get()).isNull();

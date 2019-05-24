@@ -53,6 +53,7 @@ import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
@@ -61,6 +62,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.ProxyDetector;
 import io.grpc.Status;
@@ -557,14 +559,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.getDefaultProxyDetector();
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
-    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory = null;
-    if (builder.loadBalancerFactory == null) {
-      autoConfiguredLoadBalancerFactory =
-          new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-      this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
-    } else {
-      this.loadBalancerFactory = builder.loadBalancerFactory;
-    }
+    AutoConfiguredLoadBalancerFactory autoConfiguredLoadBalancerFactory =
+        new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.loadBalancerFactory = autoConfiguredLoadBalancerFactory;
     this.nameResolverHelper =
         new NrHelper(
             builder.getDefaultPort(),
@@ -581,7 +578,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
         "Channel for '" + target + "'");
     channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
-
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
@@ -1049,6 +1045,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
     }
 
+    @Deprecated
     @Override
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
@@ -1060,17 +1057,36 @@ final class ManagedChannelImpl extends ManagedChannel implements
             + " Otherwise, it may race with handleSubchannelState()."
             + " See https://github.com/grpc/grpc-java/issues/5015", e);
       }
-      checkNotNull(addressGroups, "addressGroups");
-      checkNotNull(attrs, "attrs");
+      return createSubchannelInternal(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroups)
+              .setAttributes(attrs)
+              .setStateListener(new LoadBalancer.SubchannelStateListener() {
+                  @Override
+                  public void onSubchannelState(
+                      LoadBalancer.Subchannel subchannel, ConnectivityStateInfo newState) {
+                    lb.handleSubchannelState(subchannel, newState);
+                  }
+                })
+              .build());
+    }
+
+    @Override
+    public AbstractSubchannel createSubchannel(CreateSubchannelArgs args) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      return createSubchannelInternal(args);
+    }
+
+    private AbstractSubchannel createSubchannelInternal(final CreateSubchannelArgs args) {
       // TODO(ejona): can we be even stricter? Like loadBalancer == null?
       checkState(!terminated, "Channel is terminated");
-      final SubchannelImpl subchannel = new SubchannelImpl(attrs);
+      final SubchannelImpl subchannel = new SubchannelImpl(args.getAttributes());
       long subchannelCreationTime = timeProvider.currentTimeNanos();
       InternalLogId subchannelLogId = InternalLogId.allocate("Subchannel", /*details=*/ null);
       ChannelTracer subchannelTracer =
           new ChannelTracer(
               subchannelLogId, maxTraceEvents, subchannelCreationTime,
-              "Subchannel for " + addressGroups);
+              "Subchannel for " + args.getAddresses());
 
       final class ManagedInternalSubchannelCallback extends InternalSubchannel.Callback {
         // All callbacks are run in syncContext
@@ -1086,7 +1102,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           handleInternalSubchannelState(newState);
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (LbHelperImpl.this == ManagedChannelImpl.this.lbHelper) {
-            lb.handleSubchannelState(subchannel, newState);
+            args.getStateListener().onSubchannelState(subchannel, newState);
           }
         }
 
@@ -1102,7 +1118,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       final InternalSubchannel internalSubchannel = new InternalSubchannel(
-          addressGroups,
+          args.getAddresses(),
           authority(),
           userAgent,
           backoffPolicyProvider,
@@ -1319,7 +1335,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @SuppressWarnings("ReferenceEquality")
         @Override
         public void run() {
-          List<EquivalentAddressGroup> servers = resolutionResult.getServers();
+          List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
           Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
@@ -1388,7 +1404,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
               helper.lb.handleResolvedAddresses(
                   ResolvedAddresses.newBuilder()
-                      .setServers(servers)
+                      .setAddresses(servers)
                       .setAttributes(effectiveAttrs)
                       .build());
             }

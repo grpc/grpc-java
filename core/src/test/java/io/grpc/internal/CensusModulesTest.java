@@ -107,17 +107,7 @@ public class CensusModulesTest {
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.EMPTY;
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   private static class StringInputStream extends InputStream {
     final String string;

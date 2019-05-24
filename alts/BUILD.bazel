@@ -8,7 +8,7 @@ java_library(
     deps = [
         ":handshaker_java_grpc",
         ":handshaker_java_proto",
-        "//core",
+        "//api",
         "//core:internal",
         "//netty",
         "//stub",
@@ -35,8 +35,8 @@ java_library(
     deps = [
         ":alts_internal",
         ":handshaker_java_grpc",
+        "//api",
         "//auth",
-        "//core",
         "//core:internal",
         "//netty",
         "@com_google_auth_google_auth_library_oauth2_http//jar",

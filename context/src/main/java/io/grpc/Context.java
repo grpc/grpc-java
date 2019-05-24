@@ -97,7 +97,7 @@ import java.util.logging.Logger;
 @CheckReturnValue
 public class Context {
 
-  private static final Logger log = Logger.getLogger(Context.class.getName());
+  static final Logger log = Logger.getLogger(Context.class.getName());
 
   private static final PersistentHashArrayMappedTrie<Key<?>, Object> EMPTY_ENTRIES =
       new PersistentHashArrayMappedTrie<>();
@@ -116,42 +116,42 @@ public class Context {
    */
   public static final Context ROOT = new Context(null, EMPTY_ENTRIES);
 
+  // Visible For testing
+  static Storage storage() {
+    return LazyStorage.storage;
+  }
+
   // Lazy-loaded storage. Delaying storage initialization until after class initialization makes it
   // much easier to avoid circular loading since there can still be references to Context as long as
   // they don't depend on storage, like key() and currentContextExecutor(). It also makes it easier
   // to handle exceptions.
-  private static final AtomicReference<Storage> storage = new AtomicReference<>();
+  private static final class LazyStorage {
+    static final Storage storage;
 
-  // For testing
-  static Storage storage() {
-    Storage tmp = storage.get();
-    if (tmp == null) {
-      tmp = createStorage();
-    }
-    return tmp;
-  }
-
-  private static Storage createStorage() {
-    // Note that this method may be run more than once
-    try {
-      Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
-      // The override's constructor is prohibited from triggering any code that can loop back to
-      // Context
-      Storage newStorage = (Storage) clazz.getConstructor().newInstance();
-      storage.compareAndSet(null, newStorage);
-    } catch (ClassNotFoundException e) {
-      Storage newStorage = new ThreadLocalContextStorage();
-      // Must set storage before logging, since logging may call Context.current().
-      if (storage.compareAndSet(null, newStorage)) {
-        // Avoid logging if this thread lost the race, to avoid confusion
-        log.log(Level.FINE, "Storage override doesn't exist. Using default", e);
+    static {
+      AtomicReference<Throwable> deferredStorageFailure = new AtomicReference<>();
+      storage = createStorage(deferredStorageFailure);
+      Throwable failure = deferredStorageFailure.get();
+      // Logging must happen after storage has been set, as loggers may use Context.
+      if (failure != null) {
+        log.log(Level.FINE, "Storage override doesn't exist. Using default", failure);
       }
-    } catch (Exception e) {
-      throw new RuntimeException("Storage override failed to initialize", e);
     }
-    // Re-retreive from storage since compareAndSet may have failed (returned false) in case of
-    // race.
-    return storage.get();
+
+    private static Storage createStorage(
+        AtomicReference<? super ClassNotFoundException> deferredStorageFailure) {
+      try {
+        Class<?> clazz = Class.forName("io.grpc.override.ContextStorageOverride");
+        // The override's constructor is prohibited from triggering any code that can loop back to
+        // Context
+        return clazz.asSubclass(Storage.class).getConstructor().newInstance();
+      } catch (ClassNotFoundException e) {
+        deferredStorageFailure.set(e);
+        return new ThreadLocalContextStorage();
+      } catch (Exception e) {
+        throw new RuntimeException("Storage override failed to initialize", e);
+      }
+    }
   }
 
   /**
@@ -628,7 +628,7 @@ public class Context {
    * @see #currentContextExecutor(Executor)
    */
   public Executor fixedContextExecutor(final Executor e) {
-    class FixedContextExecutor implements Executor {
+    final class FixedContextExecutor implements Executor {
       @Override
       public void execute(Runnable r) {
         e.execute(wrap(r));
@@ -646,7 +646,7 @@ public class Context {
    * @see #fixedContextExecutor(Executor)
    */
   public static Executor currentContextExecutor(final Executor e) {
-    class CurrentContextExecutor implements Executor {
+    final class CurrentContextExecutor implements Executor {
       @Override
       public void execute(Runnable r) {
         e.execute(Context.current().wrap(r));
@@ -659,7 +659,7 @@ public class Context {
   /**
    * Lookup the value for a key in the context inheritance chain.
    */
-  private Object lookup(Key<?> key) {
+  Object lookup(Key<?> key) {
     return keyValueEntries.get(key);
   }
 
@@ -864,7 +864,7 @@ public class Context {
     /**
      * @param context the newly cancelled context.
      */
-    public void cancelled(Context context);
+    void cancelled(Context context);
   }
 
   /**
@@ -977,16 +977,16 @@ public class Context {
   /**
    * Stores listener and executor pair.
    */
-  private class ExecutableListener implements Runnable {
+  private final class ExecutableListener implements Runnable {
     private final Executor executor;
-    private final CancellationListener listener;
+    final CancellationListener listener;
 
-    private ExecutableListener(Executor executor, CancellationListener listener) {
+    ExecutableListener(Executor executor, CancellationListener listener) {
       this.executor = executor;
       this.listener = listener;
     }
 
-    private void deliver() {
+    void deliver() {
       try {
         executor.execute(this);
       } catch (Throwable t) {
@@ -1000,7 +1000,7 @@ public class Context {
     }
   }
 
-  private class ParentListener implements CancellationListener {
+  private final class ParentListener implements CancellationListener {
     @Override
     public void cancelled(Context context) {
       if (Context.this instanceof CancellableContext) {
@@ -1013,7 +1013,7 @@ public class Context {
   }
 
   @CanIgnoreReturnValue
-  private static <T> T checkNotNull(T reference, Object errorMessage) {
+  static <T> T checkNotNull(T reference, Object errorMessage) {
     if (reference == null) {
       throw new NullPointerException(String.valueOf(errorMessage));
     }

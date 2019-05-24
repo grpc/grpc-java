@@ -33,11 +33,11 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.WriteBufferWaterMark;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.Collections;
@@ -58,10 +58,10 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
-        null, // no boss group
-        null, // no event group
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -96,10 +96,10 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
-        null, // no boss group
-        null, // no event group
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -134,10 +134,10 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         channelOptions,
-        null, // no boss group
-        null, // no event group
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
@@ -184,10 +184,10 @@ public class NettyServerTest {
     InetSocketAddress addr = new InetSocketAddress(0);
     NettyServer ns = new NettyServer(
         addr,
-        NioServerSocketChannel.class,
+        Utils.DEFAULT_SERVER_CHANNEL_TYPE,
         new HashMap<ChannelOption<?>, Object>(),
-        null, // no boss group
-        null, // no event group
+        SharedResourcePool.forResource(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP),
+        SharedResourcePool.forResource(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP),
         ProtocolNegotiators.plaintext(),
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),

@@ -29,7 +29,7 @@ java_library(
     name = "java_grpc_library_deps__do_not_reference",
     visibility = ["//visibility:public"],
     exports = [
-        "//core",
+        "//api",
         "//protobuf",
         "//stub",
         "//stub:javax_annotation",
@@ -43,7 +43,7 @@ java_library(
     name = "java_lite_grpc_library_deps__do_not_reference",
     visibility = ["//visibility:public"],
     exports = [
-        "//core",
+        "//api",
         "//protobuf-lite",
         "//stub",
         "//stub:javax_annotation",

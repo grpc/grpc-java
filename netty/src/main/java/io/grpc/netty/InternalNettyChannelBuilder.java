@@ -18,6 +18,8 @@ package io.grpc.netty;
 
 import io.grpc.Internal;
 import io.grpc.internal.ClientTransportFactory;
+import io.grpc.internal.SharedResourcePool;
+import io.netty.channel.socket.nio.NioSocketChannel;
 
 /**
  * Internal {@link NettyChannelBuilder} accessor.  This is intended for usage internal to the gRPC
@@ -68,6 +70,17 @@ public final class InternalNettyChannelBuilder {
 
   public static void setStatsRecordRealTimeMetrics(NettyChannelBuilder builder, boolean value) {
     builder.setStatsRecordRealTimeMetrics(value);
+  }
+
+  /**
+   * Sets {@link io.grpc.Channel} and {@link io.netty.channel.EventLoopGroup} to Nio. A major
+   * benefit over using setters is gRPC will manage the life cycle of {@link
+   * io.netty.channel.EventLoopGroup}.
+   */
+  public static void useNioTransport(NettyChannelBuilder builder) {
+    builder.channelType(NioSocketChannel.class);
+    builder
+        .eventLoopGroupPool(SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP));
   }
 
   public static ClientTransportFactory buildTransportFactory(NettyChannelBuilder builder) {

@@ -341,7 +341,7 @@ public class WriteBufferingAndExceptionHandlerTest {
     }).sync();
 
     assertThat(chan.pipeline().context(handler)).isNull();
-    assertThat(write.get().getClass()).isSameAs(Object.class);
+    assertThat(write.get().getClass()).isSameInstanceAs(Object.class);
     assertTrue(flush.get());
     assertThat(chan.pipeline()).doesNotContain(handler);
   }

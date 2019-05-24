@@ -23,7 +23,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.Attributes;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.internal.GrpcAttributes;
@@ -50,45 +49,30 @@ public class TokenAttachingTracerFactoryTest {
   @Test
   public void hasToken() {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(delegate);
-    ClientStreamTracer.StreamInfo info = new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          Attributes eagAttrs = Attributes.newBuilder()
-              .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, "token0001").build();
-          return Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+    Attributes eagAttrs = Attributes.newBuilder()
+        .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, "token0001").build();
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
+        .setTransportAttrs(
+            Attributes.newBuilder().set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build())
+        .build();
     Metadata headers = new Metadata();
     // Preexisting token should be replaced
     headers.put(GrpclbConstants.TOKEN_METADATA_KEY, "preexisting-token");
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameAs(fakeTracer);
+    assertThat(tracer).isSameInstanceAs(fakeTracer);
     assertThat(headers.getAll(GrpclbConstants.TOKEN_METADATA_KEY)).containsExactly("token0001");
   }
 
   @Test
   public void noToken() {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(delegate);
-    ClientStreamTracer.StreamInfo info = new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build();
-        }
-
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
+        .setTransportAttrs(
+            Attributes.newBuilder()
+                .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build())
+        .build();
 
     Metadata headers = new Metadata();
     // Preexisting token should be removed
@@ -96,25 +80,19 @@ public class TokenAttachingTracerFactoryTest {
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
     verify(delegate).newClientStreamTracer(same(info), same(headers));
-    assertThat(tracer).isSameAs(fakeTracer);
+    assertThat(tracer).isSameInstanceAs(fakeTracer);
     assertThat(headers.get(GrpclbConstants.TOKEN_METADATA_KEY)).isNull();
   }
 
   @Test
   public void nullDelegate() {
     TokenAttachingTracerFactory factory = new TokenAttachingTracerFactory(null);
-    ClientStreamTracer.StreamInfo info = new ClientStreamTracer.StreamInfo() {
-        @Override
-        public Attributes getTransportAttrs() {
-          return Attributes.newBuilder()
-              .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build();
-        }
+    ClientStreamTracer.StreamInfo info = ClientStreamTracer.StreamInfo.newBuilder()
+        .setTransportAttrs(
+            Attributes.newBuilder()
+                .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, Attributes.EMPTY).build())
+        .build();
 
-        @Override
-        public CallOptions getCallOptions() {
-          return CallOptions.DEFAULT;
-        }
-      };
     Metadata headers = new Metadata();
 
     ClientStreamTracer tracer = factory.newClientStreamTracer(info, headers);
