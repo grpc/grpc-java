@@ -17,6 +17,7 @@
 package io.grpc.stub;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
@@ -321,6 +322,8 @@ public final class ClientCalls {
     private final ClientCall<T, ?> call;
     private Runnable onReadyHandler;
     private boolean autoFlowControlEnabled = true;
+    private boolean aborted = false;
+    private boolean completed = false;
 
     // Non private to avoid synthetic class
     CallToStreamObserverAdapter(ClientCall<T, ?> call) {
@@ -333,17 +336,21 @@ public final class ClientCalls {
 
     @Override
     public void onNext(T value) {
+      checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
+      checkState(!completed, "Stream is already completed, no further calls are allowed");
       call.sendMessage(value);
     }
 
     @Override
     public void onError(Throwable t) {
       call.cancel("Cancelled by client with StreamObserver.onError()", t);
+      aborted = true;
     }
 
     @Override
     public void onCompleted() {
       call.halfClose();
+      completed = true;
     }
 
     @Override

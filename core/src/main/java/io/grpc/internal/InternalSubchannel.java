@@ -63,7 +63,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * Transports for a single {@link SocketAddress}.
  */
 @ThreadSafe
-final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
+final class InternalSubchannel implements InternalInstrumented<ChannelStats>, TransportProvider {
   private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final InternalLogId logId;
@@ -76,7 +76,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
   private final InternalChannelz channelz;
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
-  private final ChannelLoggerImpl channelLogger;
+  private final ChannelLogger channelLogger;
   private final SynchronizationContext syncContext;
 
   /**
@@ -142,7 +142,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
       ClientTransportFactory transportFactory, ScheduledExecutorService scheduledExecutor,
       Supplier<Stopwatch> stopwatchSupplier, SynchronizationContext syncContext, Callback callback,
       InternalChannelz channelz, CallTracer callsTracer, ChannelTracer channelTracer,
-      InternalLogId logId, TimeProvider timeProvider) {
+      InternalLogId logId, ChannelLogger channelLogger) {
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
@@ -159,21 +159,16 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
     this.channelz = channelz;
     this.callsTracer = callsTracer;
     this.channelTracer = Preconditions.checkNotNull(channelTracer, "channelTracer");
-    this.logId = InternalLogId.allocate("Subchannel", authority);
-    this.channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
+    this.logId = Preconditions.checkNotNull(logId, "logId");
+    this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
   }
 
   ChannelLogger getChannelLogger() {
     return channelLogger;
   }
 
-  /**
-   * Returns a READY transport that will be used to create new streams.
-   *
-   * <p>Returns {@code null} if the state is not READY.  Will try to connect if state is IDLE.
-   */
-  @Nullable
-  ClientTransport obtainActiveTransport() {
+  @Override
+  public ClientTransport obtainActiveTransport() {
     ClientTransport savedTransport = activeTransport;
     if (savedTransport != null) {
       return savedTransport;

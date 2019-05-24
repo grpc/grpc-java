@@ -20,7 +20,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.InternalChannelz.ChannelStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.LoadBalancer;
-import javax.annotation.Nullable;
 
 /**
  * The base interface of the Subchannels returned by {@link
@@ -29,15 +28,9 @@ import javax.annotation.Nullable;
 abstract class AbstractSubchannel extends LoadBalancer.Subchannel {
 
   /**
-   * Same as {@link InternalSubchannel#obtainActiveTransport}.
-   */
-  @Nullable
-  abstract ClientTransport obtainActiveTransport();
-
-  /**
    * Returns the InternalSubchannel as an {@code Instrumented<T>} for the sole purpose of channelz
    * unit tests.
    */
   @VisibleForTesting
-  abstract InternalInstrumented<ChannelStats> getInternalSubchannel();
+  abstract InternalInstrumented<ChannelStats> getInstrumentedInternalSubchannel();
 }

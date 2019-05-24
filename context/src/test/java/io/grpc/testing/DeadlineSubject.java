@@ -41,8 +41,11 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
     return deadlineFactory;
   }
 
+  private final Deadline actual;
+
   private DeadlineSubject(FailureMetadata metadata, Deadline subject) {
     super(metadata, subject);
+    this.actual = subject;
   }
 
   /**
@@ -54,7 +57,7 @@ public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, De
     return new TolerantDeadlineComparison() {
       @Override
       public void of(Deadline expected) {
-        Deadline actual = actual();
+        Deadline actual = DeadlineSubject.this.actual;
         checkNotNull(actual, "actual value cannot be null. expected=%s", expected);
 
         // This is probably overkill, but easier than thinking about overflow.

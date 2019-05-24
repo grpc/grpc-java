@@ -16,7 +16,6 @@
 
 package io.grpc.services;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.CONNECTING;
@@ -24,6 +23,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
@@ -53,6 +53,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.ForwardingSubchannel;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
@@ -116,12 +117,11 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
+      Subchannel originalSubchannel = super.createSubchannel(args);
       HealthCheckState hcState = new HealthCheckState(
-          this, args.getStateListener(), syncContext, delegate.getScheduledExecutorService());
+          this, originalSubchannel, syncContext, delegate.getScheduledExecutorService());
       hcStates.add(hcState);
-      Subchannel subchannel =
-          super.createSubchannel(args.toBuilder().setStateListener(hcState).build());
-      hcState.init(subchannel);
+      Subchannel subchannel = new SubchannelImpl(originalSubchannel, hcState);
       if (healthCheckedService != null) {
         hcState.setServiceName(healthCheckedService);
       }
@@ -138,6 +138,28 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
+  }
+
+  @VisibleForTesting
+  static final class SubchannelImpl extends ForwardingSubchannel {
+    final Subchannel delegate;
+    final HealthCheckState hcState;
+
+    SubchannelImpl(Subchannel delegate, HealthCheckState hcState) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.hcState = checkNotNull(hcState, "hcState");
+    }
+
+    @Override
+    protected Subchannel delegate() {
+      return delegate;
+    }
+
+    @Override
+    public void start(final SubchannelStateListener listener) {
+      hcState.init(listener);
+      delegate().start(hcState);
     }
   }
 
@@ -176,7 +198,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         // ManagedChannel will stop calling onSubchannelState() after shutdown() is called,
         // which is required by LoadBalancer API semantics. We need to deliver the final SHUTDOWN
         // signal to health checkers so that they can cancel the streams.
-        hcState.onSubchannelState(hcState.subchannel, ConnectivityStateInfo.forNonError(SHUTDOWN));
+        hcState.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
       }
       helper.hcStates.clear();
     }
@@ -197,13 +219,12 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         }
       };
 
-    private final SubchannelStateListener stateListener;
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timerService;
     private final HelperImpl helperImpl;
-
-    private Subchannel subchannel;
-    private ChannelLogger subchannelLogger;
+    private final Subchannel subchannel;
+    private final ChannelLogger subchannelLogger;
+    private SubchannelStateListener stateListener;
 
     // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
@@ -225,18 +246,18 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     HealthCheckState(
         HelperImpl helperImpl,
-        SubchannelStateListener stateListener, SynchronizationContext syncContext,
+        Subchannel subchannel, SynchronizationContext syncContext,
         ScheduledExecutorService timerService) {
       this.helperImpl = checkNotNull(helperImpl, "helperImpl");
-      this.stateListener = checkNotNull(stateListener, "stateListener");
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timerService = checkNotNull(timerService, "timerService");
     }
 
-    void init(Subchannel subchannel) {
-      checkState(this.subchannel == null, "init() already called");
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
+    void init(SubchannelStateListener listener) {
+      checkState(this.stateListener == null, "init() already called");
+      this.stateListener = checkNotNull(listener, "listener");
     }
 
     void setServiceName(@Nullable String newServiceName) {
@@ -254,9 +275,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
-    public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo rawState) {
-      checkArgument(subchannel == this.subchannel,
-          "Subchannel mismatch: %s vs %s", subchannel, this.subchannel);
+    public void onSubchannelState(ConnectivityStateInfo rawState) {
       if (Objects.equal(this.rawState.getState(), READY)
           && !Objects.equal(rawState.getState(), READY)) {
         // A connection was lost.  We will reset disabled flag because health check
@@ -324,7 +343,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       checkState(subchannel != null, "init() not called");
       if (!helperImpl.balancerShutdown && !Objects.equal(concludedState, newState)) {
         concludedState = newState;
-        stateListener.onSubchannelState(subchannel, concludedState);
+        stateListener.onSubchannelState(concludedState);
       }
     }
 

@@ -17,11 +17,19 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
-import static io.grpc.xds.XdsLoadBalancer.STATE_INFO;
+import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -29,19 +37,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.protobuf.Any;
+import com.google.protobuf.UInt32Value;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.api.v2.core.Address;
+import io.envoyproxy.envoy.api.v2.core.Locality;
+import io.envoyproxy.envoy.api.v2.core.SocketAddress;
+import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
+import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
+import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
@@ -55,12 +71,10 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLbState.SubchannelStore;
-import io.grpc.xds.XdsLbState.SubchannelStoreImpl;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -82,7 +96,7 @@ public class XdsLoadBalancerTest {
   @Mock
   private Helper helper;
   @Mock
-  private LoadBalancer fakeBalancer1;
+  private LoadBalancer fallbackBalancer1;
   @Mock
   private LoadBalancer fakeBalancer2;
   private XdsLoadBalancer lb;
@@ -91,6 +105,8 @@ public class XdsLoadBalancerTest {
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+
+  private Helper fallbackHelper1;
 
   private final LoadBalancerProvider lbProvider1 = new LoadBalancerProvider() {
     @Override
@@ -105,12 +121,13 @@ public class XdsLoadBalancerTest {
 
     @Override
     public String getPolicyName() {
-      return "supported_1";
+      return "fallback_1";
     }
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return fakeBalancer1;
+      fallbackHelper1 = helper;
+      return fallbackBalancer1;
     }
   };
 
@@ -136,6 +153,29 @@ public class XdsLoadBalancerTest {
     }
   };
 
+  private final Locality localityProto1 = Locality.newBuilder()
+      .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
+  private final LbEndpoint endpoint11 = LbEndpoint.newBuilder()
+      .setEndpoint(Endpoint.newBuilder()
+          .setAddress(Address.newBuilder()
+              .setSocketAddress(SocketAddress.newBuilder()
+                  .setAddress("addr11").setPortValue(11))))
+      .setLoadBalancingWeight(UInt32Value.of(11))
+      .build();
+  private final DiscoveryResponse edsResponse = DiscoveryResponse.newBuilder()
+      .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
+          .addEndpoints(LocalityLbEndpoints.newBuilder()
+              .setLocality(localityProto1)
+              .addLbEndpoints(endpoint11)
+              .setLoadBalancingWeight(UInt32Value.of(1)))
+          .build()))
+      .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+      .build();
+
+  private Helper childHelper;
+  @Mock
+  private LoadBalancer childBalancer;
+
   private final LoadBalancerProvider roundRobin = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
@@ -154,7 +194,8 @@ public class XdsLoadBalancerTest {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
-      return null;
+      childHelper = helper;
+      return childBalancer;
     }
   };
 
@@ -165,9 +206,6 @@ public class XdsLoadBalancerTest {
           throw new AssertionError(e);
         }
       });
-
-  private final SubchannelStore fakeSubchannelStore =
-      mock(SubchannelStore.class, delegatesTo(new SubchannelStoreImpl()));
 
   private ManagedChannel oobChannel1;
   private ManagedChannel oobChannel2;
@@ -181,10 +219,11 @@ public class XdsLoadBalancerTest {
     lbRegistry.register(lbProvider1);
     lbRegistry.register(lbProvider2);
     lbRegistry.register(roundRobin);
-    lb = new XdsLoadBalancer(helper, lbRegistry, fakeSubchannelStore);
+    lb = new XdsLoadBalancer(helper, lbRegistry);
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
+    doReturn("fake_authority").when(helper).getAuthority();
 
     String serverName = InProcessServerBuilder.generateName();
 
@@ -236,7 +275,7 @@ public class XdsLoadBalancerTest {
         delegatesTo(cleanupRule.register(channelBuilder.build())));
 
     doReturn(oobChannel1).doReturn(oobChannel2).doReturn(oobChannel3)
-      .when(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+      .when(helper).createResolvingOobChannel(anyString());
   }
 
   @After
@@ -254,7 +293,7 @@ public class XdsLoadBalancerTest {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -268,7 +307,7 @@ public class XdsLoadBalancerTest {
 
     XdsLbState xdsLbState1 = lb.getXdsLbStateForTest();
     assertThat(xdsLbState1.childPolicy).isNull();
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -276,7 +315,7 @@ public class XdsLoadBalancerTest {
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -293,7 +332,7 @@ public class XdsLoadBalancerTest {
     assertThat(xdsLbState2).isSameInstanceAs(xdsLbState1);
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is unchanged
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -305,7 +344,7 @@ public class XdsLoadBalancerTest {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -316,15 +355,15 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -339,7 +378,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -350,8 +389,8 @@ public class XdsLoadBalancerTest {
   public void resolverEvent_customModeToStandardMode() throws Exception {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -362,7 +401,7 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -372,7 +411,7 @@ public class XdsLoadBalancerTest {
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -387,7 +426,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNull();
 
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -398,8 +437,8 @@ public class XdsLoadBalancerTest {
   public void resolverEvent_customModeToCustomMode() throws Exception {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -411,15 +450,15 @@ public class XdsLoadBalancerTest {
             .build());
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_1\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"childPolicy\" : [{\"fallback_1\" : {\"key\" : \"val\"}}, {\"unfallback_1\" : {}}],"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -433,7 +472,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
     // verify oobChannel is unchanged
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
     verify(oobChannel1, times(2))
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -445,7 +484,7 @@ public class XdsLoadBalancerTest {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -456,15 +495,15 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
             .build());
-    verify(helper).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(), anyString());
+    verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
     lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8443\","
-        + "\"childPolicy\" : [{\"supported_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"childPolicy\" : [{\"fallback_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -479,8 +518,7 @@ public class XdsLoadBalancerTest {
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
     // verify oobChannel is unchanged
-    verify(helper, times(2)).createOobChannel(ArgumentMatchers.<EquivalentAddressGroup>any(),
-        anyString());
+    verify(helper, times(2)).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
@@ -491,6 +529,34 @@ public class XdsLoadBalancerTest {
   }
 
   @Test
+  public void resolutionErrorAtStartup() {
+    lb.handleNameResolutionError(Status.UNAVAILABLE);
+
+    assertNull(childHelper);
+    assertNull(fallbackHelper1);
+    verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
+  }
+
+  @Test
+  public void resolutionErrorAtFallback() throws Exception {
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(standardModeWithFallback1Attributes())
+            .build());
+    // let fallback timer expire
+    assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
+    ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(fallbackBalancer1).handleResolvedAddresses(captor.capture());
+    assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .containsExactly("fallback_1_option", "yes");
+
+    Status status = Status.UNAVAILABLE.withDescription("resolution error");
+    lb.handleNameResolutionError(status);
+    verify(fallbackBalancer1).handleNameResolutionError(status);
+  }
+
+  @Test
   public void fallback_AdsNotWorkingYetTimerExpired() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
@@ -498,49 +564,98 @@ public class XdsLoadBalancerTest {
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
 
+    assertNull(childHelper);
+    assertNull(fallbackHelper1);
+
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
 
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertNull(childHelper);
+    assertNotNull(fallbackHelper1);
     ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(fakeBalancer1).handleResolvedAddresses(captor.capture());
+    verify(fallbackBalancer1).handleResolvedAddresses(captor.capture());
     assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("supported_1_option", "yes");
+        .containsExactly("fallback_1_option", "yes");
+
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    fallbackHelper1.updateBalancingState(CONNECTING, picker);
+    verify(helper).updateBalancingState(CONNECTING, picker);
   }
 
   @Test
-  public void fallback_AdsWorkingTimerCancelled() throws Exception {
+  public void fallback_ErrorWithoutReceivingEdsResponse() throws Exception {
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
-    serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
 
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
-    verify(fakeBalancer1, never()).handleResolvedAddresses(
-        ArgumentMatchers.any(ResolvedAddresses.class));
-  }
-
-  @Test
-  public void fallback_AdsErrorAndNoActiveSubchannel() throws Exception {
-    lb.handleResolvedAddresses(
-        ResolvedAddresses.newBuilder()
-            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-            .setAttributes(standardModeWithFallback1Attributes())
-            .build());
+    assertNull(childHelper);
+    assertNull(fallbackHelper1);
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
 
     serverResponseWriter.onError(new Exception("fake error"));
 
+    // goes to fallback-at-startup mode immediately
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertNull(childHelper);
+    assertNotNull(fallbackHelper1);
+    // verify fallback balancer is working
     ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(fakeBalancer1).handleResolvedAddresses(captor.capture());
+    verify(fallbackBalancer1).handleResolvedAddresses(captor.capture());
     assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("supported_1_option", "yes");
+        .containsExactly("fallback_1_option", "yes");
+
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    fallbackHelper1.updateBalancingState(CONNECTING, picker);
+    verify(helper).updateBalancingState(CONNECTING, picker);
+  }
+
+  @Test
+  public void fallback_EdsResponseReceivedThenErrorBeforeBackendReady() throws Exception {
+    lb.handleResolvedAddresses(
+        ResolvedAddresses.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(standardModeWithFallback1Attributes())
+            .build());
+    serverResponseWriter.onNext(edsResponse);
+    assertNotNull(childHelper);
+    assertNull(fallbackHelper1);
+
+    serverResponseWriter.onError(new Exception("fake error"));
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    // verify fallback balancer is not started
+    assertNull(fallbackHelper1);
+    verify(fallbackBalancer1, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
+
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    childHelper.updateBalancingState(CONNECTING, picker1);
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    childHelper.updateBalancingState(TRANSIENT_FAILURE, picker1);
+    verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
 
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    // verify fallback balancer is working
+    ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
+    assertNotNull(fallbackHelper1);
+    verify(fallbackBalancer1).handleResolvedAddresses(captor.capture());
+    assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
+        .containsExactly("fallback_1_option", "yes");
 
-    // verify handleResolvedAddresses() is not called again
-    verify(fakeBalancer1).handleResolvedAddresses(ArgumentMatchers.any(ResolvedAddresses.class));
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    childHelper.updateBalancingState(CONNECTING, picker2);
+    // verify childHelper no more delegates updateBalancingState to parent helper
+    verify(helper, times(2)).updateBalancingState(
+        any(ConnectivityState.class), any(SubchannelPicker.class));
+
+    SubchannelPicker picker3 = mock(SubchannelPicker.class);
+    fallbackHelper1.updateBalancingState(CONNECTING, picker3);
+    verify(helper).updateBalancingState(CONNECTING, picker3);
+
+    SubchannelPicker picker4 = mock(SubchannelPicker.class);
+    childHelper.updateBalancingState(READY, picker4);
+    verify(fallbackBalancer1).shutdown();
+    verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
   }
 
   @Test
@@ -550,46 +665,29 @@ public class XdsLoadBalancerTest {
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(standardModeWithFallback1Attributes())
             .build());
+    serverResponseWriter.onNext(edsResponse);
+    assertNotNull(childHelper);
+    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertNull(fallbackHelper1);
 
-    serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    doReturn(true).when(fakeSubchannelStore).hasReadyBackends();
+    childHelper.updateBalancingState(READY, mock(SubchannelPicker.class));
+    verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
+
     serverResponseWriter.onError(new Exception("fake error"));
+    assertNull(fallbackHelper1);
+    verify(fallbackBalancer1, never()).handleResolvedAddresses(
+        any(ResolvedAddresses.class));
 
-    verify(fakeBalancer1, never()).handleResolvedAddresses(
-        ArgumentMatchers.any(ResolvedAddresses.class));
-
-    Subchannel subchannel = new Subchannel() {
-      @Override
-      public void shutdown() {}
-
-      @Override
-      public void requestConnection() {}
-
-      @Override
-      public Attributes getAttributes() {
-        return Attributes.newBuilder()
-            .set(
-                STATE_INFO,
-                new AtomicReference<>(ConnectivityStateInfo.forNonError(ConnectivityState.READY)))
-            .build();
-      }
-    };
-
-    doReturn(true).when(fakeSubchannelStore).hasSubchannel(subchannel);
-    doReturn(false).when(fakeSubchannelStore).hasReadyBackends();
-    lb.handleSubchannelState(subchannel, ConnectivityStateInfo.forTransientFailure(
-        Status.UNAVAILABLE));
-
-    ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
-    verify(fakeBalancer1).handleResolvedAddresses(captor.capture());
-    assertThat(captor.getValue().getAttributes().get(ATTR_LOAD_BALANCING_CONFIG))
-        .containsExactly("supported_1_option", "yes");
+    // verify childHelper still delegates updateBalancingState to parent helper
+    childHelper.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
   }
 
   private static Attributes standardModeWithFallback1Attributes() throws Exception {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
-        + "\"fallbackPolicy\" : [{\"supported_1\" : { \"supported_1_option\" : \"yes\"}}]"
+        + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
@@ -601,7 +699,7 @@ public class XdsLoadBalancerTest {
     String lbConfigRaw = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
-        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"supported_1\" : {\"key\" : \"val\"}}]"
+        + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
         + "}}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);

@@ -96,7 +96,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       boolean retryEnabled) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
-    this.tag = PerfTag.create(PerfTag.allocateNumericId(), method.getFullMethodName());
+    this.tag = PerfMark.createTag(method.getFullMethodName());
     // If we know that the executor is a direct executor, we don't need to wrap it with a
     // SerializingExecutor. This is purely for performance reasons.
     // See https://github.com/grpc/grpc-java/issues/368
@@ -187,7 +187,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       startInternal(observer, headers);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ClientCall.start");
     }
   }
 
@@ -389,7 +389,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       cancelInternal(message, cause);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ClientCall.cancel");
     }
   }
 
@@ -428,7 +428,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       halfCloseInternal();
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ClientCall.halfClose");
     }
   }
 
@@ -446,7 +446,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     try {
       sendMessageInternal(message);
     } finally {
-      PerfMark.taskEnd();
+      PerfMark.taskEnd(tag, "ClientCall.sendMessage");
     }
   }
 
@@ -534,7 +534,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             stream.cancel(status);
             close(status, new Metadata());
           } finally {
-            PerfMark.taskEnd();
+            PerfMark.taskEnd(tag, "ClientCall.headersRead");
           }
         }
       }
@@ -574,7 +574,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             stream.cancel(status);
             close(status, new Metadata());
           } finally {
-            PerfMark.taskEnd();
+            PerfMark.taskEnd(tag, "ClientCall.messagesAvailable");
           }
         }
       }
@@ -631,7 +631,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           try {
             close(savedStatus, savedTrailers);
           } finally {
-            PerfMark.taskEnd();
+            PerfMark.taskEnd(tag, "ClientCall.closed");
           }
         }
       }
@@ -657,7 +657,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
             stream.cancel(status);
             close(status, new Metadata());
           } finally {
-            PerfMark.taskEnd();
+            PerfMark.taskEnd(tag, "ClientCall.onReady");
           }
         }
       }

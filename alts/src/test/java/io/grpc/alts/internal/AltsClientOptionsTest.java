@@ -49,7 +49,8 @@ public final class AltsClientOptionsTest {
             .build();
 
     assertThat(options.getTargetName()).isEqualTo(targetName);
-    assertThat(options.getTargetServiceAccounts()).containsAllOf(serviceAccount1, serviceAccount2);
+    assertThat(options.getTargetServiceAccounts())
+        .containsAtLeast(serviceAccount1, serviceAccount2);
     assertThat(options.getRpcProtocolVersions()).isEqualTo(rpcVersions);
   }
 }

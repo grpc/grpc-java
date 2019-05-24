@@ -24,7 +24,6 @@ import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import java.net.SocketAddress;
 import java.util.Arrays;
 import java.util.List;
@@ -38,8 +37,6 @@ import org.junit.runners.JUnit4;
 public class LoadBalancerTest {
   private final Subchannel subchannel = mock(Subchannel.class);
   private final Subchannel subchannel2 = mock(Subchannel.class);
-  private final SubchannelStateListener subchannelStateListener =
-      mock(SubchannelStateListener.class);
   private final ClientStreamTracer.Factory tracerFactory = mock(ClientStreamTracer.Factory.class);
   private final Status status = Status.UNAVAILABLE.withDescription("for test");
   private final Status status2 = Status.UNAVAILABLE.withDescription("for test 2");
@@ -163,7 +160,6 @@ public class LoadBalancerTest {
       new NoopHelper().createSubchannel(CreateSubchannelArgs.newBuilder()
           .setAddresses(eag)
           .setAttributes(attrs)
-          .setStateListener(subchannelStateListener)
           .build());
       fail("Should throw");
     } catch (UnsupportedOperationException e) {
@@ -234,7 +230,6 @@ public class LoadBalancerTest {
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
         .setAddresses(eag)
         .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
         .build();
     assertThat(args.getOption(testKey)).isNull();
     assertThat(args.getOption(testWithDefaultKey)).isSameInstanceAs(testValue);
@@ -247,7 +242,6 @@ public class LoadBalancerTest {
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
         .setAddresses(eag)
         .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
         .addOption(testKey, testValue)
         .build();
     assertThat(args.getOption(testKey)).isEqualTo(testValue);
@@ -261,7 +255,6 @@ public class LoadBalancerTest {
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
         .setAddresses(eag)
         .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
         .addOption(testKey, testValue1)
         .addOption(testKey, testValue2)
         .build();
@@ -275,13 +268,11 @@ public class LoadBalancerTest {
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
         .setAddresses(eag)
         .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
         .addOption(testKey, testValue)
         .build();
     CreateSubchannelArgs rebuildedArgs = args.toBuilder().build();
     assertThat(rebuildedArgs.getAddresses()).containsExactly(eag);
     assertThat(rebuildedArgs.getAttributes()).isSameInstanceAs(attrs);
-    assertThat(rebuildedArgs.getStateListener()).isSameInstanceAs(subchannelStateListener);
     assertThat(rebuildedArgs.getOption(testKey)).isSameInstanceAs(testValue);
   }
 
@@ -291,13 +282,11 @@ public class LoadBalancerTest {
     CreateSubchannelArgs args = CreateSubchannelArgs.newBuilder()
         .setAddresses(eag)
         .setAttributes(attrs)
-        .setStateListener(subchannelStateListener)
         .addOption(testKey, "test-value")
         .build();
     String str = args.toString();
     assertThat(str).contains("addrs=");
     assertThat(str).contains("attrs=");
-    assertThat(str).contains("listener=");
     assertThat(str).contains("customOptions=");
   }
 

@@ -28,13 +28,14 @@ import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
  * NameResolver}.  The channel's default behavior is used, which is walking down the address list
  * and sticking to the first that works.
  */
-final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStateListener {
+final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private Subchannel subchannel;
 
@@ -46,11 +47,17 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
     if (subchannel == null) {
-      subchannel = helper.createSubchannel(
+      final Subchannel subchannel = helper.createSubchannel(
           CreateSubchannelArgs.newBuilder()
               .setAddresses(servers)
-              .setStateListener(this)
               .build());
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+            processSubchannelState(subchannel, stateInfo);
+          }
+        });
+      this.subchannel = subchannel;
 
       // The channel state does not get updated when doing name resolving today, so for the moment
       // let LB report CONNECTION and call subchannel.requestConnection() immediately.
@@ -72,10 +79,9 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
     helper.updateBalancingState(TRANSIENT_FAILURE, new Picker(PickResult.withError(error)));
   }
 
-  @Override
-  public void onSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     ConnectivityState currentState = stateInfo.getState();
-    if (subchannel != PickFirstLoadBalancer.this.subchannel || currentState == SHUTDOWN) {
+    if (currentState == SHUTDOWN) {
       return;
     }
 
@@ -108,6 +114,13 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
     }
   }
 
+  @Override
+  public void requestConnection() {
+    if (subchannel != null) {
+      subchannel.requestConnection();
+    }
+  }
+
   /**
    * No-op picker which doesn't add any custom picking logic. It just passes already known result
    * received in constructor.
@@ -125,9 +138,10 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
     }
   }
 
-  /** Picker that requests connection during pick, and returns noResult. */
-  private static final class RequestConnectionPicker extends SubchannelPicker {
+  /** Picker that requests connection during the first pick, and returns noResult. */
+  private final class RequestConnectionPicker extends SubchannelPicker {
     private final Subchannel subchannel;
+    private final AtomicBoolean connectionRequested = new AtomicBoolean(false);
 
     RequestConnectionPicker(Subchannel subchannel) {
       this.subchannel = checkNotNull(subchannel, "subchannel");
@@ -135,13 +149,15 @@ final class PickFirstLoadBalancer extends LoadBalancer implements SubchannelStat
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      subchannel.requestConnection();
+      if (connectionRequested.compareAndSet(false, true)) {
+        helper.getSynchronizationContext().execute(new Runnable() {
+            @Override
+            public void run() {
+              subchannel.requestConnection();
+            }
+          });
+      }
       return PickResult.withNoResult();
-    }
-
-    @Override
-    public void requestConnection() {
-      subchannel.requestConnection();
     }
   }
 }

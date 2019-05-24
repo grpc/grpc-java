@@ -17,20 +17,20 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.logging.Level.FINEST;
 
-import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import java.net.SocketAddress;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -49,33 +49,30 @@ import javax.annotation.Nullable;
  */
 class XdsLbState {
 
-  private static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
   final String balancerName;
 
   @Nullable
   final LbConfig childPolicy;
 
-  private final SubchannelStore subchannelStore;
+  private final LocalityStore localityStore;
   private final Helper helper;
   private final AdsStreamCallback adsStreamCallback;
 
   @Nullable
   private XdsComms xdsComms;
 
-
   XdsLbState(
       String balancerName,
       @Nullable LbConfig childPolicy,
       @Nullable XdsComms xdsComms,
       Helper helper,
-      SubchannelStore subchannelStore,
+      LocalityStore localityStore,
       AdsStreamCallback adsStreamCallback) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.xdsComms = xdsComms;
     this.helper = checkNotNull(helper, "helper");
-    this.subchannelStore = checkNotNull(subchannelStore, "subchannelStore");
+    this.localityStore = checkNotNull(localityStore, "localityStore");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
   }
 
@@ -86,30 +83,38 @@ class XdsLbState {
     if (xdsComms != null) {
       xdsComms.refreshAdsStream();
     } else {
-      // ** This is wrong **
-      // FIXME: use name resolver to resolve addresses for balancerName, and create xdsComms in
-      // name resolver listener callback.
-      // TODO: consider pass a fake EAG as a static final field visible to tests and verify
-      // createOobChannel() with this EAG in tests.
-      ManagedChannel oobChannel = helper.createOobChannel(
-          new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new SocketAddress() {
-          })),
-          balancerName);
-      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback);
+      ManagedChannel oobChannel;
+      try {
+        oobChannel = helper.createResolvingOobChannel(balancerName);
+      } catch (UnsupportedOperationException uoe) {
+        // Temporary solution until createResolvingOobChannel is implemented
+        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
+        Logger logger = Logger.getLogger(XdsLbState.class.getName());
+        if (logger.isLoggable(FINEST)) {
+          logger.log(
+              FINEST,
+              "createResolvingOobChannel() not supported by the helper: " + helper,
+              uoe);
+          logger.log(
+              FINEST,
+              "creating oob channel for target {0} using default ManagedChannelBuilder",
+              balancerName);
+        }
+        oobChannel = ManagedChannelBuilder.forTarget(balancerName).build();
+      }
+      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, localityStore);
     }
 
     // TODO: maybe update picker
   }
 
-
   final void handleNameResolutionError(Status error) {
-    if (!subchannelStore.hasNonDropBackends()) {
-      // TODO: maybe update picker with transient failure
-    }
+    // NO-OP?
   }
 
   final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // TODO: maybe update picker
+    localityStore.handleSubchannelState(subchannel, newState);
   }
 
   /**
@@ -117,8 +122,7 @@ class XdsLbState {
    */
   void shutdown() {
     // TODO: cancel retry timer
-    // TODO: shutdown child balancers
-    subchannelStore.shutdown();
+    localityStore.reset();
   }
 
   @Nullable
@@ -129,50 +133,4 @@ class XdsLbState {
     return xdsComms;
   }
 
-  /**
-   * Manages EAG and locality info for a collection of subchannels, not including subchannels
-   * created by the fallback balancer.
-   */
-  static final class SubchannelStoreImpl implements SubchannelStore {
-
-    SubchannelStoreImpl() {}
-
-    @Override
-    public boolean hasReadyBackends() {
-      // TODO: impl
-      return false;
-    }
-
-    @Override
-    public boolean hasNonDropBackends() {
-      // TODO: impl
-      return false;
-    }
-
-
-    @Override
-    public boolean hasSubchannel(Subchannel subchannel) {
-      // TODO: impl
-      return false;
-    }
-
-    @Override
-    public void shutdown() {
-      // TODO: impl
-    }
-  }
-
-  /**
-   * The interface of {@link XdsLbState.SubchannelStoreImpl} that is convenient for testing.
-   */
-  public interface SubchannelStore {
-
-    boolean hasReadyBackends();
-
-    boolean hasNonDropBackends();
-
-    boolean hasSubchannel(Subchannel subchannel);
-
-    void shutdown();
-  }
 }

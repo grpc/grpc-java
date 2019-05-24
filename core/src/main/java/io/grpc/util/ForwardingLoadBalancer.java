@@ -69,6 +69,11 @@ public abstract class ForwardingLoadBalancer extends LoadBalancer {
   }
 
   @Override
+  public void requestConnection() {
+    delegate().requestConnection();
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

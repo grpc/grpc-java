@@ -232,6 +232,26 @@ public final class Attributes {
       return this;
     }
 
+    /**
+     * Removes the key and associated value from the attribtues.
+     *
+     * @since 1.22.0
+     * @param key The key to remove
+     * @return this
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5777")
+    public <T> Builder discard(Key<T> key) {
+      if (base.data.containsKey(key)) {
+        Map<Key<?>, Object> newBaseData = new IdentityHashMap<>(base.data);
+        newBaseData.remove(key);
+        base = new Attributes(newBaseData);
+      }
+      if (newdata != null) {
+        newdata.remove(key);
+      }
+      return this;
+    }
+
     public <T> Builder setAll(Attributes other) {
       data(other.data.size()).putAll(other.data);
       return this;

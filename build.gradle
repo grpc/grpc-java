@@ -4,7 +4,6 @@ buildscript {
         maven { url "https://plugins.gradle.org/m2/" }
     }
     dependencies {
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:3.13.0"
         classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
         classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.4.5'
         classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.6'
@@ -49,7 +48,7 @@ subprojects {
     }
 
     group = "io.grpc"
-    version = "1.21.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.22.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.7
     targetCompatibility = 1.7
@@ -112,8 +111,7 @@ subprojects {
         guavaVersion = '26.0-android'
         protobufVersion = '3.7.1'
         protocVersion = protobufVersion
-        protobufNanoVersion = '3.0.0-alpha-5'
-        opencensusVersion = '0.19.2'
+        opencensusVersion = '0.21.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -211,8 +209,6 @@ subprojects {
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
             protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
-            protobuf_nano: "com.google.protobuf.nano:protobuf-javanano:${protobufNanoVersion}",
-            protoc_nano: "com.google.protobuf:protoc:3.5.1-1",
             protobuf_plugin: 'com.google.protobuf:protobuf-gradle-plugin:0.8.8',
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
             lang: "org.apache.commons:commons-lang3:3.5",
@@ -387,7 +383,6 @@ subprojects {
                             "grpc-stub",
                             "grpc-protobuf",
                             "grpc-protobuf-lite",
-                            "grpc-protobuf-nano"
                         ])) {
                             asNode().dependencies.'*'.findAll() { dep ->
                                 dep.artifactId.text() in ['grpc-api', 'grpc-core']
@@ -462,7 +457,6 @@ def publicApiSubprojects = [
     ':grpc-okhttp',
     ':grpc-protobuf',
     ':grpc-protobuf-lite',
-    ':grpc-protobuf-nano',
     ':grpc-stub',
     ':grpc-testing',
 ]
@@ -515,17 +509,5 @@ publicApiSubprojects.each { name ->
             // TODO(zpencer): enable after japicmp-gradle-plugin/pull/15
             // annotationExcludes = ['@io.grpc.ExperimentalApi']
         }
-    }
-}
-
-// format checkers
-apply plugin: "com.diffplug.gradle.spotless"
-apply plugin: 'groovy'
-spotless {
-    groovyGradle {
-        target '**/*.gradle'
-        greclipse()
-        indentWithSpaces()
-        paddedCell()
     }
 }

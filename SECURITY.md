@@ -346,6 +346,10 @@ If on Alpine Linux, try to use `grpc-netty-shaded` instead of `grpc-netty` or
 `netty-tcnative`. If those are not an option, you may consider using
 [netty-tcnative-alpine](https://github.com/pires/netty-tcnative-alpine).
 
+If on Fedora 30 or later and you see "libcrypt.so.1: cannot open shared object
+file: No such file or directory". Run `dnf -y install libxcrypt-compat` to
+install the necessary dependency.
+
 If you are running inside of an embedded Tomcat runtime (e.g., Spring Boot),
 then some versions of `netty-tcnative-boringssl-static` will have conflicts and
 won't work. You must use gRPC 1.4.0 or later.

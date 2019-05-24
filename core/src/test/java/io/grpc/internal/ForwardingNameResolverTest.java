@@ -78,7 +78,7 @@ public class ForwardingNameResolverTest {
 
   @Test
   public void start_observer() {
-    NameResolver.Observer observer = new NameResolver.Observer() {
+    NameResolver.Listener2 listener = new NameResolver.Listener2() {
       @Override
       public void onResult(ResolutionResult result) {
 
@@ -88,7 +88,7 @@ public class ForwardingNameResolverTest {
       public void onError(Status error) { }
     };
 
-    forwarder.start(observer);
-    verify(delegate).start(observer);
+    forwarder.start(listener);
+    verify(delegate).start(listener);
   }
 }
