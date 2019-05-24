@@ -178,7 +178,8 @@ public class LocalityStoreTest {
   }
 
   @Test
-  public void updateLoaclityStore() {
+  public void updateLoaclityStore_withEmptyDropList() {
+    localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
     LocalityInfo localityInfo1 =
         new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
     LocalityInfo localityInfo2 =
@@ -276,12 +277,6 @@ public class LocalityStoreTest {
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
 
     verify(random, never()).nextInt(1000_000);
-  }
-
-  @Test
-  public void updateLoaclityStore_withEmptyDropList() {
-    localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
-    updateLoaclityStore();
   }
 
   @Test
