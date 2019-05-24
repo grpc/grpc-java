@@ -53,8 +53,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nullable;
 
 /**
  * Manages EAG and locality info for a collection of subchannels, not including subchannels
@@ -67,7 +65,7 @@ interface LocalityStore {
 
   void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
 
-  void updateDropPercentage(@Nullable ImmutableList<DropOverload> dropOverloads);
+  void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
@@ -80,9 +78,7 @@ interface LocalityStore {
     private final ThreadSafeRandom random;
 
     private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
-
-    @CheckForNull
-    private ImmutableList<DropOverload> dropOverloads;
+    private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
@@ -223,7 +219,7 @@ interface LocalityStore {
 
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
-      this.dropOverloads = dropOverloads;
+      this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
     private static ConnectivityState aggregateState(
@@ -287,7 +283,7 @@ interface LocalityStore {
         picker = pickerFactory.picker(childPickers);
       }
 
-      if (dropOverloads != null && !dropOverloads.isEmpty()) {
+      if (!dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random);
       }
 

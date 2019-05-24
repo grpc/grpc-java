@@ -237,7 +237,7 @@ final class XdsComms {
                     // maybe better to run this deserialization task out of syncContext?
                     clusterLoadAssignment =
                         value.getResources(0).unpack(ClusterLoadAssignment.class);
-                  } catch (InvalidProtocolBufferException | NullPointerException e) {
+                  } catch (InvalidProtocolBufferException | RuntimeException e) {
                     cancelRpc("Received invalid EDS response", e);
                     adsStreamCallback.onError();
                     return;
@@ -248,24 +248,17 @@ final class XdsComms {
                     adsStreamCallback.onWorking();
                   }
 
-                  ImmutableList<DropOverload> dropOverloads = null;
-                  ClusterLoadAssignment.Policy policy = clusterLoadAssignment.getPolicy();
-                  if (policy != null) {
-                    List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
-                        policy.getDropOverloadsList();
-                    if (dropOverloadsProto != null) {
-                      ImmutableList.Builder<DropOverload> dropOverloadsBuilder
-                          = ImmutableList.builder();
-                      for (ClusterLoadAssignment.Policy.DropOverload dropOverload
-                          : dropOverloadsProto) {
-                        dropOverloadsBuilder.add(new DropOverload(
-                            dropOverload.getCategory(),
-                            rateInMillion(dropOverload.getDropPercentage())));
-                      }
-
-                      dropOverloads = dropOverloadsBuilder.build();
-                    }
+                  List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
+                      clusterLoadAssignment.getPolicy().getDropOverloadsList();
+                  ImmutableList.Builder<DropOverload> dropOverloadsBuilder
+                      = ImmutableList.builder();
+                  for (ClusterLoadAssignment.Policy.DropOverload dropOverload
+                      : dropOverloadsProto) {
+                    dropOverloadsBuilder.add(new DropOverload(
+                        dropOverload.getCategory(),
+                        rateInMillion(dropOverload.getDropPercentage())));
                   }
+                  ImmutableList<DropOverload> dropOverloads = dropOverloadsBuilder.build();
                   localityStore.updateDropPercentage(dropOverloads);
 
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
