@@ -157,7 +157,7 @@ public final class ProtoLiteUtils {
         // Today the parser is always the same for a given proto, but that isn't guaranteed. Even
         // if not, using the same MethodDescriptor would ensure the parser matches and permit us
         // to enable this optimization.
-        if (protoStream.parser().equals(parser)) {
+        if (protoStream.parser() == parser) {
           try {
             @SuppressWarnings("unchecked")
             T message = (T) ((ProtoInputStream) stream).message();
