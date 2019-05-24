@@ -99,8 +99,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
   @Nullable
   private ScheduledHandle reconnectTask;
 
-  private boolean reconnectCanceled;
-
   /**
    * All transports that are not terminated. At the very least the value of {@link #activeTransport}
    * will be present, but previously used transports that still have streams or are stopping may
@@ -258,11 +256,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
       @Override
       public void run() {
         reconnectTask = null;
-        if (reconnectCanceled) {
-          // Even though cancelReconnectTask() will cancel this task, the task may have already
-          // started when it's being canceled.
-          return;
-        }
         channelLogger.log(ChannelLogLevel.INFO, "CONNECTING after backoff");
         gotoNonErrorState(CONNECTING);
         startNewTransport();
@@ -282,7 +275,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
         "TRANSIENT_FAILURE ({0}). Will reconnect after {1} ns",
         printShortStatus(status), delayNanos);
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
-    reconnectCanceled = false;
     reconnectTask = syncContext.schedule(
         new LogExceptionRunnable(new EndOfCurrentBackoff()),
         delayNanos,
@@ -452,7 +444,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats> {
 
     if (reconnectTask != null) {
       reconnectTask.cancel();
-      reconnectCanceled = true;
       reconnectTask = null;
       reconnectPolicy = null;
     }
