@@ -162,7 +162,7 @@ public final class ProtoLiteUtils {
             @SuppressWarnings("unchecked")
             T message = (T) ((ProtoInputStream) stream).message();
             return message;
-          } catch (IllegalStateException ex) {
+          } catch (IllegalStateException ignored) {
             // Stream must have been read from, which is a strange state. Since the point of this
             // optimization is to be transparent, instead of throwing an error we'll continue,
             // even though it seems likely there's a bug.
