@@ -25,6 +25,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
@@ -291,8 +292,7 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponse);
 
     verify(adsStreamCallback, times(1)).onWorking();
-    verify(adsStreamCallback, never()).onAllDrop();
-    verify(adsStreamCallback, never()).onError();
+    verifyZeroInteractions(adsStreamCallback);
     inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
     inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
@@ -376,8 +376,7 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponseWithDrops);
 
     verify(adsStreamCallback).onWorking();
-    verify(adsStreamCallback, never()).onAllDrop();
-    verify(adsStreamCallback, never()).onError();
+    verifyZeroInteractions(adsStreamCallback);
     InOrder inOrder = inOrder(localityStore);
     inOrder.verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("throttle", 123),
@@ -458,8 +457,7 @@ public class XdsCommsTest {
     responseWriter.onCompleted();
 
     verify(adsStreamCallback).onError();
-    verify(adsStreamCallback, never()).onWorking();
-    verify(adsStreamCallback, never()).onAllDrop();
+    verifyZeroInteractions(adsStreamCallback);
 
     xdsComms.shutdownChannel();
   }
