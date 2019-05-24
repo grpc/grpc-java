@@ -84,12 +84,7 @@ public final class NameResolverRegistry {
     List<NameResolverProvider> providers = new ArrayList<>(allProviders);
     // Sort descending based on priority.
     // sort() must be stable, as we prefer first-registered providers
-    Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
-      @Override
-      public int compare(NameResolverProvider p1, NameResolverProvider p2) {
-        return p1.priority() - p2.priority();
-      }
-    }));
+    Collections.sort(providers, Collections.reverseOrder(new NameResolverComparator()));
     effectiveProviders = Collections.unmodifiableList(providers);
   }
 
