@@ -97,8 +97,8 @@ public final class ProtoLiteUtils {
   /** Copies the data from input stream to output stream. */
   static long copy(InputStream from, OutputStream to) throws IOException {
     // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
-    checkNotNull(from);
-    checkNotNull(to);
+    checkNotNull(from, "inputStream cannot be null!");
+    checkNotNull(to, "outputStream cannot be null!");
     byte[] buf = new byte[BUF_SIZE];
     long total = 0;
     while (true) {
