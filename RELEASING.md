@@ -187,8 +187,8 @@ releases. Generate one for the new release by following the
 Update README.md
 ----------------
 After waiting ~1 day and verifying that the release appears on [Maven
-Central](https://mvnrepository.com/), cherry-pick the commit that updated the
-README into the master branch and go through review process.
+Central](https://search.maven.org/search?q=g:io.grpc), cherry-pick the commit
+that updated the README into the master branch and go through review process.
 
 ```
 $ git checkout -b bump-readme master
@@ -199,8 +199,8 @@ Update version referenced by tutorials
 --------------------------------------
 
 Update the `grpc_java_release_tag` in
-[\_data/config.yml](https://github.com/grpc/grpc.github.io/blob/master/_data/config.yml)
-of the grpc.github.io repository.
+[config.toml](https://github.com/grpc/grpc.io/blob/master/config.toml)
+of the grpc.io repository.
 
 Notify the Community
 --------------------
@@ -223,6 +223,7 @@ Now we need to update gh-pages with the new Javadoc:
 
 ```bash
 git checkout gh-pages
+git pull --ff-only
 rm -r javadoc/
 wget -O grpc-all-javadoc.jar "http://search.maven.org/remotecontent?filepath=io/grpc/grpc-all/$MAJOR.$MINOR.$PATCH/grpc-all-$MAJOR.$MINOR.$PATCH-javadoc.jar"
 unzip -d javadoc grpc-all-javadoc.jar
