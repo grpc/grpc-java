@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.logging.Level;
@@ -83,7 +84,12 @@ public final class NameResolverRegistry {
     List<NameResolverProvider> providers = new ArrayList<>(allProviders);
     // Sort descending based on priority.
     // sort() must be stable, as we prefer first-registered providers
-    Collections.sort(providers, Collections.reverseOrder(new NameResolverComparator()));
+    Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
+      @Override
+      public int compare(NameResolverProvider o1, NameResolverProvider o2) {
+        return o1.priority() - o2.priority();
+      }
+    }));
     effectiveProviders = Collections.unmodifiableList(providers);
   }
 
