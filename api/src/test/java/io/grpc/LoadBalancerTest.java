@@ -124,7 +124,6 @@ public class LoadBalancerTest {
 
   @Deprecated
   @Test
-  @SuppressWarnings("deprecation")
   public void helper_createSubchannel_old_delegates() {
     class OverrideCreateSubchannel extends NoopHelper {
       boolean ran;

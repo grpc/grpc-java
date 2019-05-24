@@ -364,7 +364,7 @@ final class XdsComms {
       case MILLION:
         break;
       default:
-        throw new IllegalArgumentException("unknow denominator type of " + fractionalPercent);
+        throw new IllegalArgumentException("unknown denominator type of " + fractionalPercent);
     }
 
     if (numerator > 1000_000) {

@@ -1053,7 +1053,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Deprecated
     @Override
-    @SuppressWarnings("deprecation")
     public AbstractSubchannel createSubchannel(
         List<EquivalentAddressGroup> addressGroups, Attributes attrs) {
       logWarningIfNotInSyncContext("createSubchannel()");

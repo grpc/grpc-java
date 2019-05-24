@@ -85,7 +85,6 @@ public final class AltsProtocolNegotiator {
     }
   }
 
-  @VisibleForTesting
   private static final class ClientAltsProtocolNegotiator implements ProtocolNegotiator {
     private final TsiHandshakerFactory handshakerFactory;
     private final LazyChannel lazyHandshakerChannel;
