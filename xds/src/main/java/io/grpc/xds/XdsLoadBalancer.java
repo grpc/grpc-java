@@ -191,7 +191,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * This is only for the subchannel that is created by the the child/fallback balancer using the
+   * This is only for the subchannel that is created by the child/fallback balancer using the
    * old API {@link LoadBalancer.Helper#createSubchannel(EquivalentAddressGroup, Attributes)} or
    * {@link LoadBalancer.Helper#createSubchannel(List, Attributes)}. Otherwise, it either won't be
    * called or won't have any effect.

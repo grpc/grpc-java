@@ -466,7 +466,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(inOrder, mockListener, subchannel, healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, mockListener, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
 
     subchannel.logs.clear();
@@ -485,7 +485,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Retry with backoff
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
 
-    verifyRetryAfterNanos(inOrder, mockListener, subchannel, healthImpl, 21);
+    verifyRetryAfterNanos(inOrder, mockListener, healthImpl, 21);
 
     // Server responds this time
     healthImpl.calls.poll().responseObserver.onNext(makeResponse(ServingStatus.SERVING));
@@ -535,7 +535,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     inOrder.verify(backoffPolicy1).nextBackoffNanos();
     assertThat(clock.getPendingTasks()).hasSize(1);
 
-    verifyRetryAfterNanos(inOrder, mockStateListener, subchannel, healthImpl, 11);
+    verifyRetryAfterNanos(inOrder, mockStateListener, healthImpl, 11);
     assertThat(clock.getPendingTasks()).isEmpty();
 
     // Server responds
@@ -573,11 +573,11 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Retry with a new backoff policy
     inOrder.verify(backoffPolicy2).nextBackoffNanos();
 
-    verifyRetryAfterNanos(inOrder, mockStateListener, subchannel, healthImpl, 12);
+    verifyRetryAfterNanos(inOrder, mockStateListener, healthImpl, 12);
   }
 
   private void verifyRetryAfterNanos(
-      InOrder inOrder, SubchannelStateListener listener, Subchannel subchannel, HealthImpl impl,
+      InOrder inOrder, SubchannelStateListener listener, HealthImpl impl,
       long nanos) {
     assertThat(impl.calls).isEmpty();
     clock.forwardNanos(nanos - 1);

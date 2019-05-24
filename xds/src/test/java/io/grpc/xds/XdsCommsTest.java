@@ -303,13 +303,6 @@ public class XdsCommsTest {
                     .setAddress("addr11").setPortValue(11))))
         .setLoadBalancingWeight(UInt32Value.of(11))
         .build();
-    LbEndpoint endpoint12 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr12").setPortValue(12))))
-        .setLoadBalancingWeight(UInt32Value.of(12))
-        .build();
     Locality localityProto2 = Locality.newBuilder()
         .setRegion("region2").setZone("zone2").setSubZone("subzone2").build();
     LbEndpoint endpoint21 = LbEndpoint.newBuilder()
@@ -319,14 +312,6 @@ public class XdsCommsTest {
                     .setAddress("addr21").setPortValue(21))))
         .setLoadBalancingWeight(UInt32Value.of(21))
         .build();
-    LbEndpoint endpoint22 = LbEndpoint.newBuilder()
-        .setEndpoint(Endpoint.newBuilder()
-            .setAddress(Address.newBuilder()
-                .setSocketAddress(SocketAddress.newBuilder()
-                    .setAddress("addr22").setPortValue(22))))
-        .setLoadBalancingWeight(UInt32Value.of(22))
-        .build();
-
 
     DiscoveryResponse edsResponseWithDrops = DiscoveryResponse.newBuilder()
         .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
