@@ -356,7 +356,7 @@ public final class CensusStatsModule {
       this.parentCtx = checkNotNull(parentCtx);
       TagValue methodTag = TagValue.create(fullMethodName);
       this.startCtx = module.tagger.toBuilder(parentCtx)
-          .putPropagating(DeprecatedCensusConstants.RPC_METHOD, methodTag)
+          .putLocal(DeprecatedCensusConstants.RPC_METHOD, methodTag)
           .build();
       this.stopwatch = module.stopwatchSupplier.get().start();
       if (module.recordStartedRpcs) {
@@ -442,7 +442,7 @@ public final class CensusStatsModule {
           module
               .tagger
               .toBuilder(startCtx)
-              .putPropagating(DeprecatedCensusConstants.RPC_STATUS, statusTag)
+              .putLocal(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
   }
@@ -647,7 +647,7 @@ public final class CensusStatsModule {
           module
               .tagger
               .toBuilder(parentCtx)
-              .putPropagating(DeprecatedCensusConstants.RPC_STATUS, statusTag)
+              .putLocal(DeprecatedCensusConstants.RPC_STATUS, statusTag)
               .build());
     }
 
@@ -672,7 +672,7 @@ public final class CensusStatsModule {
       parentCtx =
           tagger
               .toBuilder(parentCtx)
-              .putPropagating(DeprecatedCensusConstants.RPC_METHOD, methodTag)
+              .putLocal(DeprecatedCensusConstants.RPC_METHOD, methodTag)
               .build();
       return new ServerTracer(CensusStatsModule.this, parentCtx);
     }

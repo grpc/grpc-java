@@ -204,7 +204,7 @@ public class StatsTestUtils {
       String serializedString = new String(bytes, UTF_8);
       if (serializedString.startsWith(EXTRA_TAG_HEADER_VALUE_PREFIX)) {
         return tagger.emptyBuilder()
-            .putPropagating(EXTRA_TAG,
+            .putLocal(EXTRA_TAG,
                 TagValue.create(serializedString.substring(EXTRA_TAG_HEADER_VALUE_PREFIX.length())))
             .build();
       } else {

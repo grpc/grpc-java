@@ -255,7 +255,7 @@ public class CensusModulesTest {
               Context.ROOT,
               tagger
                   .emptyBuilder()
-                  .putPropagating(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                  .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
                   .build());
       ctx = ContextUtils.withValue(ctx, fakeClientParentSpan);
       Context origCtx = ctx.attach();
@@ -648,7 +648,7 @@ public class CensusModulesTest {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
-    TagContext clientCtx = tagger.emptyBuilder().putPropagating(
+    TagContext clientCtx = tagger.emptyBuilder().putLocal(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897")).build();
     CensusStatsModule census =
         new CensusStatsModule(
@@ -689,7 +689,7 @@ public class CensusModulesTest {
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
         tagger.toBuilder(clientCtx)
-            .putPropagating(
+            .putLocal(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
@@ -925,7 +925,7 @@ public class CensusModulesTest {
     assertEquals(
         tagger
             .emptyBuilder()
-            .putPropagating(
+            .putLocal(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
