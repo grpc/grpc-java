@@ -21,8 +21,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Any;
@@ -64,6 +67,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -248,6 +252,8 @@ public class XdsCommsTest {
         .build();
     responseWriter.onNext(edsResponse);
 
+    verify(adsStreamCallback).onWorking();
+
     XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
@@ -261,8 +267,9 @@ public class XdsCommsTest {
         2);
     XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
 
-    verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
-    verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+    InOrder inOrder = inOrder(localityStore);
+    inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
+    inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
 
@@ -284,8 +291,10 @@ public class XdsCommsTest {
         .build();
     responseWriter.onNext(edsResponse);
 
-    verify(localityStore, times(2)).updateDropPercentage(ImmutableList.<DropOverload>of());
-    verify(localityStore, times(2)).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+    verify(adsStreamCallback, times(1)).onWorking();
+    verifyNoMoreInteractions(adsStreamCallback);
+    inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
+    inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
@@ -345,25 +354,20 @@ public class XdsCommsTest {
                         .setDropPercentage(FractionalPercent.newBuilder()
                             .setNumerator(78).setDenominator(DenominatorType.HUNDRED).build())
                         .build())
-                .addDropOverloads(
-                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
-                        .newBuilder()
-                        .setCategory("fake_category_2")
-                        .setDropPercentage(FractionalPercent.newBuilder()
-                            .setNumerator(789).setDenominator(DenominatorType.HUNDRED).build())
-                        .build())
                 .build())
             .build()))
         .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
         .build();
     responseWriter.onNext(edsResponseWithDrops);
 
-    verify(localityStore).updateDropPercentage(ImmutableList.of(
+    verify(adsStreamCallback).onWorking();
+    verifyNoMoreInteractions(adsStreamCallback);
+    InOrder inOrder = inOrder(localityStore);
+    inOrder.verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("throttle", 123),
         new DropOverload("lb", 456_00),
-        new DropOverload("fake_category", 78_00_00),
-        new DropOverload("fake_category_2", 1000_000)));
-    verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+        new DropOverload("fake_category", 78_00_00)));
+    inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
 
     XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
@@ -373,6 +377,63 @@ public class XdsCommsTest {
     XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
+
+    DiscoveryResponse edsResponseWithAllDrops = DiscoveryResponse.newBuilder()
+        .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto2)
+                .addLbEndpoints(endpoint21)
+                .setLoadBalancingWeight(UInt32Value.of(2)))
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto1)
+                .addLbEndpoints(endpoint11)
+                .setLoadBalancingWeight(UInt32Value.of(1)))
+            .setPolicy(Policy.newBuilder()
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("throttle")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(123).setDenominator(DenominatorType.MILLION).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("lb")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(456).setDenominator(DenominatorType.TEN_THOUSAND).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(789).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
+                .addDropOverloads(
+                    io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload
+                        .newBuilder()
+                        .setCategory("fake_category_2")
+                        .setDropPercentage(FractionalPercent.newBuilder()
+                            .setNumerator(78).setDenominator(DenominatorType.HUNDRED).build())
+                        .build())
+                .build())
+            .build()))
+        .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+        .build();
+    responseWriter.onNext(edsResponseWithAllDrops);
+
+    verify(adsStreamCallback, times(1)).onWorking();
+    verify(adsStreamCallback).onAllDrop();
+    verify(adsStreamCallback, never()).onError();
+    inOrder.verify(localityStore).updateDropPercentage(ImmutableList.of(
+        new DropOverload("throttle", 123),
+        new DropOverload("lb", 456_00),
+        new DropOverload("fake_category", 1000_000)));
+    inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
+    assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
+        locality2, localityInfo2, locality1, localityInfo1).inOrder();
+
     xdsComms.shutdownChannel();
   }
 
@@ -381,6 +442,7 @@ public class XdsCommsTest {
     responseWriter.onCompleted();
 
     verify(adsStreamCallback).onError();
+    verifyNoMoreInteractions(adsStreamCallback);
 
     xdsComms.shutdownChannel();
   }

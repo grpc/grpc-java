@@ -53,6 +53,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Manages EAG and locality info for a collection of subchannels, not including subchannels
@@ -222,8 +223,9 @@ interface LocalityStore {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
+    @Nullable
     private static ConnectivityState aggregateState(
-        ConnectivityState overallState, ConnectivityState childState) {
+        @Nullable ConnectivityState overallState, @Nullable ConnectivityState childState) {
       if (overallState == null) {
         return childState;
       }
@@ -270,7 +272,8 @@ interface LocalityStore {
       updatePicker(overallState, childPickers);
     }
 
-    private void updatePicker(ConnectivityState state,  List<WeightedChildPicker> childPickers) {
+    private void updatePicker(
+        @Nullable ConnectivityState state,  List<WeightedChildPicker> childPickers) {
       childPickers = Collections.unmodifiableList(childPickers);
       SubchannelPicker picker;
       if (childPickers.isEmpty()) {
@@ -285,6 +288,9 @@ interface LocalityStore {
 
       if (!dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random);
+        if (state == null) {
+          state = IDLE;
+        }
       }
 
       if (state != null) {
