@@ -77,6 +77,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private final CallTracer callsTracer;
   private final ChannelTracer channelTracer;
   private final ChannelLogger channelLogger;
+
+  /**
+   * All field must be mutated in the syncContext.
+   */
   private final SynchronizationContext syncContext;
 
   /**
@@ -127,8 +131,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private ConnectionClientTransport pendingTransport;
 
   /**
-   * The transport for new outgoing requests. 'lock' must be held when assigning to it. Non-null
-   * only in READY state.
+   * The transport for new outgoing requests. Non-null only in READY state.
    */
   @Nullable
   private volatile ManagedClientTransport activeTransport;
@@ -247,6 +250,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
    *     TRANSIENT_FAILURE.
    */
   private void scheduleBackoff(final Status status) {
+    syncContext.throwIfNotInThisSynchronizationContext();
+
     class EndOfCurrentBackoff implements Runnable {
       @Override
       public void run() {
@@ -256,8 +261,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
         startNewTransport();
       }
     }
-
-    syncContext.throwIfNotInThisSynchronizationContext();;
 
     gotoState(ConnectivityStateInfo.forTransientFailure(status));
     if (reconnectPolicy == null) {
@@ -271,7 +274,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
         printShortStatus(status), delayNanos);
     Preconditions.checkState(reconnectTask == null, "previous reconnectTask is not done");
     reconnectTask = syncContext.schedule(
-        new LogExceptionRunnable(new EndOfCurrentBackoff()),
+        new EndOfCurrentBackoff(),
         delayNanos,
         TimeUnit.NANOSECONDS,
         scheduledExecutor);
@@ -495,19 +498,16 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
-          Status savedShutdownReason = shutdownReason;
           reconnectPolicy = null;
-          if (savedShutdownReason != null) {
+          if (shutdownReason != null) {
             // activeTransport should have already been set to null by shutdown(). We keep it null.
             Preconditions.checkState(activeTransport == null,
                 "Unexpected non-null activeTransport");
+            transport.shutdown(shutdownReason);
           } else if (pendingTransport == transport) {
             gotoNonErrorState(READY);
             activeTransport = transport;
             pendingTransport = null;
-          }
-          if (savedShutdownReason != null) {
-            transport.shutdown(savedShutdownReason);
           }
         }
       });
