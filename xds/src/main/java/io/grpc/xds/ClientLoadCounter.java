@@ -20,11 +20,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
+import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
+import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.HashMap;
@@ -275,6 +278,29 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
           delegate().streamClosed(status);
         }
       };
+    }
+  }
+
+  /**
+   * Listener implementation to receive backend metrics with locality-level aggregation.
+   */
+  @ThreadSafe
+  static final class LocalityMetricsListener implements OrcaPerRequestReportListener,
+      OrcaOobReportListener {
+
+    private final ClientLoadCounter counter;
+
+    LocalityMetricsListener(ClientLoadCounter counter) {
+      this.counter = checkNotNull(counter, "counter");
+    }
+
+    @Override
+    public void onLoadReport(OrcaLoadReport report) {
+      counter.recordMetric("cpu_utilization", report.getCpuUtilization());
+      counter.recordMetric("mem_utilization", report.getMemUtilization());
+      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
+        counter.recordMetric(entry.getKey(), entry.getValue());
+      }
     }
   }
 }

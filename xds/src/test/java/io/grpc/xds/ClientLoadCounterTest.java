@@ -18,11 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.LocalityMetricsListener;
+import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
@@ -134,6 +137,66 @@ public class ClientLoadCounterTest {
     recorder2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
     snapshot = counter.snapshot();
     assertQueryCounts(snapshot, 0, 0, 2, 2);
+  }
+
+  @Test
+  public void metricListener_backendMetricsAggregation() {
+    LocalityMetricsListener listener1 = new LocalityMetricsListener(counter);
+    OrcaLoadReport report =
+        OrcaLoadReport.newBuilder()
+            .setCpuUtilization(0.5345)
+            .setMemUtilization(0.647)
+            .putRequestCostOrUtilization("named-cost-or-utilization-1", 3453.3525)
+            .putRequestCostOrUtilization("named-cost-or-utilization-2", 532543.14234)
+            .build();
+    listener1.onLoadReport(report);
+
+    // Simulate an empty load report.
+    listener1.onLoadReport(OrcaLoadReport.getDefaultInstance());
+
+    ClientLoadSnapshot snapshot = counter.snapshot();
+    MetricValue cpuMetric = snapshot.getMetricValues().get("cpu_utilization");
+    assertThat(cpuMetric.getNumReports()).isEqualTo(2);
+    assertThat(cpuMetric.getTotalValue()).isEqualTo(0.5345);
+
+    MetricValue memMetric = snapshot.getMetricValues().get("mem_utilization");
+    assertThat(memMetric.getNumReports()).isEqualTo(2);
+    assertThat(memMetric.getTotalValue()).isEqualTo(0.647);
+
+    MetricValue namedMetric1 = snapshot.getMetricValues().get("named-cost-or-utilization-1");
+    assertThat(namedMetric1.getNumReports()).isEqualTo(1);
+    assertThat(namedMetric1.getTotalValue()).isEqualTo(3453.3525);
+
+    MetricValue namedMetric2 = snapshot.getMetricValues().get("named-cost-or-utilization-2");
+    assertThat(namedMetric2.getNumReports()).isEqualTo(1);
+    assertThat(namedMetric2.getTotalValue()).isEqualTo(532543.14234);
+
+    snapshot = counter.snapshot();
+    assertThat(snapshot.getMetricValues()).isEmpty();
+
+    LocalityMetricsListener listener2 = new LocalityMetricsListener(counter);
+    report =
+        OrcaLoadReport.newBuilder()
+            .setCpuUtilization(0.3423)
+            .setMemUtilization(0.654)
+            .putRequestCostOrUtilization("named-cost-or-utilization", 3534.0)
+            .build();
+    // Two listeners with the same counter aggregate metrics together.
+    listener1.onLoadReport(report);
+    listener2.onLoadReport(report);
+
+    snapshot = counter.snapshot();
+    cpuMetric = snapshot.getMetricValues().get("cpu_utilization");
+    assertThat(cpuMetric.getNumReports()).isEqualTo(2);
+    assertThat(cpuMetric.getTotalValue()).isEqualTo(0.3423 + 0.3423);
+
+    memMetric = snapshot.getMetricValues().get("mem_utilization");
+    assertThat(memMetric.getNumReports()).isEqualTo(2);
+    assertThat(memMetric.getTotalValue()).isEqualTo(0.654 + 0.654);
+
+    MetricValue namedMetric = snapshot.getMetricValues().get("named-cost-or-utilization");
+    assertThat(namedMetric.getNumReports()).isEqualTo(2);
+    assertThat(namedMetric.getTotalValue()).isEqualTo(3534.0 + 3534.0);
   }
 
   private void assertQueryCounts(ClientLoadSnapshot snapshot,
