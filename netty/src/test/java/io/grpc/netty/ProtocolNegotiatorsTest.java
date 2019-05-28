@@ -238,10 +238,21 @@ public class ProtocolNegotiatorsTest {
     Object unused = ProtocolNegotiators.serverTls(null);
   }
 
+  @Test
+  public void tlsAdapter_exceptionClosesChannel() throws Exception {
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+
+    // Use addFirst due to the funny error handling in EmbeddedChannel.
+    pipeline.addFirst(handler);
+
+    pipeline.fireExceptionCaught(new Exception("bad"));
+
+    assertFalse(channel.isOpen());
+  }
 
   @Test
   public void tlsHandler_handlerAddedAddsSslHandler() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
 
     pipeline.addLast(handler);
 
@@ -250,7 +261,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredNonSslEvent() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object nonSslEvent = new Object();
@@ -271,18 +282,8 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
-
-    final AtomicReference<Throwable> error = new AtomicReference<>();
-    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
-      @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        error.set(cause);
-      }
-    };
-
-    pipeline.addLast(errorCapture);
 
     pipeline.replace(SslHandler.class, null, badSslHandler);
     channelHandlerCtx = pipeline.context(handler);
@@ -290,33 +291,23 @@ public class ProtocolNegotiatorsTest {
 
     pipeline.fireUserEventTriggered(sslEvent);
 
-    // No h2 protocol was specified, so there should be an error, (normally handled by WBAEH)
-    assertThat(error.get()).hasMessageThat().contains("Unable to find compatible protocol");
+    // No h2 protocol was specified, so this should be closed.
+    assertFalse(channel.isOpen());
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNull(grpcHandlerCtx);
   }
 
   @Test
   public void tlsHandler_userEventTriggeredSslEvent_handshakeFailure() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object sslEvent = new SslHandshakeCompletionEvent(new RuntimeException("bad"));
 
-    final AtomicReference<Throwable> error = new AtomicReference<>();
-    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
-      @Override
-      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        error.set(cause);
-      }
-    };
-
-    pipeline.addLast(errorCapture);
-
     pipeline.fireUserEventTriggered(sslEvent);
 
-    // No h2 protocol was specified, so there should be an error, (normally handled by WBAEH)
-    assertThat(error.get()).hasMessageThat().contains("bad");
+    // No h2 protocol was specified, so this should be closed.
+    assertFalse(channel.isOpen());
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNull(grpcHandlerCtx);
   }
@@ -330,7 +321,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -353,7 +344,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -369,7 +360,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void engineLog() {
-    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
+    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
 
