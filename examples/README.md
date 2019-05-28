@@ -107,11 +107,11 @@ We encourage users to leverage `InProcessTransport` as demonstrated in the examp
 write unit tests. `InProcessTransport` is light-weight and runs the server
 and client in the same process without any socket/TCP connection.
 
-Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses allows for tests
-that don't map to reality, causing the tests to pass, but the system-under-test to fail. Example bugs not caught by mocked 
-stub tests include:
+Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses 
+allows for teststhat don't map to reality, causing the tests to pass, but the system-under-test to fail. 
+Example bugs not caught by mocked stub tests include:
 
-* Calling the stub with a NULL message
+* Calling the stub with a `null` message
 * Not calling `close()`
 * Sending invalid headers
 * Ignoring deadlines
