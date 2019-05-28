@@ -18,7 +18,6 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
-import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -196,36 +195,6 @@ public class OkHttpChannelBuilder extends
         throw new AssertionError("Unknown negotiation type: " + type);
     }
     return this;
-  }
-
-  /**
-   * Enable keepalive with default delay and timeout.
-   *
-   * @deprecated Use {@link #keepAliveTime} instead
-   */
-  @Deprecated
-  public final OkHttpChannelBuilder enableKeepAlive(boolean enable) {
-    if (enable) {
-      return keepAliveTime(DEFAULT_KEEPALIVE_TIME_NANOS, TimeUnit.NANOSECONDS);
-    } else {
-      return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
-    }
-  }
-
-  /**
-   * Enable keepalive with custom delay and timeout.
-   *
-   * @deprecated Use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
-   */
-  @Deprecated
-  public final OkHttpChannelBuilder enableKeepAlive(boolean enable, long keepAliveTime,
-      TimeUnit delayUnit, long keepAliveTimeout, TimeUnit timeoutUnit) {
-    if (enable) {
-      return keepAliveTime(keepAliveTime, delayUnit)
-          .keepAliveTimeout(keepAliveTimeout, timeoutUnit);
-    } else {
-      return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
-    }
   }
 
   /**

@@ -205,11 +205,6 @@ public final class GrpcUtil {
   private static final String IMPLEMENTATION_VERSION = "1.22.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
-   * The default delay in nanos before we send a keepalive.
-   */
-  public static final long DEFAULT_KEEPALIVE_TIME_NANOS = TimeUnit.MINUTES.toNanos(1);
-
-  /**
    * The default timeout in nanos for a keepalive ping request.
    */
   public static final long DEFAULT_KEEPALIVE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(20L);

@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
-import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -316,34 +315,6 @@ public final class NettyChannelBuilder
   public NettyChannelBuilder useTransportSecurity() {
     negotiationType(NegotiationType.TLS);
     return this;
-  }
-
-  /**
-   * Enable keepalive with default delay and timeout.
-   *
-   * @deprecated Please use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
-   */
-  @Deprecated
-  public final NettyChannelBuilder enableKeepAlive(boolean enable) {
-    if (enable) {
-      return keepAliveTime(DEFAULT_KEEPALIVE_TIME_NANOS, TimeUnit.NANOSECONDS);
-    }
-    return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
-  }
-
-  /**
-   * Enable keepalive with custom delay and timeout.
-   *
-   * @deprecated Please use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
-   */
-  @Deprecated
-  public final NettyChannelBuilder enableKeepAlive(boolean enable, long keepAliveTime,
-      TimeUnit delayUnit, long keepAliveTimeout, TimeUnit timeoutUnit) {
-    if (enable) {
-      return keepAliveTime(keepAliveTime, delayUnit)
-          .keepAliveTimeout(keepAliveTimeout, timeoutUnit);
-    }
-    return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
   }
 
   /**
