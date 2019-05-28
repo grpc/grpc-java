@@ -50,11 +50,12 @@ public class ClientLoadCounterTest {
   public void setUp() {
     counter = new ClientLoadCounter();
     ClientLoadSnapshot emptySnapshot = counter.snapshot();
-    assertSnapshot(emptySnapshot, 0, 0, 0, 0);
+    assertQueryCounts(emptySnapshot, 0, 0, 0, 0);
+    assertThat(emptySnapshot.getMetricValues()).isEmpty();
   }
 
   @Test
-  public void snapshotContainsEverything() {
+  public void snapshotContainsDataInCounter() {
     long numSucceededCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numInProgressCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
     long numFailedCalls = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
@@ -63,38 +64,56 @@ public class ClientLoadCounterTest {
         new ClientLoadCounter(numSucceededCalls, numInProgressCalls, numFailedCalls,
             numIssuedCalls);
     ClientLoadSnapshot snapshot = counter.snapshot();
-    assertSnapshot(snapshot, numSucceededCalls, numInProgressCalls, numFailedCalls, numIssuedCalls);
+    assertQueryCounts(snapshot, numSucceededCalls, numInProgressCalls, numFailedCalls,
+        numIssuedCalls);
     String snapshotStr = snapshot.toString();
     assertThat(snapshotStr).contains("callsSucceeded=" + numSucceededCalls);
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
     assertThat(snapshotStr).contains("callsFailed=" + numFailedCalls);
     assertThat(snapshotStr).contains("callsIssued=" + numIssuedCalls);
+    assertThat(snapshotStr).contains("metricValues={}");
 
     // Snapshot only accounts for stats happening after previous snapshot.
     snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 0, numInProgressCalls, 0, 0);
+    assertQueryCounts(snapshot, 0, numInProgressCalls, 0, 0);
 
     snapshotStr = snapshot.toString();
     assertThat(snapshotStr).contains("callsSucceeded=0");
     assertThat(snapshotStr).contains("callsInProgress=" + numInProgressCalls);
     assertThat(snapshotStr).contains("callsFailed=0");
     assertThat(snapshotStr).contains("callsIssued=0");
+    assertThat(snapshotStr).contains("metricValues={}");
   }
 
   @Test
-  public void normalCountingOperations() {
+  public void normalRecordingOperations() {
     counter.recordCallStarted();
     ClientLoadSnapshot snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 0, 1, 0, 1);
+    assertQueryCounts(snapshot, 0, 1, 0, 1);
 
     counter.recordCallFinished(Status.OK);
     snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 1, 0, 0, 0);
+    assertQueryCounts(snapshot, 1, 0, 0, 0);
 
     counter.recordCallStarted();
     counter.recordCallFinished(Status.CANCELLED);
     snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 0, 0, 1, 1);
+    assertQueryCounts(snapshot, 0, 0, 1, 1);
+
+    counter.recordMetric("test-metric-1", 0.75);
+    counter.recordMetric("test-metric-2", 0.342);
+    counter.recordMetric("test-metric-3", 0.512);
+    counter.recordMetric("test-metric-1", 0.543);
+    counter.recordMetric("test-metric-1", 4.412);
+    counter.recordMetric("test-metric-1", 100.353);
+    snapshot = counter.snapshot();
+    assertThat(snapshot.getMetricValues().get("test-metric-1").getNumReports()).isEqualTo(4);
+    assertThat(snapshot.getMetricValues().get("test-metric-1").getTotalValue())
+        .isEqualTo(0.75 + 0.543 + 4.412 + 100.353);
+    assertThat(snapshot.getMetricValues().get("test-metric-2").getNumReports()).isEqualTo(1);
+    assertThat(snapshot.getMetricValues().get("test-metric-2").getTotalValue()).isEqualTo(0.342);
+    assertThat(snapshot.getMetricValues().get("test-metric-3").getNumReports()).isEqualTo(1);
+    assertThat(snapshot.getMetricValues().get("test-metric-3").getTotalValue()).isEqualTo(0.512);
   }
 
   @Test
@@ -103,10 +122,10 @@ public class ClientLoadCounterTest {
         new XdsClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
     ClientStreamTracer tracer = recorder1.newClientStreamTracer(STREAM_INFO, new Metadata());
     ClientLoadSnapshot snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 0, 1, 0, 1);
+    assertQueryCounts(snapshot, 0, 1, 0, 1);
     tracer.streamClosed(Status.OK);
     snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 1, 0, 0, 0);
+    assertQueryCounts(snapshot, 1, 0, 0, 0);
 
     // Create a second XdsClientLoadRecorder with the same counter, stats are aggregated together.
     XdsClientLoadRecorder recorder2 =
@@ -114,10 +133,10 @@ public class ClientLoadCounterTest {
     recorder1.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.ABORTED);
     recorder2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
     snapshot = counter.snapshot();
-    assertSnapshot(snapshot, 0, 0, 2, 2);
+    assertQueryCounts(snapshot, 0, 0, 2, 2);
   }
 
-  private void assertSnapshot(ClientLoadSnapshot snapshot,
+  private void assertQueryCounts(ClientLoadSnapshot snapshot,
       long callsSucceeded,
       long callsInProgress,
       long callsFailed,
