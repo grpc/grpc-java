@@ -46,8 +46,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -70,7 +70,7 @@ public class ClientInterceptorsTest {
    */
   @Before public void setUp() {
     when(channel.newCall(
-        Mockito.<MethodDescriptor<String, Integer>>any(), any(CallOptions.class)))
+            ArgumentMatchers.<MethodDescriptor<String, Integer>>any(), any(CallOptions.class)))
         .thenReturn(call);
   }
 
@@ -103,13 +103,14 @@ public class ClientInterceptorsTest {
     // First call
     assertSame(call, intercepted.newCall(method, callOptions));
     verify(channel).newCall(same(method), same(callOptions));
-    verify(interceptor).interceptCall(same(method), same(callOptions), Mockito.<Channel>any());
+    verify(interceptor)
+        .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
     verifyNoMoreInteractions(channel, interceptor);
     // Second call
     assertSame(call, intercepted.newCall(method, callOptions));
     verify(channel, times(2)).newCall(same(method), same(callOptions));
     verify(interceptor, times(2))
-        .interceptCall(same(method), same(callOptions), Mockito.<Channel>any());
+        .interceptCall(same(method), same(callOptions), ArgumentMatchers.<Channel>any());
     verifyNoMoreInteractions(channel, interceptor);
   }
 
@@ -233,8 +234,8 @@ public class ClientInterceptorsTest {
         }));
     Channel intercepted = ClientInterceptors.intercept(channel, interceptor);
     intercepted.newCall(method, initialCallOptions);
-    verify(interceptor).interceptCall(
-        same(method), same(initialCallOptions), Mockito.<Channel>any());
+    verify(interceptor)
+        .interceptCall(same(method), same(initialCallOptions), ArgumentMatchers.<Channel>any());
     verify(channel).newCall(same(method), same(newCallOptions));
   }
 
