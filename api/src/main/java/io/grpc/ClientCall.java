@@ -144,10 +144,16 @@ public abstract class ClientCall<ReqT, RespT> {
     public void onClose(Status status, Metadata trailers) {}
 
     /**
-     * This indicates that the ClientCall is now capable of sending additional messages (via
+     * This indicates that the ClientCall may now be capable of sending additional messages (via
      * {@link #sendMessage}) without requiring excessive buffering internally. This event is
      * just a suggestion and the application is free to ignore it, however doing so may
      * result in excessive buffering within the ClientCall.
+     *
+     * <p>Because there is a processing delay to deliver this notification, it is possible for
+     * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
+     * notifications by checking {@code isReady()}'s current value instead of assuming it is now
+     * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
+     * <em>another</em> {@code onReady()} callback.
      *
      * <p>If the type of a call is either {@link MethodDescriptor.MethodType#UNARY} or
      * {@link MethodDescriptor.MethodType#SERVER_STREAMING}, this callback may not be fired. Calls
@@ -236,12 +242,15 @@ public abstract class ClientCall<ReqT, RespT> {
    * just a suggestion and the application is free to ignore it, however doing so may
    * result in excessive buffering within the call.
    *
-   * <p>This abstract class's implementation always returns {@code true}. Implementations generally
-   * override the method.
+   * <p>If {@code false}, {@link Listener#onReady()} will be called after {@code isReady()}
+   * transitions to {@code true}.
    *
    * <p>If the type of the call is either {@link MethodDescriptor.MethodType#UNARY} or
    * {@link MethodDescriptor.MethodType#SERVER_STREAMING}, this method may persistently return
    * false. Calls that send exactly one message should not check this method.
+   *
+   * <p>This abstract class's implementation always returns {@code true}. Implementations generally
+   * override the method.
    */
   public boolean isReady() {
     return true;
