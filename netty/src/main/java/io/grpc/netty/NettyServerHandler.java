@@ -512,8 +512,6 @@ class NettyServerHandler extends AbstractNettyHandler {
       Attributes attrs, InternalChannelz.Security securityInfo) {
     negotiationAttributes = attrs;
     this.securityInfo = securityInfo;
-    super.handleProtocolNegotiationCompleted(attrs, securityInfo);
-    NettyClientHandler.writeBufferingAndRemove(ctx().channel());
   }
 
   InternalChannelz.Security getSecurityInfo() {
