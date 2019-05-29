@@ -1140,7 +1140,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1165,7 +1166,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1190,7 +1192,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1213,7 +1216,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1236,7 +1240,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1259,7 +1264,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            false);
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 

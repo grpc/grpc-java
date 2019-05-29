@@ -121,7 +121,7 @@ public final class ServerCalls {
       // We expect only 1 request, but we ask for 2 requests here so that if a misbehaving client
       // sends more than 1 requests, ServerCall will catch it. Note that disabling auto
       // inbound flow control has no effect on unary calls.
-      call.request(2);
+      call.request(1);
       return new UnaryServerCallListener(responseObserver, call);
     }
 

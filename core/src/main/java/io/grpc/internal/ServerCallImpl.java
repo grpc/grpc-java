@@ -60,6 +60,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   private final DecompressorRegistry decompressorRegistry;
   private final CompressorRegistry compressorRegistry;
   private CallTracer serverCallTracer;
+  private boolean firstRequestDone;
 
   // state
   private volatile boolean cancelled;
@@ -71,7 +72,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      CallTracer serverCallTracer) {
+      CallTracer serverCallTracer, boolean firstRequestDone) {
     this.stream = stream;
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this to the ServerImpl to record startCall.
@@ -82,11 +83,18 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     this.compressorRegistry = compressorRegistry;
     this.serverCallTracer = serverCallTracer;
     this.serverCallTracer.reportCallStarted();
+    this.firstRequestDone = firstRequestDone;
   }
 
   @Override
   public void request(int numMessages) {
-    stream.request(numMessages);
+    if (firstRequestDone) {
+      firstRequestDone = false;
+      numMessages -= 1;
+    }
+    if (numMessages > 0) {
+      stream.request(numMessages);
+    }
   }
 
   @Override
@@ -261,6 +269,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     private final ServerCallImpl<ReqT, ?> call;
     private final ServerCall.Listener<ReqT> listener;
     private final Context.CancellableContext context;
+    private MessageProducer unrequestedMessageProducer;
 
     public ServerStreamListenerImpl(
         ServerCallImpl<ReqT, ?> call, ServerCall.Listener<ReqT> listener,
@@ -288,7 +297,15 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         GrpcUtil.closeQuietly(producer);
         return;
       }
+      if (call.firstRequestDone) {
+        checkState(unrequestedMessageProducer == null);
+        unrequestedMessageProducer = producer;
+        return;
+      }
+      deliverMessages(producer);
+    }
 
+    private void deliverMessages(MessageProducer producer) {
       PerfMark.taskStart(call.tag, "ServerCall.messagesAvailable");
       InputStream message;
       try {
@@ -319,8 +336,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       PerfMark.taskStart(call.tag, "ServerCall.halfClosed");
 
       try {
+        if (unrequestedMessageProducer != null) {
+          deliverMessages(unrequestedMessageProducer);
+        }
         listener.onHalfClose();
       } finally {
+        unrequestedMessageProducer = null;
         PerfMark.taskEnd(call.tag, "ServerCall.halfClosed");
       }
     }
@@ -328,6 +349,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     @Override
     public void closed(Status status) {
       PerfMark.taskStart(call.tag, "ServerCall.closed");
+      if (unrequestedMessageProducer != null) {
+        GrpcUtil.closeQuietly(unrequestedMessageProducer);
+        unrequestedMessageProducer = null;
+      }
       try {
         try {
           if (status.isOk()) {

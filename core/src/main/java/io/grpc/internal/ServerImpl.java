@@ -489,10 +489,24 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         wrappedExecutor = new SerializingExecutor(executor);
       }
 
+      final ServerMethodDefinition<?, ?> staticMethod = registry.lookupMethod(methodName);
+      final boolean firstRequestDone;
+      if (staticMethod != null) {
+        if (staticMethod.getMethodDescriptor().getType().clientSendsOneMessage()) {
+          stream.request(1);
+          firstRequestDone = true;
+        } else {
+          firstRequestDone = false;
+        }
+      } else {
+        firstRequestDone = false;
+      }
+
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
-              wrappedExecutor, executor, stream, context);
+          wrappedExecutor, executor, stream, context, firstRequestDone);
       stream.setListener(jumpListener);
+
       // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
       // are delivered, including any errors. Callbacks can still be triggered, but they will be
       // queued.
@@ -507,11 +521,11 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         public void runInContext() {
           ServerStreamListener listener = NOOP_LISTENER;
           try {
-            ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
-            if (method == null) {
-              method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
+            ServerMethodDefinition<?, ?> localMethod = staticMethod;
+            if (localMethod == null) {
+              localMethod = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
             }
-            if (method == null) {
+            if (localMethod == null) {
               Status status = Status.UNIMPLEMENTED.withDescription(
                   "Method not found: " + methodName);
               // TODO(zhangkun83): this error may be recorded by the tracer, and if it's kept in
@@ -523,7 +537,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               context.cancel(null);
               return;
             }
-            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx);
+            listener = startCall(
+                stream, methodName, localMethod, headers, context, statsTraceCtx, firstRequestDone);
           } catch (RuntimeException e) {
             stream.close(Status.fromThrowable(e), new Metadata());
             context.cancel(null);
@@ -573,7 +588,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /** Never returns {@code null}. */
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
-        Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
+        Context.CancellableContext context, StatsTraceContext statsTraceCtx,
+        boolean firstRequestDone) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       statsTraceCtx.serverCallStarted(
           new ServerCallInfoImpl<>(
@@ -587,7 +603,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
       ServerMethodDefinition<?, ?> wMethodDef = binlog == null
           ? interceptedDef : binlog.wrapMethodDefinition(interceptedDef);
-      return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context);
+      return startWrappedCall(
+          fullMethodName, wMethodDef, stream, headers, context, firstRequestDone);
     }
 
     private <WReqT, WRespT> ServerStreamListener startWrappedCall(
@@ -595,7 +612,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerMethodDefinition<WReqT, WRespT> methodDef,
         ServerStream stream,
         Metadata headers,
-        Context.CancellableContext context) {
+        Context.CancellableContext context, boolean firstRequestDone) {
 
       ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<>(
           stream,
@@ -604,7 +621,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           context,
           decompressorRegistry,
           compressorRegistry,
-          serverCallTracer);
+          serverCallTracer,
+          firstRequestDone);
 
       ServerCall.Listener<WReqT> listener =
           methodDef.getServerCallHandler().startCall(call, headers);
@@ -691,7 +709,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     private ServerStreamListener listener;
 
     public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context) {
+        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context,
+        boolean firstRequestMade) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;

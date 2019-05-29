@@ -90,7 +90,7 @@ public class ServerCallImplTest {
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer, false);
   }
 
   @Test
@@ -113,7 +113,7 @@ public class ServerCallImplTest {
 
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        tracer);
+        tracer, false);
 
     // required boilerplate
     call.sendHeaders(new Metadata());
@@ -224,7 +224,7 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer, false);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
@@ -258,7 +258,7 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer, false);
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     serverCall.sendMessage(1L);
@@ -295,7 +295,7 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer, false);
     serverCall.close(Status.OK, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(stream, times(1)).cancel(statusCaptor.capture());
