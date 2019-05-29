@@ -48,6 +48,9 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * without requiring excessive buffering internally. This value is just a suggestion and the
    * application is free to ignore it, however doing so may result in excessive buffering within the
    * observer.
+   *
+   * <p>If {@code false}, the runnable passed to {@link #setOnReadyHandler} will be called after
+   * {@code isReady()} transitions to {@code true}.
    */
   public abstract boolean isReady();
 
@@ -61,8 +64,11 @@ public abstract class CallStreamObserver<V> implements StreamObserver<V> {
    * ClientResponseObserver#beforeStart}. On server-side it may only be called during the initial
    * call to the application, before the service returns its {@code StreamObserver}.
    *
-   * <p>Note that the handler may be called some time after {@link #isReady} has transitioned to
-   * true as other callbacks may still be executing in the 'inbound' observer.
+   * <p>Because there is a processing delay to deliver this notification, it is possible for
+   * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
+   * notifications by checking {@code isReady()}'s current value instead of assuming it is now
+   * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
+   * <em>another</em> {@code onReadyHandler} callback.
    *
    * @param onReadyHandler to call when peer is ready to receive more messages.
    */

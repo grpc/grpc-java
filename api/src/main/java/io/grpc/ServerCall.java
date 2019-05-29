@@ -83,10 +83,16 @@ public abstract class ServerCall<ReqT, RespT> {
     public void onComplete() {}
 
     /**
-     * This indicates that the call is now capable of sending additional messages (via
+     * This indicates that the call may now be capable of sending additional messages (via
      * {@link #sendMessage}) without requiring excessive buffering internally. This event is
      * just a suggestion and the application is free to ignore it, however doing so may
      * result in excessive buffering within the call.
+     *
+     * <p>Because there is a processing delay to deliver this notification, it is possible for
+     * concurrent writes to cause {@code isReady() == false} within this callback. Handle "spurious"
+     * notifications by checking {@code isReady()}'s current value instead of assuming it is now
+     * {@code true}. If {@code isReady() == false} the normal expectations apply, so there would be
+     * <em>another</em> {@code onReady()} callback.
      */
     public void onReady() {}
   }
@@ -133,7 +139,11 @@ public abstract class ServerCall<ReqT, RespT> {
    * just a suggestion and the application is free to ignore it, however doing so may
    * result in excessive buffering within the call.
    *
-   * <p>This implementation always returns {@code true}.
+   * <p>If {@code false}, {@link Listener#onReady()} will be called after {@code isReady()}
+   * transitions to {@code true}.
+   *
+   * <p>This abstract class's implementation always returns {@code true}. Implementations generally
+   * override the method.
    */
   public boolean isReady() {
     return true;
