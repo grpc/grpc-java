@@ -44,6 +44,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
@@ -88,8 +89,10 @@ public class ServerInterceptorsTest {
         .setResponseMarshaller(responseMarshaller)
         .build();
 
-    Mockito.when(handler.startCall(
-        Mockito.<ServerCall<String, Integer>>any(), Mockito.<Metadata>any()))
+    Mockito.when(
+            handler.startCall(
+                ArgumentMatchers.<ServerCall<String, Integer>>any(),
+                ArgumentMatchers.<Metadata>any()))
             .thenReturn(listener);
 
     serviceDefinition = ServerServiceDefinition.builder(new ServiceDescriptor("basic", flowMethod))
@@ -438,7 +441,7 @@ public class ServerInterceptorsTest {
   }
 
   private ServerCallHandler<String, Integer> anyCallHandler() {
-    return Mockito.any();
+    return ArgumentMatchers.any();
   }
 
   private static class NoopInterceptor implements ServerInterceptor {

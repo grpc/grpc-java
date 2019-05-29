@@ -17,7 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.verify;
@@ -25,7 +25,6 @@ import static org.mockito.Mockito.when;
 
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ServiceConfigParser;
-import io.grpc.SynchronizationContext;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.util.Collections;

@@ -41,7 +41,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.Mockito;
+import org.mockito.ArgumentMatchers;
 
 /**
  * Tests for {@link OkHttpProtocolNegotiator}.
@@ -135,7 +135,7 @@ public class OkHttpProtocolNegotiatorTest {
 
   @Test
   public void negotiate_success() throws Exception {
-    when(platform.getSelectedProtocol(Mockito.<SSLSocket>any())).thenReturn("h2");
+    when(platform.getSelectedProtocol(ArgumentMatchers.<SSLSocket>any())).thenReturn("h2");
     OkHttpProtocolNegotiator negotiator = new OkHttpProtocolNegotiator(platform);
 
     String actual = negotiator.negotiate(sock, "hostname", ImmutableList.of(Protocol.HTTP_2));
@@ -153,7 +153,7 @@ public class OkHttpProtocolNegotiatorTest {
     // The main usefulness of the test is for future changes to
     // OkHttpProtocolNegotiator, where we can catch any change that would affect
     // grpc-exp preference.
-    when(platform.getSelectedProtocol(Mockito.<SSLSocket>any())).thenReturn("grpc-exp");
+    when(platform.getSelectedProtocol(ArgumentMatchers.<SSLSocket>any())).thenReturn("grpc-exp");
     OkHttpProtocolNegotiator negotiator = new OkHttpProtocolNegotiator(platform);
 
     String actual =

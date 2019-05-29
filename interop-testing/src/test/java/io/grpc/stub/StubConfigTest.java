@@ -38,8 +38,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 /**
@@ -62,7 +62,8 @@ public class StubConfigTest {
     ClientCall<SimpleRequest, SimpleResponse> call =
         new NoopClientCall<>();
     when(channel.newCall(
-        Mockito.<MethodDescriptor<SimpleRequest, SimpleResponse>>any(), any(CallOptions.class)))
+            ArgumentMatchers.<MethodDescriptor<SimpleRequest, SimpleResponse>>any(),
+            any(CallOptions.class)))
         .thenReturn(call);
   }
 
