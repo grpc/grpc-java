@@ -438,7 +438,7 @@ final class GrpclbState {
         } else {
           checkState(subchannels.size() == 1, "Unexpected Subchannel count: %s", subchannels);
           subchannel = subchannels.values().iterator().next();
-          helper.updateSubchannelAddresses(subchannel, eagList);
+          subchannel.updateAddresses(eagList);
         }
         subchannels = Collections.singletonMap(eagList, subchannel);
         newBackendList.add(

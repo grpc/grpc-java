@@ -64,7 +64,7 @@ final class PickFirstLoadBalancer extends LoadBalancer {
       helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
       subchannel.requestConnection();
     } else {
-      helper.updateSubchannelAddresses(subchannel, servers);
+      subchannel.updateAddresses(servers);
     }
   }
 

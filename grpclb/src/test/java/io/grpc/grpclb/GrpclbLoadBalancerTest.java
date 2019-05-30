@@ -1776,8 +1776,7 @@ public class GrpclbLoadBalancerTest {
     // createSubchannel() has ever been called only once
     verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
     assertThat(mockSubchannels).isEmpty();
-    inOrder.verify(helper).updateSubchannelAddresses(
-        same(subchannel),
+    verify(subchannel).updateAddresses(
         eq(Arrays.asList(
                 new EquivalentAddressGroup(backends2.get(0).addr, eagAttrsWithToken("token0001")),
                 new EquivalentAddressGroup(backends2.get(2).addr,
@@ -1874,8 +1873,7 @@ public class GrpclbLoadBalancerTest {
     // createSubchannel() has ever been called only once
     verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
     assertThat(mockSubchannels).isEmpty();
-    inOrder.verify(helper).updateSubchannelAddresses(
-        same(subchannel),
+    verify(subchannel).updateAddresses(
         eq(Arrays.asList(
                 new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
                 new EquivalentAddressGroup(backends1.get(1).addr,

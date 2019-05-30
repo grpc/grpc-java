@@ -963,7 +963,9 @@ public abstract class LoadBalancer {
      * href="https://github.com/grpc/grpc-java/issues/5015">#5015</a> for the background.
      *
      * @since 1.4.0
+     * @deprecated use {@link Subchannel#updateAddresses} instead
      */
+    @Deprecated
     public final void updateSubchannelAddresses(
         Subchannel subchannel, EquivalentAddressGroup addrs) {
       checkNotNull(addrs, "addrs");
@@ -982,7 +984,9 @@ public abstract class LoadBalancer {
      * @throws IllegalArgumentException if {@code subchannel} was not returned from {@link
      *     #createSubchannel} or {@code addrs} is empty
      * @since 1.14.0
+     * @deprecated use {@link Subchannel#updateAddresses} instead
      */
+    @Deprecated
     public void updateSubchannelAddresses(
         Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
       throw new UnsupportedOperationException();
@@ -1298,6 +1302,19 @@ public abstract class LoadBalancer {
      * @since 1.17.0
      */
     public ChannelLogger getChannelLogger() {
+      throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Replaces the existing addresses used with this {@code Subchannel}. If the new and old
+     * addresses overlap, the Subchannel can continue using an existing connection.
+     *
+     * <p>It must be called from the Synchronization Context or will throw.
+     *
+     * @throws IllegalArgumentException if {@code addrs} is empty
+     * @since 1.22.0
+     */
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
       throw new UnsupportedOperationException();
     }
 

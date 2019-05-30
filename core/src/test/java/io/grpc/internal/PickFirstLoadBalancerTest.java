@@ -172,6 +172,7 @@ public class PickFirstLoadBalancerTest {
     verify(mockSubchannel).requestConnection();
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
+    verify(mockSubchannel).updateAddresses(eq(servers));
     verifyNoMoreInteractions(mockSubchannel);
 
     verify(mockHelper).createSubchannel(createArgsCaptor.capture());
@@ -179,8 +180,7 @@ public class PickFirstLoadBalancerTest {
     verify(mockHelper)
         .updateBalancingState(isA(ConnectivityState.class), isA(SubchannelPicker.class));
     // Updating the subchannel addresses is unnecessary, but doesn't hurt anything
-    verify(mockHelper).updateSubchannelAddresses(
-        eq(mockSubchannel), ArgumentMatchers.<EquivalentAddressGroup>anyList());
+    verify(mockSubchannel).updateAddresses(ArgumentMatchers.<EquivalentAddressGroup>anyList());
 
     verifyNoMoreInteractions(mockHelper);
   }
@@ -191,7 +191,7 @@ public class PickFirstLoadBalancerTest {
     List<EquivalentAddressGroup> newServers =
         Lists.newArrayList(new EquivalentAddressGroup(socketAddr));
 
-    InOrder inOrder = inOrder(mockHelper);
+    InOrder inOrder = inOrder(mockHelper, mockSubchannel);
 
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(affinity).build());
@@ -205,7 +205,7 @@ public class PickFirstLoadBalancerTest {
 
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(newServers).setAttributes(affinity).build());
-    inOrder.verify(mockHelper).updateSubchannelAddresses(eq(mockSubchannel), eq(newServers));
+    inOrder.verify(mockSubchannel).updateAddresses(eq(newServers));
 
     verifyNoMoreInteractions(mockSubchannel);
     verifyNoMoreInteractions(mockHelper);

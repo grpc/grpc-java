@@ -1127,6 +1127,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       syncContext.execute(new LoadBalancerRefreshNameResolution());
     }
 
+    @Deprecated
     @Override
     public void updateSubchannelAddresses(
         LoadBalancer.Subchannel subchannel, List<EquivalentAddressGroup> addrs) {
@@ -1620,6 +1621,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public ChannelLogger getChannelLogger() {
       return subchannelLogger;
+    }
+
+    @Override
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
+      syncContext.throwIfNotInThisSynchronizationContext();
+      subchannel.updateAddresses(addrs);
     }
   }
 

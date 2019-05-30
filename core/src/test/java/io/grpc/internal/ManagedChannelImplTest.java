@@ -184,7 +184,16 @@ public class ManagedChannelImplTest {
           return "test-addr";
         }
       };
+  private final SocketAddress socketAddress2 =
+      new SocketAddress() {
+        @Override
+        public String toString() {
+          return "test-addr";
+        }
+      };
   private final EquivalentAddressGroup addressGroup = new EquivalentAddressGroup(socketAddress);
+  private final EquivalentAddressGroup addressGroup2 =
+      new EquivalentAddressGroup(Arrays.asList(socketAddress, socketAddress2));
   private final FakeClock timer = new FakeClock();
   private final FakeClock executor = new FakeClock();
   private final FakeClock balancerRpcExecutor = new FakeClock();
@@ -1321,6 +1330,11 @@ public class ManagedChannelImplTest {
     verify(mockTransportFactory, times(2))
         .newClientTransport(
             eq(socketAddress), eq(clientTransportOptions), isA(TransportLogger.class));
+
+    // updateAddresses()
+    updateAddressesSafely(helper, sub1, Collections.singletonList(addressGroup2));
+    assertThat(((InternalSubchannel) sub1.getInternalSubchannel()).getAddressGroups())
+        .isEqualTo(Collections.singletonList(addressGroup2));
 
     // shutdown() has a delay
     shutdownSafely(helper, sub1);
@@ -4112,6 +4126,17 @@ public class ManagedChannelImplTest {
           @Override
           public void run() {
             helper.refreshNameResolution();
+          }
+        });
+  }
+
+  private static void updateAddressesSafely(
+      Helper helper, final Subchannel subchannel, final List<EquivalentAddressGroup> addrs) {
+    helper.getSynchronizationContext().execute(
+        new Runnable() {
+          @Override
+          public void run() {
+            subchannel.updateAddresses(addrs);
           }
         });
   }
