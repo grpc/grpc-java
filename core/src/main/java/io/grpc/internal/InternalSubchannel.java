@@ -89,7 +89,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
    *
    * <p>Note: any {@link Index#updateAddresses(List)} should also update {@link #addressGroups}.
    */
-  private Index addressIndex;
+  private final Index addressIndex;
 
   /**
    * A volatile accessor to {@link Index#getAddressGroups()}. There are few methods ({@link
