@@ -379,18 +379,16 @@ public final class ServiceConfigUtil {
   /**
    * Extracts the loadbalancer name from xds loadbalancer config.
    */
-  public static String getBalancerNameFromXdsConfig(LbConfig xdsConfig) {
-    Map<String, ?> map = xdsConfig.getRawConfigValue();
-    return getString(map, XDS_CONFIG_BALANCER_NAME_KEY);
+  public static String getBalancerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    return getString(rawXdsConfig, XDS_CONFIG_BALANCER_NAME_KEY);
   }
 
   /**
    * Extracts list of child policies from xds loadbalancer config.
    */
   @Nullable
-  public static List<LbConfig> getChildPolicyFromXdsConfig(LbConfig xdsConfig) {
-    Map<String, ?> map = xdsConfig.getRawConfigValue();
-    List<?> rawChildPolicies = getList(map, XDS_CONFIG_CHILD_POLICY_KEY);
+  public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    List<?> rawChildPolicies = getList(rawXdsConfig, XDS_CONFIG_CHILD_POLICY_KEY);
     if (rawChildPolicies != null) {
       return unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
     }
@@ -401,9 +399,8 @@ public final class ServiceConfigUtil {
    * Extracts list of fallback policies from xds loadbalancer config.
    */
   @Nullable
-  public static List<LbConfig> getFallbackPolicyFromXdsConfig(LbConfig xdsConfig) {
-    Map<String, ?> map = xdsConfig.getRawConfigValue();
-    List<?> rawFallbackPolicies = getList(map, XDS_CONFIG_FALLBACK_POLICY_KEY);
+  public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    List<?> rawFallbackPolicies = getList(rawXdsConfig, XDS_CONFIG_FALLBACK_POLICY_KEY);
     if (rawFallbackPolicies != null) {
       return unwrapLoadBalancingConfigList(checkObjectList(rawFallbackPolicies));
     }
