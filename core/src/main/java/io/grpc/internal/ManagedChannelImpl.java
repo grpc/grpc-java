@@ -70,6 +70,7 @@ import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
@@ -1049,7 +1050,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   }
 
   private class LbHelperImpl extends LoadBalancer.Helper {
-    LoadBalancer lb;
+    AutoConfiguredLoadBalancer lb;
 
     @Deprecated
     @Override
@@ -1333,21 +1334,19 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
           // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
           if (NameResolverListener.this.helper == ManagedChannelImpl.this.lbHelper) {
-            if (servers.isEmpty() && !helper.lb.canHandleEmptyAddressListFromNameResolution()) {
-              handleErrorInSyncContext(Status.UNAVAILABLE.withDescription(
-                  "Name resolver " + resolver + " returned an empty list"));
-            } else {
-              Attributes effectiveAttrs = attrs;
-              if (effectiveServiceConfig != serviceConfig) {
-                effectiveAttrs = attrs.toBuilder()
-                    .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
-                    .build();
-              }
-              helper.lb.handleResolvedAddresses(
-                  ResolvedAddresses.newBuilder()
-                      .setAddresses(servers)
-                      .setAttributes(effectiveAttrs)
-                      .build());
+            Attributes effectiveAttrs = attrs;
+            if (effectiveServiceConfig != serviceConfig) {
+              effectiveAttrs = attrs.toBuilder()
+                  .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, effectiveServiceConfig)
+                  .build();
+            }
+            Status handleResult = helper.lb.tryHandleResolvedAddresses(
+                ResolvedAddresses.newBuilder()
+                .setAddresses(servers)
+                .setAttributes(effectiveAttrs)
+                .build());
+            if (!handleResult.isOk()) {
+              handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
             }
           }
         }
