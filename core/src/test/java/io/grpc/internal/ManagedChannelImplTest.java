@@ -952,6 +952,9 @@ public class ManagedChannelImplTest {
     Status status = statusCaptor.getValue();
     assertSame(Status.Code.UNAVAILABLE, status.getCode());
     Truth.assertThat(status.getDescription()).startsWith(errorDescription);
+
+    // A resolution retry has been scheduled
+    assertEquals(1, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test
@@ -982,6 +985,9 @@ public class ManagedChannelImplTest {
     assertEquals(ImmutableMap.of("setting1", "high"), lbConfig);
     assertSame(
         serviceConfig, actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG));
+
+    // A no resolution retry
+    assertEquals(0, timer.numPendingTasks(NAME_RESOLVER_REFRESH_TASK_FILTER));
   }
 
   @Test
