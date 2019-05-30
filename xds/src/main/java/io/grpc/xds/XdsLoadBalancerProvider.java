@@ -73,11 +73,10 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   static ConfigOrError parseLoadBalancingConfigPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
-      LbConfig newLbConfig =
-          ServiceConfigUtil.unwrapLoadBalancingConfig(rawLoadBalancingPolicyConfig);
-      String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
-      LbConfig childPolicy = selectChildPolicy(newLbConfig, registry);
-      LbConfig fallbackPolicy = selectFallbackPolicy(newLbConfig, registry);
+      String newBalancerName =
+          ServiceConfigUtil.getBalancerNameFromXdsConfig(rawLoadBalancingPolicyConfig);
+      LbConfig childPolicy = selectChildPolicy(rawLoadBalancingPolicyConfig, registry);
+      LbConfig fallbackPolicy = selectFallbackPolicy(rawLoadBalancingPolicyConfig, registry);
       return ConfigOrError.fromConfig(new XdsConfig(newBalancerName, childPolicy, fallbackPolicy));
     } catch (RuntimeException e) {
       return ConfigOrError.fromError(
@@ -86,16 +85,20 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   }
 
   @VisibleForTesting
-  static LbConfig selectFallbackPolicy(LbConfig lbConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> fallbackConfigs = ServiceConfigUtil.getFallbackPolicyFromXdsConfig(lbConfig);
+  static LbConfig selectFallbackPolicy(
+      Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
+    List<LbConfig> fallbackConfigs =
+        ServiceConfigUtil.getFallbackPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
     LbConfig fallbackPolicy = selectSupportedLbPolicy(fallbackConfigs, lbRegistry);
     return fallbackPolicy == null ? DEFAULT_FALLBACK_POLICY : fallbackPolicy;
   }
 
   @Nullable
   @VisibleForTesting
-  static LbConfig selectChildPolicy(LbConfig lbConfig, LoadBalancerRegistry lbRegistry) {
-    List<LbConfig> childConfigs = ServiceConfigUtil.getChildPolicyFromXdsConfig(lbConfig);
+  static LbConfig selectChildPolicy(
+      Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry lbRegistry) {
+    List<LbConfig> childConfigs =
+        ServiceConfigUtil.getChildPolicyFromXdsConfig(rawLoadBalancingPolicyConfig);
     return selectSupportedLbPolicy(childConfigs, lbRegistry);
   }
 
