@@ -45,6 +45,13 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p>It doesn't own any thread.  Tasks are run from caller's or caller-provided threads.
  *
+ * <p>Conceptually, it is fairly accurate to think of {@code SynchronizationContext} like a cheaper
+ * {@code Executors.newSingleThreadExecutor()} when used for synchronization (not long-running
+ * tasks). Both use a queue for tasks that are run in order and neither guarantee that tasks have
+ * completed before returning from {@code execute()}. However, the behavior does diverge if locks
+ * are held when calling the context. So it is encouraged to avoid mixing locks and synchronization
+ * context except via {@link #executeLater}.
+ *
  * <p>This class is thread-safe.
  *
  * @since 1.17.0
