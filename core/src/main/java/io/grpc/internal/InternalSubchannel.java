@@ -86,8 +86,19 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   /**
    * The index of the address corresponding to pendingTransport/activeTransport, or at beginning if
    * both are null.
+   *
+   * <p>Note: any {@link Index#updateAddresses(List)} should also update {@link #addressGroups}.
    */
-  private volatile Index addressIndex;
+  private Index addressIndex;
+
+  /**
+   * A volatile accessor to {@link Index#getAddressGroups()}. There are few methods ({@link
+   * #getAddressGroups()} and {@link #toString()} access this value where they supposed to access
+   * in the {@link #syncContext}. Ideally {@link Index#getAddressGroups()} can be volatile, so we
+   * don't need to maintain this volatile accessor. Although, having this accessor can reduce
+   * unnecessary volatile reads.
+   */
+  private volatile List<EquivalentAddressGroup> addressGroups;
 
   /**
    * The policy to control back off between reconnects. Non-{@code null} when a reconnect task is
@@ -149,8 +160,10 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     Preconditions.checkNotNull(addressGroups, "addressGroups");
     Preconditions.checkArgument(!addressGroups.isEmpty(), "addressGroups is empty");
     checkListHasNoNulls(addressGroups, "addressGroups contains null entry");
-    this.addressIndex = new Index(
-        Collections.unmodifiableList(new ArrayList<>(addressGroups)));
+    List<EquivalentAddressGroup> unmodifiableAddressGroups =
+        Collections.unmodifiableList(new ArrayList<>(addressGroups));
+    this.addressGroups = unmodifiableAddressGroups;
+    this.addressIndex = new Index(unmodifiableAddressGroups);
     this.authority = authority;
     this.userAgent = userAgent;
     this.backoffPolicyProvider = backoffPolicyProvider;
@@ -330,6 +343,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
         ManagedClientTransport savedTransport = null;
         SocketAddress previousAddress = addressIndex.getCurrentAddress();
         addressIndex.updateGroups(newImmutableAddressGroups);
+        addressGroups = newImmutableAddressGroups;
         if (state.getState() == READY || state.getState() == CONNECTING) {
           if (!addressIndex.seekTo(previousAddress)) {
             // Forced to drop the connection
@@ -391,7 +405,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     // since there may be many addresses.
     return MoreObjects.toStringHelper(this)
         .add("logId", logId.getId())
-        .add("addressGroups", addressIndex.getGroups())
+        .add("addressGroups", addressGroups)
         .toString();
   }
 
@@ -431,7 +445,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   }
 
   List<EquivalentAddressGroup> getAddressGroups() {
-    return addressIndex.getGroups();
+    return addressGroups;
   }
 
   private void cancelReconnectTask() {
