@@ -931,7 +931,7 @@ public class ManagedChannelImplTest {
 
   @Test
   public void nameResolverReturnsEmptySubLists_becomeErrorByDefault() throws Exception {
-    String errorDescription = "Name resolver returned no usable address";
+    String errorDescription = "NameResolver returned no usable address";
 
     // Pass a FakeNameResolverFactory with an empty list and LB config
     FakeNameResolverFactory nameResolverFactory =
