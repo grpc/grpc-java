@@ -295,11 +295,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void resolverEvent_standardModeToStandardMode() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -318,10 +318,10 @@ public class XdsLoadBalancerTest {
             ArgumentMatchers.<CallOptions>any());
 
 
-    lbConfigRaw = "{\"xds_experimental\" : { "
+    lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2).build();
@@ -346,11 +346,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void resolverEvent_standardModeToCustomMode() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -365,11 +365,11 @@ public class XdsLoadBalancerTest {
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
-    lbConfigRaw = "{\"xds_experimental\" : { "
+    lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2).build();
@@ -392,11 +392,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void resolverEvent_customModeToStandardMode() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -413,11 +413,11 @@ public class XdsLoadBalancerTest {
 
     assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
 
-    lbConfigRaw = "{\"xds_experimental\" : { "
+    lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2).build();
@@ -440,11 +440,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void resolverEvent_customModeToCustomMode() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"supported_2\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -460,11 +460,11 @@ public class XdsLoadBalancerTest {
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
-    lbConfigRaw = "{\"xds_experimental\" : { "
+    lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"fallback_1\" : {\"key\" : \"val\"}}, {\"unfallback_1\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2).build();
@@ -486,11 +486,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void resolverEvent_balancerNameChange() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -505,11 +505,11 @@ public class XdsLoadBalancerTest {
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
-    lbConfigRaw = "{\"xds_experimental\" : { "
+    lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8443\","
         + "\"childPolicy\" : [{\"fallback_1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2).build();
@@ -765,10 +765,10 @@ public class XdsLoadBalancerTest {
   }
 
   private static Attributes standardModeWithFallback1Attributes() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     return Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();
@@ -776,11 +776,11 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void shutdown_cleanupTimers() throws Exception {
-    String lbConfigRaw = "{\"xds_experimental\" : { "
+    String lbConfigRaw = "{ "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"fallback_1\" : {\"key\" : \"val\"}}]"
-        + "}}";
+        + "}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     Attributes attrs = Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build();

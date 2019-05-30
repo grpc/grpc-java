@@ -42,6 +42,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   private static final LbConfig DEFAULT_FALLBACK_POLICY =
       new LbConfig("round_robin", ImmutableMap.<String, Void>of());
+  private static final String XDS_POLICY_NAME = "xds_experimental";
 
   @Override
   public boolean isAvailable() {
@@ -55,7 +56,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "xds_experimental";
+    return XDS_POLICY_NAME;
   }
 
   @Override
@@ -73,8 +74,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   static ConfigOrError parseLoadBalancingConfigPolicy(
       Map<String, ?> rawLoadBalancingPolicyConfig, LoadBalancerRegistry registry) {
     try {
-      LbConfig newLbConfig =
-          ServiceConfigUtil.unwrapLoadBalancingConfig(rawLoadBalancingPolicyConfig);
+      LbConfig newLbConfig = new LbConfig(XDS_POLICY_NAME, rawLoadBalancingPolicyConfig);
       String newBalancerName = ServiceConfigUtil.getBalancerNameFromXdsConfig(newLbConfig);
       LbConfig childPolicy = selectChildPolicy(newLbConfig, registry);
       LbConfig fallbackPolicy = selectFallbackPolicy(newLbConfig, registry);
