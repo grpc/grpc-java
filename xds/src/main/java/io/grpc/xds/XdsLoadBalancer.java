@@ -43,7 +43,6 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
@@ -51,10 +50,6 @@ import javax.annotation.Nullable;
  * A {@link LoadBalancer} that uses the XDS protocol.
  */
 final class XdsLoadBalancer extends LoadBalancer {
-
-  @VisibleForTesting
-  static final Attributes.Key<AtomicReference<ConnectivityStateInfo>> STATE_INFO =
-      Attributes.Key.create("io.grpc.xds.XdsLoadBalancer.stateInfo");
 
   private final LocalityStore localityStore;
   private final Helper helper;
@@ -98,7 +93,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     this.helper = helper;
     this.lbRegistry = lbRegistry;
     this.localityStore = new LocalityStoreImpl(new LocalityStoreHelper(), lbRegistry);
-    fallbackManager = new FallbackManager(helper, localityStore, lbRegistry);
+    fallbackManager = new FallbackManager(helper, lbRegistry);
   }
 
   private final class LocalityStoreHelper extends ForwardingLoadBalancerHelper {
@@ -241,7 +236,6 @@ final class XdsLoadBalancer extends LoadBalancer {
     private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
     private final Helper helper;
-    private final LocalityStore localityStore;
     private final LoadBalancerRegistry lbRegistry;
 
     private LbConfig fallbackPolicy;
@@ -260,10 +254,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     private boolean childBalancerWorked;
     private boolean childPolicyHasBeenReady;
 
-    FallbackManager(
-        Helper helper, LocalityStore localityStore, LoadBalancerRegistry lbRegistry) {
+    FallbackManager(Helper helper, LoadBalancerRegistry lbRegistry) {
       this.helper = helper;
-      this.localityStore = localityStore;
       this.lbRegistry = lbRegistry;
     }
 
