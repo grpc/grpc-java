@@ -1309,7 +1309,7 @@ public abstract class LoadBalancer {
      * Replaces the existing addresses used with this {@code Subchannel}. If the new and old
      * addresses overlap, the Subchannel can continue using an existing connection.
      *
-     * <p>It must be called from the Synchronization Context or will will throw.
+     * <p>It must be called from the Synchronization Context or will throw.
      *
      * @throws IllegalArgumentException if {@code addrs} is empty
      * @since 1.22.0
