@@ -300,12 +300,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   }
 
   private void gotoNonErrorState(final ConnectivityState newState) {
-    syncContext.execute(new Runnable() {
-      @Override
-      public void run() {
-        gotoState(ConnectivityStateInfo.forNonError(newState));
-      }
-    });
+    syncContext.throwIfNotInThisSynchronizationContext();
+
+    gotoState(ConnectivityStateInfo.forNonError(newState));
   }
 
   private void gotoState(final ConnectivityStateInfo newState) {
@@ -368,11 +365,11 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           return;
         }
         shutdownReason = reason;
-        gotoNonErrorState(SHUTDOWN);
         savedActiveTransport = activeTransport;
         savedPendingTransport = pendingTransport;
         activeTransport = null;
         pendingTransport = null;
+        gotoNonErrorState(SHUTDOWN);
         addressIndex.reset();
         if (transports.isEmpty()) {
           handleTermination();
@@ -505,9 +502,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
                 "Unexpected non-null activeTransport");
             transport.shutdown(shutdownReason);
           } else if (pendingTransport == transport) {
-            gotoNonErrorState(READY);
             activeTransport = transport;
             pendingTransport = null;
+            gotoNonErrorState(READY);
           }
         }
       });
@@ -529,9 +526,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
             return;
           }
           if (activeTransport == transport) {
-            gotoNonErrorState(IDLE);
             activeTransport = null;
             addressIndex.reset();
+            gotoNonErrorState(IDLE);
           } else if (pendingTransport == transport) {
             Preconditions.checkState(state.getState() == CONNECTING,
                 "Expected state is CONNECTING, actual state is %s", state.getState());
