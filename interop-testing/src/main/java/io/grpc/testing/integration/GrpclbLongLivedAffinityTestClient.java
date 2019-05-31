@@ -38,6 +38,9 @@ public final class GrpclbLongLivedAffinityTestClient {
   private static final Logger logger =
       Logger.getLogger(GrpclbLongLivedAffinityTestClient.class.getName());
 
+  /**
+   * Entry point.
+   */
   public static void main(String[] args) throws Exception {
     final GrpclbLongLivedAffinityTestClient client = new GrpclbLongLivedAffinityTestClient();
     client.parseArgs(args);
