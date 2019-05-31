@@ -252,7 +252,7 @@ public final class Attributes {
       return this;
     }
 
-    public <T> Builder setAll(Attributes other) {
+    public Builder setAll(Attributes other) {
       data(other.data.size()).putAll(other.data);
       return this;
     }

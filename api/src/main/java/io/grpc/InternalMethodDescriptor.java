@@ -30,11 +30,11 @@ public final class InternalMethodDescriptor {
     this.transport = checkNotNull(transport, "transport");
   }
 
-  public Object geRawMethodName(MethodDescriptor<?, ?> md) {
-    return md.getRawMethodName(transport.ordinal());
+  public Object geRawMethodName(MethodDescriptor<?, ?> descriptor) {
+    return descriptor.getRawMethodName(transport.ordinal());
   }
 
-  public void setRawMethodName(MethodDescriptor<?, ?> md, Object o) {
-    md.setRawMethodName(transport.ordinal(), o);
+  public void setRawMethodName(MethodDescriptor<?, ?> descriptor, Object o) {
+    descriptor.setRawMethodName(transport.ordinal(), o);
   }
 }

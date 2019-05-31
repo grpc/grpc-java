@@ -86,8 +86,8 @@ public final class NameResolverRegistry {
     // sort() must be stable, as we prefer first-registered providers
     Collections.sort(providers, Collections.reverseOrder(new Comparator<NameResolverProvider>() {
       @Override
-      public int compare(NameResolverProvider p1, NameResolverProvider p2) {
-        return p1.priority() - p2.priority();
+      public int compare(NameResolverProvider o1, NameResolverProvider o2) {
+        return o1.priority() - o2.priority();
       }
     }));
     effectiveProviders = Collections.unmodifiableList(providers);
