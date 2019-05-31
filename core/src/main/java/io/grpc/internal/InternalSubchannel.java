@@ -96,7 +96,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
    * #getAddressGroups()} and {@link #toString()} access this value where they supposed to access
    * in the {@link #syncContext}. Ideally {@link Index#getAddressGroups()} can be volatile, so we
    * don't need to maintain this volatile accessor. Although, having this accessor can reduce
-   * unnecessary volatile reads.
+   * unnecessary volatile reads while it delivers clearer intention of why .
    */
   private volatile List<EquivalentAddressGroup> addressGroups;
 
