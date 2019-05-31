@@ -48,11 +48,13 @@ public final class GrpclbLongLivedAffinityTestClient {
 
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
+      @SuppressWarnings("CatchAndPrintStackTrace")
       public void run() {
         try {
           client.shutdown();
         } catch (Exception e) {
-          logger.log(Level.SEVERE, e.getMessage(), e);
+          // At this moment logger may have stopped working
+          e.printStackTrace();
         }
       }
     });
