@@ -28,8 +28,11 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -69,6 +72,19 @@ public class XdsLoadStatsStoreTest {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
     loadStore = new XdsLoadStatsStore(SERVICE_NAME, localityLoadCounters, dropCounters);
+  }
+
+  private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
+      Map<String, MetricValue> metrics) {
+    List<EndpointLoadMetricStats> res = new ArrayList<>();
+    for (Map.Entry<String, MetricValue> entry : metrics.entrySet()) {
+      res.add(EndpointLoadMetricStats.newBuilder()
+          .setMetricName(entry.getKey())
+          .setNumRequestsFinishedWithMetric(entry.getValue().getNumReports())
+          .setTotalMetricValue(entry.getValue().getTotalValue())
+          .build());
+    }
+    return res;
   }
 
   private static UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
@@ -213,15 +229,23 @@ public class XdsLoadStatsStoreTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void loadReportMatchesSnapshots() {
     StatsCounter counter1 = mock(StatsCounter.class);
+    Map<String, MetricValue> metrics1 = new HashMap<>();
+    metrics1.put("cpu_utilization", new MetricValue(15, 12.5435));
+    metrics1.put("mem_utilization", new MetricValue(8, 0.421));
+    metrics1.put("named_cost_or_utilization", new MetricValue(3, 2.5435));
     when(counter1.isActive()).thenReturn(true);
-    when(counter1.snapshot())
-        .thenReturn(new ClientLoadSnapshot(4315, 3421, 23, 593),
-            new ClientLoadSnapshot(0, 543, 0, 0));
+    when(counter1.snapshot()).thenReturn(new ClientLoadSnapshot(4315, 3421, 23, 593, metrics1),
+        new ClientLoadSnapshot(0, 543, 0, 0, Collections.EMPTY_MAP));
     StatsCounter counter2 = mock(StatsCounter.class);
-    when(counter2.snapshot()).thenReturn(new ClientLoadSnapshot(41234, 432, 431, 702),
-        new ClientLoadSnapshot(0, 432, 0, 0));
+    Map<String, MetricValue> metrics2 = new HashMap<>();
+    metrics2.put("cpu_utilization", new MetricValue(344, 132.74));
+    metrics2.put("mem_utilization", new MetricValue(41, 23.453));
+    metrics2.put("named_cost_or_utilization", new MetricValue(12, 423));
+    when(counter2.snapshot()).thenReturn(new ClientLoadSnapshot(41234, 432, 431, 702, metrics2),
+        new ClientLoadSnapshot(0, 432, 0, 0, Collections.EMPTY_MAP));
     when(counter2.isActive()).thenReturn(true);
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
@@ -229,8 +253,10 @@ public class XdsLoadStatsStoreTest {
     ClusterStats expectedReport =
         buildClusterStats(
             Arrays.asList(
-                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, 593, null),
-                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, 702, null)
+                buildUpstreamLocalityStats(LOCALITY1, 4315, 3421, 23, 593,
+                    buildEndpointLoadMetricStatsList(metrics1)),
+                buildUpstreamLocalityStats(LOCALITY2, 41234, 432, 431, 702,
+                    buildEndpointLoadMetricStatsList(metrics2))
             ),
             null);
 

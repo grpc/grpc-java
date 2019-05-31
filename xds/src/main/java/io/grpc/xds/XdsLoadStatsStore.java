@@ -23,9 +23,11 @@ import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
+import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -76,6 +78,13 @@ final class XdsLoadStatsStore implements StatsStore {
           .setTotalErrorRequests(snapshot.getCallsFailed())
           .setTotalRequestsInProgress(snapshot.getCallsInProgress())
           .setTotalIssuedRequests(snapshot.getCallsIssued());
+      for (Map.Entry<String, MetricValue> metric : snapshot.getMetricValues().entrySet()) {
+        localityStatsBuilder.addLoadMetricStats(
+            EndpointLoadMetricStats.newBuilder()
+                .setMetricName(metric.getKey())
+                .setNumRequestsFinishedWithMetric(metric.getValue().getNumReports())
+                .setTotalMetricValue(metric.getValue().getTotalValue()));
+      }
       statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
       // Discard counters for localities that are no longer exposed by the remote balancer and
       // no RPCs ongoing.
@@ -152,8 +161,8 @@ final class XdsLoadStatsStore implements StatsStore {
   }
 
   /**
-   * Blueprint for counters that can can record number of calls in-progress, succeeded, failed and
-   * issued.
+   * Blueprint for counters that can can record number of calls in-progress, succeeded, failed,
+   * issued and backend metrics.
    */
   abstract static class StatsCounter {
 
@@ -162,6 +171,8 @@ final class XdsLoadStatsStore implements StatsStore {
     abstract void recordCallStarted();
 
     abstract void recordCallFinished(Status status);
+
+    abstract void recordMetric(String name, double value);
 
     abstract ClientLoadSnapshot snapshot();
 
