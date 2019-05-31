@@ -96,11 +96,23 @@ task http2_client(type: CreateStartScripts) {
     classpath = jar.outputs.files + configurations.runtime
 }
 
+task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
+    applicationName = "grpclb-long-lived-affinity-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
     from(http2_client)
+    from(grpclb_long_lived_affinity_test_client)
     fileMode = 0755
 }
