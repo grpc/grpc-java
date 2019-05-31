@@ -96,6 +96,10 @@ public final class GrpclbLongLivedAffinityTestClient {
         rpcErrorBudgetIncreaseMinutes = Long.parseLong(value);
       } else if ("affinity_breakage_budget_increase_minutes".equals(key)) {
         affinityBreakageBudgetIncreaseMinutes = Long.parseLong(value);
+      } else if ("rpc_intermission_seconds".equals(key)) {
+        rpcIntermissionSeconds = Long.parseLong(value);
+      } else if ("total_test_seconds".equals(key)) {
+        totalTestSeconds = Long.parseLong(value);
       } else {
         System.err.println("Unknown argument: " + key);
         usage = true;
@@ -161,7 +165,7 @@ public final class GrpclbLongLivedAffinityTestClient {
 
     while (true) {
       try {
-        logger.info("Sent request");
+        logger.info("Sending request");
         SimpleResponse response =
             blockingStub.withDeadlineAfter(1, TimeUnit.MINUTES).unaryCall(request);
         logger.info("Received response");
