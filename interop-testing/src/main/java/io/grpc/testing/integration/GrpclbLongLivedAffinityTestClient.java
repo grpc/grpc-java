@@ -161,7 +161,10 @@ public final class GrpclbLongLivedAffinityTestClient {
 
     while (true) {
       try {
-        SimpleResponse response = blockingStub.unaryCall(request);
+        logger.info("Sent request");
+        SimpleResponse response =
+            blockingStub.withDeadlineAfter(1, TimeUnit.MINUTES).unaryCall(request);
+        logger.info("Received response");
         String serverId = response.getServerId();
         checkNotNull(serverId, "serverId is null");
         if (lastServerId != null && !lastServerId.equals(serverId)) {
