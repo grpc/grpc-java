@@ -318,7 +318,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     assertEquals("value",
         captor.getValue().get(Metadata.Key.of("magic", Metadata.ASCII_STRING_MARSHALLER)));
 
-    streamTransportState.requestMessagesFromDeframer(1);
+    streamTransportState.requestMessagesFromDeframerForTesting(1);
 
     // Create a data frame and then trigger the handler to read it.
     ByteBuf frame = grpcDataFrame(3, false, contentAsArray());

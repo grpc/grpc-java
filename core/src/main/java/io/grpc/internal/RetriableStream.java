@@ -541,6 +541,18 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
+  public void optimizeForDirectExecutor() {
+    class OptimizeDirectEntry implements BufferEntry {
+      @Override
+      public void runWith(Substream substream) {
+        substream.stream.optimizeForDirectExecutor();
+      }
+    }
+
+    delayOrExecute(new OptimizeDirectEntry());
+  }
+
+  @Override
   public final void setCompressor(final Compressor compressor) {
     class CompressorEntry implements BufferEntry {
       @Override

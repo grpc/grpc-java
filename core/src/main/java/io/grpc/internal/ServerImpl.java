@@ -480,6 +480,15 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     private void streamCreatedInternal(
         final ServerStream stream, final String methodName, final Metadata headers, final Tag tag) {
+      final Executor wrappedExecutor;
+      // This is a performance optimization that avoids the synchronization and queuing overhead
+      // that comes with SerializingExecutor.
+      if (executor == directExecutor()) {
+        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+        stream.optimizeForDirectExecutor();
+      } else {
+        wrappedExecutor = new SerializingExecutor(executor);
+      }
 
       if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
         String encoding = headers.get(MESSAGE_ENCODING_KEY);
@@ -499,14 +508,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
       final Context.CancellableContext context = createContext(headers, statsTraceCtx);
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
 
       final Link link = PerfMark.linkOut();
 

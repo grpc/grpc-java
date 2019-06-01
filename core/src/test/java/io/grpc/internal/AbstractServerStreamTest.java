@@ -163,7 +163,7 @@ public class AbstractServerStreamTest {
 
     // Queue a partial message in the deframer
     stream.transportState().inboundDataReceived(ReadableBuffers.wrap(new byte[] {1}), true);
-    stream.transportState().requestMessagesFromDeframer(1);
+    stream.request(1);
 
     Status status = closedFuture.get(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     assertEquals(Status.INTERNAL.getCode(), status.getCode());
