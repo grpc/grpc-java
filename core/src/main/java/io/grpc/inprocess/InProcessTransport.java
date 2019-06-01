@@ -623,6 +623,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
+      public void optimizeForDirectExecutor() {}
+
+      @Override
       public void setCompressor(Compressor compressor) {}
 
       @Override
@@ -817,6 +820,9 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       public Attributes getAttributes() {
         return attributes;
       }
+
+      @Override
+      public void optimizeForDirectExecutor() {}
 
       @Override
       public void setCompressor(Compressor compressor) {}

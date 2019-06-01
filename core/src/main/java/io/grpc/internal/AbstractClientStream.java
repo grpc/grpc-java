@@ -81,13 +81,6 @@ public abstract class AbstractClientStream extends AbstractStream
         @Nullable WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages);
 
     /**
-     * Requests up to the given number of messages from the call to be delivered to the client. This
-     * should end up triggering {@link TransportState#requestMessagesFromDeframer(int)} on the
-     * transport thread.
-     */
-    void request(int numMessages);
-
-    /**
      * Tears down the stream, typically in the event of a timeout. This method may be called
      * multiple times and from any thread.
      *
@@ -185,11 +178,6 @@ public abstract class AbstractClientStream extends AbstractStream
    */
   public final boolean shouldBeCountedForInUse() {
     return shouldBeCountedForInUse;
-  }
-
-  @Override
-  public final void request(int numMessages) {
-    abstractClientStreamSink().request(numMessages);
   }
 
   @Override

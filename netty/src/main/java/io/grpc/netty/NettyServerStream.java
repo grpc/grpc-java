@@ -48,7 +48,6 @@ class NettyServerStream extends AbstractServerStream {
 
   private final Sink sink = new Sink();
   private final TransportState state;
-  private final Channel channel;
   private final WriteQueue writeQueue;
   private final Attributes attributes;
   private final String authority;
@@ -64,7 +63,6 @@ class NettyServerStream extends AbstractServerStream {
       TransportTracer transportTracer) {
     super(new NettyWritableBufferAllocator(channel.alloc()), statsTraceCtx);
     this.state = checkNotNull(state, "transportState");
-    this.channel = checkNotNull(channel, "channel");
     this.writeQueue = state.handler.getWriteQueue();
     this.attributes = checkNotNull(transportAttrs);
     this.authority = authority;
@@ -94,42 +92,6 @@ class NettyServerStream extends AbstractServerStream {
   }
 
   private class Sink implements AbstractServerStream.Sink {
-
-    private void requestInternal(final int numMessages) {
-      if (channel.eventLoop().inEventLoop()) {
-        // Processing data read in the event loop so can call into the deframer immediately
-        transportState().requestMessagesFromDeframer(numMessages);
-      } else {
-        final Link link = PerfMark.linkOut();
-        channel.eventLoop().execute(new Runnable() {
-          @Override
-          public void run() {
-            PerfMark.startTask(
-                "NettyServerStream$Sink.requestMessagesFromDeframer",
-                transportState().tag());
-            PerfMark.linkIn(link);
-            try {
-              transportState().requestMessagesFromDeframer(numMessages);
-            } finally {
-              PerfMark.stopTask(
-                  "NettyServerStream$Sink.requestMessagesFromDeframer",
-                  transportState().tag());
-            }
-          }
-        });
-      }
-    }
-
-    @Override
-    public void request(final int numMessages) {
-      PerfMark.startTask("NettyServerStream$Sink.request");
-      try {
-        requestInternal(numMessages);
-      } finally {
-        PerfMark.stopTask("NettyServerStream$Sink.request");
-      }
-    }
-
     @Override
     public void writeHeaders(Metadata headers) {
       PerfMark.startTask("NettyServerStream$Sink.writeHeaders");
@@ -230,7 +192,19 @@ class NettyServerStream extends AbstractServerStream {
       if (eventLoop.inEventLoop()) {
         r.run();
       } else {
-        eventLoop.execute(r);
+        final Link link = PerfMark.linkOut();
+        eventLoop.execute(new Runnable() {
+          @Override
+          public void run() {
+            PerfMark.startTask("NettyServerStream$TransportState.runOnTransportThread", tag);
+            PerfMark.linkIn(link);
+            try {
+              r.run();
+            } finally {
+              PerfMark.stopTask("NettyServerStream$TransportState.runOnTransportThread", tag);
+            }
+          }
+        });
       }
     }
 
