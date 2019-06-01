@@ -71,17 +71,16 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      CallTracer serverCallTracer) {
+      CallTracer serverCallTracer, Tag tag) {
     this.stream = stream;
     this.method = method;
-    // TODO(carl-mastrangelo): consider moving this to the ServerImpl to record startCall.
-    this.tag = PerfMark.createTag(method.getFullMethodName());
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
     this.serverCallTracer = serverCallTracer;
     this.serverCallTracer.reportCallStarted();
+    this.tag = tag;
   }
 
   @Override

@@ -50,6 +50,9 @@ import io.grpc.ServerMethodDefinition;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
+import io.perfmark.Tag;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -463,82 +466,100 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     @Override
     public void streamCreated(
         final ServerStream stream, final String methodName, final Metadata headers) {
-      if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
-        String encoding = headers.get(MESSAGE_ENCODING_KEY);
-        Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
-        if (decompressor == null) {
-          stream.close(
-              Status.UNIMPLEMENTED.withDescription(
-                  String.format("Can't find decompressor for %s", encoding)),
-              new Metadata());
-          return;
-        }
-        stream.setDecompressor(decompressor);
-      }
-
-      final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
-          stream.statsTraceContext(), "statsTraceCtx not present from stream");
-
-      final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
-      final Executor wrappedExecutor;
-      // This is a performance optimization that avoids the synchronization and queuing overhead
-      // that comes with SerializingExecutor.
-      if (executor == directExecutor()) {
-        wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
-      } else {
-        wrappedExecutor = new SerializingExecutor(executor);
-      }
-
-      final JumpToApplicationThreadServerStreamListener jumpListener
-          = new JumpToApplicationThreadServerStreamListener(
-              wrappedExecutor, executor, stream, context);
-      stream.setListener(jumpListener);
-      // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
-      // are delivered, including any errors. Callbacks can still be triggered, but they will be
-      // queued.
-
-      final class StreamCreated extends ContextRunnable {
-
-        StreamCreated() {
-          super(context);
+      final Tag tag = PerfMark.createTag(methodName, stream.hashCode());
+      PerfMark.startTask("ServerTransportListener.streamCreated", tag);
+      try {
+        if (headers.containsKey(MESSAGE_ENCODING_KEY)) {
+          String encoding = headers.get(MESSAGE_ENCODING_KEY);
+          Decompressor decompressor = decompressorRegistry.lookupDecompressor(encoding);
+          if (decompressor == null) {
+            stream.close(
+                Status.UNIMPLEMENTED.withDescription(
+                    String.format("Can't find decompressor for %s", encoding)),
+                new Metadata());
+            return;
+          }
+          stream.setDecompressor(decompressor);
         }
 
-        @Override
-        public void runInContext() {
-          ServerStreamListener listener = NOOP_LISTENER;
-          try {
-            ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
-            if (method == null) {
-              method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
+        final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
+            stream.statsTraceContext(), "statsTraceCtx not present from stream");
+
+        final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
+        final Executor wrappedExecutor;
+        // This is a performance optimization that avoids the synchronization and queuing overhead
+        // that comes with SerializingExecutor.
+        if (executor == directExecutor()) {
+          wrappedExecutor = new SerializeReentrantCallsDirectExecutor();
+        } else {
+          wrappedExecutor = new SerializingExecutor(executor);
+        }
+
+        final Link link = PerfMark.link();
+
+        final JumpToApplicationThreadServerStreamListener jumpListener
+            = new JumpToApplicationThreadServerStreamListener(
+            wrappedExecutor, executor, stream, context, tag);
+        stream.setListener(jumpListener);
+        // Run in wrappedExecutor so jumpListener.setListener() is called before any callbacks
+        // are delivered, including any errors. Callbacks can still be triggered, but they will be
+        // queued.
+
+        final class StreamCreated extends ContextRunnable {
+          StreamCreated() {
+            super(context);
+          }
+
+          @Override
+          public void runInContext() {
+            PerfMark.startTask("ServerTransportListener$StreamCreated.startCall", tag);
+            link.link();
+            try {
+              runInternal();
+            } finally {
+              PerfMark.stopTask("ServerTransportListener$StreamCreated.startCall", tag);
             }
-            if (method == null) {
-              Status status = Status.UNIMPLEMENTED.withDescription(
-                  "Method not found: " + methodName);
-              // TODO(zhangkun83): this error may be recorded by the tracer, and if it's kept in
-              // memory as a map whose key is the method name, this would allow a misbehaving
-              // client to blow up the server in-memory stats storage by sending large number of
-              // distinct unimplemented method
-              // names. (https://github.com/grpc/grpc-java/issues/2285)
-              stream.close(status, new Metadata());
+          }
+
+          private void runInternal() {
+            ServerStreamListener listener = NOOP_LISTENER;
+            try {
+              ServerMethodDefinition<?, ?> method = registry.lookupMethod(methodName);
+              if (method == null) {
+                method = fallbackRegistry.lookupMethod(methodName, stream.getAuthority());
+              }
+              if (method == null) {
+                Status status = Status.UNIMPLEMENTED.withDescription(
+                    "Method not found: " + methodName);
+                // TODO(zhangkun83): this error may be recorded by the tracer, and if it's kept in
+                // memory as a map whose key is the method name, this would allow a misbehaving
+                // client to blow up the server in-memory stats storage by sending large number of
+                // distinct unimplemented method
+                // names. (https://github.com/grpc/grpc-java/issues/2285)
+                stream.close(status, new Metadata());
+                context.cancel(null);
+                return;
+              }
+              listener =
+                  startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
+            } catch (RuntimeException e) {
+              stream.close(Status.fromThrowable(e), new Metadata());
               context.cancel(null);
-              return;
+              throw e;
+            } catch (Error e) {
+              stream.close(Status.fromThrowable(e), new Metadata());
+              context.cancel(null);
+              throw e;
+            } finally {
+              jumpListener.setListener(listener);
             }
-            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx);
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
-          } finally {
-            jumpListener.setListener(listener);
           }
         }
-      }
 
-      wrappedExecutor.execute(new StreamCreated());
+        wrappedExecutor.execute(new StreamCreated());
+      } finally {
+        PerfMark.stopTask("ServerTransportListener.streamCreated", tag);
+      }
     }
 
     private Context.CancellableContext createContext(
@@ -573,7 +594,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     /** Never returns {@code null}. */
     private <ReqT, RespT> ServerStreamListener startCall(ServerStream stream, String fullMethodName,
         ServerMethodDefinition<ReqT, RespT> methodDef, Metadata headers,
-        Context.CancellableContext context, StatsTraceContext statsTraceCtx) {
+        Context.CancellableContext context, StatsTraceContext statsTraceCtx, Tag tag) {
       // TODO(ejona86): should we update fullMethodName to have the canonical path of the method?
       statsTraceCtx.serverCallStarted(
           new ServerCallInfoImpl<>(
@@ -587,7 +608,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       ServerMethodDefinition<ReqT, RespT> interceptedDef = methodDef.withServerCallHandler(handler);
       ServerMethodDefinition<?, ?> wMethodDef = binlog == null
           ? interceptedDef : binlog.wrapMethodDefinition(interceptedDef);
-      return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context);
+      return startWrappedCall(fullMethodName, wMethodDef, stream, headers, context, tag);
     }
 
     private <WReqT, WRespT> ServerStreamListener startWrappedCall(
@@ -595,7 +616,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         ServerMethodDefinition<WReqT, WRespT> methodDef,
         ServerStream stream,
         Metadata headers,
-        Context.CancellableContext context) {
+        Context.CancellableContext context,
+        Tag tag) {
 
       ServerCallImpl<WReqT, WRespT> call = new ServerCallImpl<>(
           stream,
@@ -604,7 +626,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           context,
           decompressorRegistry,
           compressorRegistry,
-          serverCallTracer);
+          serverCallTracer,
+          tag);
 
       ServerCall.Listener<WReqT> listener =
           methodDef.getServerCallHandler().startCall(call, headers);
@@ -687,15 +710,17 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     private final Executor cancelExecutor;
     private final Context.CancellableContext context;
     private final ServerStream stream;
+    private final Tag tag;
     // Only accessed from callExecutor.
     private ServerStreamListener listener;
 
     public JumpToApplicationThreadServerStreamListener(Executor executor,
-        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context) {
+        Executor cancelExecutor, ServerStream stream, Context.CancellableContext context, Tag tag) {
       this.callExecutor = executor;
       this.cancelExecutor = cancelExecutor;
       this.stream = stream;
       this.context = context;
+      this.tag = tag;
     }
 
     /**
@@ -725,6 +750,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     @Override
     public void messagesAvailable(final MessageProducer producer) {
+      PerfMark.startTask("ServerStreamListener.messagesAvailable", tag);
+      final Link link = PerfMark.link();
 
       final class MessagesAvailable extends ContextRunnable {
 
@@ -734,6 +761,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).messagesAvailable", tag);
+          link.link();
           try {
             getListener().messagesAvailable(producer);
           } catch (RuntimeException e) {
@@ -742,15 +771,21 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           } catch (Error e) {
             internalClose();
             throw e;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
           }
         }
       }
 
       callExecutor.execute(new MessagesAvailable());
+      PerfMark.stopTask("ServerStreamListener.messagesAvailable", tag);
     }
 
     @Override
     public void halfClosed() {
+      PerfMark.startTask("ServerStreamListener.halfClosed", tag);
+      final Link link = PerfMark.link();
+
       final class HalfClosed extends ContextRunnable {
         HalfClosed() {
           super(context);
@@ -758,6 +793,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).halfClosed", tag);
+          link.link();
           try {
             getListener().halfClosed();
           } catch (RuntimeException e) {
@@ -766,39 +803,57 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           } catch (Error e) {
             internalClose();
             throw e;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
           }
         }
       }
 
       callExecutor.execute(new HalfClosed());
+      PerfMark.stopTask("ServerStreamListener.halfClosed", tag);
     }
 
     @Override
     public void closed(final Status status) {
-      // For cancellations, promptly inform any users of the context that their work should be
-      // aborted. Otherwise, we can wait until pending work is done.
-      if (!status.isOk()) {
-        // The callExecutor might be busy doing user work. To avoid waiting, use an executor that
-        // is not serializing.
-        cancelExecutor.execute(new ContextCloser(context, status.getCause()));
-      }
+      PerfMark.startTask("ServerStreamListener.closed", tag);
+      final Link link = PerfMark.link();
 
-      final class Closed extends ContextRunnable {
-        Closed() {
-          super(context);
+      try {
+        // For cancellations, promptly inform any users of the context that their work should be
+        // aborted. Otherwise, we can wait until pending work is done.
+        if (!status.isOk()) {
+          // The callExecutor might be busy doing user work. To avoid waiting, use an executor that
+          // is not serializing.
+          cancelExecutor.execute(new ContextCloser(context, status.getCause()));
         }
 
-        @Override
-        public void runInContext() {
-          getListener().closed(status);
-        }
-      }
+        final class Closed extends ContextRunnable {
+          Closed() {
+            super(context);
+          }
 
-      callExecutor.execute(new Closed());
+          @Override
+          public void runInContext() {
+            PerfMark.startTask("ServerCallListener(app).closed", tag);
+            link.link();
+            try {
+              getListener().closed(status);
+            } finally {
+              PerfMark.stopTask("ServerCallListener(app).closed", tag);
+            }
+          }
+        }
+
+        callExecutor.execute(new Closed());
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.closed", tag);
+      }
     }
 
     @Override
     public void onReady() {
+      PerfMark.startTask("ServerStreamListener.onReady", tag);
+      final Link link = PerfMark.link();
       final class OnReady extends ContextRunnable {
         OnReady() {
           super(context);
@@ -806,6 +861,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
         @Override
         public void runInContext() {
+          PerfMark.startTask("ServerCallListener(app).onReady", tag);
+          link.link();
           try {
             getListener().onReady();
           } catch (RuntimeException e) {
@@ -814,11 +871,14 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           } catch (Error e) {
             internalClose();
             throw e;
+          } finally {
+            PerfMark.stopTask("ServerCallListener(app).onReady", tag);
           }
         }
       }
 
       callExecutor.execute(new OnReady());
+      PerfMark.stopTask("ServerStreamListener.onReady", tag);
     }
   }
 
