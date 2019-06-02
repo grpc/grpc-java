@@ -104,6 +104,7 @@ public final class AutoConfiguredLoadBalancerFactory {
     public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       tryHandleResolvedAddresses(resolvedAddresses);
     }
+
     /**
      * Returns non-OK status if resolvedAddresses is rejected and should be considered as a
      * name-resolution error.
