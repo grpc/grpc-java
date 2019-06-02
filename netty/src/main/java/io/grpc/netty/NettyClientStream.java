@@ -43,6 +43,8 @@ import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import javax.annotation.Nullable;
 
 /**
@@ -116,48 +118,53 @@ class NettyClientStream extends AbstractClientStream {
   private class Sink implements AbstractClientStream.Sink {
     @Override
     public void writeHeaders(Metadata headers, byte[] requestPayload) {
-      // Convert the headers into Netty HTTP/2 headers.
-      AsciiString defaultPath = (AsciiString) methodDescriptorAccessor.geRawMethodName(method);
-      if (defaultPath == null) {
-        defaultPath = new AsciiString("/" + method.getFullMethodName());
-        methodDescriptorAccessor.setRawMethodName(method, defaultPath);
-      }
-      boolean get = (requestPayload != null);
-      AsciiString httpMethod;
-      if (get) {
-        // Forge the query string
-        // TODO(ericgribkoff) Add the key back to the query string
-        defaultPath =
-            new AsciiString(defaultPath + "?" + BaseEncoding.base64().encode(requestPayload));
-        httpMethod = Utils.HTTP_GET_METHOD;
-      } else {
-        httpMethod = Utils.HTTP_METHOD;
-      }
-      Http2Headers http2Headers = Utils.convertClientHeaders(headers, scheme, defaultPath,
-          authority, httpMethod, userAgent);
-
-      ChannelFutureListener failureListener = new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (!future.isSuccess()) {
-            // Stream creation failed. Close the stream if not already closed.
-            // When the channel is shutdown, the lifecycle manager has a better view of the failure,
-            // especially before negotiation completes (because the negotiator commonly doesn't
-            // receive the execeptionCaught because NettyClientHandler does not propagate it).
-            Status s = transportState().handler.getLifecycleManager().getShutdownStatus();
-            if (s == null) {
-              s = transportState().statusFromFailedFuture(future);
-            }
-            transportState().transportReportStatus(s, true, new Metadata());
-          }
+      PerfMark.startTask("NettyClientStream$Sink.writeHeaders");
+      Link link = PerfMark.link();
+      try {
+        // Convert the headers into Netty HTTP/2 headers.
+        AsciiString defaultPath = (AsciiString) methodDescriptorAccessor.geRawMethodName(method);
+        if (defaultPath == null) {
+          defaultPath = new AsciiString("/" + method.getFullMethodName());
+          methodDescriptorAccessor.setRawMethodName(method, defaultPath);
         }
-      };
+        boolean get = (requestPayload != null);
+        AsciiString httpMethod;
+        if (get) {
+          // Forge the query string
+          // TODO(ericgribkoff) Add the key back to the query string
+          defaultPath =
+              new AsciiString(defaultPath + "?" + BaseEncoding.base64().encode(requestPayload));
+          httpMethod = Utils.HTTP_GET_METHOD;
+        } else {
+          httpMethod = Utils.HTTP_METHOD;
+        }
+        Http2Headers http2Headers = Utils.convertClientHeaders(headers, scheme, defaultPath,
+            authority, httpMethod, userAgent);
 
-      // Write the command requesting the creation of the stream.
-      writeQueue.enqueue(
-          new CreateStreamCommand(http2Headers, transportState(), shouldBeCountedForInUse(), get),
-          !method.getType().clientSendsOneMessage() || get).addListener(failureListener);
-    }
+        ChannelFutureListener failureListener = new ChannelFutureListener() {
+          @Override
+          public void operationComplete(ChannelFuture future) throws Exception {
+            if (!future.isSuccess()) {
+              // Stream creation failed. Close the stream if not already closed.
+              // When the channel is shutdown, the lifecycle manager has a better view of the failure,
+              // especially before negotiation completes (because the negotiator commonly doesn't
+              // receive the execeptionCaught because NettyClientHandler does not propagate it).
+              Status s = transportState().handler.getLifecycleManager().getShutdownStatus();
+              if (s == null) {
+                s = transportState().statusFromFailedFuture(future);
+              }
+              transportState().transportReportStatus(s, true, new Metadata());
+            }
+          }
+        };
+        // Write the command requesting the creation of the stream.
+        writeQueue.enqueue(
+            new CreateStreamCommand(http2Headers, transportState(), shouldBeCountedForInUse(), get),
+            !method.getType().clientSendsOneMessage() || get).addListener(failureListener);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.writeHeaders");
+      }
+   }
 
     @Override
     public void writeFrame(
