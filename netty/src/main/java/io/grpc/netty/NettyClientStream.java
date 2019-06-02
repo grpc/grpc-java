@@ -169,50 +169,65 @@ class NettyClientStream extends AbstractClientStream {
     @Override
     public void writeFrame(
         WritableBuffer frame, boolean endOfStream, boolean flush, final int numMessages) {
-      Preconditions.checkArgument(numMessages >= 0);
-      ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
-      final int numBytes = bytebuf.readableBytes();
-      if (numBytes > 0) {
-        // Add the bytes to outbound flow control.
-        onSendingBytes(numBytes);
-        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
-            .addListener(new ChannelFutureListener() {
-              @Override
-              public void operationComplete(ChannelFuture future) throws Exception {
-                // If the future succeeds when http2stream is null, the stream has been cancelled
-                // before it began and Netty is purging pending writes from the flow-controller.
-                if (future.isSuccess() && transportState().http2Stream() != null) {
-                  // Remove the bytes from outbound flow control, optionally notifying
-                  // the client that they can send more bytes.
-                  transportState().onSentBytes(numBytes);
-                  NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
+      PerfMark.startTask("NettyClientStream$Sink.writeFrame");
+      try {
+        Preconditions.checkArgument(numMessages >= 0);
+        ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
+        final int numBytes = bytebuf.readableBytes();
+        if (numBytes > 0) {
+          // Add the bytes to outbound flow control.
+          onSendingBytes(numBytes);
+          writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
+              .addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture future) throws Exception {
+                  // If the future succeeds when http2stream is null, the stream has been cancelled
+                  // before it began and Netty is purging pending writes from the flow-controller.
+                  if (future.isSuccess() && transportState().http2Stream() != null) {
+                    // Remove the bytes from outbound flow control, optionally notifying
+                    // the client that they can send more bytes.
+                    transportState().onSentBytes(numBytes);
+                    NettyClientStream.this.getTransportTracer().reportMessageSent(numMessages);
+                  }
                 }
-              }
-            });
-      } else {
-        // The frame is empty and will not impact outbound flow control. Just send it.
-        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
+              });
+        } else {
+          // The frame is empty and will not impact outbound flow control. Just send it.
+          writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
+        }
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.writeFrame");
       }
     }
 
     @Override
     public void request(final int numMessages) {
-      if (channel.eventLoop().inEventLoop()) {
-        // Processing data read in the event loop so can call into the deframer immediately
-        transportState().requestMessagesFromDeframer(numMessages);
-      } else {
-        channel.eventLoop().execute(new Runnable() {
-          @Override
-          public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
-          }
-        });
+      PerfMark.startTask("NettyClientStream$Sink.request");
+      try {
+        if (channel.eventLoop().inEventLoop()) {
+          // Processing data read in the event loop so can call into the deframer immediately
+          transportState().requestMessagesFromDeframer(numMessages);
+        } else {
+          channel.eventLoop().execute(new Runnable() {
+            @Override
+            public void run() {
+              transportState().requestMessagesFromDeframer(numMessages);
+            }
+          });
+        }
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.request");
       }
     }
 
     @Override
     public void cancel(Status status) {
-      writeQueue.enqueue(new CancelClientStreamCommand(transportState(), status), true);
+      PerfMark.startTask("NettyClientStream$Sink.cancel");
+      try {
+        writeQueue.enqueue(new CancelClientStreamCommand(transportState(), status), true);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.cancel");
+      }
     }
   }
 

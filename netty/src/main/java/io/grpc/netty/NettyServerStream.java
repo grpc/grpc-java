@@ -33,6 +33,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.perfmark.PerfMark;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -90,64 +91,89 @@ class NettyServerStream extends AbstractServerStream {
   private class Sink implements AbstractServerStream.Sink {
     @Override
     public void request(final int numMessages) {
-      if (channel.eventLoop().inEventLoop()) {
-        // Processing data read in the event loop so can call into the deframer immediately
-        transportState().requestMessagesFromDeframer(numMessages);
-      } else {
-        channel.eventLoop().execute(new Runnable() {
-          @Override
-          public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
-          }
-        });
+      PerfMark.startTask("NettyServerStream$Sink.request");
+      try {
+        if (channel.eventLoop().inEventLoop()) {
+          // Processing data read in the event loop so can call into the deframer immediately
+          transportState().requestMessagesFromDeframer(numMessages);
+        } else {
+          channel.eventLoop().execute(new Runnable() {
+            @Override
+            public void run() {
+              transportState().requestMessagesFromDeframer(numMessages);
+            }
+          });
+        }
+      } finally {
+        PerfMark.stopTask("NettyServerStream$Sink.request");
       }
     }
 
     @Override
     public void writeHeaders(Metadata headers) {
-      writeQueue.enqueue(
-          SendResponseHeadersCommand.createHeaders(
-              transportState(),
-              Utils.convertServerHeaders(headers)),
-          true);
+      PerfMark.startTask("NettyServerStream$Sink.writeHeaders");
+      try {
+        writeQueue.enqueue(
+            SendResponseHeadersCommand.createHeaders(
+                transportState(),
+                Utils.convertServerHeaders(headers)),
+            true);
+      } finally {
+        PerfMark.stopTask("NettyServerStream$Sink.writeHeaders");
+      }
     }
 
     @Override
     public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
-      Preconditions.checkArgument(numMessages >= 0);
-      if (frame == null) {
-        writeQueue.scheduleFlush();
-        return;
-      }
-      ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
-      final int numBytes = bytebuf.readableBytes();
-      // Add the bytes to outbound flow control.
-      onSendingBytes(numBytes);
-      writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
-          .addListener(new ChannelFutureListener() {
-            @Override
-            public void operationComplete(ChannelFuture future) throws Exception {
-              // Remove the bytes from outbound flow control, optionally notifying
-              // the client that they can send more bytes.
-              transportState().onSentBytes(numBytes);
-              if (future.isSuccess()) {
-                transportTracer.reportMessageSent(numMessages);
+      PerfMark.startTask("NettyServerStream$Sink.writeFrame");
+      try {
+        Preconditions.checkArgument(numMessages >= 0);
+        if (frame == null) {
+          writeQueue.scheduleFlush();
+          return;
+        }
+        ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
+        final int numBytes = bytebuf.readableBytes();
+        // Add the bytes to outbound flow control.
+        onSendingBytes(numBytes);
+        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
+            .addListener(new ChannelFutureListener() {
+              @Override
+              public void operationComplete(ChannelFuture future) throws Exception {
+                // Remove the bytes from outbound flow control, optionally notifying
+                // the client that they can send more bytes.
+                transportState().onSentBytes(numBytes);
+                if (future.isSuccess()) {
+                  transportTracer.reportMessageSent(numMessages);
+                }
               }
-            }
-          });
+            });
+      } finally {
+        PerfMark.stopTask("NettyServerStream$Sink.writeFrame");
+      }
     }
 
     @Override
     public void writeTrailers(Metadata trailers, boolean headersSent, Status status) {
-      Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
-      writeQueue.enqueue(
-          SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
-          true);
+      PerfMark.startTask("NettyServerStream$Sink.writeTrailers");
+      try {
+        Http2Headers http2Trailers = Utils.convertTrailers(trailers, headersSent);
+        writeQueue.enqueue(
+            SendResponseHeadersCommand.createTrailers(transportState(), http2Trailers, status),
+            true);
+      } finally {
+        PerfMark.stopTask("NettyServerStream$Sink.writeTrailers");
+      }
     }
 
     @Override
     public void cancel(Status status) {
-      writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
+      PerfMark.startTask("NettyServerStream$Sink.cancel");
+      try {
+        writeQueue.enqueue(new CancelServerStreamCommand(transportState(), status), true);
+      } finally {
+        PerfMark.startTask("NettyServerStream$Sink.cancel");
+      }
     }
   }
 
