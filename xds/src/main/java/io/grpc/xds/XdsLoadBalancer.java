@@ -35,6 +35,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
@@ -55,6 +56,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
@@ -89,9 +91,11 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   private LbConfig fallbackPolicy;
 
-  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+  XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
+      BackoffPolicy.Provider backoffPolicyProvider) {
     this.helper = helper;
     this.lbRegistry = lbRegistry;
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.localityStore = new LocalityStoreImpl(new LocalityStoreHelper(), lbRegistry);
     fallbackManager = new FallbackManager(helper, lbRegistry);
   }
@@ -166,7 +170,8 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
     }
     xdsLbState = new XdsLbState(
-        newBalancerName, childPolicy, xdsComms, helper, localityStore, adsStreamCallback);
+        newBalancerName, childPolicy, xdsComms, helper, localityStore, adsStreamCallback,
+        backoffPolicyProvider);
   }
 
   @Nullable

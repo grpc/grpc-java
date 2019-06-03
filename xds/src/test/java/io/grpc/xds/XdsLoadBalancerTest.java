@@ -71,6 +71,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
@@ -104,6 +105,8 @@ public class XdsLoadBalancerTest {
   private LoadBalancer fallbackBalancer1;
   @Mock
   private LoadBalancer fakeBalancer2;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
   private XdsLoadBalancer lb;
 
   private final FakeClock fakeClock = new FakeClock();
@@ -224,7 +227,7 @@ public class XdsLoadBalancerTest {
     lbRegistry.register(lbProvider1);
     lbRegistry.register(lbProvider2);
     lbRegistry.register(roundRobin);
-    lb = new XdsLoadBalancer(helper, lbRegistry);
+    lb = new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();

@@ -49,6 +49,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -92,6 +93,8 @@ public class XdsLbStateTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
   @Captor
   private ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor;
   @Captor
@@ -298,7 +301,8 @@ public class XdsLbStateTest {
   public void handleResolvedAddressGroupsThenShutdown() throws Exception {
     localityStore = mock(LocalityStore.class);
     XdsLbState xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback);
+        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback,
+            backoffPolicyProvider);
     xdsLbState.handleResolvedAddressGroups(
         ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
 
