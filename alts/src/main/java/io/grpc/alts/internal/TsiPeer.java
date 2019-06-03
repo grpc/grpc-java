@@ -73,6 +73,13 @@ public final class TsiPeer {
     }
   }
 
+  /** A peer property corresponding to a boolean. */
+  public static final class BooleanProperty extends Property<Boolean> {
+    public BooleanProperty(@Nonnull String name, boolean value) {
+      super(name, value);
+    }
+  }
+
   /** A peer property corresponding to a signed 64-bit integer. */
   public static final class SignedInt64Property extends Property<Long> {
     public SignedInt64Property(@Nonnull String name, @Nonnull Long value) {
