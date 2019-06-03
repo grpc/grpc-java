@@ -45,7 +45,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-final class AutoConfiguredLoadBalancerFactory {
+public final class AutoConfiguredLoadBalancerFactory {
   private static final Logger logger =
       Logger.getLogger(AutoConfiguredLoadBalancerFactory.class.getName());
   private static final String GRPCLB_POLICY_NAME = "grpclb";
@@ -63,7 +63,7 @@ final class AutoConfiguredLoadBalancerFactory {
     this.defaultPolicy = checkNotNull(defaultPolicy, "defaultPolicy");
   }
 
-  AutoConfiguredLoadBalancer newLoadBalancer(Helper helper) {
+  public AutoConfiguredLoadBalancer newLoadBalancer(Helper helper) {
     return new AutoConfiguredLoadBalancer(helper);
   }
 
@@ -84,7 +84,7 @@ final class AutoConfiguredLoadBalancerFactory {
   }
 
   @VisibleForTesting
-  final class AutoConfiguredLoadBalancer {
+  public final class AutoConfiguredLoadBalancer {
     private final Helper helper;
     private LoadBalancer delegate;
     private LoadBalancerProvider delegateProvider;
@@ -99,6 +99,10 @@ final class AutoConfiguredLoadBalancerFactory {
             + " included in META-INF/services/io.grpc.LoadBalancerProvider from your jar files.");
       }
       delegate = delegateProvider.newLoadBalancer(helper);
+    }
+
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      tryHandleResolvedAddresses(resolvedAddresses);
     }
 
     /**
@@ -179,7 +183,7 @@ final class AutoConfiguredLoadBalancerFactory {
     }
 
     @VisibleForTesting
-    LoadBalancer getDelegate() {
+    public LoadBalancer getDelegate() {
       return delegate;
     }
 
