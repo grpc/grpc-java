@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
@@ -35,6 +36,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
@@ -326,6 +328,16 @@ final class XdsLoadBalancer extends LoadBalancer {
         List<EquivalentAddressGroup> servers, Attributes attributes,
         LbConfig fallbackPolicy) {
       this.fallbackServers = servers;
+      String fallbackPolicyName = fallbackPolicy.getPolicyName();
+      if (!fallbackPolicyName.equals("grpclb") && !fallbackPolicyName.equals(XDS_POLICY_NAME)) {
+        ImmutableList.Builder<EquivalentAddressGroup> backends = ImmutableList.builder();
+        for (EquivalentAddressGroup eag : servers) {
+          if (eag.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) == null) {
+            backends.add(eag);
+          }
+        }
+        this.fallbackServers = backends.build();
+      }
       this.fallbackAttributes = Attributes.newBuilder()
           .setAll(attributes)
           .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy.getRawConfigValue())
@@ -333,7 +345,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       LbConfig currentFallbackPolicy = this.fallbackPolicy;
       this.fallbackPolicy = fallbackPolicy;
       if (fallbackBalancer != null) {
-        if (fallbackPolicy.getPolicyName().equals(currentFallbackPolicy.getPolicyName())) {
+        if (fallbackPolicyName.equals(currentFallbackPolicy.getPolicyName())) {
           // TODO(carl-mastrangelo): propagate the load balancing config policy
           fallbackBalancer.handleResolvedAddresses(
               ResolvedAddresses.newBuilder()

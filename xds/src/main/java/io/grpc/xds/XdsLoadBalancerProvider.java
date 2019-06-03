@@ -40,6 +40,8 @@ import javax.annotation.Nullable;
 @Internal
 public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
+  static final String XDS_POLICY_NAME = "xds_experimental";
+
   private static final LbConfig DEFAULT_FALLBACK_POLICY =
       new LbConfig("round_robin", ImmutableMap.<String, Void>of());
 
@@ -55,7 +57,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public String getPolicyName() {
-    return "xds_experimental";
+    return XDS_POLICY_NAME;
   }
 
   @Override
