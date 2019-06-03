@@ -59,54 +59,6 @@ final class XdsComms {
   // never null
   private AdsStream adsStream;
 
-  static final class Locality {
-    final String region;
-    final String zone;
-    final String subzone;
-
-    Locality(io.envoyproxy.envoy.api.v2.core.Locality locality) {
-      this(
-          /* region = */ locality.getRegion(),
-          /* zone = */ locality.getZone(),
-          /* subzone = */ locality.getSubZone());
-    }
-
-    @VisibleForTesting
-    Locality(String region, String zone, String subzone) {
-      this.region = region;
-      this.zone = zone;
-      this.subzone = subzone;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      Locality locality = (Locality) o;
-      return Objects.equal(region, locality.region)
-          && Objects.equal(zone, locality.zone)
-          && Objects.equal(subzone, locality.subzone);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(region, zone, subzone);
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("region", region)
-          .add("zone", zone)
-          .add("subzone", subzone)
-          .toString();
-    }
-  }
-
   /**
    * Information about the locality from EDS response.
    */
@@ -266,11 +218,11 @@ final class XdsComms {
                   localityStore.updateDropPercentage(dropOverloads);
 
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-                  Map<Locality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
+                  Map<XdsLocality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
                   for (LocalityLbEndpoints localityLbEndpoints : localities) {
                     io.envoyproxy.envoy.api.v2.core.Locality localityProto =
                         localityLbEndpoints.getLocality();
-                    Locality locality = new Locality(localityProto);
+                    XdsLocality locality = XdsLocality.fromLocalityProto(localityProto);
                     List<LbEndpoint> lbEndPoints = new ArrayList<>();
                     for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
                         : localityLbEndpoints.getLbEndpointsList()) {

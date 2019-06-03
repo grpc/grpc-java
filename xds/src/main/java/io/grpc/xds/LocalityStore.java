@@ -43,7 +43,6 @@ import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.DropOverload;
-import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
@@ -64,7 +63,7 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap);
+  void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap);
 
   void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
 
@@ -78,7 +77,7 @@ interface LocalityStore {
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
 
-    private Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
+    private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -157,13 +156,13 @@ interface LocalityStore {
 
     // This is triggered by EDS response.
     @Override
-    public void updateLocalityStore(Map<Locality, LocalityInfo> localityInfoMap) {
-      Set<Locality> oldLocalities = localityMap.keySet();
-      Set<Locality> newLocalities = localityInfoMap.keySet();
+    public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
+      Set<XdsLocality> oldLocalities = localityMap.keySet();
+      Set<XdsLocality> newLocalities = localityInfoMap.keySet();
 
-      Iterator<Locality> iterator = oldLocalities.iterator();
+      Iterator<XdsLocality> iterator = oldLocalities.iterator();
       while (iterator.hasNext()) {
-        Locality oldLocality = iterator.next();
+        XdsLocality oldLocality = iterator.next();
         if (!newLocalities.contains(oldLocality)) {
           // No graceful transition until a high-level lb graceful transition design is available.
           localityMap.get(oldLocality).shutdown();
@@ -177,7 +176,7 @@ interface LocalityStore {
 
       ConnectivityState newState = null;
       List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
-      for (Locality newLocality : newLocalities) {
+      for (XdsLocality newLocality : newLocalities) {
 
         // Assuming standard mode only (EDS response with a list of endpoints) for now
         List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
@@ -242,7 +241,7 @@ interface LocalityStore {
     }
 
     private void updateChildState(
-        Locality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
+        XdsLocality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
       if (!localityMap.containsKey(locality)) {
         return;
       }
@@ -250,7 +249,7 @@ interface LocalityStore {
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
-      for (Locality l : localityMap.keySet()) {
+      for (XdsLocality l : localityMap.keySet()) {
         LocalityLbInfo localityLbInfo = localityMap.get(l);
         ConnectivityState childState;
         SubchannelPicker childPicker;
@@ -324,12 +323,12 @@ interface LocalityStore {
 
     class ChildHelper extends ForwardingLoadBalancerHelper {
 
-      private final Locality locality;
+      private final XdsLocality locality;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
-      ChildHelper(Locality locality) {
+      ChildHelper(XdsLocality locality) {
         this.locality = checkNotNull(locality, "locality");
       }
 
@@ -359,7 +358,7 @@ interface LocalityStore {
       @Override
       public String getAuthority() {
         //FIXME: This should be a new proposed field of Locality, locality_name
-        return locality.subzone;
+        return locality.getSubzone();
       }
     }
   }

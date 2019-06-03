@@ -59,7 +59,6 @@ import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.LbEndpoint;
-import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
@@ -236,7 +235,7 @@ public class XdsLbStateTest {
   public void handleSubchannelState() {
     assertThat(loadBalancers).isEmpty();
 
-    Locality locality1 = new Locality("r1", "z1", "sz1");
+    XdsLocality locality1 = new XdsLocality("r1", "z1", "sz1");
     EquivalentAddressGroup eag11 = new EquivalentAddressGroup(new InetSocketAddress("addr11", 11));
     EquivalentAddressGroup eag12 = new EquivalentAddressGroup(new InetSocketAddress("addr12", 12));
 
@@ -244,7 +243,7 @@ public class XdsLbStateTest {
     LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12);
     LocalityInfo localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
 
-    Locality locality2 = new Locality("r2", "z2", "sz2");
+    XdsLocality locality2 = new XdsLocality("r2", "z2", "sz2");
     EquivalentAddressGroup eag21 = new EquivalentAddressGroup(new InetSocketAddress("addr21", 21));
     EquivalentAddressGroup eag22 = new EquivalentAddressGroup(new InetSocketAddress("addr22", 22));
 
@@ -252,7 +251,7 @@ public class XdsLbStateTest {
     LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22);
     LocalityInfo localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
 
-    Map<Locality, LocalityInfo> localityInfoMap = new LinkedHashMap<>();
+    Map<XdsLocality, LocalityInfo> localityInfoMap = new LinkedHashMap<>();
     localityInfoMap.put(locality1, localityInfo1);
     localityInfoMap.put(locality2, localityInfo2);
 
