@@ -146,9 +146,10 @@ class NettyClientStream extends AbstractClientStream {
           public void operationComplete(ChannelFuture future) throws Exception {
             if (!future.isSuccess()) {
               // Stream creation failed. Close the stream if not already closed.
-              // When the channel is shutdown, the lifecycle manager has a better view of the failure,
-              // especially before negotiation completes (because the negotiator commonly doesn't
-              // receive the execeptionCaught because NettyClientHandler does not propagate it).
+              // When the channel is shutdown, the lifecycle manager has a better view of the
+              // failure, especially before negotiation completes (because the negotiator commonly
+              // doesn't receive the execeptionCaught because NettyClientHandler does not propagate
+              // it).
               Status s = transportState().handler.getLifecycleManager().getShutdownStatus();
               if (s == null) {
                 s = transportState().statusFromFailedFuture(future);
@@ -164,7 +165,7 @@ class NettyClientStream extends AbstractClientStream {
       } finally {
         PerfMark.stopTask("NettyClientStream$Sink.writeHeaders");
       }
-   }
+    }
 
     @Override
     public void writeFrame(
@@ -177,7 +178,8 @@ class NettyClientStream extends AbstractClientStream {
         if (numBytes > 0) {
           // Add the bytes to outbound flow control.
           onSendingBytes(numBytes);
-          writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
+          writeQueue.enqueue(
+              new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush)
               .addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -193,7 +195,8 @@ class NettyClientStream extends AbstractClientStream {
               });
         } else {
           // The frame is empty and will not impact outbound flow control. Just send it.
-          writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
+          writeQueue.enqueue(
+              new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
         }
       } finally {
         PerfMark.stopTask("NettyClientStream$Sink.writeFrame");
