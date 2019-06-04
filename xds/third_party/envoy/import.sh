@@ -72,7 +72,7 @@ done
 
 # DO NOT TOUCH! The following section is upstreamed with an internal script.
 
-# See google internal third_party/envoy/envoy-update.sh
+# See google internal third_party/envoy/copy.bara.sky
 # ===========================================================================
 # Fix up proto imports and remove references to gogoproto.
 # ===========================================================================
