@@ -24,7 +24,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
@@ -58,22 +57,14 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class XdsLoadStatsStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
-  private static final Locality LOCALITY1 =
-      Locality.newBuilder()
-          .setRegion("test_region1")
-          .setZone("test_zone")
-          .setSubZone("test_subzone")
-          .build();
-  private static final Locality LOCALITY2 =
-      Locality.newBuilder()
-          .setRegion("test_region2")
-          .setZone("test_zone")
-          .setSubZone("test_subzone")
-          .build();
+  private static final XdsLocality LOCALITY1 =
+      new XdsLocality("test_region1", "test_zone", "test_subzone");
+  private static final XdsLocality LOCALITY2 =
+      new XdsLocality("test_region2", "test_zone", "test_subzone");
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
   private Subchannel mockSubchannel = mock(Subchannel.class);
-  private ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
+  private ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private XdsLoadStatsStore loadStore;
 
@@ -97,7 +88,7 @@ public class XdsLoadStatsStoreTest {
     return res;
   }
 
-  private static UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
+  private static UpstreamLocalityStats buildUpstreamLocalityStats(XdsLocality locality,
       long callsSucceed,
       long callsInProgress,
       long callsFailed,
@@ -105,7 +96,7 @@ public class XdsLoadStatsStoreTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
+            .setLocality(locality.toLocalityProto())
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
@@ -155,7 +146,8 @@ public class XdsLoadStatsStoreTest {
   private static void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
       List<UpstreamLocalityStats> actual) {
     assertThat(actual).hasSize(expected.size());
-    Map<Locality, UpstreamLocalityStats> expectedLocalityStats = new HashMap<>();
+    Map<io.envoyproxy.envoy.api.v2.core.Locality, UpstreamLocalityStats> expectedLocalityStats =
+        new HashMap<>();
     for (UpstreamLocalityStats stats : expected) {
       expectedLocalityStats.put(stats.getLocality(), stats);
     }

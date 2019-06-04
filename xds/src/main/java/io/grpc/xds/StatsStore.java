@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
@@ -44,7 +43,7 @@ interface StatsStore {
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
-  void addLocality(Locality locality);
+  void addLocality(XdsLocality locality);
 
   /**
    * Stops tracking load stats for endpoints in the provided locality. To be called upon balancer
@@ -55,7 +54,7 @@ interface StatsStore {
    * <p>This method is not thread-safe and should be called from the same synchronized context *
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
-  void removeLocality(Locality locality);
+  void removeLocality(XdsLocality locality);
 
   /**
    * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker
@@ -63,7 +62,7 @@ interface StatsStore {
    *
    * <p>This method is thread-safe.
    */
-  PickResult interceptPickResult(PickResult pickResult, Locality locality);
+  PickResult interceptPickResult(PickResult pickResult, XdsLocality locality);
 
   /**
    * Returns the {@link StatsCounter} that does locality level stats aggregation for the provided
@@ -71,7 +70,7 @@ interface StatsStore {
    * (i.e., after {@code #addLocality} and before {@code #removeLocality} is called for the
    * provided locality).
    */
-  StatsCounter getLocalityCounter(Locality locality);
+  StatsCounter getLocalityCounter(XdsLocality locality);
 
   /**
    * Records a drop decision made by a {@link io.grpc.LoadBalancer.SubchannelPicker} instance

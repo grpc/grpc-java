@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
@@ -57,18 +56,18 @@ final class XdsLoadStatsStore implements StatsStore {
       };
 
   private final String clusterName;
-  private final ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
+  private final ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
   XdsLoadStatsStore(String clusterName) {
-    this(clusterName, new ConcurrentHashMap<Locality, StatsCounter>(),
+    this(clusterName, new ConcurrentHashMap<XdsLocality, StatsCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
   XdsLoadStatsStore(String clusterName,
-      ConcurrentMap<Locality, StatsCounter> localityLoadCounters,
+      ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
@@ -84,10 +83,10 @@ final class XdsLoadStatsStore implements StatsStore {
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName);
-    for (Map.Entry<Locality, StatsCounter> entry : localityLoadCounters.entrySet()) {
+    for (Map.Entry<XdsLocality, StatsCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
@@ -123,7 +122,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   @Override
-  public void addLocality(final Locality locality) {
+  public void addLocality(final XdsLocality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active counter for locality %s already exists", locality);
@@ -143,7 +142,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   @Override
-  public void removeLocality(final Locality locality) {
+  public void removeLocality(final XdsLocality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active counter for locality %s exists", locality);
@@ -155,7 +154,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * stats for the provided locality, or {@code null} if the locality is untracked.
    */
   @Override
-  public StatsCounter getLocalityCounter(final Locality locality) {
+  public StatsCounter getLocalityCounter(final XdsLocality locality) {
     return localityLoadCounters.get(locality);
   }
 
@@ -176,7 +175,7 @@ final class XdsLoadStatsStore implements StatsStore {
   }
 
   @Override
-  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
+  public PickResult interceptPickResult(PickResult pickResult, XdsLocality locality) {
     if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
