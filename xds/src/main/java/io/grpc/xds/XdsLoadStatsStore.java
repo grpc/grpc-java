@@ -78,7 +78,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * Generates a {@link ClusterStats} containing client side load stats and backend metrics
    * (if any) in locality granularity.
    * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
+   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
    */
   @Override
   public ClusterStats generateLoadReport() {
@@ -119,7 +119,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * this {@link XdsLoadStatsStore}. This method needs to be called at locality updates only for
    * newly assigned localities in balancer discovery responses.
    * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
+   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
    */
   @Override
   public void addLocality(final XdsLocality locality) {
@@ -139,7 +139,7 @@ final class XdsLoadStatsStore implements StatsStore {
    * no longer exposed by the remote balancer. This method needs to be called at
    * locality updates only for localities newly removed from balancer discovery responses.
    * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
+   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
    */
   @Override
   public void removeLocality(final XdsLocality locality) {

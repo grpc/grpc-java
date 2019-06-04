@@ -34,7 +34,7 @@ interface XdsLoadReportClient {
    * XdsLoadReportClient} and should only be called once.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
   void startLoadReporting();
 
@@ -44,7 +44,7 @@ interface XdsLoadReportClient {
    * <p>No method in {@link XdsLoadReportClient} should be called after calling this method.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
   void stopLoadReporting();
 }
