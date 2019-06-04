@@ -25,10 +25,14 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -40,6 +44,17 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class XdsLoadStatsStore implements StatsStore {
+
+  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+      new ClientStreamTracer() {
+      };
+  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+      new ClientStreamTracer.Factory() {
+        @Override
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+          return NOOP_CLIENT_STREAM_TRACER;
+        }
+      };
 
   private final String clusterName;
   private final ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
@@ -158,6 +173,23 @@ final class XdsLoadStatsStore implements StatsStore {
       }
     }
     counter.getAndIncrement();
+  }
+
+  @Override
+  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
+    if (!pickResult.getStatus().isOk()) {
+      return pickResult;
+    }
+    StatsCounter counter = localityLoadCounters.get(locality);
+    if (counter == null) {
+      return pickResult;
+    }
+    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
+    if (originFactory == null) {
+      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+    }
+    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
+    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 
   /**

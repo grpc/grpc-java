@@ -26,7 +26,6 @@ import com.google.common.base.Supplier;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
@@ -37,7 +36,6 @@ import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -46,8 +44,6 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -98,9 +94,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
-      BackoffPolicy.Provider backoffPolicyProvider) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
+      BackoffPolicy.Provider backoffPolicyProvider,
+      StatsStore statsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
   }
 
   @VisibleForTesting
@@ -137,44 +133,6 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       lrsStream.close(null);
     }
     // Do not shutdown channel as it is not owned by LrsClient.
-  }
-
-  @Override
-  public void addLocality(Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    statsStore.addLocality(locality);
-  }
-
-  @Override
-  public void removeLocality(final Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    statsStore.removeLocality(locality);
-  }
-
-  @Override
-  public void recordDroppedRequest(String category) {
-    checkState(started, "load reporting must be started first");
-    statsStore.recordDroppedRequest(category);
-  }
-
-  @Override
-  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    checkState(started, "load reporting must be started first");
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    StatsCounter counter = statsStore.getLocalityCounter(locality);
-    if (counter == null) {
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 
   @VisibleForTesting
@@ -381,20 +339,5 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
-  }
-
-  /**
-   * Interface for client side load stats store.
-   */
-  interface StatsStore {
-    ClusterStats generateLoadReport();
-
-    void addLocality(Locality locality);
-
-    void removeLocality(Locality locality);
-
-    StatsCounter getLocalityCounter(Locality locality);
-
-    void recordDroppedRequest(String category);
   }
 }
