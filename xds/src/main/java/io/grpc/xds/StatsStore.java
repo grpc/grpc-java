@@ -21,14 +21,17 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 
 /**
- * Interface for client side load stats store.
+ * Interface for client side load stats store. A {@code StatsStore} implementation should only be
+ * responsible for keeping track of load data aggregation, any load reporting information should
+ * be opaque to {@code StatsStore} and be set outside.
  */
 interface StatsStore {
   /**
    * Generates a {@link ClusterStats} containing load stats and backend metrics in locality
    * granularity, as well service level drop stats for the interval since the previous call of
-   * this method. The field LoadReportInterval in teh returned {@link ClusterStats} needs to be
-   * set before it is ready to be sent to the traffic directory.
+   * this method. The fields cluster_name and load_report_interval in the returned
+   * {@link ClusterStats} needs to be set before it is ready to be sent to the traffic directory
+   * for load reporting.
    *
    * <p>This method should be called in the same synchronized context that
    * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.

@@ -85,7 +85,7 @@ interface LocalityStore {
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore(helper.getAuthority()));
+          new XdsLoadStatsStore());
     }
 
     @VisibleForTesting
