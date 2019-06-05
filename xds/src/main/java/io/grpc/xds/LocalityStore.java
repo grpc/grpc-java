@@ -111,13 +111,15 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
+      final StatsStore statsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random) {
+          ThreadSafeRandom random, StatsStore statsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
+        this.statsStore = statsStore;
       }
 
       @Override
@@ -125,6 +127,7 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.dropsPerMillion) {
+            statsStore.recordDroppedRequest(dropOverload.category);
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
@@ -300,7 +303,7 @@ interface LocalityStore {
       }
 
       if (!dropOverloads.isEmpty()) {
-        picker = new DroppablePicker(dropOverloads, picker, random);
+        picker = new DroppablePicker(dropOverloads, picker, random, statsStore);
         if (state == null) {
           state = IDLE;
         }
