@@ -64,9 +64,6 @@ def _path_ignoring_repository(f):
         return f.short_path
     return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
 
-def _create_include_path(include):
-    return "-I{0}={1}".format(_path_ignoring_repository(include), include.path)
-
 def _java_rpc_library_impl(ctx):
     if len(ctx.attr.srcs) != 1:
         fail("Exactly one src value supported", "srcs")
@@ -76,18 +73,18 @@ def _java_rpc_library_impl(ctx):
 
     toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
     srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
-    includes = ctx.attr.srcs[0][ProtoInfo].transitive_imports
+    descriptor_set_in = ctx.attr.srcs[0][ProtoInfo].transitive_descriptor_sets
 
     srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
     args = ctx.actions.args()
     args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
     args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
-    args.add_all(includes, map_each = _create_include_path)
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ":")
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
     ctx.actions.run(
-        inputs = depset([toolchain.plugin] + srcs, transitive = [includes]),
+        inputs = depset([toolchain.plugin] + srcs, transitive = [descriptor_set_in]),
         outputs = [srcjar],
         executable = toolchain.protoc,
         arguments = [args],
