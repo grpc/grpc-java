@@ -54,6 +54,7 @@ public final class ManagedChannelOrphanWrapperTest {
         new ConcurrentHashMap<>();
 
     assertEquals(0, refs.size());
+    @SuppressWarnings("UnusedVariable")
     ManagedChannelOrphanWrapper channel = new ManagedChannelOrphanWrapper(mc, refqueue, refs);
     assertEquals(1, refs.size());
 
@@ -106,8 +107,11 @@ public final class ManagedChannelOrphanWrapperTest {
         new ReferenceQueue<>();
     ConcurrentMap<ManagedChannelReference, ManagedChannelReference> refs =
         new ConcurrentHashMap<>();
+    @SuppressWarnings("UnusedVariable")
     ApplicationWithChannelRef app = new ApplicationWithChannelRef();
+    @SuppressWarnings("UnusedVariable")
     ChannelWithApplicationRef channelImpl = new ChannelWithApplicationRef();
+    @SuppressWarnings("UnusedVariable")
     ManagedChannelOrphanWrapper channel =
         new ManagedChannelOrphanWrapper(channelImpl, refqueue, refs);
     app.channel = channel;
@@ -164,10 +168,12 @@ public final class ManagedChannelOrphanWrapperTest {
   }
 
   private static final class ApplicationWithChannelRef {
+    @SuppressWarnings("UnusedVariable")
     private ManagedChannel channel;
   }
 
   private static final class ChannelWithApplicationRef extends TestManagedChannel {
+    @SuppressWarnings("UnusedVariable")
     private ApplicationWithChannelRef application;
   }
 }

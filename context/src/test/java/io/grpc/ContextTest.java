@@ -967,7 +967,7 @@ public class ContextTest {
         assertNull(logRef.get());
         ctx = ctx.fork();
       }
-      ctx = ctx.fork();
+      ctx.fork();
       assertNotNull(logRef.get());
       assertNotNull(logRef.get().getThrown());
       assertEquals(Level.SEVERE, logRef.get().getLevel());

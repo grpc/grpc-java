@@ -532,8 +532,6 @@ public class ServerCallsTest {
     private final MethodDescriptor<Integer, Integer> methodDescriptor;
     private final List<Integer> requestCalls = new ArrayList<>();
     private final List<Integer> responses = new ArrayList<>();
-    private Metadata headers;
-    private Metadata trailers;
     private Status status;
     private boolean isCancelled;
     private boolean isReady;
@@ -549,7 +547,6 @@ public class ServerCallsTest {
 
     @Override
     public void sendHeaders(Metadata headers) {
-      this.headers = headers;
     }
 
     @Override
@@ -560,7 +557,6 @@ public class ServerCallsTest {
     @Override
     public void close(Status status, Metadata trailers) {
       this.status = status;
-      this.trailers = trailers;
     }
 
     @Override

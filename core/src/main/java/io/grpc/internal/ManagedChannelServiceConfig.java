@@ -45,6 +45,7 @@ final class ManagedChannelServiceConfig {
   private final Map<String, MethodInfo> serviceMap;
   // TODO(notcarl/zdapeng): use retryThrottling here
   @Nullable
+  @SuppressWarnings("unused")
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
