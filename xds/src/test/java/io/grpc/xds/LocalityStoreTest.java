@@ -20,13 +20,16 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -51,6 +54,8 @@ import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Before;
@@ -85,7 +90,7 @@ public class LocalityStoreTest {
       return new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
+          return childPickers.get(nextIndex).pickSubchannel(args);
         }
       };
     }
@@ -164,6 +169,8 @@ public class LocalityStoreTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
+  @Mock
+  private StatsStore statsStore;
 
   private LocalityStore localityStore;
 
@@ -172,8 +179,40 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(
         ArgumentMatchers.<EquivalentAddressGroup>anyList(), any(Attributes.class));
+    doAnswer(returnsFirstArg())
+        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random);
+    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void updateLocalityStore_updateStatsStoreLocalityTracking() {
+    Map<XdsLocality, LocalityInfo> localityInfoMap = new HashMap<>();
+    localityInfoMap
+        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1));
+    localityInfoMap
+        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality1);
+    verify(statsStore).addLocality(locality2);
+
+    localityInfoMap
+        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality3);
+
+    localityInfoMap = ImmutableMap
+        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
+    verify(statsStore).removeLocality(locality3);
+    verify(statsStore).addLocality(locality4);
+
+    localityStore.updateLocalityStore(Collections.EMPTY_MAP);
+    verify(statsStore).removeLocality(locality4);
+    verifyNoMoreInteractions(statsStore);
   }
 
   @Test

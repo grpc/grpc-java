@@ -32,24 +32,32 @@ final class InterLocalityPicker extends SubchannelPicker {
   private final ThreadSafeRandom random;
   private final int totalWeight;
 
-  static final class WeightedChildPicker {
-    final int weight;
-    final SubchannelPicker childPicker;
+  static final class WeightedChildPicker extends SubchannelPicker {
+    private final XdsLocality locality;
+    private final int weight;
+    private final SubchannelPicker childPicker;
+    private final StatsStore statsStore;
 
-    WeightedChildPicker(int weight, SubchannelPicker childPicker) {
+    WeightedChildPicker(XdsLocality locality, int weight, SubchannelPicker childPicker,
+        StatsStore statsStore) {
       checkArgument(weight >= 0, "weight is negative");
       checkNotNull(childPicker, "childPicker is null");
+      checkNotNull(locality, "locality is null");
+      checkNotNull(statsStore, "statsStore is null");
 
+      this.locality = locality;
       this.weight = weight;
       this.childPicker = childPicker;
+      this.statsStore = statsStore;
     }
 
     int getWeight() {
       return weight;
     }
 
-    SubchannelPicker getPicker() {
-      return childPicker;
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return statsStore.interceptPickResult(childPicker.pickSubchannel(args), locality);
     }
   }
 
@@ -79,8 +87,7 @@ final class InterLocalityPicker extends SubchannelPicker {
     SubchannelPicker childPicker = null;
 
     if (totalWeight == 0) {
-      childPicker =
-          weightedChildPickers.get(random.nextInt(weightedChildPickers.size())).getPicker();
+      childPicker = weightedChildPickers.get(random.nextInt(weightedChildPickers.size()));
     } else {
       int rand = random.nextInt(totalWeight);
 
@@ -90,7 +97,7 @@ final class InterLocalityPicker extends SubchannelPicker {
       for (int idx = 0; idx < weightedChildPickers.size(); idx++) {
         accumulatedWeight += weightedChildPickers.get(idx).getWeight();
         if (rand < accumulatedWeight) {
-          childPicker = weightedChildPickers.get(idx).getPicker();
+          childPicker = weightedChildPickers.get(idx);
           break;
         }
       }

@@ -19,14 +19,17 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -94,6 +97,8 @@ public class XdsLbStateTest {
   private ThreadSafeRandom random;
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
+  @Mock
+  private StatsStore statsStore;
   @Captor
   private ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor;
   @Captor
@@ -157,7 +162,7 @@ public class XdsLbStateTest {
       return new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
+          return childPickers.get(nextIndex).pickSubchannel(args);
         }
       };
     }
@@ -177,8 +182,11 @@ public class XdsLbStateTest {
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
+    doAnswer(returnsFirstArg())
+        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(childLbProvider);
-    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry, random);
+    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry, random,
+        statsStore);
 
     String serverName = InProcessServerBuilder.generateName();
 
@@ -299,6 +307,7 @@ public class XdsLbStateTest {
   @Test
   public void handleResolvedAddressGroupsThenShutdown() throws Exception {
     localityStore = mock(LocalityStore.class);
+    when(localityStore.getStatsStore()).thenReturn(statsStore);
     XdsLbState xdsLbState =
         new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback,
             backoffPolicyProvider);

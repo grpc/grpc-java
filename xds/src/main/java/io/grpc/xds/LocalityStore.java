@@ -69,6 +69,8 @@ interface LocalityStore {
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
+  StatsStore getStatsStore();
+
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
 
@@ -76,24 +78,27 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
+    private final StatsStore statsStore;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          new XdsLoadStatsStore(helper.getAuthority()));
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
         Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random) {
+        ThreadSafeRandom random, StatsStore statsStore) {
       this.helper = helper;
-      this.pickerFactory = pickerFactory;
+      this.pickerFactory = checkNotNull(pickerFactory, "pickFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
       this.random = random;
+      this.statsStore = checkNotNull(statsStore, "statsStore");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -165,6 +170,7 @@ interface LocalityStore {
         XdsLocality oldLocality = iterator.next();
         if (!newLocalities.contains(oldLocality)) {
           // No graceful transition until a high-level lb graceful transition design is available.
+          statsStore.removeLocality(oldLocality);
           localityMap.get(oldLocality).shutdown();
           iterator.remove();
           if (localityMap.isEmpty()) {
@@ -191,6 +197,7 @@ interface LocalityStore {
               oldLocalityLbInfo.childBalancer,
               childHelper);
         } else {
+          statsStore.addLocality(newLocality);
           childHelper = new ChildHelper(newLocality);
           localityLbInfo =
               new LocalityLbInfo(
@@ -207,8 +214,10 @@ interface LocalityStore {
         if (localityLbInfo.childHelper.currentChildState == READY) {
           childPickers.add(
               new WeightedChildPicker(
+                  newLocality,
                   localityInfoMap.get(newLocality).localityWeight,
-                  localityLbInfo.childHelper.currentChildPicker));
+                  localityLbInfo.childHelper.currentChildPicker,
+                  statsStore));
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
@@ -220,6 +229,11 @@ interface LocalityStore {
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
+    }
+
+    @Override
+    public StatsStore getStatsStore() {
+      return statsStore;
     }
 
     @Nullable
@@ -264,7 +278,7 @@ interface LocalityStore {
 
         if (READY == childState) {
           childPickers.add(
-              new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
+              new WeightedChildPicker(l, localityLbInfo.localityWeight, childPicker, statsStore));
         }
       }
 
