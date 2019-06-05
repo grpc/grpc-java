@@ -31,7 +31,7 @@ import org.apache.logging.log4j.util.PropertiesUtil;
 
 /**
  * A simple server that like {@link io.grpc.examples.helloworld.HelloWorldServer}.
- * It uses
+ * It uses {@link HeaderServerInterceptor} to set the correct logging context for the stub.
  */
 public class CustomLogServer {
 
@@ -96,6 +96,9 @@ public class CustomLogServer {
     @Override
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
       logger.info("Got a request");
+      // outputs something like:
+      // 2019/06/05 15:22:12:686 PDT INFO Got a request
+      // {requestId=3e6c256d-6e87-411e-8bf3-fbf81e7ce0e6, clientname=my.domain.name}
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
       responseObserver.onNext(reply);
       responseObserver.onCompleted();
