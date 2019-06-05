@@ -9,7 +9,8 @@ plugins {
 
 repositories {
     maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
+        url "https://maven-central.storage-download.googleapis.com/repos/central/data/"
+    }
     mavenLocal()
 }
 
@@ -22,22 +23,14 @@ targetCompatibility = 1.7
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
 def grpcVersion = '1.22.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-def protobufVersion = '3.7.1'
-def protocVersion = protobufVersion
+def protocVersion = '3.7.1'
 
 dependencies {
+    compile "org.apache.logging.log4j:log4j-api:2.11.2"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
+    implementation "io.grpc:grpc-netty:${grpcVersion}"
     compileOnly "javax.annotation:javax.annotation-api:1.2"
-
-    // examples/advanced need this for JsonFormat
-    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
-
-    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
-
-    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "junit:junit:4.12"
-    testImplementation "org.mockito:mockito-core:2.25.1"
 }
 
 protobuf {
@@ -62,46 +55,23 @@ sourceSets {
 
 startScripts.enabled = false
 
-task routeGuideServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.routeguide.RouteGuideServer'
-    applicationName = 'route-guide-server'
+
+task customLogServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.logcontext.CustomLogServer'
+    applicationName = 'hello-world-logcontext-server'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
-task routeGuideClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.routeguide.RouteGuideClient'
-    applicationName = 'route-guide-client'
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = startScripts.classpath
-}
-
-task helloWorldServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworld.HelloWorldServer'
-    applicationName = 'hello-world-server'
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = startScripts.classpath
-}
-
-task helloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.helloworld.HelloWorldClient'
-    applicationName = 'hello-world-client'
-    outputDir = new File(project.buildDir, 'tmp')
-    classpath = startScripts.classpath
-}
-
-task compressingHelloWorldClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
-    applicationName = 'compressing-hello-world-client'
+task customLogClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.logcontext.Client'
+    applicationName = 'hello-world-logcontext-client'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 applicationDistribution.into('bin') {
-    from(routeGuideServer)
-    from(routeGuideClient)
-    from(helloWorldServer)
-    from(helloWorldClient)
-    from(compressingHelloWorldClient)
+    from(customLogServer)
+    from(customLogClient)
     fileMode = 0755
 }
