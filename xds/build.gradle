@@ -44,6 +44,7 @@ sourceSets {
     main {
         proto {
             srcDir 'third_party/envoy/src/main/proto'
+            srcDir 'third_party/gogoproto/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
         }
     }
