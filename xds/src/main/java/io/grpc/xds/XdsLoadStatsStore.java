@@ -77,8 +77,6 @@ final class XdsLoadStatsStore implements StatsStore {
   /**
    * Generates a {@link ClusterStats} containing client side load stats and backend metrics
    * (if any) in locality granularity.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
    */
   @Override
   public ClusterStats generateLoadReport() {
@@ -116,10 +114,7 @@ final class XdsLoadStatsStore implements StatsStore {
 
   /**
    * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadStatsStore}. This method needs to be called at locality updates only for
-   * newly assigned localities in balancer discovery responses.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
+   * this {@link XdsLoadStatsStore}.
    */
   @Override
   public void addLocality(final XdsLocality locality) {
@@ -135,11 +130,7 @@ final class XdsLoadStatsStore implements StatsStore {
 
   /**
    * Deactivate the {@link StatsCounter} for the provided locality in by this
-   * {@link XdsLoadStatsStore}. Inactive {@link StatsCounter}s are for localities
-   * no longer exposed by the remote balancer. This method needs to be called at
-   * locality updates only for localities newly removed from balancer discovery responses.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer.Helper#getSynchronizationContext} returns.
+   * {@link XdsLoadStatsStore}.
    */
   @Override
   public void removeLocality(final XdsLocality locality) {
@@ -149,19 +140,11 @@ final class XdsLoadStatsStore implements StatsStore {
     counter.setActive(false);
   }
 
-  /**
-   * Returns the {@link StatsCounter} instance that is responsible for aggregating load
-   * stats for the provided locality, or {@code null} if the locality is untracked.
-   */
   @Override
   public StatsCounter getLocalityCounter(final XdsLocality locality) {
     return localityLoadCounters.get(locality);
   }
 
-  /**
-   * Record that a request has been dropped by drop overload policy with the provided category
-   * instructed by the remote balancer.
-   */
   @Override
   public void recordDroppedRequest(String category) {
     AtomicLong counter = dropCounters.get(category);

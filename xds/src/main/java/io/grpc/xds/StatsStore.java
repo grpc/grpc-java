@@ -38,7 +38,8 @@ interface StatsStore {
   /**
    * Tracks load stats for endpoints in the provided locality. To be called upon balancer locality
    * updates only for newly assigned localities. Only load stats for endpoints in added localities
-   * will be reported to the remote balancer.
+   * will be reported to the remote balancer. This method needs to be called at locality updates
+   * only for * newly assigned localities in balancer discovery responses.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
@@ -68,7 +69,9 @@ interface StatsStore {
    * Returns the {@link StatsCounter} that does locality level stats aggregation for the provided
    * locality. It is caller's responsibility to ensure the counter exists
    * (i.e., after {@code #addLocality} and before {@code #removeLocality} is called for the
-   * provided locality).
+   * provided locality). Otherwise, {@code null} will be returned.
+   *
+   * <p>This method is thread-safe.
    */
   StatsCounter getLocalityCounter(XdsLocality locality);
 
