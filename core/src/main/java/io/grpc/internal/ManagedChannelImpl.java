@@ -254,6 +254,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Must be mutated and read from constructor or syncContext
   // See service config error handling spec for reference.
   // TODO(notcarl): check this value when error in service config resolution
+  @SuppressWarnings("UnusedVariable")
   private boolean waitingForServiceConfig = true;
   private final boolean lookUpServiceConfig;
 

@@ -55,7 +55,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -64,7 +63,6 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 final class InternalSubchannel implements InternalInstrumented<ChannelStats>, TransportProvider {
-  private static final Logger log = Logger.getLogger(InternalSubchannel.class.getName());
 
   private final InternalLogId logId;
   private final String authority;

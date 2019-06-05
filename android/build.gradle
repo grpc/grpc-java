@@ -43,7 +43,7 @@ repositories {
 }
 
 dependencies {
-    errorprone 'com.google.errorprone:error_prone_core:2.3.2'
+    errorprone 'com.google.errorprone:error_prone_core:2.3.3'
     errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
 
     implementation 'io.grpc:grpc-core:1.22.0-SNAPSHOT' // CURRENT_GRPC_VERSION

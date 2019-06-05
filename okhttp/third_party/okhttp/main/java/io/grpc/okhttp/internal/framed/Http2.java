@@ -234,7 +234,8 @@ public final class Http2 implements Variant {
       source.skip(padding);
     }
 
-    private void readPriority(Handler handler, int length, byte flags, int streamId)
+    private void readPriority(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 5) throw ioException("TYPE_PRIORITY length: %d != 5", length);
       if (streamId == 0) throw ioException("TYPE_PRIORITY streamId == 0");
@@ -249,7 +250,8 @@ public final class Http2 implements Variant {
       handler.priority(streamId, streamDependency, weight, exclusive);
     }
 
-    private void readRstStream(Handler handler, int length, byte flags, int streamId)
+    private void readRstStream(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 4) throw ioException("TYPE_RST_STREAM length: %d != 4", length);
       if (streamId == 0) throw ioException("TYPE_RST_STREAM streamId == 0");
@@ -335,7 +337,8 @@ public final class Http2 implements Variant {
       handler.ping(ack, payload1, payload2);
     }
 
-    private void readGoAway(Handler handler, int length, byte flags, int streamId)
+    private void readGoAway(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length < 8) throw ioException("TYPE_GOAWAY length < 8: %s", length);
       if (streamId != 0) throw ioException("TYPE_GOAWAY streamId != 0");
@@ -353,7 +356,8 @@ public final class Http2 implements Variant {
       handler.goAway(lastStreamId, errorCode, debugData);
     }
 
-    private void readWindowUpdate(Handler handler, int length, byte flags, int streamId)
+    private void readWindowUpdate(
+        Handler handler, int length, @SuppressWarnings("UnusedVariable") byte flags, int streamId)
         throws IOException {
       if (length != 4) throw ioException("TYPE_WINDOW_UPDATE length !=4: %s", length);
       long increment = (source.readInt() & 0x7fffffffL);

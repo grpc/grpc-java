@@ -136,7 +136,7 @@ class AltsHandshakerClient {
       throw new IllegalStateException("Could not get enough key data from the handshake.");
     }
     byte[] key = new byte[KEY_LENGTH];
-    result.getKeyData().copyTo(key, 0, 0, KEY_LENGTH);
+    result.getKeyData().copyTo(key, 0);
     return key;
   }
 

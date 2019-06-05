@@ -27,7 +27,6 @@ import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz;
-import io.grpc.InternalChannelz.Security;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
@@ -396,7 +395,6 @@ public class AltsProtocolNegotiatorTest {
   private final class CapturingGrpcHttp2ConnectionHandler extends GrpcHttp2ConnectionHandler {
 
     private Attributes attrs;
-    private Security securityInfo;
 
     private CapturingGrpcHttp2ConnectionHandler(
         Http2ConnectionDecoder decoder,
@@ -407,11 +405,11 @@ public class AltsProtocolNegotiatorTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(
-        Attributes attrs, InternalChannelz.Security securityInfo) {
+        Attributes attrs,
+        @SuppressWarnings("UnusedVariable") InternalChannelz.Security securityInfo) {
       // If we are added to the pipeline, we need to remove ourselves.  The HTTP2 handler
       channel.pipeline().remove(this);
       this.attrs = attrs;
-      this.securityInfo = securityInfo;
     }
   }
 
