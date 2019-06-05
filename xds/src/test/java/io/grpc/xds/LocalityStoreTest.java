@@ -456,5 +456,7 @@ public class LocalityStoreTest {
 
     verify(loadBalancers.get(0)).shutdown();
     verify(loadBalancers.get(1)).shutdown();
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
   }
 }

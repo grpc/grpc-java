@@ -156,8 +156,9 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        localityLbInfo.shutdown();
+      for (XdsLocality locality : localityMap.keySet()) {
+        statsStore.removeLocality(locality);
+        localityMap.get(locality).shutdown();
       }
       localityMap = new HashMap<>();
     }
