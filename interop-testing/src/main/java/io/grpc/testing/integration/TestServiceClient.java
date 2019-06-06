@@ -433,14 +433,14 @@ public class TestServiceClient {
               GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
         }
         if (useTls) {
-          try {
-            SSLSocketFactory factory = useTestCa
-                ? TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
-                    TestUtils.loadCert("ca.pem"))
-                : (SSLSocketFactory) SSLSocketFactory.getDefault();
-            okBuilder.sslSocketFactory(factory);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
+          if (useTestCa) {
+            try {
+              SSLSocketFactory factory = TestUtils.newSslSocketFactoryForCa(
+                  Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+              okBuilder.sslSocketFactory(factory);
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
           }
         } else {
           okBuilder.usePlaintext();
