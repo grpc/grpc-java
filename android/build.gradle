@@ -14,12 +14,13 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:3.3.0'
         classpath "net.ltgt.gradle:gradle-errorprone-plugin:0.6"
-        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
+        classpath "digital.wup:android-maven-publish:3.6.2"
     }
 }
 
+apply plugin: "maven-publish"
 apply plugin: "net.ltgt.errorprone"
-apply plugin: 'com.github.dcendents.android-maven'
+apply plugin: "digital.wup.android-maven-publish"
 apply plugin: "signing"
 
 android {
@@ -54,11 +55,6 @@ dependencies {
     testImplementation 'com.google.truth:truth:0.45'
 }
 
-signing {
-    required false
-    sign configurations.archives
-}
-
 task javadocs(type: Javadoc) {
     source = android.sourceSets.main.java.srcDirs
     // TODO(ericgribkoff) Fix javadoc errors
@@ -71,7 +67,7 @@ task javadocs(type: Javadoc) {
     }
 }
 
-task javadocsJar(type: Jar, dependsOn: javadocs) {
+task javadocJar(type: Jar, dependsOn: javadocs) {
     classifier = 'javadoc'
     from javadocs.destinationDir
 }
@@ -81,69 +77,83 @@ task sourcesJar(type: Jar) {
     from android.sourceSets.main.java.srcDirs
 }
 
-artifacts {
-    archives sourcesJar
-    archives javadocsJar
-}
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.android
 
-uploadArchives.repositories.mavenDeployer {
-    beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
-    if (rootProject.hasProperty('repositoryDir')) {
-        repository(url: new File(rootProject.repositoryDir).toURI())
-    } else {
-        String stagingUrl
-        if (rootProject.hasProperty('repositoryId')) {
-            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
-                    rootProject.repositoryId
-        } else {
-            stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
-        }
-        def configureAuth = {
-            if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
-                authentication(userName: rootProject.ossrhUsername, password: rootProject.ossrhPassword)
+            artifact javadocJar
+            artifact sourcesJar
+
+            pom {
+                name = project.group + ":" + project.name
+                url = 'https://github.com/grpc/grpc-java'
+                afterEvaluate {
+                    // description is not available until evaluated.
+                    description = project.description
+                }
+
+                scm {
+                    connection = 'scm:git:https://github.com/grpc/grpc-java.git'
+                    developerConnection = 'scm:git:git@github.com:grpc/grpc-java.git'
+                    url = 'https://github.com/grpc/grpc-java'
+                }
+
+                licenses {
+                    license {
+                        name = 'Apache 2.0'
+                        url = 'https://opensource.org/licenses/Apache-2.0'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = "grpc.io"
+                        name = "gRPC Contributors"
+                        email = "grpc-io@googlegroups.com"
+                        url = "https://grpc.io/"
+                        organization = "gRPC Authors"
+                        organizationUrl = "https://www.google.com"
+                    }
+                }
+
+                withXml {
+                    asNode().dependencies.'*'.findAll() { dep ->
+                        dep.artifactId.text() in ['grpc-api', 'grpc-core']
+                    }.each() { core ->
+                        core.version*.value = "[" + core.version.text() + "]"
+                    }
+                }
             }
         }
-        repository(url: stagingUrl, configureAuth)
-        snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots/', configureAuth)
+    }
+    repositories {
+        maven {
+            if (rootProject.hasProperty('repositoryDir')) {
+                url = new File(rootProject.repositoryDir).toURI()
+            } else {
+                String stagingUrl
+                if (rootProject.hasProperty('repositoryId')) {
+                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deployByRepositoryId/' +
+                            rootProject.repositoryId
+                } else {
+                    stagingUrl = 'https://oss.sonatype.org/service/local/staging/deploy/maven2/'
+                }
+                credentials {
+                    if (rootProject.hasProperty('ossrhUsername') && rootProject.hasProperty('ossrhPassword')) {
+                        username = rootProject.ossrhUsername
+                        password = rootProject.ossrhPassword
+                    }
+                }
+                def releaseUrl = stagingUrl
+                def snapshotUrl = 'https://oss.sonatype.org/content/repositories/snapshots/'
+                url = version.endsWith('SNAPSHOT') ? snapshotUrl : releaseUrl
+            }
+        }
     }
 }
 
-[
-    install.repositories.mavenInstaller,
-    uploadArchives.repositories.mavenDeployer,
-]*.pom*.whenConfigured { pom ->
-    pom.project {
-        name "$project.group:$project.name"
-        description project.description
-        url 'https://conscrypt.org/'
-
-        scm {
-            connection 'scm:git:https://github.com/grpc/grpc-java.git'
-            developerConnection 'scm:git:git@github.com:grpc/grpc-java.git'
-            url 'https://github.com/grpc/grpc-java'
-        }
-
-        licenses {
-            license {
-                name 'Apache 2.0'
-                url 'https://opensource.org/licenses/Apache-2.0'
-            }
-        }
-
-        developers {
-            developer {
-                id "grpc.io"
-                name "gRPC Contributors"
-                email "grpc-io@googlegroups.com"
-                url "https://grpc.io/"
-                organization = "gRPC Authors"
-                organizationUrl "https://www.google.com"
-            }
-        }
-    }
-    def core = pom.dependencies.find {dep -> dep.artifactId == 'grpc-core'}
-    if (core != null) {
-        // Depend on specific version of grpc-core because internal package is unstable
-        core.version = "[" + core.version + "]"
-    }
+signing {
+    required false
+    sign publishing.publications.maven
 }

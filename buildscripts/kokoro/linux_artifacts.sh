@@ -15,7 +15,7 @@ readonly GRPC_JAVA_DIR="$(cd "$(dirname "$0")"/../.. && pwd)"
 echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
 LOCAL_MVN_TEMP=$(mktemp -d)
 pushd "$GRPC_JAVA_DIR/android"
-../gradlew uploadArchives \
+../gradlew publish \
   --include-build "$GRPC_JAVA_DIR" \
   -Dorg.gradle.parallel=false \
   -PskipCodegen=true \
