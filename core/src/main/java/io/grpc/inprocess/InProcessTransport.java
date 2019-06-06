@@ -608,6 +608,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       public StatsTraceContext statsTraceContext() {
         return statsTraceCtx;
       }
+
+      @Override
+      public int streamId() {
+        return -1;
+      }
     }
 
     private class InProcessClientStream implements ClientStream {
