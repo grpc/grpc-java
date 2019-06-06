@@ -86,8 +86,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   @Override
   public void request(int numMessages) {
     PerfMark.startTask("ServerCall.request", tag);
-    stream.request(numMessages);
-    PerfMark.stopTask("ServerCall.request", tag);
+    try {
+      stream.request(numMessages);
+    } finally {
+      PerfMark.stopTask("ServerCall.request", tag);
+    }
   }
 
   @Override
@@ -282,15 +285,23 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           MoreExecutors.directExecutor());
     }
 
-    @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
     @Override
-    public void messagesAvailable(final MessageProducer producer) {
+    public void messagesAvailable(MessageProducer producer) {
+      PerfMark.startTask("ServerStreamListener.messagesAvailable", call.tag);
+      try {
+        messagesAvailableInternal(producer);
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.messagesAvailable", call.tag);
+      }
+    }
+
+    @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
+    private void messagesAvailableInternal(final MessageProducer producer) {
       if (call.cancelled) {
         GrpcUtil.closeQuietly(producer);
         return;
       }
 
-      PerfMark.startTask("ServerStreamListener.messagesAvailable", call.tag);
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
@@ -306,19 +317,17 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         GrpcUtil.closeQuietly(producer);
         Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);
-      } finally {
-        PerfMark.stopTask("ServerStreamListener.messagesAvailable", call.tag);
       }
     }
 
     @Override
     public void halfClosed() {
-      if (call.cancelled) {
-        return;
-      }
-
       PerfMark.startTask("ServerStreamListener.halfClosed", call.tag);
       try {
+        if (call.cancelled) {
+          return;
+        }
+
         listener.onHalfClose();
       } finally {
         PerfMark.stopTask("ServerStreamListener.halfClosed", call.tag);
@@ -329,30 +338,34 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
     public void closed(Status status) {
       PerfMark.startTask("ServerStreamListener.closed", call.tag);
       try {
-        try {
-          if (status.isOk()) {
-            listener.onComplete();
-          } else {
-            call.cancelled = true;
-            listener.onCancel();
-          }
-        } finally {
-          // Cancel context after delivering RPC closure notification to allow the application to
-          // clean up and update any state based on whether onComplete or onCancel was called.
-          context.cancel(null);
-        }
+        closedInternal(status);
       } finally {
         PerfMark.stopTask("ServerStreamListener.closed", call.tag);
       }
     }
 
+    private void closedInternal(Status status) {
+      try {
+        if (status.isOk()) {
+          listener.onComplete();
+        } else {
+          call.cancelled = true;
+          listener.onCancel();
+        }
+      } finally {
+        // Cancel context after delivering RPC closure notification to allow the application to
+        // clean up and update any state based on whether onComplete or onCancel was called.
+        context.cancel(null);
+      }
+    }
+
     @Override
     public void onReady() {
-      if (call.cancelled) {
-        return;
-      }
       PerfMark.startTask("ServerStreamListener.onReady", call.tag);
       try {
+        if (call.cancelled) {
+          return;
+        }
         listener.onReady();
       } finally {
         PerfMark.stopTask("ServerCall.closed", call.tag);
