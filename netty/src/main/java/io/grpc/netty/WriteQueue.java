@@ -113,8 +113,8 @@ class WriteQueue {
       boolean flushedOnce = false;
       while ((cmd = queue.poll()) != null) {
         PerfMark.startTask("WriteQueue.run");
-        cmd.getLink().link();
         try {
+          cmd.getLink().link();
           cmd.run(channel);
         } finally {
           PerfMark.stopTask("WriteQueue.run");
@@ -125,16 +125,22 @@ class WriteQueue {
           // might never end as new events are continuously added to the queue, if we never
           // flushed in that case we would be guaranteed to OOM.
           PerfMark.startTask("WriteQueue.flush0");
-          channel.flush();
-          PerfMark.stopTask("WriteQueue.flush0");
+          try {
+            channel.flush();
+          } finally {
+            PerfMark.stopTask("WriteQueue.flush0");
+          }
           flushedOnce = true;
         }
       }
       // Must flush at least once, even if there were no writes.
       if (i != 0 || !flushedOnce) {
         PerfMark.startTask("WriteQueue.flush1");
-        channel.flush();
-        PerfMark.stopTask("WriteQueue.flush1");
+        try {
+          channel.flush();
+        } finally {
+          PerfMark.stopTask("WriteQueue.flush1");
+        }
       }
     } finally {
       PerfMark.stopTask("WriteQueue.periodicFlush");
