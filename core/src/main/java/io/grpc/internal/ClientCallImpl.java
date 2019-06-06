@@ -721,7 +721,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           }
         }
       }
-      
+
       try {
         callExecutor.execute(new StreamOnReady());
       } finally {
