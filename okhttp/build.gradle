@@ -2,8 +2,12 @@ description = "gRPC: OkHttp"
 
 dependencies {
     compile project(':grpc-core'),
-            libraries.okhttp,
             libraries.okio
+
+    compile (libraries.okhttp) {
+        // prefer 1.13.0 from libraries instead of 1.6.0
+        exclude group: 'com.squareup.okio', module: 'okio'
+    }
 
     // Tests depend on base class defined by core module.
     testCompile project(':grpc-core').sourceSets.test.output,
