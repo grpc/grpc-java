@@ -127,6 +127,8 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.DisableOnDebug;
+import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
 
 /**
@@ -137,7 +139,7 @@ import org.junit.rules.Timeout;
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(30);
+  @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(30));
 
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
