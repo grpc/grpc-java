@@ -182,11 +182,6 @@ subprojects {
             }
         }
 
-        def epoll_suffix = "";
-        if (osdetector.classifier in ["linux-x86_64"]) {
-            // The native code is only pre-compiled on certain platforms.
-            epoll_suffix = ":" + osdetector.classifier
-        }
         libraries = [
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.17",
@@ -214,7 +209,7 @@ subprojects {
             lang: "org.apache.commons:commons-lang3:3.5",
 
             netty: "io.netty:netty-codec-http2:[${nettyVersion}]",
-            netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}" + epoll_suffix,
+            netty_epoll: "io.netty:netty-transport-native-epoll:${nettyVersion}:linux-x86_64",
             netty_proxy_handler: "io.netty:netty-handler-proxy:${nettyVersion}",
 
             // Keep the following references of tcnative version in sync whenever it's updated
