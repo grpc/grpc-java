@@ -89,21 +89,26 @@ class NettyServerStream extends AbstractServerStream {
   }
 
   private class Sink implements AbstractServerStream.Sink {
+
+    private void requestInternal(final int numMessages) {
+      if (channel.eventLoop().inEventLoop()) {
+        // Processing data read in the event loop so can call into the deframer immediately
+        transportState().requestMessagesFromDeframer(numMessages);
+      } else {
+        channel.eventLoop().execute(new Runnable() {
+          @Override
+          public void run() {
+            transportState().requestMessagesFromDeframer(numMessages);
+          }
+        });
+      }
+    }
+
     @Override
     public void request(final int numMessages) {
       PerfMark.startTask("NettyServerStream$Sink.request");
       try {
-        if (channel.eventLoop().inEventLoop()) {
-          // Processing data read in the event loop so can call into the deframer immediately
-          transportState().requestMessagesFromDeframer(numMessages);
-        } else {
-          channel.eventLoop().execute(new Runnable() {
-            @Override
-            public void run() {
-              transportState().requestMessagesFromDeframer(numMessages);
-            }
-          });
-        }
+        requestInternal(numMessages);
       } finally {
         PerfMark.stopTask("NettyServerStream$Sink.request");
       }
@@ -123,31 +128,35 @@ class NettyServerStream extends AbstractServerStream {
       }
     }
 
+    private void writeFrameInternal(WritableBuffer frame, boolean flush, final int numMessages) {
+      Preconditions.checkArgument(numMessages >= 0);
+      if (frame == null) {
+        writeQueue.scheduleFlush();
+        return;
+      }
+      ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
+      final int numBytes = bytebuf.readableBytes();
+      // Add the bytes to outbound flow control.
+      onSendingBytes(numBytes);
+      writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
+          .addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+              // Remove the bytes from outbound flow control, optionally notifying
+              // the client that they can send more bytes.
+              transportState().onSentBytes(numBytes);
+              if (future.isSuccess()) {
+                transportTracer.reportMessageSent(numMessages);
+              }
+            }
+          });
+    }
+
     @Override
     public void writeFrame(WritableBuffer frame, boolean flush, final int numMessages) {
       PerfMark.startTask("NettyServerStream$Sink.writeFrame");
       try {
-        Preconditions.checkArgument(numMessages >= 0);
-        if (frame == null) {
-          writeQueue.scheduleFlush();
-          return;
-        }
-        ByteBuf bytebuf = ((NettyWritableBuffer) frame).bytebuf();
-        final int numBytes = bytebuf.readableBytes();
-        // Add the bytes to outbound flow control.
-        onSendingBytes(numBytes);
-        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, false), flush)
-            .addListener(new ChannelFutureListener() {
-              @Override
-              public void operationComplete(ChannelFuture future) throws Exception {
-                // Remove the bytes from outbound flow control, optionally notifying
-                // the client that they can send more bytes.
-                transportState().onSentBytes(numBytes);
-                if (future.isSuccess()) {
-                  transportTracer.reportMessageSent(numMessages);
-                }
-              }
-            });
+        writeFrameInternal(frame, flush, numMessages);
       } finally {
         PerfMark.stopTask("NettyServerStream$Sink.writeFrame");
       }
