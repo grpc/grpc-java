@@ -113,6 +113,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
     this.retryEnabled = retryEnabled;
+    PerfMark.event("ClientCall.<init>", tag);
   }
 
   private final class ContextCancellationListener implements CancellationListener {
@@ -379,9 +380,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
-    checkState(stream != null, "Not started");
-    checkArgument(numMessages >= 0, "Number requested must be non-negative");
-    stream.request(numMessages);
+    PerfMark.startTask("ClientCall.request", tag);
+    try {
+      checkState(stream != null, "Not started");
+      checkArgument(numMessages >= 0, "Number requested must be non-negative");
+      stream.request(numMessages);
+    } finally {
+      PerfMark.stopTask("ClientCall.cancel", tag);
+    }
   }
 
   @Override
@@ -550,8 +556,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
       }
 
-      callExecutor.execute(new HeadersRead());
-      PerfMark.stopTask("ClientStreamListener.headersRead", tag);
+      try {
+        callExecutor.execute(new HeadersRead());
+      } finally {
+        PerfMark.stopTask("ClientStreamListener.headersRead", tag);
+      }
     }
 
     @Override
@@ -601,8 +610,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         }
       }
 
-      callExecutor.execute(new MessagesAvailable());
-      PerfMark.stopTask("ClientStreamListener.messagesAvailable", tag);
+      try {
+        callExecutor.execute(new MessagesAvailable());
+      } finally {
+        PerfMark.stopTask("ClientStreamListener.messagesAvailable", tag);
+      }
     }
 
     /**
@@ -627,50 +639,54 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       PerfMark.startTask("ClientStreamListener.closed", tag);
-      final Link link = PerfMark.link();
       try {
-        Deadline deadline = effectiveDeadline();
-        if (status.getCode() == Status.Code.CANCELLED && deadline != null) {
-          // When the server's deadline expires, it can only reset the stream with CANCEL and no
-          // description. Since our timer may be delayed in firing, we double-check the deadline and
-          // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
-          if (deadline.isExpired()) {
-            status = DEADLINE_EXCEEDED;
-            // Replace trailers to prevent mixing sources of status and trailers.
-            trailers = new Metadata();
-          }
-        }
-        final Status savedStatus = status;
-        final Metadata savedTrailers = trailers;
-        final class StreamClosed extends ContextRunnable {
-          StreamClosed() {
-            super(context);
-          }
-
-          @Override
-          public void runInContext() {
-            PerfMark.startTask("ClientCall$Listener.onClose", tag);
-            link.link();
-            try {
-              runInternal();
-            } finally {
-              PerfMark.stopTask("ClientCall$Listener.onClose", tag);
-            }
-          }
-
-          private void runInternal() {
-            if (closed) {
-              // We intentionally don't keep the status or metadata from the server.
-              return;
-            }
-            close(savedStatus, savedTrailers);
-          }
-        }
-
-        callExecutor.execute(new StreamClosed());
+        closedInternal(status, rpcProgress, trailers);
       } finally {
         PerfMark.stopTask("ClientStreamListener.closed", tag);
       }
+    }
+
+    private void closedInternal(Status status, RpcProgress rpcProgress, Metadata trailers) {
+      Deadline deadline = effectiveDeadline();
+      if (status.getCode() == Status.Code.CANCELLED && deadline != null) {
+        // When the server's deadline expires, it can only reset the stream with CANCEL and no
+        // description. Since our timer may be delayed in firing, we double-check the deadline and
+        // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
+        if (deadline.isExpired()) {
+          status = DEADLINE_EXCEEDED;
+          // Replace trailers to prevent mixing sources of status and trailers.
+          trailers = new Metadata();
+        }
+      }
+      final Status savedStatus = status;
+      final Metadata savedTrailers = trailers;
+      final Link link = PerfMark.link();
+      final class StreamClosed extends ContextRunnable {
+        StreamClosed() {
+          super(context);
+        }
+
+        @Override
+        public void runInContext() {
+          PerfMark.startTask("ClientCall$Listener.onClose", tag);
+          link.link();
+          try {
+            runInternal();
+          } finally {
+            PerfMark.stopTask("ClientCall$Listener.onClose", tag);
+          }
+        }
+
+        private void runInternal() {
+          if (closed) {
+            // We intentionally don't keep the status or metadata from the server.
+            return;
+          }
+          close(savedStatus, savedTrailers);
+        }
+      }
+
+      callExecutor.execute(new StreamClosed());
     }
 
     @Override
@@ -705,9 +721,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
           }
         }
       }
-
-      callExecutor.execute(new StreamOnReady());
-      PerfMark.stopTask("ClientStreamListener.onReady", tag);
+      
+      try {
+        callExecutor.execute(new StreamOnReady());
+      } finally {
+        PerfMark.stopTask("ClientStreamListener.onReady", tag);
+      }
     }
   }
 }
