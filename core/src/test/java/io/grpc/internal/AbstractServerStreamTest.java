@@ -394,6 +394,11 @@ public class AbstractServerStreamTest {
         r.run();
       }
     }
+
+    @Override
+    public int streamId() {
+      return -1;
+    }
   }
 }
 
