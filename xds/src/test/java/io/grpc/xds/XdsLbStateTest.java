@@ -29,7 +29,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -175,6 +174,8 @@ public class XdsLbStateTest {
   private final FakeInterLocalityPickerFactory interLocalityPickerFactory
       = new FakeInterLocalityPickerFactory();
 
+  private XdsLbState xdsLbState;
+
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
@@ -225,6 +226,9 @@ public class XdsLbStateTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
+    xdsLbState =
+        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
+            backoffPolicyProvider);
   }
 
   @After
@@ -233,12 +237,23 @@ public class XdsLbStateTest {
   }
 
   @Test
-  public void shutdownAndReleaseXdsCommsDoesShutdown() {
-    XdsLbState xdsLbState = mock(XdsLbState.class);
-    xdsLbState.shutdownAndReleaseXdsComms();
-    verify(xdsLbState).shutdown();
+  public void shutdownResetsLocalityStore() {
+    localityStore = mock(LocalityStore.class);
+    xdsLbState =
+        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
+            backoffPolicyProvider);
+    xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    verify(localityStore).reset();
   }
 
+  @Test
+  public void shutdownDoesNotTearDownChannel() {
+    ManagedChannel lbChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    assertThat(lbChannel).isSameInstanceAs(channel);
+    assertThat(channel.isShutdown()).isFalse();
+  }
+
+  // FIXME: should not test LocalityStore's logic here.
   @Test
   public void handleSubchannelState() {
     assertThat(loadBalancers).isEmpty();
@@ -305,21 +320,13 @@ public class XdsLbStateTest {
   }
 
   @Test
-  public void handleResolvedAddressGroupsThenShutdown() throws Exception {
-    localityStore = mock(LocalityStore.class);
-    when(localityStore.getStatsStore()).thenReturn(statsStore);
-    XdsLbState xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback,
-            backoffPolicyProvider);
+  public void handleResolvedAddressGroupsTriggerEds() throws Exception {
     xdsLbState.handleResolvedAddressGroups(
         ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
 
     assertThat(streamRecorder.firstValue().get().getTypeUrl())
         .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
 
-    xdsLbState.shutdown();
-    verify(localityStore).reset();
-
-    channel.shutdownNow();
+    xdsLbState.shutdownAndReleaseChannel("End test");
   }
 }
