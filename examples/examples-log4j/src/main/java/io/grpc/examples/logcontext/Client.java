@@ -36,7 +36,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * A simple client that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
+ * A simple client that is like {@link io.grpc.examples.helloworld.HelloWorldClient}.
  * This client can help you create custom headers.
  */
 public class Client {
@@ -80,7 +80,7 @@ public class Client {
   }
 
   /**
-   * A simple client method that like {@link io.grpc.examples.helloworld.HelloWorldClient}.
+   * A simple client method that is like {@link io.grpc.examples.helloworld.HelloWorldClient}.
    */
   private void greet(String name) {
     logger.info("Will try to greet " + name + " ...");

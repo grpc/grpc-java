@@ -98,7 +98,7 @@ public class CustomLogServer {
       logger.info("Got a request");
       // outputs something like:
       // 2019/06/05 15:22:12:686 PDT INFO Got a request
-      // {requestId=3e6c256d-6e87-411e-8bf3-fbf81e7ce0e6, clientname=my.domain.name}
+      // {requestId=3e6c256d-6e87-411e-8bf3-fbf81e7ce0e6, clientName=my.domain.name}
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
       responseObserver.onNext(reply);
       responseObserver.onCompleted();

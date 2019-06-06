@@ -40,6 +40,9 @@ public class HeaderServerInterceptor implements ServerInterceptor {
       final Metadata requestHeaders,
       ServerCallHandler<ReqT, RespT> next) {
 
+    Context ctx = Context.current();
+
+
     final String requestId = UUID.randomUUID().toString();
     final String clientName = String.valueOf(requestHeaders.get(CLIENT_NAME_KEY));
 
@@ -47,60 +50,60 @@ public class HeaderServerInterceptor implements ServerInterceptor {
       @Override
       public void onCancel() {
         ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.name(), clientName);
+        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
         try {
           super.onCancel();
         } finally {
           ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.name());
+          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onComplete() {
         ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.name(), clientName);
+        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
         try {
           super.onComplete();
         } finally {
           ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.name());
+          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onMessage(ReqT message) {
         ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.name(), clientName);
+        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
         try {
           super.onMessage(message);
         } finally {
           ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.name());
+          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onReady() {
         ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.name(), clientName);
+        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
         try {
           super.onReady();
         } finally {
           ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.name());
+          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onHalfClose() {
         ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.name(), clientName);
+        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
         try {
           super.onHalfClose();
         } finally {
           ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.name());
+          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
     };
