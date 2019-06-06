@@ -17,13 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -34,7 +28,6 @@ import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -57,8 +50,6 @@ public class InterLocalityPickerTest {
 
   @Mock
   private PickSubchannelArgs pickSubchannelArgs;
-  @Mock
-  private StatsStore statsStore;
 
   private final PickResult pickResult0 = PickResult.withNoResult();
   private final PickResult pickResult1 = PickResult.withDrop(Status.UNAVAILABLE);
@@ -108,15 +99,6 @@ public class InterLocalityPickerTest {
   }
 
   private final FakeRandom fakeRandom = new FakeRandom();
-  private final XdsLocality testLocality =
-      new XdsLocality("test_region", "test_zone", "test_subzone");
-
-  @Before
-  public void setUp() {
-    // Mock StatsStore#interceptPickResult returns the identity PickResult.
-    when(statsStore.interceptPickResult(any(PickResult.class), any(XdsLocality.class)))
-        .thenAnswer(returnsFirstArg());
-  }
 
   @Test
   public void emptyList() {
@@ -129,19 +111,15 @@ public class InterLocalityPickerTest {
   @Test
   public void negativeWeight() {
     thrown.expect(IllegalArgumentException.class);
-    new WeightedChildPicker(testLocality, -1, childPicker0, statsStore);
+    new WeightedChildPicker(-1, childPicker0);
   }
 
   @Test
   public void pickWithFakeRandom() {
-    WeightedChildPicker weightedChildPicker0 =
-        new WeightedChildPicker(testLocality, 0, childPicker0, statsStore);
-    WeightedChildPicker weightedChildPicker1 =
-        new WeightedChildPicker(testLocality, 15, childPicker1, statsStore);
-    WeightedChildPicker weightedChildPicker2 =
-        new WeightedChildPicker(testLocality, 0, childPicker2, statsStore);
-    WeightedChildPicker weightedChildPicker3 =
-        new WeightedChildPicker(testLocality, 10, childPicker3, statsStore);
+    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
+    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(15, childPicker1);
+    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
+    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(10, childPicker3);
 
     InterLocalityPicker xdsPicker = new InterLocalityPicker(
         Arrays.asList(
@@ -154,39 +132,30 @@ public class InterLocalityPickerTest {
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
-    verify(statsStore).interceptPickResult(same(pickResult1), same(testLocality));
 
     fakeRandom.nextInt = 1;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
-    verify(statsStore, times(2)).interceptPickResult(same(pickResult1), same(testLocality));
 
     fakeRandom.nextInt = 14;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
     assertThat(fakeRandom.bound).isEqualTo(25);
-    verify(statsStore, times(3)).interceptPickResult(same(pickResult1), same(testLocality));
 
     fakeRandom.nextInt = 15;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(25);
-    verify(statsStore).interceptPickResult(same(pickResult3), same(testLocality));
 
     fakeRandom.nextInt = 24;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult3);
     assertThat(fakeRandom.bound).isEqualTo(25);
-    verify(statsStore, times(2)).interceptPickResult(same(pickResult3), same(testLocality));
   }
 
   @Test
   public void allZeroWeights() {
-    WeightedChildPicker weightedChildPicker0 =
-        new WeightedChildPicker(testLocality, 0, childPicker0, statsStore);
-    WeightedChildPicker weightedChildPicker1 =
-        new WeightedChildPicker(testLocality, 0, childPicker1, statsStore);
-    WeightedChildPicker weightedChildPicker2 =
-        new WeightedChildPicker(testLocality, 0, childPicker2, statsStore);
-    WeightedChildPicker weightedChildPicker3 =
-        new WeightedChildPicker(testLocality, 0, childPicker3, statsStore);
+    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
+    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(0, childPicker1);
+    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
+    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(0, childPicker3);
 
     InterLocalityPicker xdsPicker = new InterLocalityPicker(
         Arrays.asList(

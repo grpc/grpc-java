@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
@@ -92,7 +93,7 @@ public class LocalityStoreTest {
       return new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).pickSubchannel(args);
+          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
         }
       };
     }
@@ -215,6 +216,38 @@ public class LocalityStoreTest {
     localityStore.updateLocalityStore(Collections.EMPTY_MAP);
     verify(statsStore).removeLocality(locality4);
     verifyNoMoreInteractions(statsStore);
+  }
+
+  @Test
+  public void updateLocalityStore_interceptPickResultUponPickReadySubchannel() {
+    // Simulate receiving one locality.
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    localityStore.updateLocalityStore(ImmutableMap.of(locality1, localityInfo1));
+
+    // One child balancer is created.
+    assertThat(loadBalancers).hasSize(1);
+
+    // Simulate child balancer creating a subchannel and the subchannel goes to READY state.
+    final Subchannel subchannel12 =
+        helpers.get(0).createSubchannel(ImmutableList.of(eag12), Attributes.EMPTY);
+    final PickResult result12 = PickResult.withSubchannel(subchannel12);
+    verify(helper).createSubchannel(ImmutableList.of(eag12), Attributes.EMPTY);
+    SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return result12;
+      }
+    };
+    helpers.get(0).updateBalancingState(READY, subchannelPicker12);
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor12 =
+        ArgumentCaptor.forClass(SubchannelPicker.class);
+    verify(helper).updateBalancingState(eq(READY), subchannelPickerCaptor12.capture());
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+
+    // Simulate a pick, the result is expected to be intercepted.
+    subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs);
+    verify(statsStore).interceptPickResult(same(result12), eq(locality1));
   }
 
   @Test

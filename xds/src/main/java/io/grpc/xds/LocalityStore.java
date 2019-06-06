@@ -218,10 +218,8 @@ interface LocalityStore {
         if (localityLbInfo.childHelper.currentChildState == READY) {
           childPickers.add(
               new WeightedChildPicker(
-                  newLocality,
                   localityInfoMap.get(newLocality).localityWeight,
-                  localityLbInfo.childHelper.currentChildPicker,
-                  statsStore));
+                  localityLbInfo.childHelper.currentChildPicker));
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
@@ -282,7 +280,7 @@ interface LocalityStore {
 
         if (READY == childState) {
           childPickers.add(
-              new WeightedChildPicker(l, localityLbInfo.localityWeight, childPicker, statsStore));
+              new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
         }
       }
 
@@ -364,8 +362,21 @@ interface LocalityStore {
         currentChildState = newState;
         currentChildPicker = newPicker;
 
+        class LoadRecordPicker extends SubchannelPicker {
+          private final SubchannelPicker delegate;
+
+          private LoadRecordPicker(SubchannelPicker delegate) {
+            this.delegate = delegate;
+          }
+
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            return statsStore.interceptPickResult(delegate.pickSubchannel(args), locality);
+          }
+        }
+
         // delegate to parent helper
-        updateChildState(locality, newState, newPicker);
+        updateChildState(locality, newState, new LoadRecordPicker(newPicker));
       }
 
       @Override

@@ -158,7 +158,7 @@ public class XdsLbStateTest {
       return new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).pickSubchannel(args);
+          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
         }
       };
     }
