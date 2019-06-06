@@ -40,7 +40,6 @@ import io.grpc.ServerCall.Listener;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerMethodDefinition;
-import io.grpc.internal.IoUtils;
 import io.grpc.internal.NoopClientCall;
 import io.grpc.internal.NoopServerCall;
 import java.io.ByteArrayInputStream;
@@ -318,7 +317,7 @@ public class BinaryLogProviderTest {
                 public void onMessage(RespT message) {
                   assertTrue(message instanceof InputStream);
                   try {
-                    byte[] bytes = IoUtils.toByteArray((InputStream) message);
+                    byte[] bytes = ByteStreams.toByteArray((InputStream) message);
                     binlogResp.add(bytes);
                     ByteArrayInputStream input = new ByteArrayInputStream(bytes);
                     RespT dup = method.parseResponse(input);
@@ -371,7 +370,7 @@ public class BinaryLogProviderTest {
         public void onMessage(ReqT message) {
           assertTrue(message instanceof InputStream);
           try {
-            byte[] bytes = IoUtils.toByteArray((InputStream) message);
+            byte[] bytes = ByteStreams.toByteArray((InputStream) message);
             binlogReq.add(bytes);
             ByteArrayInputStream input = new ByteArrayInputStream(bytes);
             ReqT dup = call.getMethodDescriptor().parseRequest(input);

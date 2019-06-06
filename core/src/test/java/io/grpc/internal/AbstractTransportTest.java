@@ -42,6 +42,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.base.Objects;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -2293,7 +2294,7 @@ public abstract class AbstractTransportTest {
     @Override
     public String parse(InputStream stream) {
       try {
-        return new String(IoUtils.toByteArray(stream), UTF_8);
+        return new String(ByteStreams.toByteArray(stream), UTF_8);
       } catch (IOException ex) {
         throw new RuntimeException(ex);
       }
