@@ -85,7 +85,9 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void request(int numMessages) {
+    PerfMark.startTask("ServerCall.request", tag);
     stream.request(numMessages);
+    PerfMark.stopTask("ServerCall.request", tag);
   }
 
   @Override
