@@ -195,9 +195,9 @@ final class XdsLoadBalancer extends LoadBalancer {
     } else { // effectively no change in policy, keep xdsLbState unchanged
       return;
     }
-    xdsLbState = new XdsLbState(
-        newBalancerName, childPolicy, helper, localityStore, lbChannel, adsStreamCallback,
-        backoffPolicyProvider);
+    xdsLbState =
+        new XdsLbState(newBalancerName, childPolicy, helper, localityStore, lbChannel,
+            adsStreamCallback);
   }
 
   @Nullable

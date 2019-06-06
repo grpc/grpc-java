@@ -51,7 +51,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -94,8 +93,6 @@ public class XdsLbStateTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
-  @Mock
-  private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
   private StatsStore statsStore;
   @Captor
@@ -227,8 +224,7 @@ public class XdsLbStateTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
     xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
-            backoffPolicyProvider);
+        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback);
   }
 
   @After
@@ -240,8 +236,7 @@ public class XdsLbStateTest {
   public void shutdownResetsLocalityStore() {
     localityStore = mock(LocalityStore.class);
     xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
-            backoffPolicyProvider);
+        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback);
     xdsLbState.shutdownAndReleaseChannel("Client shutdown");
     verify(localityStore).reset();
   }

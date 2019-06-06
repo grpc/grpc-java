@@ -25,7 +25,6 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.List;
@@ -56,7 +55,6 @@ class XdsLbState {
   private final Helper helper;
   private final ManagedChannel channel;
   private final AdsStreamCallback adsStreamCallback;
-  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   @Nullable
   private XdsComms xdsComms;
@@ -67,15 +65,13 @@ class XdsLbState {
       Helper helper,
       LocalityStore localityStore,
       ManagedChannel channel,
-      AdsStreamCallback adsStreamCallback,
-      BackoffPolicy.Provider backoffPolicyProvider) {
+      AdsStreamCallback adsStreamCallback) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
     this.helper = checkNotNull(helper, "helper");
     this.localityStore = checkNotNull(localityStore, "localityStore");
     this.channel = checkNotNull(channel, "channel");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
   final void handleResolvedAddressGroups(
