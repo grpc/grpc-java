@@ -29,10 +29,8 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
-/**
- * Propositions for {@link Deadline} subjects.
- */
-public final class DeadlineSubject extends ComparableSubject<DeadlineSubject, Deadline> {
+/** Propositions for {@link Deadline} subjects. */
+public final class DeadlineSubject extends ComparableSubject {
   private static final Subject.Factory<DeadlineSubject, Deadline> deadlineFactory =
       new Factory();
 
