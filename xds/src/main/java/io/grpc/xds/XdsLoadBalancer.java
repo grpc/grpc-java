@@ -316,32 +316,13 @@ final class XdsLoadBalancer extends LoadBalancer {
       fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
           .newLoadBalancer(fallbackBalancerHelper);
       fallbackBalancerHelper.balancer = fallbackBalancer;
-      // TODO(carl-mastrangelo): propagate the load balancing config policy
-      fallbackBalancer.handleResolvedAddresses(
-          ResolvedAddresses.newBuilder()
-              .setAddresses(fallbackServers)
-              .setAttributes(fallbackAttributes)
-              .build());
+      handleFallbackAddressesOrNameResolutionError();
     }
 
     void updateFallbackServers(
         List<EquivalentAddressGroup> servers, Attributes attributes,
         LbConfig fallbackPolicy) {
       this.fallbackServers = servers;
-      String fallbackPolicyName = fallbackPolicy.getPolicyName();
-
-      // Some addresses in the list may be grpclb-v1 balancer addresses, so if the fallback policy
-      // does not support grpclb-v1 balancer addresses, then we need to exclude them from the list.
-      if (!fallbackPolicyName.equals("grpclb") && !fallbackPolicyName.equals(XDS_POLICY_NAME)) {
-        ImmutableList.Builder<EquivalentAddressGroup> backends = ImmutableList.builder();
-        for (EquivalentAddressGroup eag : servers) {
-          if (eag.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) == null) {
-            backends.add(eag);
-          }
-        }
-        this.fallbackServers = backends.build();
-      }
-
       this.fallbackAttributes = Attributes.newBuilder()
           .setAll(attributes)
           .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy.getRawConfigValue())
@@ -349,18 +330,45 @@ final class XdsLoadBalancer extends LoadBalancer {
       LbConfig currentFallbackPolicy = this.fallbackPolicy;
       this.fallbackPolicy = fallbackPolicy;
       if (fallbackBalancer != null) {
-        if (fallbackPolicyName.equals(currentFallbackPolicy.getPolicyName())) {
-          // TODO(carl-mastrangelo): propagate the load balancing config policy
-          fallbackBalancer.handleResolvedAddresses(
-              ResolvedAddresses.newBuilder()
-                  .setAddresses(fallbackServers)
-                  .setAttributes(fallbackAttributes)
-                  .build());
+        if (fallbackPolicy.getPolicyName().equals(currentFallbackPolicy.getPolicyName())) {
+          handleFallbackAddressesOrNameResolutionError();
         } else {
           fallbackBalancer.shutdown();
           fallbackBalancer = null;
           useFallbackPolicy();
         }
+      }
+    }
+
+    private void handleFallbackAddressesOrNameResolutionError() {
+      String fallbackPolicyName = fallbackPolicy.getPolicyName();
+      List<EquivalentAddressGroup> servers = fallbackServers;
+
+      // Some addresses in the list may be grpclb-v1 balancer addresses, so if the fallback policy
+      // does not support grpclb-v1 balancer addresses, then we need to exclude them from the list.
+      if (!fallbackPolicyName.equals("grpclb") && !fallbackPolicyName.equals(XDS_POLICY_NAME)) {
+        ImmutableList.Builder<EquivalentAddressGroup> backends = ImmutableList.builder();
+        for (EquivalentAddressGroup eag : fallbackServers) {
+          if (eag.getAttributes().get(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY) == null) {
+            backends.add(eag);
+          }
+        }
+        servers = backends.build();
+      }
+
+      // FIXME: this is a temporary hack.
+      if (servers.isEmpty()
+          && !fallbackBalancer.canHandleEmptyAddressListFromNameResolution()) {
+        fallbackBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription(
+            "NameResolver returned no usable address."
+                + " addrs=" + fallbackServers + ", attrs=" + fallbackAttributes));
+      } else {
+        // TODO(carl-mastrangelo): propagate the load balancing config policy
+        fallbackBalancer.handleResolvedAddresses(
+            ResolvedAddresses.newBuilder()
+                .setAddresses(servers)
+                .setAttributes(fallbackAttributes)
+                .build());
       }
     }
 

@@ -281,6 +281,9 @@ public class XdsLoadBalancerTest {
 
     doReturn(oobChannel1).doReturn(oobChannel2).doReturn(oobChannel3)
       .when(helper).createResolvingOobChannel(anyString());
+
+    // To write less tedious code for tests, allow fallbackBalancer to handle empty address list.
+    doReturn(true).when(fallbackBalancer1).canHandleEmptyAddressListFromNameResolution();
   }
 
   @After

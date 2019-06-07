@@ -30,6 +30,8 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
@@ -37,7 +39,6 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +47,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -145,7 +147,8 @@ public class FallbackManagerTest {
   @Test
   public void useFallbackWhenTimeout() {
     fallbackManager.startFallbackTimer();
-    List<EquivalentAddressGroup> eags = new ArrayList<>();
+    List<EquivalentAddressGroup> eags = ImmutableList.of(
+        new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new InetSocketAddress(8080))));
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
 
@@ -237,9 +240,37 @@ public class FallbackManagerTest {
   }
 
   @Test
+  public void fallback_onlyGrpclbAddresses_NoBackendAddress() {
+    lbRegistry.deregister(fakeFallbackLbProvider);
+    fallbackPolicy = new LbConfig("not_grpclb", new HashMap<String, Void>());
+    lbRegistry.register(fakeFallbackLbProvider);
+
+    fallbackManager.startFallbackTimer();
+    Attributes attributes = Attributes
+        .newBuilder()
+        .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "this is a balancer address")
+        .build();
+    EquivalentAddressGroup eag1 = new EquivalentAddressGroup(
+        ImmutableList.<SocketAddress>of(new InetSocketAddress(8081)), attributes);
+    EquivalentAddressGroup eag2 = new EquivalentAddressGroup(
+        ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)), attributes);
+    List<EquivalentAddressGroup> eags = ImmutableList.of(eag1, eag2);
+    fallbackManager.updateFallbackServers(
+        eags, Attributes.EMPTY, fallbackPolicy);
+
+    fakeClock.forwardTime(FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+
+    assertThat(fallbackManager.isInFallbackMode()).isTrue();
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(fakeFallbackLb).handleNameResolutionError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+  }
+
+  @Test
   public void cancelFallback() {
     fallbackManager.startFallbackTimer();
-    List<EquivalentAddressGroup> eags = new ArrayList<>();
+    List<EquivalentAddressGroup> eags = ImmutableList.of(
+        new EquivalentAddressGroup(ImmutableList.<SocketAddress>of(new InetSocketAddress(8080))));
     fallbackManager.updateFallbackServers(
         eags, Attributes.EMPTY, fallbackPolicy);
 
