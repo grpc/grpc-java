@@ -46,8 +46,8 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
     return link;
   }
 
-  int streamId() {
-    return stream.id();
+  StreamIdHolder stream() {
+    return stream;
   }
 
   boolean endStream() {
@@ -100,7 +100,7 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
 
   @Override
   public String toString() {
-    return getClass().getSimpleName() + "(streamId=" + streamId()
+    return getClass().getSimpleName() + "(streamId=" + stream.id()
         + ", endStream=" + endStream + ", content=" + content()
         + ")";
   }

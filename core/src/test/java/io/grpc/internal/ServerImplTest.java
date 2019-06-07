@@ -483,10 +483,12 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
     assertEquals("Can't find decompressor for " + decompressorName, status.getDescription());
+
     verifyNoMoreInteractions(stream);
   }
 
@@ -786,6 +788,7 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).streamId();
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
