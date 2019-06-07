@@ -139,7 +139,7 @@ import org.junit.rules.Timeout;
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 
-  @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(30));
+  @Rule public final TestRule globalTimeout;
 
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
@@ -181,6 +181,21 @@ public abstract class AbstractInteropTest {
         return super.filterContext(context);
       }
     }
+  }
+
+  /**
+   * Constructor for tests.
+   */
+  public AbstractInteropTest() {
+    TestRule timeout = Timeout.seconds(30);
+    try {
+      timeout = new DisableOnDebug(timeout);
+    } catch (Throwable t) {
+      // This can happen on Android, which lacks some standard Java class.
+      // Seen at https://github.com/grpc/grpc-java/pull/5832#issuecomment-499698086
+      logger.log(Level.FINE, "Debugging not disabled.", t);
+    }
+    globalTimeout = timeout;
   }
 
   private final ServerStreamTracer.Factory serverStreamTracerFactory =
