@@ -121,7 +121,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       HealthCheckState hcState = new HealthCheckState(
           this, originalSubchannel, syncContext, delegate.getScheduledExecutorService());
       hcStates.add(hcState);
-      Subchannel subchannel = new SubchannelImpl(originalSubchannel, hcState);
+      Subchannel subchannel = new SubchannelImpl(originalSubchannel, this, hcState);
       if (healthCheckedService != null) {
         hcState.setServiceName(healthCheckedService);
       }
@@ -144,10 +144,12 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
   @VisibleForTesting
   static final class SubchannelImpl extends ForwardingSubchannel {
     final Subchannel delegate;
+    final HelperImpl helperImpl;
     final HealthCheckState hcState;
 
-    SubchannelImpl(Subchannel delegate, HealthCheckState hcState) {
+    SubchannelImpl(Subchannel delegate, HelperImpl helperImpl, HealthCheckState hcState) {
       this.delegate = checkNotNull(delegate, "delegate");
+      this.helperImpl = checkNotNull(helperImpl, "helperImpl");
       this.hcState = checkNotNull(hcState, "hcState");
     }
 
@@ -160,6 +162,13 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     public void start(final SubchannelStateListener listener) {
       hcState.init(listener);
       delegate().start(hcState);
+    }
+
+    @Override
+    public void shutdown() {
+      helperImpl.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+      delegate().shutdown();
+      helperImpl.hcStates.remove(hcState);
     }
   }
 
@@ -281,9 +290,6 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         // A connection was lost.  We will reset disabled flag because health check
         // may be available on the new connection.
         disabled = false;
-      }
-      if (Objects.equal(rawState.getState(), SHUTDOWN)) {
-        helperImpl.hcStates.remove(this);
       }
       this.rawState = rawState;
       adjustHealthCheck();
