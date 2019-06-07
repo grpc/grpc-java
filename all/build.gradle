@@ -65,14 +65,13 @@ jacocoTestReport {
 
     additionalSourceDirs.from(files(subprojects.sourceSets.main.allSource.srcDirs))
     sourceDirectories.from(files(subprojects.sourceSets.main.allSource.srcDirs))
-    classDirectories.from(files(subprojects.sourceSets.main.output))
-    classDirectories.from(files(classDirectories.files.collect {
+    classDirectories.from(files(subprojects.sourceSets.main.output).collect {
         fileTree(dir: it,
         exclude: [
                 '**/io/grpc/internal/testing/**',
                 '**/io/grpc/okhttp/internal/**',
         ])
-    }))
+    })
 }
 
 coveralls {
