@@ -63,10 +63,9 @@ jacocoTestReport {
         html.enabled = true
     }
 
-    additionalSourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs)
-    sourceDirectories = files(subprojects.sourceSets.main.allSource.srcDirs)
-    classDirectories = files(subprojects.sourceSets.main.output)
-    classDirectories = files(classDirectories.files.collect {
+    additionalSourceDirs.from(files(subprojects.sourceSets.main.allSource.srcDirs))
+    sourceDirectories.from(files(subprojects.sourceSets.main.allSource.srcDirs))
+    classDirectories.from(files(subprojects.sourceSets.main.output).collect {
         fileTree(dir: it,
         exclude: [
                 '**/io/grpc/internal/testing/**',
