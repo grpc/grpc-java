@@ -43,6 +43,7 @@ import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
+import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import javax.annotation.Nullable;
@@ -216,9 +217,20 @@ class NettyClientStream extends AbstractClientStream {
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
         channel.eventLoop().execute(new Runnable() {
+          final Link link = PerfMark.link();
           @Override
           public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
+            PerfMark.startTask(
+                "NettyClientStream$Sink.requestMessagesFromDeframer",
+                transportState().tag());
+            link.link();
+            try {
+              transportState().requestMessagesFromDeframer(numMessages);
+            } finally {
+              PerfMark.stopTask(
+                  "NettyClientStream$Sink.requestMessagesFromDeframer",
+                  transportState().tag());
+            }
           }
         });
       }

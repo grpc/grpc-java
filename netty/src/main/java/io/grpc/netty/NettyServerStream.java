@@ -33,6 +33,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
+import io.perfmark.Link;
 import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.util.logging.Level;
@@ -99,10 +100,21 @@ class NettyServerStream extends AbstractServerStream {
         // Processing data read in the event loop so can call into the deframer immediately
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
+        final Link link = PerfMark.link();
         channel.eventLoop().execute(new Runnable() {
           @Override
           public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
+            PerfMark.startTask(
+                "NettyServerStream$Sink.requestMessagesFromDeframer",
+                transportState().tag());
+            link.link();
+            try {
+              transportState().requestMessagesFromDeframer(numMessages);
+            } finally {
+              PerfMark.stopTask(
+                  "NettyServerStream$Sink.requestMessagesFromDeframer",
+                  transportState().tag());
+            }
           }
         });
       }
