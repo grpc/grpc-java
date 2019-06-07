@@ -35,7 +35,6 @@ def grpc_java_repositories(
         omit_io_netty_tcnative_boringssl_static = False,
         omit_io_opencensus_api = False,
         omit_io_opencensus_grpc_metrics = False,
-        omit_io_perfmark = False,
         omit_javax_annotation = False,
         omit_junit_junit = False,
         omit_net_zlib = False,
@@ -104,8 +103,6 @@ def grpc_java_repositories(
         io_opencensus_api()
     if not omit_io_opencensus_grpc_metrics:
         io_opencensus_grpc_metrics()
-    if not omit_io_perfmark:
-        io_perfmark()
     if not omit_javax_annotation:
         javax_annotation()
     if not omit_junit_junit:
@@ -402,15 +399,6 @@ def io_opencensus_grpc_metrics():
         artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.21.0",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "29fc79401082301542cab89d7054d2f0825f184492654c950020553ef4ff0ef8",
-        licenses = ["notice"],  # Apache 2.0
-    )
-
-def io_perfmark():
-    jvm_maven_import_external(
-        name = "io_perfmark_perfmark_api",
-        artifact = "io.perfmark:perfmark-api:0.16.0",
-        server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "a93667875ea9d10315177768739a18d6c667df041c982d2841645ae8558d0af0",
         licenses = ["notice"],  # Apache 2.0
     )
 

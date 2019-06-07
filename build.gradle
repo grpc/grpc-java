@@ -201,7 +201,6 @@ subprojects {
             opencensus_impl: "io.opencensus:opencensus-impl:${opencensusVersion}",
             opencensus_impl_lite: "io.opencensus:opencensus-impl-lite:${opencensusVersion}",
             instrumentation_api: 'com.google.instrumentation:instrumentation-api:0.4.3',
-            perfmark: 'io.perfmark:perfmark-api:0.16.0',
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
             protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",

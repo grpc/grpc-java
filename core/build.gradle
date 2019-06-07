@@ -4,7 +4,6 @@ dependencies {
     compile project(':grpc-api'),
             libraries.gson,
             libraries.android_annotations,
-            libraries.perfmark
     compile (libraries.opencensus_api) {
         // prefer 3.0.2 from libraries instead of 3.0.1
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
