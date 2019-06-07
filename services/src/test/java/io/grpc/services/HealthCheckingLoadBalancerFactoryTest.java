@@ -258,6 +258,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(origHelper);
     verifyNoMoreInteractions(origLb);
+    Subchannel[] wrappedSubchannels = new Subchannel[NUM_SUBCHANNELS];
 
     // Simulate that the orignal LB creates Subchannels
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -265,8 +266,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
-      // We don't wrap Subchannels, thus origLb gets the original Subchannels.
-      assertThat(unwrap(createSubchannel(i, attrs))).isSameInstanceAs(subchannels[i]);
+      wrappedSubchannels[i] = createSubchannel(i, attrs);
+      assertThat(unwrap(wrappedSubchannels[i])).isSameInstanceAs(subchannels[i]);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -340,9 +341,17 @@ public class HealthCheckingLoadBalancerFactoryTest {
       assertThat(serverCall.cancelled).isFalse();
       verifyNoMoreInteractions(mockStateListener);
 
+      assertThat(subchannels[i].isShutdown).isFalse();
+      final Subchannel wrappedSubchannel = wrappedSubchannels[i];
       // Subchannel enters SHUTDOWN state as a response to shutdown(), and that will cancel the
       // health check RPC
-      subchannel.shutdown();
+      syncContext.execute(new Runnable() {
+          @Override
+          public void run() {
+            wrappedSubchannel.shutdown();
+          }
+        });
+      assertThat(subchannels[i].isShutdown).isTrue();
       assertThat(serverCall.cancelled).isTrue();
       verify(mockStateListener).onSubchannelState(
           eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
@@ -1160,6 +1169,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
     final ArrayList<String> logs = new ArrayList<>();
     final int index;
     SubchannelStateListener listener;
+    boolean isShutdown;
     private final ChannelLogger logger = new ChannelLogger() {
         @Override
         public void log(ChannelLogLevel level, String msg) {
@@ -1187,6 +1197,7 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     @Override
     public void shutdown() {
+      isShutdown = true;
       deliverSubchannelState(index, ConnectivityStateInfo.forNonError(SHUTDOWN));
     }
 

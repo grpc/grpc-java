@@ -167,6 +167,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     @Override
     public void shutdown() {
       helperImpl.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+      delegate().shutdown();
       helperImpl.hcStates.remove(hcState);
     }
   }
