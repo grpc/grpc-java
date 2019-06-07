@@ -329,6 +329,9 @@ final class XdsLoadBalancer extends LoadBalancer {
         LbConfig fallbackPolicy) {
       this.fallbackServers = servers;
       String fallbackPolicyName = fallbackPolicy.getPolicyName();
+
+      // Some addresses in the list may be grpclb-v1 balancer addresses, so if the fallback policy
+      // does not support grpclb-v1 balancer addresses, then we need to exclude them from the list.
       if (!fallbackPolicyName.equals("grpclb") && !fallbackPolicyName.equals(XDS_POLICY_NAME)) {
         ImmutableList.Builder<EquivalentAddressGroup> backends = ImmutableList.builder();
         for (EquivalentAddressGroup eag : servers) {
@@ -338,6 +341,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         }
         this.fallbackServers = backends.build();
       }
+
       this.fallbackAttributes = Attributes.newBuilder()
           .setAll(attributes)
           .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy.getRawConfigValue())
