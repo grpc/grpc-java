@@ -1004,34 +1004,38 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
+    ServerSideCall[] serverCalls = new ServerSideCall[NUM_SUBCHANNELS];
 
-    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
-    SubchannelStateListener mockListener = mockStateListeners[0];
-    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
+    for (int i = 0; i < NUM_SUBCHANNELS; i++) {
+      Subchannel subchannel = createSubchannel(i, Attributes.EMPTY);
+      SubchannelStateListener mockListener = mockStateListeners[i];
+      assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[i]);
 
-    // Trigger the health check
-    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
+      // Trigger the health check
+      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
 
-    HealthImpl healthImpl = healthImpls[0];
-    assertThat(healthImpl.calls).hasSize(1);
-    ServerSideCall serverCall = healthImpl.calls.poll();
-    assertThat(serverCall.cancelled).isFalse();
+      HealthImpl healthImpl = healthImpls[i];
+      assertThat(healthImpl.calls).hasSize(1);
+      serverCalls[i] = healthImpl.calls.poll();
+      assertThat(serverCalls[i].cancelled).isFalse();
 
-    verify(mockListener).onSubchannelState(
-        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+      verify(mockListener).onSubchannelState(
+          eq(ConnectivityStateInfo.forNonError(CONNECTING)));
+    }
 
     // Shut down the balancer
     hcLbEventDelivery.shutdown();
     verify(origLb).shutdown();
 
     // Health check stream should be cancelled
-    assertThat(serverCall.cancelled).isTrue();
+    for (int i = 0; i < NUM_SUBCHANNELS; i++) {
+      assertThat(serverCalls[i].cancelled).isTrue();
+      // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
+      verifyNoMoreInteractions(origLb, mockStateListeners[i]);
+      // No more health check call is made or scheduled
+      assertThat(healthImpls[i].calls).isEmpty();
+    }
 
-    // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
-    verifyNoMoreInteractions(origLb, mockListener);
-
-    // No more health check call is made or scheduled
-    assertThat(healthImpl.calls).isEmpty();
     assertThat(clock.getPendingTasks()).isEmpty();
   }
 
