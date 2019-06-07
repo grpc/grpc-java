@@ -43,6 +43,7 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
   private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final XdsLoadReportClientFactory lrsClientFactory;
 
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
@@ -105,18 +107,47 @@ final class XdsLoadBalancer extends LoadBalancer {
 
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    this.helper = helper;
-    this.lbRegistry = lbRegistry;
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.localityStore = new LocalityStoreImpl(new LocalityStoreHelper(), lbRegistry);
-    fallbackManager = new FallbackManager(helper, lbRegistry);
+    this(helper, lbRegistry, backoffPolicyProvider, XdsLoadReportClientFactory.getInstance(),
+        new FallbackManager(helper, lbRegistry));
   }
 
-  private final class LocalityStoreHelper extends ForwardingLoadBalancerHelper {
+  private XdsLoadBalancer(Helper helper,
+      LoadBalancerRegistry lbRegistry,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      XdsLoadReportClientFactory lrsClientFactory,
+      FallbackManager fallbackManager) {
+    this(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory, fallbackManager,
+        new LocalityStoreImpl(new LocalityStoreHelper(helper, fallbackManager), lbRegistry));
+  }
+
+  @VisibleForTesting
+  XdsLoadBalancer(Helper helper,
+      LoadBalancerRegistry lbRegistry,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      XdsLoadReportClientFactory lrsClientFactory,
+      FallbackManager fallbackManager,
+      LocalityStore localityStore) {
+    this.helper = checkNotNull(helper, "helper");
+    this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.lrsClientFactory = checkNotNull(lrsClientFactory, "lrsClientFactory");
+    this.fallbackManager = checkNotNull(fallbackManager, "fallbackManager");
+    this.localityStore = checkNotNull(localityStore, "localityStore");
+  }
+
+  private static final class LocalityStoreHelper extends ForwardingLoadBalancerHelper {
+
+    final Helper delegate;
+    final FallbackManager fallbackManager;
+
+    LocalityStoreHelper(Helper delegate, FallbackManager fallbackManager) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.fallbackManager = checkNotNull(fallbackManager, "fallbackManager");
+    }
 
     @Override
     protected Helper delegate() {
-      return helper;
+      return delegate;
     }
 
     @Override
@@ -131,7 +162,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
 
       if (!fallbackManager.isInFallbackMode()) {
-        helper.updateBalancingState(newState, newPicker);
+        delegate.updateBalancingState(newState, newPicker);
       }
     }
   }
@@ -186,7 +217,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         lbChannel = ManagedChannelBuilder.forTarget(newBalancerName).build();
       }
       lrsClient =
-          new XdsLoadReportClientImpl(lbChannel, helper, backoffPolicyProvider,
+          lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
               localityStore.getStatsStore());
     } else if (!Objects.equal(
         getPolicyNameOrNull(childPolicy),
@@ -242,9 +273,11 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     if (xdsLbState != null) {
-      lrsClient.stopLoadReporting();
-      lrsClient = null;
-      lrsWorking = false;
+      if (lrsWorking) {
+        lrsClient.stopLoadReporting();
+        lrsClient = null;
+        lrsWorking = false;
+      }
       ManagedChannel channel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
       channel.shutdown();
       xdsLbState = null;
@@ -287,8 +320,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     private boolean childPolicyHasBeenReady;
 
     FallbackManager(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this.helper = helper;
-      this.lbRegistry = lbRegistry;
+      this.helper = checkNotNull(helper, "helper");
+      this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     }
 
     /**
