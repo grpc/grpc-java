@@ -112,13 +112,7 @@ class WriteQueue {
       int i = 0;
       boolean flushedOnce = false;
       while ((cmd = queue.poll()) != null) {
-        PerfMark.startTask("WriteQueue.run");
-        try {
-          cmd.getLink().link();
-          cmd.run(channel);
-        } finally {
-          PerfMark.stopTask("WriteQueue.run");
-        }
+        cmd.run(channel);
         if (++i == DEQUE_CHUNK_SIZE) {
           i = 0;
           // Flush each chunk so we are releasing buffers periodically. In theory this loop
