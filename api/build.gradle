@@ -28,5 +28,4 @@ dependencies {
 javadoc {
     // We want io.grpc.Internal, but not io.grpc.Internal*
     exclude 'io/grpc/Internal?*.java'
-    exclude 'io/grpc/internal/**'
 }
