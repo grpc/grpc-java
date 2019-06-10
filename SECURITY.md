@@ -17,7 +17,7 @@ BoringSSL](#tls-with-netty-tcnative-on-boringssl).
 On Android we recommend the use of the [Play Services Dynamic Security
 Provider](https://www.appfoundry.be/blog/2014/11/18/Google-Play-Services-Dynamic-Security-Provider/)
 to ensure your application has an up-to-date OpenSSL library with the necessary
-ciper-suites and a reliable ALPN implementation. This requires [updating the
+cipher-suites and a reliable ALPN implementation. This requires [updating the
 security provider at
 runtime](https://developer.android.com/training/articles/security-gms-provider.html).
 
