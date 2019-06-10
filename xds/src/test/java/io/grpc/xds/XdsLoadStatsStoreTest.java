@@ -56,6 +56,7 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link XdsLoadStatsStore}. */
 @RunWith(JUnit4.class)
 public class XdsLoadStatsStoreTest {
+  private static final String SERVICE_NAME = "api.google.com";
   private static final XdsLocality LOCALITY1 =
       new XdsLocality("test_region1", "test_zone", "test_subzone");
   private static final XdsLocality LOCALITY2 =
@@ -71,7 +72,7 @@ public class XdsLoadStatsStoreTest {
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStore = new XdsLoadStatsStore(localityLoadCounters, dropCounters);
+    loadStore = new XdsLoadStatsStore(SERVICE_NAME, localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -116,7 +117,8 @@ public class XdsLoadStatsStoreTest {
   private static ClusterStats buildClusterStats(
       @Nullable List<UpstreamLocalityStats> upstreamLocalityStatsList,
       @Nullable List<DroppedRequests> droppedRequestsList) {
-    ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder();
+    ClusterStats.Builder clusterStatsBuilder = ClusterStats.newBuilder()
+        .setClusterName(SERVICE_NAME);
     if (upstreamLocalityStatsList != null) {
       clusterStatsBuilder.addAllUpstreamLocalityStats(upstreamLocalityStatsList);
     }
