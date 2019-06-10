@@ -57,7 +57,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @VisibleForTesting
-  static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
+  static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
 
   private final String serviceName;
@@ -177,7 +177,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
               .setNode(Node.newBuilder()
                   .setMetadata(Struct.newBuilder()
                       .putFields(
-                          TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                          TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                           Value.newBuilder().setStringValue(serviceName).build())))
               .build();
       lrsRequestWriter.onNext(initRequest);
@@ -228,7 +228,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
-                      TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                      TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
           .addClusterStats(report)
           .build());

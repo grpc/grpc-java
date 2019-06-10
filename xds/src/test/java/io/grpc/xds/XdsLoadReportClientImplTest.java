@@ -136,7 +136,7 @@ public class XdsLoadReportClientImplTest {
       .setNode(Node.newBuilder()
           .setMetadata(Struct.newBuilder()
               .putFields(
-                  XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                  XdsLoadReportClientImpl.TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                   Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
       .build();
   @Mock
@@ -225,7 +225,7 @@ public class XdsLoadReportClientImplTest {
     assertEquals(report.getNode(), Node.newBuilder()
         .setMetadata(Struct.newBuilder()
             .putFields(
-                XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                XdsLoadReportClientImpl.TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                 Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
         .build());
     assertEquals(1, report.getClusterStatsCount());
