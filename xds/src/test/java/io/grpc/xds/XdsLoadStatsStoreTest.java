@@ -135,6 +135,7 @@ public class XdsLoadStatsStoreTest {
   private static void assertClusterStatsEqual(ClusterStats expected, ClusterStats actual) {
     assertThat(actual.getClusterName()).isEqualTo(expected.getClusterName());
     assertThat(actual.getLoadReportInterval()).isEqualTo(expected.getLoadReportInterval());
+    assertThat(actual.getTotalDroppedRequests()).isEqualTo(expected.getTotalDroppedRequests());
     assertThat(actual.getDroppedRequestsCount()).isEqualTo(expected.getDroppedRequestsCount());
     assertThat(new HashSet<>(actual.getDroppedRequestsList()))
         .isEqualTo(new HashSet<>(expected.getDroppedRequestsList()));

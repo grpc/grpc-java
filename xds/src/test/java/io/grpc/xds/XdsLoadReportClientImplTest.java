@@ -374,6 +374,7 @@ public class XdsLoadReportClientImplTest {
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("throttle")
             .setDroppedCount(numThrottleDrops))
+        .setTotalDroppedRequests(numLbDrops + numThrottleDrops)
         .build();
     ClusterStats expectedStats2 = ClusterStats.newBuilder()
         .setClusterName(SERVICE_AUTHORITY)
@@ -387,6 +388,7 @@ public class XdsLoadReportClientImplTest {
         .addDroppedRequests(DroppedRequests.newBuilder()
             .setCategory("throttle")
             .setDroppedCount(0))
+        .setTotalDroppedRequests(0)
         .build();
     when(statsStore.generateLoadReport())
         .thenReturn(expectedStats1, expectedStats2);
