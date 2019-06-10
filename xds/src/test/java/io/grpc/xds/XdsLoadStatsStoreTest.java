@@ -17,16 +17,22 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.ClientStreamTracer;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.Metadata;
+import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
@@ -51,19 +57,14 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class XdsLoadStatsStoreTest {
   private static final String SERVICE_NAME = "api.google.com";
-  private static final Locality LOCALITY1 =
-      Locality.newBuilder()
-          .setRegion("test_region1")
-          .setZone("test_zone")
-          .setSubZone("test_subzone")
-          .build();
-  private static final Locality LOCALITY2 =
-      Locality.newBuilder()
-          .setRegion("test_region2")
-          .setZone("test_zone")
-          .setSubZone("test_subzone")
-          .build();
-  private ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
+  private static final XdsLocality LOCALITY1 =
+      new XdsLocality("test_region1", "test_zone", "test_subzone");
+  private static final XdsLocality LOCALITY2 =
+      new XdsLocality("test_region2", "test_zone", "test_subzone");
+  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
+      ClientStreamTracer.StreamInfo.newBuilder().build();
+  private Subchannel mockSubchannel = mock(Subchannel.class);
+  private ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private XdsLoadStatsStore loadStore;
 
@@ -87,7 +88,7 @@ public class XdsLoadStatsStoreTest {
     return res;
   }
 
-  private static UpstreamLocalityStats buildUpstreamLocalityStats(Locality locality,
+  private static UpstreamLocalityStats buildUpstreamLocalityStats(XdsLocality locality,
       long callsSucceed,
       long callsInProgress,
       long callsFailed,
@@ -95,7 +96,7 @@ public class XdsLoadStatsStoreTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality)
+            .setLocality(locality.toLocalityProto())
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)
@@ -146,7 +147,8 @@ public class XdsLoadStatsStoreTest {
   private static void assertUpstreamLocalityStatsListsEqual(List<UpstreamLocalityStats> expected,
       List<UpstreamLocalityStats> actual) {
     assertThat(actual).hasSize(expected.size());
-    Map<Locality, UpstreamLocalityStats> expectedLocalityStats = new HashMap<>();
+    Map<io.envoyproxy.envoy.api.v2.core.Locality, UpstreamLocalityStats> expectedLocalityStats =
+        new HashMap<>();
     for (UpstreamLocalityStats stats : expected) {
       expectedLocalityStats.put(stats.getLocality(), stats);
     }
@@ -296,5 +298,42 @@ public class XdsLoadStatsStoreTest {
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);
+  }
+
+  @Test
+  public void loadNotRecordedForUntrackedLocality() {
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
+    // If the per-locality counter does not exist, nothing should happen.
+    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
+    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
+  public void invalidPickResultNotIntercepted() {
+    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
+    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
+    // TODO (chengyuanzhang): for NoResult PickResult, do we still intercept?
+    PickResult interceptedErrorResult = loadStore.interceptPickResult(errorResult, LOCALITY1);
+    PickResult interceptedDroppedResult =
+        loadStore.interceptPickResult(droppedResult, LOCALITY1);
+    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
+    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
+  }
+
+  @Test
+  public void interceptPreservesOriginStreamTracer() {
+    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    when(mockFactory
+        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+        .thenReturn(mockTracer);
+    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
+    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
+    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
+    Metadata metadata = new Metadata();
+    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
+        .streamClosed(Status.OK);
+    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
+    verify(mockTracer).streamClosed(Status.OK);
   }
 }
