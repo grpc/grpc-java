@@ -55,21 +55,18 @@ final class XdsLoadStatsStore implements StatsStore {
         }
       };
 
-  private final String clusterName;
   private final ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  XdsLoadStatsStore(String clusterName) {
-    this(clusterName, new ConcurrentHashMap<XdsLocality, StatsCounter>(),
+  XdsLoadStatsStore() {
+    this(new ConcurrentHashMap<XdsLocality, StatsCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadStatsStore(String clusterName,
-      ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
+  XdsLoadStatsStore(ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
-    this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
@@ -80,7 +77,7 @@ final class XdsLoadStatsStore implements StatsStore {
    */
   @Override
   public ClusterStats generateLoadReport() {
-    ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName);
+    ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
     for (Map.Entry<XdsLocality, StatsCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
