@@ -92,11 +92,15 @@ final class XdsLoadStatsStore implements StatsStore {
         localityLoadCounters.remove(entry.getKey());
       }
     }
+    long totalDrops = 0;
     for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
+      long drops = entry.getValue().getAndSet(0);
+      totalDrops += drops;
       statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
           .setCategory(entry.getKey())
-          .setDroppedCount(entry.getValue().getAndSet(0)));
+          .setDroppedCount(drops));
     }
+    statsBuilder.setTotalDroppedRequests(totalDrops);
     return statsBuilder.build();
   }
 
