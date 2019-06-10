@@ -359,9 +359,6 @@ interface LocalityStore {
         checkNotNull(newState, "newState");
         checkNotNull(newPicker, "newPicker");
 
-        currentChildState = newState;
-        currentChildPicker = newPicker;
-
         class LoadRecordPicker extends SubchannelPicker {
           private final SubchannelPicker delegate;
 
@@ -375,8 +372,11 @@ interface LocalityStore {
           }
         }
 
+        currentChildState = newState;
+        currentChildPicker = new LoadRecordPicker(newPicker);
+
         // delegate to parent helper
-        updateChildState(locality, newState, new LoadRecordPicker(newPicker));
+        updateChildState(locality, newState, currentChildPicker);
       }
 
       @Override
