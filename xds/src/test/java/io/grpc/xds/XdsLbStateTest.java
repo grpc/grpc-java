@@ -17,16 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.READY;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
@@ -34,17 +27,8 @@ import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
-import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
-import io.grpc.LoadBalancerProvider;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -53,26 +37,12 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsComms.LbEndpoint;
-import io.grpc.xds.XdsComms.Locality;
-import io.grpc.xds.XdsComms.LocalityInfo;
-import java.net.InetSocketAddress;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -88,46 +58,6 @@ public class XdsLbStateTest {
   private Helper helper;
   @Mock
   private AdsStreamCallback adsStreamCallback;
-  @Mock
-  private PickSubchannelArgs pickSubchannelArgs;
-  @Mock
-  private ThreadSafeRandom random;
-  @Captor
-  private ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor;
-  @Captor
-  private ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor;
-
-  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-  private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
-  private final Map<String, Helper> childHelpers = new HashMap<>();
-
-  private final LoadBalancerProvider childLbProvider = new LoadBalancerProvider() {
-    @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return "round_robin";
-    }
-
-    @Override
-    public LoadBalancer newLoadBalancer(Helper helper) {
-      if (loadBalancers.containsKey(helper.getAuthority())) {
-        return loadBalancers.get(helper.getAuthority());
-      }
-      LoadBalancer loadBalancer = mock(LoadBalancer.class);
-      loadBalancers.put(helper.getAuthority(), loadBalancer);
-      childHelpers.put(helper.getAuthority(), helper);
-      return loadBalancer;
-    }
-  };
 
   private LocalityStore localityStore;
 
@@ -144,29 +74,6 @@ public class XdsLbStateTest {
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
   private ManagedChannel channel;
 
-  private static final class FakeInterLocalityPickerFactory implements PickerFactory {
-    int totalReadyLocalities;
-    int nextIndex;
-
-    @Override
-    public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
-      totalReadyLocalities = childPickers.size();
-
-      return new SubchannelPicker() {
-        @Override
-        public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
-        }
-      };
-    }
-
-    void setNextIndex(int nextIndex) {
-      this.nextIndex = nextIndex;
-    }
-  }
-
-  private final FakeInterLocalityPickerFactory interLocalityPickerFactory
-      = new FakeInterLocalityPickerFactory();
 
   @Before
   public void setUp() throws Exception {
@@ -175,8 +82,6 @@ public class XdsLbStateTest {
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    lbRegistry.register(childLbProvider);
-    localityStore = new LocalityStoreImpl(helper, interLocalityPickerFactory, lbRegistry, random);
 
     String serverName = InProcessServerBuilder.generateName();
 
@@ -217,81 +122,11 @@ public class XdsLbStateTest {
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
   }
 
-  @After
-  public void tearDown() {
-    verifyNoMoreInteractions(random);
-  }
-
   @Test
   public void shutdownAndReleaseXdsCommsDoesShutdown() {
     XdsLbState xdsLbState = mock(XdsLbState.class);
     xdsLbState.shutdownAndReleaseXdsComms();
     verify(xdsLbState).shutdown();
-  }
-
-  @Test
-  public void handleSubchannelState() {
-    assertThat(loadBalancers).isEmpty();
-
-    Locality locality1 = new Locality("r1", "z1", "sz1");
-    EquivalentAddressGroup eag11 = new EquivalentAddressGroup(new InetSocketAddress("addr11", 11));
-    EquivalentAddressGroup eag12 = new EquivalentAddressGroup(new InetSocketAddress("addr12", 12));
-
-    LbEndpoint lbEndpoint11 = new LbEndpoint(eag11, 11);
-    LbEndpoint lbEndpoint12 = new LbEndpoint(eag12, 12);
-    LocalityInfo localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
-
-    Locality locality2 = new Locality("r2", "z2", "sz2");
-    EquivalentAddressGroup eag21 = new EquivalentAddressGroup(new InetSocketAddress("addr21", 21));
-    EquivalentAddressGroup eag22 = new EquivalentAddressGroup(new InetSocketAddress("addr22", 22));
-
-    LbEndpoint lbEndpoint21 = new LbEndpoint(eag21, 21);
-    LbEndpoint lbEndpoint22 = new LbEndpoint(eag22, 22);
-    LocalityInfo localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
-
-    Map<Locality, LocalityInfo> localityInfoMap = new LinkedHashMap<>();
-    localityInfoMap.put(locality1, localityInfo1);
-    localityInfoMap.put(locality2, localityInfo2);
-
-    verify(helper, never()).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
-
-    localityStore.updateLocalityStore(localityInfoMap);
-
-    assertThat(loadBalancers).hasSize(2);
-    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2");
-    assertThat(childHelpers).hasSize(2);
-    assertThat(childHelpers.keySet()).containsExactly("sz1", "sz2");
-
-    verify(loadBalancers.get("sz1")).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getAddresses())
-        .containsExactly(eag11, eag12).inOrder();
-    verify(loadBalancers.get("sz2")).handleResolvedAddresses(resolvedAddressesCaptor.capture());
-    assertThat(resolvedAddressesCaptor.getValue().getAddresses())
-        .containsExactly(eag21, eag22).inOrder();
-    verify(helper, never()).updateBalancingState(
-        any(ConnectivityState.class), any(SubchannelPicker.class));
-
-    SubchannelPicker childPicker1 = mock(SubchannelPicker.class);
-    PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class));
-    doReturn(pickResult1).when(childPicker1).pickSubchannel(any(PickSubchannelArgs.class));
-    childHelpers.get("sz1").updateBalancingState(READY, childPicker1);
-    verify(helper).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
-
-    assertThat(interLocalityPickerFactory.totalReadyLocalities).isEqualTo(1);
-    interLocalityPickerFactory.setNextIndex(0);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameInstanceAs(pickResult1);
-
-    SubchannelPicker childPicker2 = mock(SubchannelPicker.class);
-    PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
-    doReturn(pickResult2).when(childPicker2).pickSubchannel(any(PickSubchannelArgs.class));
-    childHelpers.get("sz2").updateBalancingState(CONNECTING, childPicker2);
-    verify(helper, times(2)).updateBalancingState(eq(READY), subchannelPickerCaptor.capture());
-
-    assertThat(interLocalityPickerFactory.totalReadyLocalities).isEqualTo(1);
-    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
-        .isSameInstanceAs(pickResult1);
   }
 
   @Test
