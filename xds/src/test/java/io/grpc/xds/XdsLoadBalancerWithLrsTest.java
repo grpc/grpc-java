@@ -149,6 +149,7 @@ public class XdsLoadBalancerWithLrsTest {
   private StreamObserver<DiscoveryResponse> serverResponseWriter;
   private ManagedChannel oobChannel1;
   private ManagedChannel oobChannel2;
+  private ManagedChannel oobChannel3;
   private LoadBalancer xdsLoadBalancer;
 
   @Before
@@ -197,6 +198,9 @@ public class XdsLoadBalancerWithLrsTest {
     oobChannel2 = mock(
         ManagedChannel.class,
         delegatesTo(cleanupRule.register(channelBuilder.build())));
+    oobChannel3 = mock(
+        ManagedChannel.class,
+        delegatesTo(cleanupRule.register(channelBuilder.build())));
 
     lbRegistry.register(fallBackLbProvider);
     lbRegistry.register(lbProvider);
@@ -204,7 +208,8 @@ public class XdsLoadBalancerWithLrsTest {
     when(helper.getScheduledExecutorService()).thenReturn(fakeClock.getScheduledExecutorService());
     when(helper.getAuthority()).thenReturn(SERVICE_AUTHORITY);
     when(helper.getChannelLogger()).thenReturn(mock(ChannelLogger.class));
-    when(helper.createResolvingOobChannel(anyString())).thenReturn(oobChannel1, oobChannel2);
+    when(helper.createResolvingOobChannel(anyString()))
+        .thenReturn(oobChannel1, oobChannel2, oobChannel3);
     when(localityStore.getStatsStore()).thenReturn(statsStore);
     when(lrsClientFactory.createLoadReportClient(any(ManagedChannel.class), any(Helper.class),
         any(BackoffPolicy.Provider.class), any(StatsStore.class))).thenReturn(lrsClient);
@@ -275,6 +280,7 @@ public class XdsLoadBalancerWithLrsTest {
    * the remote balancer.
    */
   @Test
+  @SuppressWarnings("unchecked")
   public void reportLoadToNewTrafficDirectorAfterBalancerNameChange() throws Exception {
     InOrder inOrder = inOrder(lrsClientFactory, lrsClient);
     xdsLoadBalancer.handleResolvedAddresses(ResolvedAddresses.newBuilder()
@@ -286,18 +292,10 @@ public class XdsLoadBalancerWithLrsTest {
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
             same(statsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
+    inOrder.verify(lrsClient, never()).startLoadReporting();
 
-    // Simulate a syntactically correct EDS response.
-    DiscoveryResponse edsResponse =
-        DiscoveryResponse.newBuilder()
-            .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
-            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-            .build();
-    serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting();
-
-    // Simulate receiving a new service config with balancer name changed.
-    @SuppressWarnings("unchecked")
+    // Simulate receiving a new service config with balancer name changed before xDS protocol is
+    // established.
     Map<String, ?> newLbConfig =
         (Map<String, ?>) JsonParser.parse(
             "{\"balancerName\" : \"dns:///another.balancer.example.com:8080\","
@@ -310,9 +308,35 @@ public class XdsLoadBalancerWithLrsTest {
 
     assertThat(oobChannel1.isShutdown()).isTrue();
     assertThat(streamRecorder.getValues()).hasSize(2);
-    inOrder.verify(lrsClient).stopLoadReporting();
+    inOrder.verify(lrsClient, never()).stopLoadReporting();
     inOrder.verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel2), same(helper), same(backoffPolicyProvider),
+            same(statsStore));
+
+    // Simulate a syntactically correct EDS response.
+    DiscoveryResponse edsResponse =
+        DiscoveryResponse.newBuilder()
+            .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
+            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+            .build();
+    serverResponseWriter.onNext(edsResponse);
+    inOrder.verify(lrsClient).startLoadReporting();
+
+    // Simulate receiving a new service config with balancer name changed.
+    newLbConfig = (Map<String, ?>) JsonParser.parse(
+            "{\"balancerName\" : \"dns:///third.balancer.example.com:8080\","
+                + "\"fallbackPolicy\" : [{\"fallback\" : { \"fallback_option\" : \"yes\"}}]}");
+
+    xdsLoadBalancer.handleResolvedAddresses(ResolvedAddresses.newBuilder()
+        .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, newLbConfig).build())
+        .build());
+
+    assertThat(oobChannel2.isShutdown()).isTrue();
+    assertThat(streamRecorder.getValues()).hasSize(3);
+    inOrder.verify(lrsClient).stopLoadReporting();
+    inOrder.verify(lrsClientFactory)
+        .createLoadReportClient(same(oobChannel3), same(helper), same(backoffPolicyProvider),
             same(statsStore));
 
     serverResponseWriter.onNext(edsResponse);
