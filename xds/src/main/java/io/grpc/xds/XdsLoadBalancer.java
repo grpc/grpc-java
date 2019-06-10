@@ -316,7 +316,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       fallbackBalancer = lbRegistry.getProvider(fallbackPolicy.getPolicyName())
           .newLoadBalancer(fallbackBalancerHelper);
       fallbackBalancerHelper.balancer = fallbackBalancer;
-      handleFallbackAddressesOrNameResolutionError();
+      propagateFallbackAddresses();
     }
 
     void updateFallbackServers(
@@ -331,7 +331,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       this.fallbackPolicy = fallbackPolicy;
       if (fallbackBalancer != null) {
         if (fallbackPolicy.getPolicyName().equals(currentFallbackPolicy.getPolicyName())) {
-          handleFallbackAddressesOrNameResolutionError();
+          propagateFallbackAddresses();
         } else {
           fallbackBalancer.shutdown();
           fallbackBalancer = null;
@@ -340,7 +340,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
     }
 
-    private void handleFallbackAddressesOrNameResolutionError() {
+    private void propagateFallbackAddresses() {
       String fallbackPolicyName = fallbackPolicy.getPolicyName();
       List<EquivalentAddressGroup> servers = fallbackServers;
 
@@ -356,7 +356,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         servers = backends.build();
       }
 
-      // FIXME: this is a temporary hack.
+      // TODO(zhangkun83): FIXME(#5496): this is a temporary hack.
       if (servers.isEmpty()
           && !fallbackBalancer.canHandleEmptyAddressListFromNameResolution()) {
         fallbackBalancer.handleNameResolutionError(Status.UNAVAILABLE.withDescription(
