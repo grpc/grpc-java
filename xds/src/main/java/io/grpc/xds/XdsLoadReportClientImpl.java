@@ -60,6 +60,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
 
+  // The name of load-balanced service.
   private final String serviceName;
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
@@ -71,6 +72,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final StatsStore statsStore;
   private boolean started;
 
+  // The name for the google service the client talks to. Received on LRS responses.
+  @Nullable
+  private String clusterName;
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
@@ -81,9 +85,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
-      BackoffPolicy.Provider backoffPolicyProvider) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
+      BackoffPolicy.Provider backoffPolicyProvider,
+      StatsStore statsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
   }
 
   @VisibleForTesting
@@ -222,6 +226,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       ClusterStats report =
           statsStore.generateLoadReport()
               .toBuilder()
+              .setClusterName(clusterName)
               .setLoadReportInterval(Durations.fromNanos(interval))
               .build();
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
@@ -263,11 +268,12 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
-      if (serviceList.size() != 1 || !serviceList.get(0).equals(serviceName)) {
-        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): {0} with EDS response: {1}",
-            serviceList, serviceName);
+      if (serviceList.size() != 1) {
+        logger.log(ChannelLogLevel.ERROR, "Received clusters: {0}, expect exactly one",
+            serviceList);
         return;
       }
+      clusterName = serviceList.get(0);
       scheduleNextLoadReport();
     }
 
