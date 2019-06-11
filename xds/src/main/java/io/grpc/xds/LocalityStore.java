@@ -48,6 +48,7 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -154,8 +155,9 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        localityLbInfo.shutdown();
+      for (XdsLocality locality : localityMap.keySet()) {
+        localityMap.get(locality).shutdown();
+        statsStore.removeLocality(locality);
       }
       localityMap = new HashMap<>();
     }
@@ -166,10 +168,12 @@ interface LocalityStore {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
 
+      Set<XdsLocality> toRemove = new HashSet<>();
       Iterator<XdsLocality> iterator = oldLocalities.iterator();
       while (iterator.hasNext()) {
         XdsLocality oldLocality = iterator.next();
         if (!newLocalities.contains(oldLocality)) {
+          toRemove.add(oldLocality);
           // No graceful transition until a high-level lb graceful transition design is available.
           localityMap.get(oldLocality).shutdown();
           iterator.remove();
@@ -197,6 +201,7 @@ interface LocalityStore {
               oldLocalityLbInfo.childBalancer,
               childHelper);
         } else {
+          statsStore.addLocality(newLocality);
           childHelper = new ChildHelper(newLocality);
           localityLbInfo =
               new LocalityLbInfo(
@@ -221,6 +226,9 @@ interface LocalityStore {
 
       updatePicker(newState, childPickers);
 
+      for (XdsLocality locality : toRemove) {
+        statsStore.removeLocality(locality);
+      }
     }
 
     @Override

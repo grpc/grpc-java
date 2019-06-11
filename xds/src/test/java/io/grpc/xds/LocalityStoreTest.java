@@ -30,6 +30,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -53,6 +54,7 @@ import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -172,6 +174,36 @@ public class LocalityStoreTest {
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     lbRegistry.register(lbProvider);
     localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void updateLocalityStore_updateStatsStoreLocalityTracking() {
+    Map<XdsLocality, LocalityInfo> localityInfoMap = new HashMap<>();
+    localityInfoMap
+        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1));
+    localityInfoMap
+        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality1);
+    verify(statsStore).addLocality(locality2);
+
+    localityInfoMap
+        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality3);
+
+    localityInfoMap = ImmutableMap
+        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
+    verify(statsStore).removeLocality(locality3);
+    verify(statsStore).addLocality(locality4);
+
+    localityStore.updateLocalityStore(Collections.EMPTY_MAP);
+    verify(statsStore).removeLocality(locality4);
+    verifyNoMoreInteractions(statsStore);
   }
 
   @Test
@@ -296,6 +328,10 @@ public class LocalityStoreTest {
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
+    verify(statsStore).addLocality(locality1);
+    verify(statsStore).addLocality(locality2);
+    verify(statsStore).addLocality(locality3);
+
     assertThat(loadBalancers).hasSize(3);
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
@@ -379,7 +415,7 @@ public class LocalityStoreTest {
         .isTrue();
     verify(random, times(times + 2)).nextInt(1000_000);
     inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
-    inOrder.verifyNoMoreInteractions();
+    verifyNoMoreInteractions(statsStore);
   }
 
   @Test
@@ -422,5 +458,7 @@ public class LocalityStoreTest {
 
     verify(loadBalancers.get("sz1")).shutdown();
     verify(loadBalancers.get("sz2")).shutdown();
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
   }
 }
