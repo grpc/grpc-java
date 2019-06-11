@@ -19,6 +19,7 @@ package io.grpc.xds;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
+import jdk.internal.jline.internal.Nullable;
 
 /**
  * Interface for client side load stats store. A {@code StatsStore} implementation should only be
@@ -42,7 +43,7 @@ interface StatsStore {
    * Tracks load stats for endpoints in the provided locality. To be called upon balancer locality
    * updates only for newly assigned localities. Only load stats for endpoints in added localities
    * will be reported to the remote balancer. This method needs to be called at locality updates
-   * only for * newly assigned localities in balancer discovery responses.
+   * only for newly assigned localities in balancer discovery responses.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
@@ -62,7 +63,8 @@ interface StatsStore {
 
   /**
    * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker
-   * for the provided locality.
+   * for the provided locality. If the provided locality is not tracked, the original
+   * {@link PickResult} will be returned.
    *
    * <p>This method is thread-safe.
    */
@@ -70,12 +72,11 @@ interface StatsStore {
 
   /**
    * Returns the {@link StatsCounter} that does locality level stats aggregation for the provided
-   * locality. It is caller's responsibility to ensure the counter exists
-   * (i.e., after {@code #addLocality} and before {@code #removeLocality} is called for the
-   * provided locality). Otherwise, {@code null} will be returned.
+   * locality. If the provided locality is not tracked, {@code null} will be returned.
    *
    * <p>This method is thread-safe.
    */
+  @Nullable
   StatsCounter getLocalityCounter(XdsLocality locality);
 
   /**
