@@ -35,7 +35,8 @@ dependencies {
 
     compileOnly libraries.javax_annotation
     
-    testCompile project(':grpc-testing')
+    testCompile project(':grpc-testing'), 
+            libraries.guava_testlib
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 

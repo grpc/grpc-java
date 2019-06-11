@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -29,7 +28,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
@@ -45,12 +43,8 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
-import io.grpc.ClientStreamTracer;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -59,7 +53,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;
@@ -107,8 +100,6 @@ public class XdsLoadReportClientImplTest {
           .setZone("test_zone")
           .setSubZone("test_subzone")
           .build();
-  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      ClientStreamTracer.StreamInfo.newBuilder().build();
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -145,7 +136,7 @@ public class XdsLoadReportClientImplTest {
       .setNode(Node.newBuilder()
           .setMetadata(Struct.newBuilder()
               .putFields(
-                  XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                  XdsLoadReportClientImpl.TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                   Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build())))
       .build();
   @Mock
@@ -154,8 +145,6 @@ public class XdsLoadReportClientImplTest {
   private XdsLoadReportClientImpl lrsClient;
   @Mock
   private BackoffPolicy backoffPolicy2;
-  @Mock
-  private Subchannel mockSubchannel;
   @Mock
   private StatsStore statsStore;
 
@@ -236,52 +225,11 @@ public class XdsLoadReportClientImplTest {
     assertEquals(report.getNode(), Node.newBuilder()
         .setMetadata(Struct.newBuilder()
             .putFields(
-                XdsLoadReportClientImpl.TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                XdsLoadReportClientImpl.TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                 Value.newBuilder().setStringValue(SERVICE_AUTHORITY).build()))
         .build());
     assertEquals(1, report.getClusterStatsCount());
     assertThat(report.getClusterStats(0)).isEqualTo(expectedStats);
-  }
-
-  @Test
-  public void loadNotRecordedForUntrackedLocality() {
-    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(null);
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
-    // If the per-locality counter does not exist, nothing should happen.
-    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
-    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
-    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
-  }
-
-  @Test
-  public void invalidPickResultNotIntercepted() {
-    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
-    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
-    // TODO (chengyuanzhang): for NoResult PickResult, do we still intercept?
-    PickResult interceptedErrorResult = lrsClient.interceptPickResult(errorResult, TEST_LOCALITY);
-    PickResult interceptedDroppedResult =
-        lrsClient.interceptPickResult(droppedResult, TEST_LOCALITY);
-    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
-    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
-    verifyZeroInteractions(statsStore);
-  }
-
-  @Test
-  public void interceptPreservesOriginStreamTracer() {
-    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
-    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
-    when(mockFactory
-        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
-        .thenReturn(mockTracer);
-    when(statsStore.getLocalityCounter(TEST_LOCALITY)).thenReturn(new ClientLoadCounter());
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
-    PickResult interceptedPickResult = lrsClient.interceptPickResult(pickResult, TEST_LOCALITY);
-    verify(statsStore).getLocalityCounter(TEST_LOCALITY);
-    Metadata metadata = new Metadata();
-    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
-        .streamClosed(Status.OK);
-    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
-    verify(mockTracer).streamClosed(Status.OK);
   }
 
   @Test

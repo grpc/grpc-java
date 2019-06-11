@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.grpc.LoadBalancer.PickResult;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -36,7 +34,7 @@ interface XdsLoadReportClient {
    * XdsLoadReportClient} and should only be called once.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
   void startLoadReporting();
 
@@ -46,44 +44,7 @@ interface XdsLoadReportClient {
    * <p>No method in {@link XdsLoadReportClient} should be called after calling this method.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
   void stopLoadReporting();
-
-  /**
-   * Applies client side load recording to {@link PickResult}s picked by the intra-locality picker
-   * for the provided locality.
-   *
-   * <p>This method is thread-safe.
-   */
-  PickResult interceptPickResult(PickResult pickResult, Locality locality);
-
-  /**
-   * Tracks load stats for endpoints in the provided locality. To be called upon balancer locality
-   * updates only for newly assigned localities. Only load stats for endpoints in added localities
-   * will be reported to the remote balancer.
-   *
-   * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
-   */
-  void addLocality(Locality locality);
-
-  /**
-   * Stops tracking load stats for endpoints in the provided locality. To be called upon balancer
-   * locality updates only for newly removed localities. Load stats for endpoints in removed
-   * localities will no longer be reported to the remote balancer when client stop sending loads to
-   * them.
-   *
-   * <p>This method is not thread-safe and should be called from the same synchronized context *
-   * returned by {@link XdsLoadBalancer#helper#getSynchronizationContext}.
-   */
-  void removeLocality(Locality locality);
-
-  /**
-   * Records a client-side request drop with the provided category instructed by the remote
-   * balancer. Stats for dropped requests are aggregated in cluster level.
-   *
-   * <p>This method is thread-safe.
-   */
-  void recordDroppedRequest(String category);
 }

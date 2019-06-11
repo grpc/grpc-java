@@ -20,15 +20,18 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
+import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.XdsLoadReportClientImpl.StatsStore;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -41,19 +44,30 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 final class XdsLoadStatsStore implements StatsStore {
 
+  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+      new ClientStreamTracer() {
+      };
+  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+      new ClientStreamTracer.Factory() {
+        @Override
+        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+          return NOOP_CLIENT_STREAM_TRACER;
+        }
+      };
+
   private final String clusterName;
-  private final ConcurrentMap<Locality, StatsCounter> localityLoadCounters;
+  private final ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
   XdsLoadStatsStore(String clusterName) {
-    this(clusterName, new ConcurrentHashMap<Locality, StatsCounter>(),
+    this(clusterName, new ConcurrentHashMap<XdsLocality, StatsCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
   XdsLoadStatsStore(String clusterName,
-      ConcurrentMap<Locality, StatsCounter> localityLoadCounters,
+      ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.clusterName = checkNotNull(clusterName, "clusterName");
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
@@ -63,16 +77,14 @@ final class XdsLoadStatsStore implements StatsStore {
   /**
    * Generates a {@link ClusterStats} containing client side load stats and backend metrics
    * (if any) in locality granularity.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
    */
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder().setClusterName(clusterName);
-    for (Map.Entry<Locality, StatsCounter> entry : localityLoadCounters.entrySet()) {
+    for (Map.Entry<XdsLocality, StatsCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey());
+          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
       localityStatsBuilder
           .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
           .setTotalErrorRequests(snapshot.getCallsFailed())
@@ -106,13 +118,10 @@ final class XdsLoadStatsStore implements StatsStore {
 
   /**
    * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadStatsStore}. This method needs to be called at locality updates only for
-   * newly assigned localities in balancer discovery responses.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
+   * this {@link XdsLoadStatsStore}.
    */
   @Override
-  public void addLocality(final Locality locality) {
+  public void addLocality(final XdsLocality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active counter for locality %s already exists", locality);
@@ -125,33 +134,21 @@ final class XdsLoadStatsStore implements StatsStore {
 
   /**
    * Deactivate the {@link StatsCounter} for the provided locality in by this
-   * {@link XdsLoadStatsStore}. Inactive {@link StatsCounter}s are for localities
-   * no longer exposed by the remote balancer. This method needs to be called at
-   * locality updates only for localities newly removed from balancer discovery responses.
-   * This method should be called in the same synchronized context that
-   * {@link XdsLoadBalancer#helper#getSynchronizationContext} returns.
+   * {@link XdsLoadStatsStore}.
    */
   @Override
-  public void removeLocality(final Locality locality) {
+  public void removeLocality(final XdsLocality locality) {
     StatsCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active counter for locality %s exists", locality);
     counter.setActive(false);
   }
 
-  /**
-   * Returns the {@link StatsCounter} instance that is responsible for aggregating load
-   * stats for the provided locality, or {@code null} if the locality is untracked.
-   */
   @Override
-  public StatsCounter getLocalityCounter(final Locality locality) {
+  public StatsCounter getLocalityCounter(final XdsLocality locality) {
     return localityLoadCounters.get(locality);
   }
 
-  /**
-   * Record that a request has been dropped by drop overload policy with the provided category
-   * instructed by the remote balancer.
-   */
   @Override
   public void recordDroppedRequest(String category) {
     AtomicLong counter = dropCounters.get(category);
@@ -163,6 +160,24 @@ final class XdsLoadStatsStore implements StatsStore {
     }
     counter.getAndIncrement();
   }
+
+  @Override
+  public PickResult interceptPickResult(PickResult pickResult, XdsLocality locality) {
+    if (!pickResult.getStatus().isOk()) {
+      return pickResult;
+    }
+    StatsCounter counter = localityLoadCounters.get(locality);
+    if (counter == null) {
+      return pickResult;
+    }
+    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
+    if (originFactory == null) {
+      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+    }
+    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
+    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
+  }
+
 
   /**
    * Blueprint for counters that can can record number of calls in-progress, succeeded, failed,

@@ -48,7 +48,6 @@ import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
-import io.grpc.xds.XdsComms.Locality;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
@@ -121,10 +120,10 @@ public class LocalityStoreTest {
 
   private final FakePickerFactory pickerFactory = new FakePickerFactory();
 
-  private final Locality locality1 = new Locality("r1", "z1", "sz1");
-  private final Locality locality2 = new Locality("r2", "z2", "sz2");
-  private final Locality locality3 = new Locality("r3", "z3", "sz3");
-  private final Locality locality4 = new Locality("r4", "z4", "sz4");
+  private final XdsLocality locality1 = new XdsLocality("r1", "z1", "sz1");
+  private final XdsLocality locality2 = new XdsLocality("r2", "z2", "sz2");
+  private final XdsLocality locality3 = new XdsLocality("r3", "z3", "sz3");
+  private final XdsLocality locality4 = new XdsLocality("r4", "z4", "sz4");
 
   private final EquivalentAddressGroup eag11 =
       new EquivalentAddressGroup(new InetSocketAddress("addr11", 11));
@@ -178,7 +177,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -287,7 +286,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -378,7 +377,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -397,7 +396,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
     LocalityInfo localityInfo2 =
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
-    Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
     localityStore.updateLocalityStore(localityInfoMap);
 

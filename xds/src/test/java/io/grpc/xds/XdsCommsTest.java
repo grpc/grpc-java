@@ -85,7 +85,7 @@ public class XdsCommsTest {
   @Mock
   private LocalityStore localityStore;
   @Captor
-  private ArgumentCaptor<Map<XdsComms.Locality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<Map<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private final SynchronizationContext syncContext = new SynchronizationContext(
       new Thread.UncaughtExceptionHandler() {
@@ -254,7 +254,7 @@ public class XdsCommsTest {
 
     verify(adsStreamCallback).onWorking();
 
-    XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
+    XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint11),
@@ -265,7 +265,7 @@ public class XdsCommsTest {
             new XdsComms.LbEndpoint(endpoint21),
             new XdsComms.LbEndpoint(endpoint22)),
         2);
-    XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
+    XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
 
     InOrder inOrder = inOrder(localityStore);
     inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
@@ -369,12 +369,12 @@ public class XdsCommsTest {
         new DropOverload("fake_category", 78_00_00)));
     inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
 
-    XdsComms.Locality locality1 = new XdsComms.Locality(localityProto1);
+    XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2);
-    XdsComms.Locality locality2 = new XdsComms.Locality(localityProto2);
+    XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 

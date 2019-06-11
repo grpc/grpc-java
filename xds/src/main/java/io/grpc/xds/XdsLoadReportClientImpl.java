@@ -26,7 +26,6 @@ import com.google.common.base.Supplier;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
@@ -34,20 +33,14 @@ import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -57,25 +50,15 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * Client of XDS load reporting service. Methods in this class are expected to be called in
- * the same synchronized context that {@link XdsLoadBalancer#helper#getSynchronizationContext}
+ * the same synchronized context that {@link XdsLoadBalancer.Helper#getSynchronizationContext}
  * returns.
  */
 @NotThreadSafe
 final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @VisibleForTesting
-  static final String TRAFFICDIRECTOR_HOSTNAME_FIELD
+  static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
-  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
-      new ClientStreamTracer() {
-      };
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return NOOP_CLIENT_STREAM_TRACER;
-        }
-      };
 
   private final String serviceName;
   private final ManagedChannel channel;
@@ -139,44 +122,6 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
-  @Override
-  public void addLocality(Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    statsStore.addLocality(locality);
-  }
-
-  @Override
-  public void removeLocality(final Locality locality) {
-    checkState(started, "load reporting must be started first");
-    syncContext.throwIfNotInThisSynchronizationContext();
-    statsStore.removeLocality(locality);
-  }
-
-  @Override
-  public void recordDroppedRequest(String category) {
-    checkState(started, "load reporting must be started first");
-    statsStore.recordDroppedRequest(category);
-  }
-
-  @Override
-  public PickResult interceptPickResult(PickResult pickResult, Locality locality) {
-    checkState(started, "load reporting must be started first");
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    StatsCounter counter = statsStore.getLocalityCounter(locality);
-    if (counter == null) {
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
-  }
-
   @VisibleForTesting
   static class LoadReportingTask implements Runnable {
     private final LrsStream stream;
@@ -232,7 +177,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
               .setNode(Node.newBuilder()
                   .setMetadata(Struct.newBuilder()
                       .putFields(
-                          TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                          TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                           Value.newBuilder().setStringValue(serviceName).build())))
               .build();
       lrsRequestWriter.onNext(initRequest);
@@ -283,7 +228,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
           .setNode(Node.newBuilder()
               .setMetadata(Struct.newBuilder()
                   .putFields(
-                      TRAFFICDIRECTOR_HOSTNAME_FIELD,
+                      TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
                       Value.newBuilder().setStringValue(serviceName).build())))
           .addClusterStats(report)
           .build());
@@ -381,20 +326,5 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
-  }
-
-  /**
-   * Interface for client side load stats store.
-   */
-  interface StatsStore {
-    ClusterStats generateLoadReport();
-
-    void addLocality(Locality locality);
-
-    void removeLocality(Locality locality);
-
-    StatsCounter getLocalityCounter(Locality locality);
-
-    void recordDroppedRequest(String category);
   }
 }
