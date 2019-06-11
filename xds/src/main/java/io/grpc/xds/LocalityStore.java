@@ -26,7 +26,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
-import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -125,6 +124,14 @@ interface LocalityStore {
           }
         }
         return delegate.pickSubchannel(args);
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("dropOverloads", dropOverloads)
+            .add("delegate", delegate)
+            .toString();
       }
     }
 
@@ -293,8 +300,6 @@ interface LocalityStore {
       }
 
       if (state != null) {
-        helper.getChannelLogger().log(
-            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
         helper.updateBalancingState(state, picker);
       }
     }

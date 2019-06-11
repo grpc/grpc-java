@@ -102,6 +102,7 @@ class XdsLbState {
         }
         oobChannel = ManagedChannelBuilder.forTarget(balancerName).build();
       }
+      // TODO(zdapeng): pass a helper that has the right ChannelLogger for the oobChannel
       xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, localityStore);
     }
 

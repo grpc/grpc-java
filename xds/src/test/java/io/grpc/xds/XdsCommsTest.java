@@ -22,6 +22,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -43,6 +44,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.grpc.ChannelLogger;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerProvider;
@@ -146,6 +148,7 @@ public class XdsCommsTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     lbRegistry.register(new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
