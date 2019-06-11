@@ -72,9 +72,6 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final StatsStore statsStore;
   private boolean started;
 
-  // The name for the google service the client talks to. Received on LRS responses.
-  @Nullable
-  private String clusterName;
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
@@ -167,6 +164,10 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     boolean closed;
     long loadReportIntervalNano = -1;
     ScheduledHandle loadReportTimer;
+
+    // The name for the google service the client talks to. Received on LRS responses.
+    @Nullable
+    String clusterName;
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
