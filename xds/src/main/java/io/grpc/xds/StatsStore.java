@@ -19,7 +19,7 @@ package io.grpc.xds;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
-import jdk.internal.jline.internal.Nullable;
+import javax.annotation.Nullable;
 
 /**
  * Interface for client side load stats store. A {@code StatsStore} implementation should only be

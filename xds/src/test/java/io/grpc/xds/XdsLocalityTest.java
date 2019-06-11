@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.testing.EqualsTester;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import org.junit.Test;
 
@@ -40,5 +41,26 @@ public class XdsLocalityTest {
     assertThat(convertedLocality.getRegion()).isEqualTo("test_region");
     assertThat(convertedLocality.getZone()).isEqualTo("test_zone");
     assertThat(convertedLocality.getSubZone()).isEqualTo("test_subzone");
+  }
+
+  @Test
+  public void equal() {
+    new EqualsTester()
+        .addEqualityGroup(
+            new XdsLocality("region-a", "zone-a", "subzone-a"),
+            new XdsLocality("region-a", "zone-a", "subzone-a"))
+        .addEqualityGroup(
+            new XdsLocality("region", "zone", "subzone")
+        )
+        .addEqualityGroup(
+            new XdsLocality("", "", ""),
+            new XdsLocality("", "", ""))
+        .testEquals();
+  }
+
+  @Test
+  public void hash() {
+    assertThat(new XdsLocality("region", "zone", "subzone").hashCode())
+        .isEqualTo(new XdsLocality("region", "zone","subzone").hashCode());
   }
 }
