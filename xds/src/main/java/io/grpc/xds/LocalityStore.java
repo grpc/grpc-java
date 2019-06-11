@@ -76,24 +76,27 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
+    private final StatsStore statsStore;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          new XdsLoadStatsStore());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
         Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random) {
-      this.helper = helper;
-      this.pickerFactory = pickerFactory;
+        ThreadSafeRandom random, StatsStore statsStore) {
+      this.helper = checkNotNull(helper, "helper");
+      this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
-      this.random = random;
+      this.random = checkNotNull(random, "random");
+      this.statsStore = checkNotNull(statsStore, "statsStore");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -106,13 +109,15 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
+      final StatsStore statsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random) {
+          ThreadSafeRandom random, StatsStore statsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
+        this.statsStore = statsStore;
       }
 
       @Override
@@ -120,6 +125,7 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.dropsPerMillion) {
+            statsStore.recordDroppedRequest(dropOverload.category);
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
@@ -286,7 +292,7 @@ interface LocalityStore {
       }
 
       if (!dropOverloads.isEmpty()) {
-        picker = new DroppablePicker(dropOverloads, picker, random);
+        picker = new DroppablePicker(dropOverloads, picker, random, statsStore);
         if (state == null) {
           state = IDLE;
         }

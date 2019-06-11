@@ -21,8 +21,11 @@ import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -59,6 +62,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -157,6 +161,8 @@ public class LocalityStoreTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
+  @Mock
+  private StatsStore statsStore;
 
   private LocalityStore localityStore;
 
@@ -165,7 +171,7 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random);
+    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
   }
 
   @Test
@@ -309,25 +315,30 @@ public class LocalityStoreTest {
     verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
 
     int times = 0;
+    InOrder inOrder = inOrder(statsStore);
     doReturn(365, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
 
     // subchannel12 goes to READY
     CreateSubchannelArgs createSubchannelArgs =
@@ -349,21 +360,26 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times + 2)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
