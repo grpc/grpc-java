@@ -192,33 +192,19 @@ final class XdsLoadBalancer extends LoadBalancer {
     String newBalancerName = xdsConfig.newBalancerName;
     LbConfig childPolicy = xdsConfig.childPolicy;
     ManagedChannel lbChannel;
-    if (xdsLbState == null || !newBalancerName.equals(xdsLbState.balancerName)) {
-      if (xdsLbState != null) {
-        if (lrsWorking) {
-          lrsClient.stopLoadReporting();
-          lrsWorking = false;
-        }
-        ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
-        oldChannel.shutdown();
+    if (xdsLbState == null) {
+      lbChannel = initLbChannel(newBalancerName);
+      lrsClient =
+          lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
+              localityStore.getStatsStore());
+    } else if (!newBalancerName.equals(xdsLbState.balancerName)) {
+      if (lrsWorking) {
+        lrsClient.stopLoadReporting();
+        lrsWorking = false;
       }
-      try {
-        lbChannel = helper.createResolvingOobChannel(newBalancerName);
-      } catch (UnsupportedOperationException uoe) {
-        // Temporary solution until createResolvingOobChannel is implemented
-        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
-        Logger logger = Logger.getLogger(XdsLoadBalancer.class.getName());
-        if (logger.isLoggable(FINEST)) {
-          logger.log(
-              FINEST,
-              "createResolvingOobChannel() not supported by the helper: " + helper,
-              uoe);
-          logger.log(
-              FINEST,
-              "creating oob channel for target {0} using default ManagedChannelBuilder",
-              newBalancerName);
-        }
-        lbChannel = ManagedChannelBuilder.forTarget(newBalancerName).build();
-      }
+      ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+      oldChannel.shutdown();
+      lbChannel = initLbChannel(newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
               localityStore.getStatsStore());
@@ -232,6 +218,29 @@ final class XdsLoadBalancer extends LoadBalancer {
     xdsLbState =
         new XdsLbState(newBalancerName, childPolicy, helper, localityStore, lbChannel,
             adsStreamCallback);
+  }
+
+  private ManagedChannel initLbChannel(String balancerName) {
+    ManagedChannel channel;
+    try {
+      channel = helper.createResolvingOobChannel(balancerName);
+    } catch (UnsupportedOperationException uoe) {
+      // Temporary solution until createResolvingOobChannel is implemented
+      // FIXME (https://github.com/grpc/grpc-java/issues/5495)
+      Logger logger = Logger.getLogger(XdsLoadBalancer.class.getName());
+      if (logger.isLoggable(FINEST)) {
+        logger.log(
+            FINEST,
+            "createResolvingOobChannel() not supported by the helper: " + helper,
+            uoe);
+        logger.log(
+            FINEST,
+            "creating oob channel for target {0} using default ManagedChannelBuilder",
+            balancerName);
+      }
+      channel = ManagedChannelBuilder.forTarget(balancerName).build();
+    }
+    return channel;
   }
 
   @Nullable
