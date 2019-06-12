@@ -338,13 +338,17 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   abstract static class XdsLoadReportClientFactory {
 
-    static XdsLoadReportClientFactory DEFAULT_INSTANCE = new XdsLoadReportClientFactory() {
-      @Override
-      XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-          Provider backoffPolicyProvider, StatsStore statsStore) {
-        return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
-      }
-    };
+    private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
+        new XdsLoadReportClientFactory() {
+          @Override
+          XdsLoadReportClient createLoadReportClient(
+              ManagedChannel channel,
+              Helper helper,
+              Provider backoffPolicyProvider,
+              StatsStore statsStore) {
+            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+          }
+        };
 
     static XdsLoadReportClientFactory getInstance() {
       return DEFAULT_INSTANCE;
