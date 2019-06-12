@@ -170,7 +170,7 @@ interface LocalityStore {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
 
-      Set<XdsLocality> toRemove = new HashSet<>();
+      final Set<XdsLocality> toRemove = new HashSet<>();
       Iterator<XdsLocality> iterator = oldLocalities.iterator();
       while (iterator.hasNext()) {
         XdsLocality oldLocality = iterator.next();
@@ -228,9 +228,19 @@ interface LocalityStore {
 
       updatePicker(newState, childPickers);
 
-      for (XdsLocality locality : toRemove) {
-        statsStore.removeLocality(locality);
-      }
+      // There is a race between picking a subchannel and updating localities, which leads to
+      // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
+      // loads will not be recorded. We consider this to be natural. By removing locality counters
+      // after updating subchannel pickers, we further narrow down the window in which this race
+      // condition can happen.
+      helper.getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          for (XdsLocality locality : toRemove) {
+            statsStore.removeLocality(locality);
+          }
+        }
+      });
     }
 
     @Override
