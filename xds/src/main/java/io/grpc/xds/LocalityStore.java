@@ -70,6 +70,8 @@ interface LocalityStore {
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
+  StatsStore getStatsStore();
+
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
 
@@ -234,6 +236,11 @@ interface LocalityStore {
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
+    }
+
+    @Override
+    public StatsStore getStatsStore() {
+      return statsStore;
     }
 
     @Nullable

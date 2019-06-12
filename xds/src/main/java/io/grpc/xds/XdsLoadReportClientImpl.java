@@ -39,6 +39,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.BackoffPolicy.Provider;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
@@ -333,5 +334,23 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
+  }
+
+  abstract static class XdsLoadReportClientFactory {
+
+    static XdsLoadReportClientFactory DEFAULT_INSTANCE = new XdsLoadReportClientFactory() {
+      @Override
+      XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+          Provider backoffPolicyProvider, StatsStore statsStore) {
+        return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+      }
+    };
+
+    static XdsLoadReportClientFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+        BackoffPolicy.Provider backoffPolicyProvider, StatsStore statsStore);
   }
 }
