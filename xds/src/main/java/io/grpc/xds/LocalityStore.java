@@ -357,11 +357,24 @@ interface LocalityStore {
         checkNotNull(newState, "newState");
         checkNotNull(newPicker, "newPicker");
 
+        class LoadRecordPicker extends SubchannelPicker {
+          private final SubchannelPicker delegate;
+
+          private LoadRecordPicker(SubchannelPicker delegate) {
+            this.delegate = delegate;
+          }
+
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            return statsStore.interceptPickResult(delegate.pickSubchannel(args), locality);
+          }
+        }
+
         currentChildState = newState;
-        currentChildPicker = newPicker;
+        currentChildPicker = new LoadRecordPicker(newPicker);
 
         // delegate to parent helper
-        updateChildState(locality, newState, newPicker);
+        updateChildState(locality, newState, currentChildPicker);
       }
 
       @Override

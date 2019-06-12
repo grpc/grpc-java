@@ -20,10 +20,12 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -31,6 +33,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -172,6 +175,8 @@ public class LocalityStoreTest {
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    doAnswer(returnsFirstArg())
+        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
     localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
   }
@@ -204,6 +209,44 @@ public class LocalityStoreTest {
     localityStore.updateLocalityStore(Collections.EMPTY_MAP);
     verify(statsStore).removeLocality(locality4);
     verifyNoMoreInteractions(statsStore);
+  }
+
+  @Test
+  public void updateLocalityStore_interceptPickResultUponPickReadySubchannel() {
+    // Simulate receiving two localities.
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    localityStore.updateLocalityStore(ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2));
+
+    // Two child balancers are created.
+    assertThat(loadBalancers).hasSize(2);
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    // Simulate picker updates for each of the two localities with dummy pickers.
+    final PickResult result1 = PickResult.withNoResult();
+    final PickResult result2 = PickResult.withNoResult();
+    SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
+    SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
+    when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(result1);
+    when(subchannelPicker2.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(result2);
+    childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker1);
+    childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
+    ArgumentCaptor<SubchannelPicker> interLocalityPickerCaptor = ArgumentCaptor.forClass(null);
+    verify(helper, times(2)).updateBalancingState(eq(READY), interLocalityPickerCaptor.capture());
+    SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      pickerFactory.nextIndex = i;
+      interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+    }
+    verify(statsStore).interceptPickResult(same(result1), eq(locality1));
+    verify(statsStore).interceptPickResult(same(result2), eq(locality2));
   }
 
   @Test
@@ -328,10 +371,6 @@ public class LocalityStoreTest {
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
-    verify(statsStore).addLocality(locality1);
-    verify(statsStore).addLocality(locality2);
-    verify(statsStore).addLocality(locality3);
-
     assertThat(loadBalancers).hasSize(3);
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
@@ -415,7 +454,7 @@ public class LocalityStoreTest {
         .isTrue();
     verify(random, times(times + 2)).nextInt(1000_000);
     inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
-    verifyNoMoreInteractions(statsStore);
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
