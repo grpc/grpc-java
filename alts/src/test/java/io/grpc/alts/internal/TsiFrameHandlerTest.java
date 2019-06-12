@@ -22,6 +22,9 @@ import static com.google.common.truth.Truth.assertWithMessage;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.CharsetUtil;
 import java.security.GeneralSecurityException;
@@ -76,6 +79,30 @@ public class TsiFrameHandlerTest {
   public void close_shouldFlushRemainingMessage() throws InterruptedException {
     ByteBuf msg = Unpooled.copiedBuffer("message after handshake failed", CharsetUtil.UTF_8);
     channel.write(msg);
+
+    assertThat(channel.outboundMessages()).isEmpty();
+
+    channel.close().sync();
+    Object actual = channel.readOutbound();
+
+    assertWithMessage("pending write should be flushed on close").that(actual).isEqualTo(msg);
+    channel.checkException();
+  }
+
+  @Test
+  public void flushAfterCloseShouldWork() throws InterruptedException {
+    ByteBuf msg = Unpooled.copiedBuffer("message after handshake failed", CharsetUtil.UTF_8);
+    channel.write(msg);
+
+    channel.pipeline().addFirst(new ChannelOutboundHandlerAdapter() {
+      @Override
+      public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+        // We have to call flush while doing a close, since close() tears down the pipeline
+        // immediately after.
+        channel.flush();
+        super.close(ctx, promise);
+      }
+    });
 
     assertThat(channel.outboundMessages()).isEmpty();
 
