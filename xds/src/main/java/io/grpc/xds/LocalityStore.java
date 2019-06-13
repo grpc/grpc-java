@@ -48,6 +48,7 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +70,8 @@ interface LocalityStore {
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
+  StatsStore getStatsStore();
+
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
 
@@ -76,24 +79,27 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
+    private final StatsStore statsStore;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          new XdsLoadStatsStore());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
         Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random) {
-      this.helper = helper;
-      this.pickerFactory = pickerFactory;
+        ThreadSafeRandom random, StatsStore statsStore) {
+      this.helper = checkNotNull(helper, "helper");
+      this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
-      this.random = random;
+      this.random = checkNotNull(random, "random");
+      this.statsStore = checkNotNull(statsStore, "statsStore");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -106,13 +112,15 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
+      final StatsStore statsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random) {
+          ThreadSafeRandom random, StatsStore statsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
+        this.statsStore = statsStore;
       }
 
       @Override
@@ -120,6 +128,7 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.dropsPerMillion) {
+            statsStore.recordDroppedRequest(dropOverload.category);
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
@@ -148,8 +157,9 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        localityLbInfo.shutdown();
+      for (XdsLocality locality : localityMap.keySet()) {
+        localityMap.get(locality).shutdown();
+        statsStore.removeLocality(locality);
       }
       localityMap = new HashMap<>();
     }
@@ -160,10 +170,12 @@ interface LocalityStore {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
 
+      final Set<XdsLocality> toRemove = new HashSet<>();
       Iterator<XdsLocality> iterator = oldLocalities.iterator();
       while (iterator.hasNext()) {
         XdsLocality oldLocality = iterator.next();
         if (!newLocalities.contains(oldLocality)) {
+          toRemove.add(oldLocality);
           // No graceful transition until a high-level lb graceful transition design is available.
           localityMap.get(oldLocality).shutdown();
           iterator.remove();
@@ -191,6 +203,7 @@ interface LocalityStore {
               oldLocalityLbInfo.childBalancer,
               childHelper);
         } else {
+          statsStore.addLocality(newLocality);
           childHelper = new ChildHelper(newLocality);
           localityLbInfo =
               new LocalityLbInfo(
@@ -215,11 +228,29 @@ interface LocalityStore {
 
       updatePicker(newState, childPickers);
 
+      // There is a race between picking a subchannel and updating localities, which leads to
+      // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
+      // loads will not be recorded. We consider this to be natural. By removing locality counters
+      // after updating subchannel pickers, we eliminate the race and conservatively record loads
+      // happening in that period.
+      helper.getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          for (XdsLocality locality : toRemove) {
+            statsStore.removeLocality(locality);
+          }
+        }
+      });
     }
 
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
+    }
+
+    @Override
+    public StatsStore getStatsStore() {
+      return statsStore;
     }
 
     @Nullable
@@ -286,7 +317,7 @@ interface LocalityStore {
       }
 
       if (!dropOverloads.isEmpty()) {
-        picker = new DroppablePicker(dropOverloads, picker, random);
+        picker = new DroppablePicker(dropOverloads, picker, random, statsStore);
         if (state == null) {
           state = IDLE;
         }
@@ -343,11 +374,24 @@ interface LocalityStore {
         checkNotNull(newState, "newState");
         checkNotNull(newPicker, "newPicker");
 
+        class LoadRecordPicker extends SubchannelPicker {
+          private final SubchannelPicker delegate;
+
+          private LoadRecordPicker(SubchannelPicker delegate) {
+            this.delegate = delegate;
+          }
+
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            return statsStore.interceptPickResult(delegate.pickSubchannel(args), locality);
+          }
+        }
+
         currentChildState = newState;
-        currentChildPicker = newPicker;
+        currentChildPicker = new LoadRecordPicker(newPicker);
 
         // delegate to parent helper
-        updateChildState(locality, newState, newPicker);
+        updateChildState(locality, newState, currentChildPicker);
       }
 
       @Override

@@ -39,6 +39,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.BackoffPolicy.Provider;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
@@ -107,19 +108,25 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @Override
   public void startLoadReporting() {
-    checkState(!started, "load reporting has already started");
+    if (started) {
+      return;
+    }
     started = true;
     startLrsRpc();
   }
 
   @Override
   public void stopLoadReporting() {
+    if (!started) {
+      return;
+    }
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
       lrsStream.close(null);
     }
+    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
@@ -333,5 +340,27 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
+  }
+
+  abstract static class XdsLoadReportClientFactory {
+
+    private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
+        new XdsLoadReportClientFactory() {
+          @Override
+          XdsLoadReportClient createLoadReportClient(
+              ManagedChannel channel,
+              Helper helper,
+              Provider backoffPolicyProvider,
+              StatsStore statsStore) {
+            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+          }
+        };
+
+    static XdsLoadReportClientFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+        BackoffPolicy.Provider backoffPolicyProvider, StatsStore statsStore);
   }
 }

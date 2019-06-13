@@ -17,6 +17,9 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -29,6 +32,7 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
+import io.grpc.LoadBalancer.PickResult;
 import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
@@ -58,7 +62,9 @@ public class XdsLbStateTest {
   private Helper helper;
   @Mock
   private AdsStreamCallback adsStreamCallback;
-
+  @Mock
+  private StatsStore statsStore;
+  @Mock
   private LocalityStore localityStore;
 
   private final FakeClock fakeClock = new FakeClock();
@@ -73,6 +79,7 @@ public class XdsLbStateTest {
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
   private ManagedChannel channel;
+  private XdsLbState xdsLbState;
 
 
   @Before
@@ -82,6 +89,8 @@ public class XdsLbStateTest {
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn("fake_authority").when(helper).getAuthority();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
+    doAnswer(returnsFirstArg())
+        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
 
     String serverName = InProcessServerBuilder.generateName();
 
@@ -120,29 +129,32 @@ public class XdsLbStateTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
+
+    xdsLbState =
+        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback);
   }
 
   @Test
-  public void shutdownAndReleaseXdsCommsDoesShutdown() {
-    XdsLbState xdsLbState = mock(XdsLbState.class);
-    xdsLbState.shutdownAndReleaseXdsComms();
-    verify(xdsLbState).shutdown();
+  public void shutdownResetsLocalityStore() {
+    xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    verify(localityStore).reset();
   }
 
   @Test
-  public void handleResolvedAddressGroupsThenShutdown() throws Exception {
-    localityStore = mock(LocalityStore.class);
-    XdsLbState xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback);
+  public void shutdownDoesNotTearDownChannel() {
+    ManagedChannel lbChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    assertThat(lbChannel).isSameInstanceAs(channel);
+    assertThat(channel.isShutdown()).isFalse();
+  }
+
+  @Test
+  public void handleResolvedAddressGroupsTriggerEds() throws Exception {
     xdsLbState.handleResolvedAddressGroups(
         ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
 
     assertThat(streamRecorder.firstValue().get().getTypeUrl())
         .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
 
-    xdsLbState.shutdown();
-    verify(localityStore).reset();
-
-    channel.shutdownNow();
+    xdsLbState.shutdownAndReleaseChannel("End test");
   }
 }

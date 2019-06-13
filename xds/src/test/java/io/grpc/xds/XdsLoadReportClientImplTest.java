@@ -246,6 +246,29 @@ public class XdsLoadReportClientImplTest {
   }
 
   @Test
+  public void startAndStopCanBeCalledMultipleTimes() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(lrsRequestObservers).hasSize(1);
+    StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.peek();
+    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    lrsClient.startLoadReporting();
+    assertThat(lrsRequestObservers).hasSize(1);
+    lrsClient.startLoadReporting();
+    assertThat(lrsRequestObservers).hasSize(1);
+    verifyNoMoreInteractions(requestObserver);
+
+    lrsClient.stopLoadReporting();
+    verify(requestObserver).onCompleted();
+    assertThat(fakeClock.getPendingTasks(LRS_RPC_RETRY_TASK_FILTER)).isEmpty();
+    lrsClient.stopLoadReporting();
+    verifyNoMoreInteractions(requestObserver);
+
+    lrsClient.startLoadReporting();
+    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(lrsRequestObservers).hasSize(2);
+  }
+
+  @Test
   public void loadReportActualIntervalAsSpecified() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
