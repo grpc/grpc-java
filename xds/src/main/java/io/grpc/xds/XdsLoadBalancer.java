@@ -194,7 +194,10 @@ final class XdsLoadBalancer extends LoadBalancer {
               localityStore.getStatsStore());
     } else if (!newBalancerName.equals(xdsLbState.balancerName)) {
       lrsClient.stopLoadReporting();
-      ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Changing balancer name");
+      ManagedChannel oldChannel =
+          xdsLbState.shutdownAndReleaseChannel(
+              String.format("Changing balancer name from %s to %s", xdsLbState.balancerName,
+                  newBalancerName));
       oldChannel.shutdown();
       lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
@@ -204,7 +207,10 @@ final class XdsLoadBalancer extends LoadBalancer {
         getPolicyNameOrNull(childPolicy),
         getPolicyNameOrNull(xdsLbState.childPolicy))) {
       // Changing child policy does not affect load reporting.
-      lbChannel = xdsLbState.shutdownAndReleaseChannel("Changing load balancing mode");
+      lbChannel =
+          xdsLbState.shutdownAndReleaseChannel(
+              String.format("Changing child policy from %s to %s", xdsLbState.childPolicy,
+                  childPolicy));
     } else { // effectively no change in policy, keep xdsLbState unchanged
       return;
     }
