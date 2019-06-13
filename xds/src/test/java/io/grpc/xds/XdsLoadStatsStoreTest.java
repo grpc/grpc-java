@@ -328,7 +328,7 @@ public class XdsLoadStatsStoreTest {
     when(mockFactory
         .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
         .thenReturn(mockTracer);
-    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
+    localityLoadCounters.put(LOCALITY1, mock(StatsCounter.class));
     PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
     PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
     Metadata metadata = new Metadata();
