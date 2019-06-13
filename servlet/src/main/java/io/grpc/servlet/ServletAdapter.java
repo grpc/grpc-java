@@ -40,6 +40,8 @@ import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
 import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -209,16 +211,12 @@ public final class ServletAdapter {
   }
 
   private static String getAuthority(HttpServletRequest req) {
-    String authority = req.getRequestURL().toString();
-    String uri = req.getRequestURI();
-    String scheme = req.getScheme() + "://";
-    if (authority.endsWith(uri)) {
-      authority = authority.substring(0, authority.length() - uri.length());
+    try {
+      return new URI(req.getRequestURL().toString()).getAuthority();
+    } catch (URISyntaxException e) {
+      logger.log(FINE, "Error getting authority from the request URL {0}" + req.getRequestURL());
+      return req.getServerName() + ":" + req.getServerPort();
     }
-    if (authority.startsWith(scheme)) {
-      authority = authority.substring(scheme.length());
-    }
-    return authority;
   }
 
   /**
