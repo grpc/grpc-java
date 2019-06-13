@@ -70,7 +70,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   private XdsLoadReportClient lrsClient;
   @Nullable
   private XdsLbState xdsLbState;
-  private boolean lrsWorking;
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
     @Override
@@ -81,11 +80,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
 
       fallbackManager.childBalancerWorked = true;
-
-      if (!lrsWorking) {
-        lrsClient.startLoadReporting();
-        lrsWorking = true;
-      }
+      lrsClient.startLoadReporting();
     }
 
     @Override
@@ -198,10 +193,7 @@ final class XdsLoadBalancer extends LoadBalancer {
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
               localityStore.getStatsStore());
     } else if (!newBalancerName.equals(xdsLbState.balancerName)) {
-      if (lrsWorking) {
-        lrsClient.stopLoadReporting();
-        lrsWorking = false;
-      }
+      lrsClient.stopLoadReporting();
       ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Changing balancer name");
       oldChannel.shutdown();
       lbChannel = initLbChannel(newBalancerName);
@@ -285,11 +277,8 @@ final class XdsLoadBalancer extends LoadBalancer {
   @Override
   public void shutdown() {
     if (xdsLbState != null) {
-      if (lrsWorking) {
-        lrsClient.stopLoadReporting();
-        lrsClient = null;
-        lrsWorking = false;
-      }
+      lrsClient.stopLoadReporting();
+      lrsClient = null;
       ManagedChannel channel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
       channel.shutdown();
       xdsLbState = null;

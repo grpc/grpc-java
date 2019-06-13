@@ -308,7 +308,6 @@ public class XdsLoadBalancerWithLrsTest {
 
     assertThat(oobChannel1.isShutdown()).isTrue();
     assertThat(streamRecorder.getValues()).hasSize(2);
-    inOrder.verify(lrsClient, never()).stopLoadReporting();
     inOrder.verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel2), same(helper), same(backoffPolicyProvider),
             same(statsStore));
