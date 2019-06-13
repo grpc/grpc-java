@@ -202,7 +202,7 @@ final class XdsLoadBalancer extends LoadBalancer {
         lrsClient.stopLoadReporting();
         lrsWorking = false;
       }
-      ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+      ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Changing balancer name");
       oldChannel.shutdown();
       lbChannel = initLbChannel(newBalancerName);
       lrsClient =
