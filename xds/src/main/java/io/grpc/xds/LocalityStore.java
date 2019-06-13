@@ -390,6 +390,14 @@ interface LocalityStore {
           public PickResult pickSubchannel(PickSubchannelArgs args) {
             return statsStore.interceptPickResult(delegate.pickSubchannel(args), locality);
           }
+
+          @Override
+          public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("delegate", delegate)
+                .add("locality", locality)
+                .toString();
+          }
         }
 
         currentChildState = newState;
