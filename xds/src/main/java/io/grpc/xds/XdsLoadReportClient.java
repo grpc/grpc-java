@@ -28,10 +28,8 @@ interface XdsLoadReportClient {
 
   /**
    * Establishes load reporting communication and negotiates with the remote balancer to report load
-   * stats periodically.
-   *
-   * <p>This method should be the first method to be called in the lifecycle of {@link
-   * XdsLoadReportClient} and should only be called once.
+   * stats periodically. Calling this method on an already started {@link XdsLoadReportClient} is
+   * no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
@@ -39,9 +37,8 @@ interface XdsLoadReportClient {
   void startLoadReporting();
 
   /**
-   * Terminates load reporting.
-   *
-   * <p>No method in {@link XdsLoadReportClient} should be called after calling this method.
+   * Terminates load reporting. Calling this method on an already stopped
+   * {@link XdsLoadReportClient} is no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.

@@ -108,19 +108,25 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @Override
   public void startLoadReporting() {
-    checkState(!started, "load reporting has already started");
+    if (started) {
+      return;
+    }
     started = true;
     startLrsRpc();
   }
 
   @Override
   public void stopLoadReporting() {
+    if (!started) {
+      return;
+    }
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
       lrsStream.close(null);
     }
+    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
