@@ -26,6 +26,8 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import io.grpc.ChannelLogger.ChannelLogLevel;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -40,9 +42,12 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.ClientLoadCounter.LocalityMetricsListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,19 +84,20 @@ interface LocalityStore {
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final StatsStore statsStore;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore());
+          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
         Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random, StatsStore statsStore) {
+        ThreadSafeRandom random, StatsStore statsStore, OrcaPerRequestUtil orcaPerRequestUtil) {
       this.helper = checkNotNull(helper, "helper");
       this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
@@ -99,6 +105,7 @@ interface LocalityStore {
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
       this.random = checkNotNull(random, "random");
       this.statsStore = checkNotNull(statsStore, "statsStore");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -400,8 +407,45 @@ interface LocalityStore {
           }
         }
 
+        class BackendMetricsRecordPicker extends SubchannelPicker {
+          private final SubchannelPicker delegate;
+
+          private BackendMetricsRecordPicker(SubchannelPicker delegate) {
+            this.delegate = delegate;
+          }
+
+          @Override
+          public PickResult pickSubchannel(PickSubchannelArgs args) {
+            PickResult result = delegate.pickSubchannel(args);
+            if (!result.getStatus().isOk()) {
+              return result;
+            }
+            if (result.getSubchannel() == null) {
+              return result;
+            }
+            StatsCounter localityCounter = statsStore.getLocalityCounter(locality);
+            if (localityCounter == null) {
+              getChannelLogger().log(ChannelLogLevel.ERROR,
+                  "Locality counter for {0} does not exist, cannot record backend metrics.",
+                  locality);
+              return result;
+            }
+            OrcaPerRequestReportListener listener = new LocalityMetricsListener(localityCounter);
+            ClientStreamTracer.Factory origFactory = result.getStreamTracerFactory();
+            ClientStreamTracer.Factory orcaClientStreamTracerFactory;
+            if (origFactory == null) {
+              orcaClientStreamTracerFactory =
+                  orcaPerRequestUtil.newOrcaClientStreamTracerFactory(listener);
+            } else {
+              orcaClientStreamTracerFactory =
+                  orcaPerRequestUtil.newOrcaClientStreamTracerFactory(origFactory, listener);
+            }
+            return PickResult.withSubchannel(result.getSubchannel(), orcaClientStreamTracerFactory);
+          }
+        }
+
         currentChildState = newState;
-        currentChildPicker = new LoadRecordPicker(newPicker);
+        currentChildPicker = new BackendMetricsRecordPicker(new LoadRecordPicker(newPicker));
 
         // delegate to parent helper
         updateChildState(locality, newState, currentChildPicker);

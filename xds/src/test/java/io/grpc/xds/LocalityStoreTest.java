@@ -177,6 +177,8 @@ public class LocalityStoreTest {
   private ThreadSafeRandom random;
   @Mock
   private StatsStore statsStore;
+  @Mock
+  private OrcaPerRequestUtil orcaPerRequestUtil;
 
   private LocalityStore localityStore;
 
@@ -188,7 +190,9 @@ public class LocalityStoreTest {
     doAnswer(returnsFirstArg())
         .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
+    localityStore =
+        new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
+            orcaPerRequestUtil);
   }
 
   @Test
