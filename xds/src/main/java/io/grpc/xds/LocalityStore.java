@@ -231,8 +231,8 @@ interface LocalityStore {
       // There is a race between picking a subchannel and updating localities, which leads to
       // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
       // loads will not be recorded. We consider this to be natural. By removing locality counters
-      // after updating subchannel pickers, we further narrow down the window in which this race
-      // condition can happen.
+      // after updating subchannel pickers, we eliminate the race and conservatively record loads
+      // happening in that period.
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
