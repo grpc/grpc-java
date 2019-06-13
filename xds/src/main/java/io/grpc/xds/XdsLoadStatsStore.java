@@ -163,6 +163,9 @@ final class XdsLoadStatsStore implements StatsStore {
     if (!pickResult.getStatus().isOk()) {
       return pickResult;
     }
+    if (pickResult.getSubchannel() == null) {
+      return pickResult;
+    }
     StatsCounter counter = localityLoadCounters.get(locality);
     if (counter == null) {
       return pickResult;

@@ -308,14 +308,17 @@ public class XdsLoadStatsStoreTest {
 
   @Test
   public void invalidPickResultNotIntercepted() {
+    localityLoadCounters.put(LOCALITY1, mock(StatsCounter.class));
     PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
     PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
-    // TODO (chengyuanzhang): for NoResult PickResult, do we still intercept?
+    PickResult emptyResult = PickResult.withNoResult();
     PickResult interceptedErrorResult = loadStore.interceptPickResult(errorResult, LOCALITY1);
     PickResult interceptedDroppedResult =
         loadStore.interceptPickResult(droppedResult, LOCALITY1);
-    assertThat(interceptedErrorResult.getStreamTracerFactory()).isNull();
-    assertThat(interceptedDroppedResult.getStreamTracerFactory()).isNull();
+    PickResult interceptedEmptyResult = loadStore.interceptPickResult(emptyResult, LOCALITY1);
+    assertThat(interceptedErrorResult).isEqualTo(errorResult);
+    assertThat(interceptedDroppedResult).isEqualTo(droppedResult);
+    assertThat(interceptedEmptyResult).isEqualTo(emptyResult);
   }
 
   @Test
