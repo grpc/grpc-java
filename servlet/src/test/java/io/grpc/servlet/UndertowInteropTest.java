@@ -74,7 +74,8 @@ public class UndertowInteropTest extends AbstractInteropTest {
 
   @Override
   protected void startServer(AbstractServerImplBuilder<?> builer) {
-    GrpcServlet grpcServlet = new GrpcServlet((ServletServerBuilder) builer);
+    GrpcServlet grpcServlet =
+        new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
     InstanceFactory<? extends Servlet> instanceFactory =
         () -> new ImmediateInstanceHandle<>(grpcServlet);
     DeploymentInfo servletBuilder =

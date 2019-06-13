@@ -20,7 +20,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
 import java.io.IOException;
 import java.util.List;
-import java.util.function.Supplier;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -46,24 +45,18 @@ public class GrpcServlet extends HttpServlet {
   }
 
   /**
-   * Instantiate the servlet with the given serverBuilder.
+   * Instantiate the servlet serving the given list of gRPC services. ServerInterceptors can be
+   * added on each gRPC service by {@link
+   * io.grpc.ServerInterceptors#intercept(BindableService, io.grpc.ServerInterceptor...)}
    */
-  public GrpcServlet(ServletServerBuilder serverBuilder) {
-    this(ServletAdapter.Factory.create(serverBuilder));
+  public GrpcServlet(List<? extends BindableService> bindableServices) {
+    this(loadServices(bindableServices));
   }
 
-  /**
-   * Instantiate the servlet serving the given list of gRPC services.
-   */
-  public GrpcServlet(List<BindableService> grpcServices) {
-    this(
-        ((Supplier<ServletServerBuilder>)
-                () -> {
-                  ServletServerBuilder serverBuilder = new ServletServerBuilder();
-                  grpcServices.forEach(service -> serverBuilder.addService(service));
-                  return serverBuilder;
-                })
-            .get());
+  private static ServletAdapter loadServices(List<? extends BindableService> bindableServices) {
+    ServletServerBuilder serverBuilder = new ServletServerBuilder();
+    bindableServices.forEach(serverBuilder::addService);
+    return serverBuilder.buildServletAdapter();
   }
 
   @Override

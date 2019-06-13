@@ -65,7 +65,7 @@ import javax.servlet.http.HttpServletResponse;
 /**
  * An adapter that transforms {@link HttpServletRequest} into gRPC request and lets a gRPC server
  * process it, and transforms the gRPC response into {@link HttpServletResponse}. An adapter can be
- * instantiated by {@link Factory#create}.
+ * instantiated by {@link ServletServerBuilder#buildServletAdapter()}.
  *
  * <p>In a servlet, calling {@link #doPost(HttpServletRequest, HttpServletResponse)} inside {@link
  * javax.servlet.http.HttpServlet#doPost(HttpServletRequest, HttpServletResponse)} makes the servlet
@@ -452,30 +452,5 @@ public final class ServletAdapter {
   public static boolean isGrpc(HttpServletRequest request) {
     return request.getContentType() != null
         && request.getContentType().contains(GrpcUtil.CONTENT_TYPE_GRPC);
-  }
-
-  /**
-   * Factory of ServletAdapter.
-   *
-   * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
-   * welcome to provide feedback by commenting on
-   * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
-   */
-  @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
-  public static final class Factory {
-
-    private Factory() {}
-
-    /**
-     * Creates an instance of ServletAdapter. A gRPC server will be built and started with the given
-     * {@link ServletServerBuilder}. The servlet using this servletAdapter will power the gRPC
-     * server.
-     */
-    public static ServletAdapter create(ServletServerBuilder serverBuilder) {
-      return new ServletAdapter(
-          serverBuilder.buildAndStart(),
-          serverBuilder.streamTracerFactories,
-          serverBuilder.maxInboundMessageSize);
-    }
   }
 }

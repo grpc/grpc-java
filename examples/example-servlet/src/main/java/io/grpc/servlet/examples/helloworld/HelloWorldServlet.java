@@ -23,7 +23,6 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.servlet.ServletAdapter;
 import io.grpc.servlet.ServletServerBuilder;
 import java.io.IOException;
-import java.util.concurrent.Executors;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -40,8 +39,8 @@ import javax.servlet.http.HttpServletResponse;
 public class HelloWorldServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
 
-  private final ServletAdapter servletAdapter = ServletAdapter.Factory.create(
-      new ServletServerBuilder().addService(new GreeterImpl()));
+  private final ServletAdapter servletAdapter =
+      new ServletServerBuilder().addService(new GreeterImpl()).buildServletAdapter();
 
   private static final class GreeterImpl extends GreeterGrpc.GreeterImplBase {
     GreeterImpl() {}

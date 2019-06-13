@@ -21,7 +21,6 @@ import static io.undertow.servlet.Servlets.deployment;
 import static io.undertow.servlet.Servlets.servlet;
 
 import com.google.common.collect.ImmutableList;
-import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer.Factory;

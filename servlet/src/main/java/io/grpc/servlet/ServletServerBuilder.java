@@ -68,9 +68,9 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
    *
    * <p>The returned server will not been started or be bound a port.
    *
-   * <p>Users should not call this method directly. Instead users should either pass the builder to
-   * {@link ServletAdapter.Factory#create(ServletServerBuilder)} or to the constructor of {@link
-   * GrpcServlet}, which internally will call {@code build()} and {@code start()} appropriately.
+   * <p>Users should not call this method directly. Instead users should call
+   * {@link #buildServletAdapter()} which internally will call {@code build()} and {@code start()}
+   * appropriately.
    *
    * @throws IllegalStateException if this method is called by users directly
    */
@@ -80,14 +80,22 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     return super.build();
   }
 
-  ServerTransportListener buildAndStart() {
+  /**
+   * Creates a {@link ServletAdapter}.
+   */
+  public ServletAdapter buildServletAdapter() {
+    return new ServletAdapter(buildAndStart(), streamTracerFactories, maxInboundMessageSize);
+  }
+
+  private ServerTransportListener buildAndStart() {
     try {
       internalCaller = true;
       build().start();
-      internalCaller = false;
     } catch (IOException e) {
       // actually this should never happen
       throw new RuntimeException(e);
+    } finally {
+      internalCaller = false;
     }
 
     if (!usingCustomScheduler) {
