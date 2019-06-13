@@ -203,6 +203,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     } else if (!Objects.equal(
         getPolicyNameOrNull(childPolicy),
         getPolicyNameOrNull(xdsLbState.childPolicy))) {
+      // Changing child policy does not affect load reporting.
       lbChannel = xdsLbState.shutdownAndReleaseChannel("Changing load balancing mode");
     } else { // effectively no change in policy, keep xdsLbState unchanged
       return;
