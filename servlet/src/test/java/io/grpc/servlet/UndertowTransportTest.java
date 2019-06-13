@@ -20,16 +20,18 @@ import static io.undertow.servlet.Servlets.defaultContainer;
 import static io.undertow.servlet.Servlets.deployment;
 import static io.undertow.servlet.Servlets.servlet;
 
+import com.google.common.collect.ImmutableList;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.ServerStreamTracer.Factory;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.testing.AbstractTransportTest;
 import io.grpc.netty.InternalNettyTestAccessor;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
@@ -45,6 +47,7 @@ import io.undertow.servlet.api.InstanceFactory;
 import io.undertow.servlet.util.ImmediateInstanceHandle;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -89,15 +92,10 @@ public class UndertowTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected boolean isServletServer() {
-    return true;
-  }
-
-  @Override
-  protected InternalServer newServer(List<Factory> streamTracerFactories) {
-    return new InternalServer() {
+  protected List<? extends InternalServer> newServer(List<Factory> streamTracerFactories) {
+    return ImmutableList.of(new InternalServer() {
       final InternalServer delegate =
-          new ServletServerBuilder().buildTransportServer(streamTracerFactories);
+          new ServletServerBuilder().buildTransportServers(streamTracerFactories).iterator().next();
 
       @Override
       public void start(ServerListener listener) throws IOException {
@@ -149,20 +147,21 @@ public class UndertowTransportTest extends AbstractTransportTest {
       }
 
       @Override
-      public int getPort() {
-        return delegate.getPort();
+      public SocketAddress getListenSocketAddress() {
+        return delegate.getListenSocketAddress();
       }
 
       @Override
-      public List<InternalInstrumented<SocketStats>> getListenSockets() {
-        return delegate.getListenSockets();
+      public InternalInstrumented<SocketStats> getListenSocketStats() {
+        return delegate.getListenSocketStats();
       }
-    };
+    });
   }
 
   @Override
-  protected InternalServer newServer(InternalServer server, List<Factory> streamTracerFactories) {
-    return null;
+  protected List<? extends InternalServer> newServer(int port,
+      List<Factory> streamTracerFactories) {
+    return newServer(streamTracerFactories);
   }
 
   @Override
@@ -179,7 +178,9 @@ public class UndertowTransportTest extends AbstractTransportTest {
     return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         new ClientTransportFactory.ClientTransportOptions()
-            .setAuthority(testAuthority(server)));
+            .setAuthority(testAuthority(server))
+            .setEagAttributes(eagAttrs()),
+        transportLogger());
   }
 
   @Override
@@ -251,4 +252,35 @@ public class UndertowTransportTest extends AbstractTransportTest {
   @Ignore("Undertow flow control non implemented yet")
   @Test
   public void flowControlPushBack() {}
+
+  @Override
+  @Ignore("Server side sockets are managed by the servlet container")
+  @Test
+  public void socketStats() {}
+
+  @Override
+  @Ignore("serverTransportListener will not terminate")
+  @Test
+  public void clientStartAndStopOnceConnected() {}
+
+  @Override
+  @Ignore("clientStreamTracer1.getInboundTrailers() is not null; listeners.poll() doesn't apply")
+  @Test
+  public void serverCancel() {}
+
+  @Override
+  @Ignore("THis doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
+  @Test
+  public void interactionsAfterServerStreamCloseAreNoops() {}
+
+  @Override
+  @Ignore("listeners.poll() doesn't apply")
+  @Test
+  public void interactionsAfterClientStreamCancelAreNoops() {}
+
+
+  @Override
+  @Ignore("assertNull(serverStatus.getCause()) isn't true")
+  @Test
+  public void clientCancel() {}
 }

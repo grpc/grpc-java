@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
@@ -39,7 +40,7 @@ import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
 import java.io.File;
 import java.io.IOException;
-import java.util.Collections;
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -102,11 +103,12 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   }
 
   @Override
-  protected InternalServer buildTransportServer(List<? extends Factory> streamTracerFactories) {
+  protected List<? extends InternalServer> buildTransportServers(
+      List<? extends Factory> streamTracerFactories) {
     checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.streamTracerFactories = streamTracerFactories;
     internalServer = new InternalServerImpl();
-    return internalServer;
+    return ImmutableList.of(internalServer);
   }
 
   @Override
@@ -151,15 +153,19 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     }
 
     @Override
-    public int getPort() {
-      // port is managed by the servlet container, grpc is ignorant of that
-      return -1;
+    public SocketAddress getListenSocketAddress() {
+      return new SocketAddress() {
+        @Override
+        public String toString() {
+          return "ServletServer";
+        }
+      };
     }
 
     @Override
-    public List<InternalInstrumented<SocketStats>> getListenSockets() {
+    public InternalInstrumented<SocketStats> getListenSocketStats() {
       // sockets are managed by the servlet container, grpc is ignorant of that
-      return Collections.emptyList();
+      return null;
     }
   }
 

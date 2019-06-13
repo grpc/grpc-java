@@ -106,6 +106,11 @@ final class ServletServerStream extends AbstractServerStream {
   }
 
   @Override
+  public int streamId() {
+    return -1;
+  }
+
+  @Override
   protected Sink abstractServerStreamSink() {
     return sink;
   }
