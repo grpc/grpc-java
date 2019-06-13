@@ -28,7 +28,8 @@ final class ThreadLocalContextStorage extends Context.Storage {
   /**
    * Currently bound context.
    */
-  private static final ThreadLocal<Context> localContext = new ThreadLocal<Context>();
+  // VisibleForTesting
+  static final ThreadLocal<Context> localContext = new ThreadLocal<>();
 
   @Override
   public Context doAttach(Context toAttach) {
@@ -46,11 +47,27 @@ final class ThreadLocalContextStorage extends Context.Storage {
       log.log(Level.SEVERE, "Context was not attached when detaching",
           new Throwable().fillInStackTrace());
     }
-    doAttach(toRestore);
+    if (toRestore != Context.ROOT) {
+      localContext.set(toRestore);
+    } else {
+      // Avoid leaking our ClassLoader via ROOT if this Thread is reused across multiple
+      // ClassLoaders, as is common for Servlet Containers. The ThreadLocal is weakly referenced by
+      // the Thread, but its current value is strongly referenced and only lazily collected as new
+      // ThreadLocals are created.
+      //
+      // Use set(null) instead of remove() since remove() deletes the entry which is then re-created
+      // on the next get() (because of initialValue() handling). set(null) has same performance as
+      // set(toRestore).
+      localContext.set(null);
+    }
   }
 
   @Override
   public Context current() {
-    return localContext.get();
+    Context current = localContext.get();
+    if (current == null) {
+      return Context.ROOT;
+    }
+    return current;
   }
 }

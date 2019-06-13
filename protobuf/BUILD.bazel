@@ -5,7 +5,7 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        "//core",
+        "//api",
         "//protobuf-lite",
         "@com_google_api_grpc_proto_google_common_protos//jar",
         "@com_google_code_findbugs_jsr305//jar",

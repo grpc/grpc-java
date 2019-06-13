@@ -16,17 +16,25 @@
 
 package io.grpc.netty;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
+import com.google.common.truth.Truth;
+import io.grpc.ServerStreamTracer.Factory;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.SslContext;
+import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-
 
 /**
  * Unit tests for {@link NettyServerBuilder}.
@@ -37,6 +45,14 @@ public class NettyServerBuilderTest {
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private NettyServerBuilder builder = NettyServerBuilder.forPort(8080);
+
+  @Test
+  public void createMultipleServers() {
+    builder.addListenAddress(new InetSocketAddress(8081));
+    List<NettyServer> servers = builder.buildTransportServers(ImmutableList.<Factory>of());
+
+    Truth.assertThat(servers).hasSize(2);
+  }
 
   @Test
   public void sslContextCanBeNull() {
@@ -115,5 +131,53 @@ public class NettyServerBuilderTest {
     thrown.expectMessage("permit keepalive time must be non-negative");
 
     builder.permitKeepAliveTime(-1, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyBossGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyWorkerGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_onlyTypeProvided() {
+    builder.channelType(LocalServerChannel.class);
+
+    assertTrue(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_usingDefault() {
+    assertFalse(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void shouldFallBackToNio_allProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    builder.channelType(LocalServerChannel.class);
+
+    assertFalse(builder.shouldFallBackToNio());
+  }
+
+  @Test
+  public void useNioTransport_shouldNotFallBack() {
+    InternalNettyServerBuilder.useNioTransport(builder);
+
+    assertFalse(builder.shouldFallBackToNio());
   }
 }

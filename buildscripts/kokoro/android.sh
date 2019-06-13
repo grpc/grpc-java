@@ -16,10 +16,12 @@ export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
 export OS_NAME=$(uname)
 
+echo y | ${ANDROID_HOME}/tools/bin/sdkmanager "build-tools;28.0.3"
+
 # Proto deps
 buildscripts/make_dependencies.sh
 
-./gradlew install
+./gradlew publishToMavenLocal
 
 # Build grpc-cronet
 
@@ -30,6 +32,11 @@ popd
 # Build grpc-android
 
 pushd android
+../gradlew build
+popd
+
+# Build android-interop-testing
+pushd android-interop-testing
 ../gradlew build
 popd
 
@@ -79,7 +86,7 @@ new_apk_size="$(stat --printf=%s $HELLO_WORLD_OUTPUT_DIR/apk/release/app-release
 
 cd $BASE_DIR/github/grpc-java
 git checkout HEAD^
-./gradlew install
+./gradlew publishToMavenLocal
 cd examples/android/helloworld/
 ../../gradlew build
 

@@ -21,8 +21,8 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -39,8 +39,8 @@ import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimaps;
 import io.grpc.Attributes;
-import io.grpc.CallCredentials2;
-import io.grpc.CallCredentials2.MetadataApplier;
+import io.grpc.CallCredentials;
+import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -58,14 +58,16 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -73,6 +75,9 @@ import org.mockito.stubbing.Answer;
  */
 @RunWith(JUnit4.class)
 public class GoogleAuthLibraryCallCredentialsTest {
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final Metadata.Key<String> AUTHORIZATION = Metadata.Key.of("Authorization",
       Metadata.ASCII_STRING_MARSHALLER);
@@ -112,7 +117,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocation) {
@@ -221,7 +225,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     ListMultimap<String, String> values = LinkedListMultimap.create();
     values.put("Authorization", "token1");
     when(credentials.getRequestMetadata(eq(expectedUri)))
-        .thenReturn(null, Multimaps.<String, String>asMap(values), null);
+        .thenReturn(null, Multimaps.asMap(values), null);
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -393,7 +397,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
     return savedPendingRunnables.size();
   }
 
-  private final class RequestInfoImpl extends CallCredentials2.RequestInfo {
+  private final class RequestInfoImpl extends CallCredentials.RequestInfo {
     final String authority;
     final SecurityLevel securityLevel;
 

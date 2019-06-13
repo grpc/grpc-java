@@ -20,9 +20,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,7 +40,7 @@ import io.grpc.Status;
 import io.grpc.internal.testing.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -48,7 +48,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link DelayedStream}.  Most of the state checking is enforced by
@@ -56,15 +57,13 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class DelayedStreamTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock private ClientStreamListener listener;
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
   private DelayedStream stream = new DelayedStream();
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @Test
   public void setStream_setAuthority() {

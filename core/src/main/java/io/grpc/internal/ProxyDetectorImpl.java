@@ -20,6 +20,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Supplier;
+import io.grpc.HttpConnectProxiedSocketAddress;
+import io.grpc.ProxiedSocketAddress;
+import io.grpc.ProxyDetector;
 import java.io.IOException;
 import java.net.Authenticator;
 import java.net.InetAddress;
@@ -155,7 +158,7 @@ class ProxyDetectorImpl implements ProxyDetector {
   // Do not hard code a ProxySelector because the global default ProxySelector can change
   private final Supplier<ProxySelector> proxySelector;
   private final AuthenticationProvider authenticationProvider;
-  private final ProxyParameters override;
+  private final InetSocketAddress overrideProxyAddress;
 
   // We want an HTTPS proxy, which operates on the entire data stream (See IETF rfc2817).
   static final String PROXY_SCHEME = "https";
@@ -176,25 +179,28 @@ class ProxyDetectorImpl implements ProxyDetector {
     this.proxySelector = checkNotNull(proxySelector);
     this.authenticationProvider = checkNotNull(authenticationProvider);
     if (proxyEnvString != null) {
-      override = new ProxyParameters(overrideProxy(proxyEnvString), null, null);
+      overrideProxyAddress = overrideProxy(proxyEnvString);
     } else {
-      override = null;
+      overrideProxyAddress = null;
     }
   }
 
   @Nullable
   @Override
-  public ProxyParameters proxyFor(SocketAddress targetServerAddress) throws IOException {
-    if (override != null) {
-      return override;
-    }
+  public ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) throws IOException {
     if (!(targetServerAddress instanceof InetSocketAddress)) {
       return null;
+    }
+    if (overrideProxyAddress != null) {
+      return HttpConnectProxiedSocketAddress.newBuilder()
+          .setProxyAddress(overrideProxyAddress)
+          .setTargetAddress((InetSocketAddress) targetServerAddress)
+          .build();
     }
     return detectProxy((InetSocketAddress) targetServerAddress);
   }
 
-  private ProxyParameters detectProxy(InetSocketAddress targetAddr) throws IOException {
+  private ProxiedSocketAddress detectProxy(InetSocketAddress targetAddr) throws IOException {
     URI uri;
     String host;
     try {
@@ -257,13 +263,19 @@ class ProxyDetectorImpl implements ProxyDetector {
       resolvedProxyAddr = proxyAddr;
     }
 
+    HttpConnectProxiedSocketAddress.Builder builder =
+        HttpConnectProxiedSocketAddress.newBuilder()
+        .setTargetAddress(targetAddr)
+        .setProxyAddress(resolvedProxyAddr);
+
     if (auth == null) {
-      return new ProxyParameters(resolvedProxyAddr, null, null);
+      return builder.build();
     }
 
-    // TODO(spencerfang): users of ProxyParameters should clear the password when done
-    return new ProxyParameters(
-        resolvedProxyAddr, auth.getUserName(), new String(auth.getPassword()));
+    return builder
+        .setUsername(auth.getUserName())
+        .setPassword(auth.getPassword() == null ? null : new String(auth.getPassword()))
+        .build();
   }
 
   /**

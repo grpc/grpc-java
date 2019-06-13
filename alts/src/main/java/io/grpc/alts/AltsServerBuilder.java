@@ -33,13 +33,7 @@ import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer.Factory;
 import io.grpc.ServerTransportFilter;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsHandshakerOptions;
 import io.grpc.alts.internal.AltsProtocolNegotiator;
-import io.grpc.alts.internal.AltsTsiHandshaker;
-import io.grpc.alts.internal.HandshakerServiceGrpc;
-import io.grpc.alts.internal.RpcProtocolVersionsUtil;
-import io.grpc.alts.internal.TsiHandshaker;
-import io.grpc.alts.internal.TsiHandshakerFactory;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.NettyServerBuilder;
@@ -69,13 +63,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
 
   /** Creates a gRPC server builder for the given port. */
   public static AltsServerBuilder forPort(int port) {
-    NettyServerBuilder nettyDelegate =
-        NettyServerBuilder.forAddress(new InetSocketAddress(port))
-            .maxConnectionIdle(1, TimeUnit.HOURS)
-            .keepAliveTime(270, TimeUnit.SECONDS)
-            .keepAliveTimeout(20, TimeUnit.SECONDS)
-            .permitKeepAliveTime(10, TimeUnit.SECONDS)
-            .permitKeepAliveWithoutCalls(true);
+    NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
     return new AltsServerBuilder(nettyDelegate);
   }
 
@@ -92,8 +80,9 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
   public AltsServerBuilder setHandshakerAddressForTesting(String handshakerAddress) {
     // Instead of using the default shared channel to the handshaker service, create a separate
     // resource to the test address.
-    handshakerChannelPool = SharedResourcePool.forResource(
-        HandshakerServiceChannel.getHandshakerChannelForTesting(handshakerAddress));
+    handshakerChannelPool =
+        SharedResourcePool.forResource(
+            HandshakerServiceChannel.getHandshakerChannelForTesting(handshakerAddress));
     return this;
   }
 
@@ -197,18 +186,7 @@ public final class AltsServerBuilder extends ServerBuilder<AltsServerBuilder> {
     }
 
     delegate.protocolNegotiator(
-        AltsProtocolNegotiator.createServerNegotiator(
-            new TsiHandshakerFactory() {
-              @Override
-              public TsiHandshaker newHandshaker(String authority) {
-                // Used the shared grpc channel to connecting to the ALTS handshaker service.
-                // TODO: Release the channel if it is not used.
-                // https://github.com/grpc/grpc-java/issues/4755.
-                return AltsTsiHandshaker.newServer(
-                    HandshakerServiceGrpc.newStub(handshakerChannelPool.getObject()),
-                    new AltsHandshakerOptions(RpcProtocolVersionsUtil.getRpcProtocolVersions()));
-              }
-            }));
+        AltsProtocolNegotiator.serverAltsProtocolNegotiator(handshakerChannelPool));
     return delegate.build();
   }
 

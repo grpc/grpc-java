@@ -11,6 +11,7 @@ buildscript {
 }
 
 def subprojects = [
+    project(':grpc-api'),
     project(':grpc-auth'),
     project(':grpc-core'),
     project(':grpc-context'),
@@ -18,7 +19,6 @@ def subprojects = [
     project(':grpc-okhttp'),
     project(':grpc-protobuf'),
     project(':grpc-protobuf-lite'),
-    project(':grpc-protobuf-nano'),
     project(':grpc-stub'),
     project(':grpc-testing'),
 ]
@@ -63,10 +63,9 @@ jacocoTestReport {
         html.enabled = true
     }
 
-    additionalSourceDirs = files(subprojects.sourceSets.main.allSource.srcDirs)
-    sourceDirectories = files(subprojects.sourceSets.main.allSource.srcDirs)
-    classDirectories = files(subprojects.sourceSets.main.output)
-    classDirectories = files(classDirectories.files.collect {
+    additionalSourceDirs.from(files(subprojects.sourceSets.main.allSource.srcDirs))
+    sourceDirectories.from(files(subprojects.sourceSets.main.allSource.srcDirs))
+    classDirectories.from(files(subprojects.sourceSets.main.output).collect {
         fileTree(dir: it,
         exclude: [
                 '**/io/grpc/internal/testing/**',

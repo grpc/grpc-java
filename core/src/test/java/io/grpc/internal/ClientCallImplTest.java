@@ -25,9 +25,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -70,14 +70,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Test for {@link ClientCallImpl}.
@@ -97,6 +99,9 @@ public class ClientCallImplTest {
       .setRequestMarshaller(TestMethodDescriptors.voidMarshaller())
       .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
       .build();
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock private ClientStreamListener streamListener;
   @Mock private ClientTransport clientTransport;
@@ -127,7 +132,6 @@ public class ClientCallImplTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     when(provider.get(any(PickSubchannelArgsImpl.class))).thenReturn(transport);
     when(transport.newStream(
             any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
@@ -143,7 +147,7 @@ public class ClientCallImplTest {
   @Test
   public void statusPropagatedFromStreamToCallListener() {
     DelayedExecutor executor = new DelayedExecutor();
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         executor,
         baseCallOptions,
@@ -159,13 +163,13 @@ public class ClientCallImplTest {
     streamListener.closed(status , new Metadata());
     executor.release();
 
-    verify(callListener).onClose(same(status), Matchers.isA(Metadata.class));
+    verify(callListener).onClose(same(status), ArgumentMatchers.isA(Metadata.class));
   }
 
   @Test
   public void exceptionInOnMessageTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         executor,
         baseCallOptions,
@@ -179,7 +183,7 @@ public class ClientCallImplTest {
     streamListener.headersRead(new Metadata());
 
     RuntimeException failure = new RuntimeException("bad");
-    doThrow(failure).when(callListener).onMessage(Matchers.<Void>any());
+    doThrow(failure).when(callListener).onMessage(ArgumentMatchers.<Void>any());
 
     /*
      * In unary calls, the server closes the call right after responding, so the onClose call is
@@ -192,17 +196,18 @@ public class ClientCallImplTest {
     streamListener.closed(Status.OK, new Metadata());
     executor.release();
 
-    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    verify(callListener).onClose(statusArgumentCaptor.capture(),
+        ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 
   @Test
   public void exceptionInOnHeadersTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         executor,
         baseCallOptions,
@@ -227,17 +232,18 @@ public class ClientCallImplTest {
     streamListener.closed(Status.OK, new Metadata());
     executor.release();
 
-    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    verify(callListener).onClose(statusArgumentCaptor.capture(),
+        ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 
   @Test
   public void exceptionInOnReadyTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         executor,
         baseCallOptions,
@@ -262,16 +268,17 @@ public class ClientCallImplTest {
     streamListener.closed(Status.OK, new Metadata());
     executor.release();
 
-    verify(callListener).onClose(statusArgumentCaptor.capture(), Matchers.isA(Metadata.class));
+    verify(callListener).onClose(statusArgumentCaptor.capture(),
+        ArgumentMatchers.isA(Metadata.class));
     Status callListenerStatus = statusArgumentCaptor.getValue();
     assertThat(callListenerStatus.getCode()).isEqualTo(Status.Code.CANCELLED);
-    assertThat(callListenerStatus.getCause()).isSameAs(failure);
+    assertThat(callListenerStatus.getCause()).isSameInstanceAs(failure);
     verify(stream).cancel(same(callListenerStatus));
   }
 
   @Test
   public void advertisedEncodingsAreSent() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -295,7 +302,7 @@ public class ClientCallImplTest {
 
   @Test
   public void authorityPropagatedToStream() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions.withAuthority("overridden-authority"),
@@ -312,7 +319,7 @@ public class ClientCallImplTest {
   @Test
   public void callOptionsPropagatedToTransport() {
     final CallOptions callOptions = baseCallOptions.withAuthority("dummy_value");
-    final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    final ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         callOptions,
@@ -330,7 +337,7 @@ public class ClientCallImplTest {
 
   @Test
   public void authorityNotPropagatedToStream() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         // Don't provide an authority
@@ -502,7 +509,7 @@ public class ClientCallImplTest {
     Context context = Context.current().withValue(testKey, "testValue");
     Context previous = context.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
@@ -580,7 +587,7 @@ public class ClientCallImplTest {
     Context.CancellableContext cancellableContext = Context.current().withCancellation();
     Context previous = cancellableContext.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
@@ -610,7 +617,7 @@ public class ClientCallImplTest {
     cancellableContext.cancel(cause);
     Context previous = cancellableContext.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
@@ -655,7 +662,7 @@ public class ClientCallImplTest {
   public void deadlineExceededBeforeCallStarted() {
     CallOptions callOptions = baseCallOptions.withDeadlineAfter(0, TimeUnit.SECONDS);
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         callOptions,
@@ -678,7 +685,7 @@ public class ClientCallImplTest {
         .withDeadlineAfter(1000, TimeUnit.MILLISECONDS, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -703,7 +710,7 @@ public class ClientCallImplTest {
     Context origContext = context.attach();
 
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(2000, TimeUnit.MILLISECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         callOpts,
@@ -728,7 +735,7 @@ public class ClientCallImplTest {
     Context origContext = context.attach();
 
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         callOpts,
@@ -749,7 +756,7 @@ public class ClientCallImplTest {
   @Test
   public void callOptionsDeadlineShouldBePropagatedToStream() {
     CallOptions callOpts = baseCallOptions.withDeadlineAfter(1000, TimeUnit.MILLISECONDS);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         callOpts,
@@ -767,7 +774,7 @@ public class ClientCallImplTest {
 
   @Test
   public void noDeadlineShouldBePropagatedToStream() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -785,7 +792,7 @@ public class ClientCallImplTest {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
     // The deadline needs to be a number large enough to get encompass the call to start, otherwise
     // the scheduled cancellation won't be created, and the call will fail early.
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
@@ -810,7 +817,7 @@ public class ClientCallImplTest {
         .withDeadlineAfter(1, TimeUnit.SECONDS, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -833,7 +840,7 @@ public class ClientCallImplTest {
   public void streamCancelAbortsDeadlineTimer() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
@@ -858,7 +865,7 @@ public class ClientCallImplTest {
    */
   @Test
   public void timeoutShouldNotBeSet() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -876,7 +883,7 @@ public class ClientCallImplTest {
 
   @Test
   public void cancelInOnMessageShouldInvokeStreamCancel() throws Exception {
-    final ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    final ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
         baseCallOptions,
@@ -914,7 +921,7 @@ public class ClientCallImplTest {
   public void startAddsMaxSize() {
     CallOptions callOptions =
         baseCallOptions.withMaxInboundMessageSize(1).withMaxOutboundMessageSize(2);
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         callOptions,
@@ -932,7 +939,7 @@ public class ClientCallImplTest {
 
   @Test
   public void getAttributes() {
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<Void, Void>(
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method, MoreExecutors.directExecutor(), baseCallOptions, provider,
         deadlineCancellationExecutor, channelCallTracer, false /* retryEnabled */);
     Attributes attrs =
@@ -952,7 +959,7 @@ public class ClientCallImplTest {
   }
 
   private static final class DelayedExecutor implements Executor {
-    private final BlockingQueue<Runnable> commands = new LinkedBlockingQueue<Runnable>();
+    private final BlockingQueue<Runnable> commands = new LinkedBlockingQueue<>();
 
     @Override
     public void execute(Runnable command) {

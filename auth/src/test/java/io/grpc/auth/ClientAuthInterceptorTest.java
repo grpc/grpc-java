@@ -18,9 +18,9 @@ package io.grpc.auth;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,13 +46,15 @@ import java.util.Date;
 import java.util.concurrent.Executor;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link ClientAuthInterceptor}.
@@ -67,6 +69,9 @@ public class ClientAuthInterceptorTest {
       "Extra-Authorization", Metadata.ASCII_STRING_MARSHALLER);
 
   private final Executor executor = MoreExecutors.directExecutor();
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   @Mock
   Credentials credentials;
@@ -92,7 +97,6 @@ public class ClientAuthInterceptorTest {
   /** Set up for test. */
   @Before
   public void startUp() {
-    MockitoAnnotations.initMocks(this);
     descriptor = MethodDescriptor.<String, Integer>newBuilder()
         .setType(MethodDescriptor.MethodType.UNKNOWN)
         .setFullMethodName("a.service/method")
@@ -184,11 +188,6 @@ public class ClientAuthInterceptorTest {
   private static final class ClientCallRecorder extends ClientCall<String, Integer> {
     private ClientCall.Listener<Integer> responseListener;
     private Metadata headers;
-    private int numMessages;
-    private String cancelMessage;
-    private Throwable cancelCause;
-    private boolean halfClosed;
-    private String sentMessage;
 
     @Override
     public void start(ClientCall.Listener<Integer> responseListener, Metadata headers) {
@@ -198,23 +197,18 @@ public class ClientAuthInterceptorTest {
 
     @Override
     public void request(int numMessages) {
-      this.numMessages = numMessages;
     }
 
     @Override
     public void cancel(String message, Throwable cause) {
-      this.cancelMessage = message;
-      this.cancelCause = cause;
     }
 
     @Override
     public void halfClose() {
-      halfClosed = true;
     }
 
     @Override
     public void sendMessage(String message) {
-      sentMessage = message;
     }
 
   }

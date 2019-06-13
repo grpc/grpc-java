@@ -20,7 +20,7 @@ before_install:
   - echo "errorProne=true" >> $HOME/.gradle/gradle.properties
 
 install:
-  - ./gradlew assemble generateTestProto install
+  - ./gradlew assemble syncGeneratedSources publishToMavenLocal
   - pushd examples && ./gradlew build && popd
   - pushd examples && mvn verify && popd
   - pushd examples/example-alts && ../gradlew build && popd
@@ -41,9 +41,10 @@ after_success:
 os:
   - linux
 
+dist: trusty
+
 jdk:
   - oraclejdk8
-  - oraclejdk9
   - openjdk11
 
 notifications:

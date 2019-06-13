@@ -166,7 +166,7 @@ public class ContextTest {
 
   @Test
   public void detachingNonCurrentLogsSevereMessage() {
-    final AtomicReference<LogRecord> logRef = new AtomicReference<LogRecord>();
+    final AtomicReference<LogRecord> logRef = new AtomicReference<>();
     Handler handler = new Handler() {
       @Override
       public void publish(LogRecord record) {
@@ -284,9 +284,9 @@ public class ContextTest {
     }
 
     Context.CancellableContext base = Context.current().withCancellation();
-    final AtomicReference<Context> observed1 = new AtomicReference<Context>();
+    final AtomicReference<Context> observed1 = new AtomicReference<>();
     base.addListener(new SetContextCancellationListener(observed1), MoreExecutors.directExecutor());
-    final AtomicReference<Context> observed2 = new AtomicReference<Context>();
+    final AtomicReference<Context> observed2 = new AtomicReference<>();
     base.addListener(new SetContextCancellationListener(observed2), MoreExecutors.directExecutor());
     assertNull(observed1.get());
     assertNull(observed2.get());
@@ -294,14 +294,14 @@ public class ContextTest {
     assertSame(base, observed1.get());
     assertSame(base, observed2.get());
 
-    final AtomicReference<Context> observed3 = new AtomicReference<Context>();
+    final AtomicReference<Context> observed3 = new AtomicReference<>();
     base.addListener(new SetContextCancellationListener(observed3), MoreExecutors.directExecutor());
     assertSame(base, observed3.get());
   }
 
   @Test
   public void exceptionOfExecutorDoesntThrow() {
-    final AtomicReference<Throwable> loggedThrowable = new AtomicReference<Throwable>();
+    final AtomicReference<Throwable> loggedThrowable = new AtomicReference<>();
     Handler logHandler = new Handler() {
       @Override
       public void publish(LogRecord record) {
@@ -325,7 +325,7 @@ public class ContextTest {
     logger.addHandler(logHandler);
     try {
       Context.CancellableContext base = Context.current().withCancellation();
-      final AtomicReference<Runnable> observed1 = new AtomicReference<Runnable>();
+      final AtomicReference<Runnable> observed1 = new AtomicReference<>();
       final Error err = new Error();
       base.addListener(cancellationListener, new Executor() {
         @Override
@@ -342,7 +342,7 @@ public class ContextTest {
 
       final Error err2 = new Error();
       loggedThrowable.set(null);
-      final AtomicReference<Runnable> observed2 = new AtomicReference<Runnable>();
+      final AtomicReference<Runnable> observed2 = new AtomicReference<>();
       base.addListener(cancellationListener, new Executor() {
         @Override
         public void execute(Runnable runnable) {
@@ -596,7 +596,7 @@ public class ContextTest {
     assertSame(parent.getDeadline(), sooner);
     assertSame(child.getDeadline(), sooner);
     final CountDownLatch latch = new CountDownLatch(1);
-    final AtomicReference<Exception> error = new AtomicReference<Exception>();
+    final AtomicReference<Exception> error = new AtomicReference<>();
     child.addListener(new Context.CancellationListener() {
       @Override
       public void cancelled(Context context) {
@@ -709,7 +709,7 @@ public class ContextTest {
   }
 
   private static class QueuedExecutor implements Executor {
-    private final Queue<Runnable> runnables = new ArrayDeque<Runnable>();
+    private final Queue<Runnable> runnables = new ArrayDeque<>();
 
     @Override
     public void execute(Runnable r) {
@@ -840,16 +840,19 @@ public class ContextTest {
 
   @Test
   public void storageReturnsNullTest() throws Exception {
-    Field storage = Context.class.getDeclaredField("storage");
+    Class<?> lazyStorageClass = Class.forName("io.grpc.Context$LazyStorage");
+    Field storage = lazyStorageClass.getDeclaredField("storage");
     assertTrue(Modifier.isFinal(storage.getModifiers()));
     // use reflection to forcibly change the storage object to a test object
     storage.setAccessible(true);
+    Field modifiersField = Field.class.getDeclaredField("modifiers");
+    modifiersField.setAccessible(true);
+    int storageModifiers = modifiersField.getInt(storage);
+    modifiersField.set(storage, storageModifiers & ~Modifier.FINAL);
     Object o = storage.get(null);
-    @SuppressWarnings("unchecked")
-    AtomicReference<Context.Storage> storageRef = (AtomicReference<Context.Storage>) o;
-    Context.Storage originalStorage = storageRef.get();
+    Context.Storage originalStorage = (Context.Storage) o;
     try {
-      storageRef.set(new Context.Storage() {
+      storage.set(null, new Context.Storage() {
         @Override
         public Context doAttach(Context toAttach) {
           return null;
@@ -878,8 +881,10 @@ public class ContextTest {
       assertEquals(Context.ROOT, Context.current());
     } finally {
       // undo the changes
-      storageRef.set(originalStorage);
+      storage.set(null, originalStorage);
       storage.setAccessible(false);
+      modifiersField.set(storage, storageModifiers | Modifier.FINAL);
+      modifiersField.setAccessible(false);
     }
   }
 
@@ -939,7 +944,7 @@ public class ContextTest {
 
   @Test
   public void errorWhenAncestryLengthLong() {
-    final AtomicReference<LogRecord> logRef = new AtomicReference<LogRecord>();
+    final AtomicReference<LogRecord> logRef = new AtomicReference<>();
     Handler handler = new Handler() {
       @Override
       public void publish(LogRecord record) {
@@ -962,7 +967,7 @@ public class ContextTest {
         assertNull(logRef.get());
         ctx = ctx.fork();
       }
-      ctx = ctx.fork();
+      ctx.fork();
       assertNotNull(logRef.get());
       assertNotNull(logRef.get().getThrown());
       assertEquals(Level.SEVERE, logRef.get().getLevel());

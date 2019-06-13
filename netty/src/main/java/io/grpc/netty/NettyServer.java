@@ -23,7 +23,6 @@ import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalChannelz;
@@ -33,9 +32,9 @@ import io.grpc.InternalLogId;
 import io.grpc.InternalWithLogId;
 import io.grpc.ServerStreamTracer;
 import io.grpc.internal.InternalServer;
+import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -46,20 +45,18 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ServerChannel;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import java.io.IOException;
-import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * Netty-based server implementation.
@@ -73,8 +70,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final Map<ChannelOption<?>, ?> channelOptions;
   private final ProtocolNegotiator protocolNegotiator;
   private final int maxStreamsPerConnection;
-  private final boolean usingSharedBossGroup;
-  private final boolean usingSharedWorkerGroup;
+  private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
+  private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
   private ServerListener listener;
@@ -94,14 +91,14 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
   // Only modified in event loop but safe to read any time. Set at startup and unset at shutdown.
-  // In the future we may have >1 listen socket.
-  private volatile ImmutableList<InternalInstrumented<SocketStats>> listenSockets
-      = ImmutableList.of();
+  private final AtomicReference<InternalInstrumented<SocketStats>> listenSocketStats =
+      new AtomicReference<>();
 
   NettyServer(
       SocketAddress address, Class<? extends ServerChannel> channelType,
       Map<ChannelOption<?>, ?> channelOptions,
-      @Nullable EventLoopGroup bossGroup, @Nullable EventLoopGroup workerGroup,
+      ObjectPool<? extends EventLoopGroup> bossGroupPool,
+      ObjectPool<? extends EventLoopGroup> workerGroupPool,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -115,12 +112,12 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelType = checkNotNull(channelType, "channelType");
     checkNotNull(channelOptions, "channelOptions");
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
-    this.bossGroup = bossGroup;
-    this.workerGroup = workerGroup;
+    this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
+    this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.bossGroup = bossGroupPool.getObject();
+    this.workerGroup = workerGroupPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
-    this.usingSharedBossGroup = bossGroup == null;
-    this.usingSharedWorkerGroup = workerGroup == null;
     this.transportTracerFactory = transportTracerFactory;
     this.maxStreamsPerConnection = maxStreamsPerConnection;
     this.flowControlWindow = flowControlWindow;
@@ -139,36 +136,29 @@ class NettyServer implements InternalServer, InternalWithLogId {
   }
 
   @Override
-  public int getPort() {
+  public SocketAddress getListenSocketAddress() {
     if (channel == null) {
-      return -1;
+      // server is not listening/bound yet, just return the original port.
+      return address;
     }
-    SocketAddress localAddr = channel.localAddress();
-    if (!(localAddr instanceof InetSocketAddress)) {
-      return -1;
-    }
-    return ((InetSocketAddress) localAddr).getPort();
+    return channel.localAddress();
   }
 
   @Override
-  public List<InternalInstrumented<SocketStats>> getListenSockets() {
-    return listenSockets;
+  public InternalInstrumented<SocketStats> getListenSocketStats() {
+    return listenSocketStats.get();
   }
 
   @Override
   public void start(ServerListener serverListener) throws IOException {
     listener = checkNotNull(serverListener, "serverListener");
 
-    // If using the shared groups, get references to them.
-    allocateSharedGroups();
-
     ServerBootstrap b = new ServerBootstrap();
     b.group(bossGroup, workerGroup);
     b.channel(channelType);
-    if (NioServerSocketChannel.class.isAssignableFrom(channelType)) {
-      b.option(SO_BACKLOG, 128);
-      b.childOption(SO_KEEPALIVE, true);
-    }
+    // For non-socket based channel, the option will be ignored.
+    b.option(SO_BACKLOG, 128);
+    b.childOption(SO_KEEPALIVE, true);
 
     if (channelOptions != null) {
       for (Map.Entry<ChannelOption<?>, ?> entry : channelOptions.entrySet()) {
@@ -260,7 +250,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       @Override
       public void run() {
         InternalInstrumented<SocketStats> listenSocket = new ListenSocket(channel);
-        listenSockets = ImmutableList.of(listenSocket);
+        listenSocketStats.set(listenSocket);
         channelz.addListenSocket(listenSocket);
       }
     });
@@ -283,25 +273,16 @@ class NettyServer implements InternalServer, InternalWithLogId {
         if (!future.isSuccess()) {
           log.log(Level.WARNING, "Error shutting down server", future.cause());
         }
-        for (InternalInstrumented<SocketStats> listenSocket : listenSockets) {
-          channelz.removeListenSocket(listenSocket);
+        InternalInstrumented<SocketStats> stats = listenSocketStats.getAndSet(null);
+        if (stats != null) {
+          channelz.removeListenSocket(stats);
         }
-        listenSockets = null;
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
         eventLoopReferenceCounter.release();
       }
     });
-  }
-
-  private void allocateSharedGroups() {
-    if (bossGroup == null) {
-      bossGroup = SharedResourceHolder.get(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP);
-    }
-    if (workerGroup == null) {
-      workerGroup = SharedResourceHolder.get(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP);
-    }
   }
 
   @Override
@@ -321,14 +302,14 @@ class NettyServer implements InternalServer, InternalWithLogId {
     @Override
     protected void deallocate() {
       try {
-        if (usingSharedBossGroup && bossGroup != null) {
-          SharedResourceHolder.release(Utils.DEFAULT_BOSS_EVENT_LOOP_GROUP, bossGroup);
+        if (bossGroup != null) {
+          bossGroupPool.returnObject(bossGroup);
         }
       } finally {
         bossGroup = null;
         try {
-          if (usingSharedWorkerGroup && workerGroup != null) {
-            SharedResourceHolder.release(Utils.DEFAULT_WORKER_EVENT_LOOP_GROUP, workerGroup);
+          if (workerGroup != null) {
+            workerGroupPool.returnObject(workerGroup);
           }
         } finally {
           workerGroup = null;

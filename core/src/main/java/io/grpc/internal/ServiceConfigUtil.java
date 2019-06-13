@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.math.LongMath.checkedAdd;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -33,13 +35,17 @@ import javax.annotation.Nullable;
 
 /**
  * Helper utility to work with service configs.
+ *
+ * <p>This class contains helper methods to parse service config JSON values into Java types.
  */
-@VisibleForTesting
 public final class ServiceConfigUtil {
 
   private static final String SERVICE_CONFIG_METHOD_CONFIG_KEY = "methodConfig";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY = "loadBalancingPolicy";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY = "loadBalancingConfig";
+  private static final String XDS_CONFIG_BALANCER_NAME_KEY = "balancerName";
+  private static final String XDS_CONFIG_CHILD_POLICY_KEY = "childPolicy";
+  private static final String XDS_CONFIG_FALLBACK_POLICY_KEY = "fallbackPolicy";
   private static final String SERVICE_CONFIG_STICKINESS_METADATA_KEY = "stickinessMetadataKey";
   private static final String METHOD_CONFIG_NAME_KEY = "name";
   private static final String METHOD_CONFIG_TIMEOUT_KEY = "timeout";
@@ -70,7 +76,7 @@ public final class ServiceConfigUtil {
    * Fetch the health-checked service name from service config. {@code null} if can't find one.
    */
   @Nullable
-  public static String getHealthCheckedServiceName(@Nullable Map<String, Object> serviceConfig) {
+  public static String getHealthCheckedServiceName(@Nullable Map<String, ?> serviceConfig) {
     String healthCheckKey = "healthCheckConfig";
     String serviceNameKey = "serviceName";
     if (serviceConfig == null || !serviceConfig.containsKey(healthCheckKey)) {
@@ -85,7 +91,7 @@ public final class ServiceConfigUtil {
       }
     }
     */
-    Map<String, Object> healthCheck = getObject(serviceConfig, healthCheckKey);
+    Map<String, ?> healthCheck = getObject(serviceConfig, healthCheckKey);
     if (!healthCheck.containsKey(serviceNameKey)) {
       return null;
     }
@@ -93,7 +99,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Throttle getThrottlePolicy(@Nullable Map<String, Object> serviceConfig) {
+  static Throttle getThrottlePolicy(@Nullable Map<String, ?> serviceConfig) {
     String retryThrottlingKey = "retryThrottling";
     if (serviceConfig == null || !serviceConfig.containsKey(retryThrottlingKey)) {
       return null;
@@ -118,8 +124,9 @@ public final class ServiceConfigUtil {
     }
     */
 
-    Map<String, Object> throttling = getObject(serviceConfig, retryThrottlingKey);
+    Map<String, ?> throttling = getObject(serviceConfig, retryThrottlingKey);
 
+    // TODO(dapengzhang0): check if this is null.
     float maxTokens = getDouble(throttling, "maxTokens").floatValue();
     float tokenRatio = getDouble(throttling, "tokenRatio").floatValue();
     checkState(maxTokens > 0f, "maxToken should be greater than zero");
@@ -128,7 +135,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxAttemptsFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Integer getMaxAttemptsFromRetryPolicy(Map<String, ?> retryPolicy) {
     if (!retryPolicy.containsKey(RETRY_POLICY_MAX_ATTEMPTS_KEY)) {
       return null;
     }
@@ -136,7 +143,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Long getInitialBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Long getInitialBackoffNanosFromRetryPolicy(Map<String, ?> retryPolicy) {
     if (!retryPolicy.containsKey(RETRY_POLICY_INITIAL_BACKOFF_KEY)) {
       return null;
     }
@@ -149,7 +156,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Long getMaxBackoffNanosFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Long getMaxBackoffNanosFromRetryPolicy(Map<String, ?> retryPolicy) {
     if (!retryPolicy.containsKey(RETRY_POLICY_MAX_BACKOFF_KEY)) {
       return null;
     }
@@ -162,7 +169,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Double getBackoffMultiplierFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static Double getBackoffMultiplierFromRetryPolicy(Map<String, ?> retryPolicy) {
     if (!retryPolicy.containsKey(RETRY_POLICY_BACKOFF_MULTIPLIER_KEY)) {
       return null;
     }
@@ -170,7 +177,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, Object> retryPolicy) {
+  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, ?> retryPolicy) {
     if (!retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY)) {
       return null;
     }
@@ -178,15 +185,15 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxAttemptsFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static Integer getMaxAttemptsFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_MAX_ATTEMPTS_KEY)) {
       return null;
     }
-    return getDouble(hedgingPolicy, RETRY_POLICY_MAX_ATTEMPTS_KEY).intValue();
+    return getDouble(hedgingPolicy, HEDGING_POLICY_MAX_ATTEMPTS_KEY).intValue();
   }
 
   @Nullable
-  static Long getHedgingDelayNanosFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static Long getHedgingDelayNanosFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_HEDGING_DELAY_KEY)) {
       return null;
     }
@@ -199,7 +206,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<String> getNonFatalStatusCodesFromHedgingPolicy(Map<String, Object> hedgingPolicy) {
+  static List<String> getNonFatalStatusCodesFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY)) {
       return null;
     }
@@ -207,7 +214,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static String getServiceFromName(Map<String, Object> name) {
+  static String getServiceFromName(Map<String, ?> name) {
     if (!name.containsKey(NAME_SERVICE_KEY)) {
       return null;
     }
@@ -215,7 +222,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static String getMethodFromName(Map<String, Object> name) {
+  static String getMethodFromName(Map<String, ?> name) {
     if (!name.containsKey(NAME_METHOD_KEY)) {
       return null;
     }
@@ -223,7 +230,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Map<String, Object> getRetryPolicyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Map<String, ?> getRetryPolicyFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_RETRY_POLICY_KEY)) {
       return null;
     }
@@ -231,7 +238,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Map<String, Object> getHedgingPolicyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Map<String, ?> getHedgingPolicyFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_HEDGING_POLICY_KEY)) {
       return null;
     }
@@ -239,7 +246,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<Map<String, Object>> getNameListFromMethodConfig(Map<String, Object> methodConfig) {
+  static List<Map<String, ?>> getNameListFromMethodConfig(
+      Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
       return null;
     }
@@ -252,7 +260,7 @@ public final class ServiceConfigUtil {
    * @return duration nanoseconds, or {@code null} if it isn't present.
    */
   @Nullable
-  static Long getTimeoutFromMethodConfig(Map<String, Object> methodConfig) {
+  static Long getTimeoutFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_TIMEOUT_KEY)) {
       return null;
     }
@@ -265,7 +273,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Boolean getWaitForReadyFromMethodConfig(Map<String, Object> methodConfig) {
+  static Boolean getWaitForReadyFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_WAIT_FOR_READY_KEY)) {
       return null;
     }
@@ -273,7 +281,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxRequestMessageBytesFromMethodConfig(Map<String, Object> methodConfig) {
+  static Integer getMaxRequestMessageBytesFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_MAX_REQUEST_MESSAGE_BYTES_KEY)) {
       return null;
     }
@@ -281,7 +289,7 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static Integer getMaxResponseMessageBytesFromMethodConfig(Map<String, Object> methodConfig) {
+  static Integer getMaxResponseMessageBytesFromMethodConfig(Map<String, ?> methodConfig) {
     if (!methodConfig.containsKey(METHOD_CONFIG_MAX_RESPONSE_MESSAGE_BYTES_KEY)) {
       return null;
     }
@@ -289,8 +297,8 @@ public final class ServiceConfigUtil {
   }
 
   @Nullable
-  static List<Map<String, Object>> getMethodConfigFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+  static List<Map<String, ?>> getMethodConfigFromServiceConfig(
+      Map<String, ?> serviceConfig) {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_METHOD_CONFIG_KEY)) {
       return null;
     }
@@ -302,40 +310,38 @@ public final class ServiceConfigUtil {
    */
   @SuppressWarnings("unchecked")
   @VisibleForTesting
-  public static List<Map<String, Object>> getLoadBalancingConfigsFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+  public static List<Map<String, ?>> getLoadBalancingConfigsFromServiceConfig(
+      Map<String, ?> serviceConfig) {
     /* schema as follows
     {
-      "loadBalancingConfig": {
-        [
-          {"xds" :
-            {
-              "balancerName": "balancer1",
-              "childPolicy": {...},
-              "fallbackPolicy": {...},
-            }
-          },
-          {"round_robin": {}}
-        ]
-      },
+      "loadBalancingConfig": [
+        {"xds" :
+          {
+            "balancerName": "balancer1",
+            "childPolicy": [...],
+            "fallbackPolicy": [...],
+          }
+        },
+        {"round_robin": {}}
+      ],
       "loadBalancingPolicy": "ROUND_ROBIN"  // The deprecated policy key
     }
     */
-    List<Map<String, Object>> lbConfigs = new ArrayList<>();
+    List<Map<String, ?>> lbConfigs = new ArrayList<>();
     if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY)) {
-      List<Object> configs = getList(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY);
-      for (Object config : configs) {
-        lbConfigs.add((Map<String, Object>) config);
+      List<?> configs = getList(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY);
+      for (Map<String, ?> config : checkObjectList(configs)) {
+        lbConfigs.add(config);
       }
     }
     if (lbConfigs.isEmpty()) {
       // No LoadBalancingConfig found.  Fall back to the deprecated LoadBalancingPolicy
       if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY)) {
+        // TODO(zhangkun83): check if this is null.
         String policy = getString(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY);
         // Convert the policy to a config, so that the caller can handle them in the same way.
         policy = policy.toLowerCase(Locale.ROOT);
-        Map<String, Object> fakeConfig =
-            Collections.singletonMap(policy, (Object) Collections.emptyMap());
+        Map<String, ?> fakeConfig = Collections.singletonMap(policy, Collections.emptyMap());
         lbConfigs.add(fakeConfig);
       }
     }
@@ -343,11 +349,70 @@ public final class ServiceConfigUtil {
   }
 
   /**
+   * Unwrap a LoadBalancingConfig JSON object into a {@link LbConfig}.  The input is a JSON object
+   * (map) with exactly one entry, where the key is the policy name and the value is a config object
+   * for that policy.
+   */
+  @SuppressWarnings("unchecked")
+  public static LbConfig unwrapLoadBalancingConfig(Map<String, ?> lbConfig) {
+    if (lbConfig.size() != 1) {
+      throw new RuntimeException(
+          "There are " + lbConfig.size() + " fields in a LoadBalancingConfig object. Exactly one"
+          + " is expected. Config=" + lbConfig);
+    }
+    String key = lbConfig.entrySet().iterator().next().getKey();
+    return new LbConfig(key, getObject(lbConfig, key));
+  }
+
+  /**
+   * Given a JSON list of LoadBalancingConfigs, and convert it into a list of LbConfig.
+   */
+  @SuppressWarnings("unchecked")
+  public static List<LbConfig> unwrapLoadBalancingConfigList(List<Map<String, ?>> list) {
+    ArrayList<LbConfig> result = new ArrayList<>();
+    for (Map<String, ?> rawChildPolicy : list) {
+      result.add(unwrapLoadBalancingConfig(rawChildPolicy));
+    }
+    return Collections.unmodifiableList(result);
+  }
+
+  /**
+   * Extracts the loadbalancer name from xds loadbalancer config.
+   */
+  public static String getBalancerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    return getString(rawXdsConfig, XDS_CONFIG_BALANCER_NAME_KEY);
+  }
+
+  /**
+   * Extracts list of child policies from xds loadbalancer config.
+   */
+  @Nullable
+  public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    List<?> rawChildPolicies = getList(rawXdsConfig, XDS_CONFIG_CHILD_POLICY_KEY);
+    if (rawChildPolicies != null) {
+      return unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+    }
+    return null;
+  }
+
+  /**
+   * Extracts list of fallback policies from xds loadbalancer config.
+   */
+  @Nullable
+  public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    List<?> rawFallbackPolicies = getList(rawXdsConfig, XDS_CONFIG_FALLBACK_POLICY_KEY);
+    if (rawFallbackPolicies != null) {
+      return unwrapLoadBalancingConfigList(checkObjectList(rawFallbackPolicies));
+    }
+    return null;
+  }
+
+  /**
    * Extracts the stickiness metadata key from a service config, or {@code null}.
    */
   @Nullable
   public static String getStickinessMetadataKeyFromServiceConfig(
-      Map<String, Object> serviceConfig) {
+      Map<String, ?> serviceConfig) {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_STICKINESS_METADATA_KEY)) {
       return null;
     }
@@ -355,108 +420,118 @@ public final class ServiceConfigUtil {
   }
 
   /**
-   * Gets a list from an object for the given key.
+   * Gets a list from an object for the given key.  If the key is not present, this returns null.
+   * If the value is not a List, throws an exception.
    */
   @SuppressWarnings("unchecked")
-  static List<Object> getList(Map<String, Object> obj, String key) {
-    assert obj.containsKey(key);
-    Object value = checkNotNull(obj.get(key), "no such key %s", key);
-    if (value instanceof List) {
-      return (List<Object>) value;
+  @Nullable
+  static List<?> getList(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
     }
-    throw new ClassCastException(
-        String.format("value %s for key %s in %s is not List", value, key, obj));
+    Object value = obj.get(key);
+    if (!(value instanceof List)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in '%s' is not List", value, key, obj));
+    }
+    return (List<?>) value;
   }
 
   /**
-   * Gets an object from an object for the given key.
+   * Gets an object from an object for the given key.  If the key is not present, this returns null.
+   * If the value is not a List, throws an exception.
    */
   @SuppressWarnings("unchecked")
-  static Map<String, Object> getObject(Map<String, Object> obj, String key) {
-    assert obj.containsKey(key);
-    Object value = checkNotNull(obj.get(key), "no such key %s", key);
-    if (value instanceof Map) {
-      return (Map<String, Object>) value;
+  @Nullable
+  static Map<String, ?> getObject(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
     }
-    throw new ClassCastException(
-        String.format("value %s for key %s in %s is not object", value, key, obj));
+    Object value = obj.get(key);
+    if (!(value instanceof Map)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in '%s' is not object", value, key, obj));
+    }
+    return (Map<String, ?>) value;
   }
 
   /**
-   * Gets a double from an object for the given key.
+   * Gets a double from an object for the given key.  If the key is not present, this returns null.
+   * If the value is not a Double, throws an exception.
    */
-  @SuppressWarnings("unchecked")
-  static Double getDouble(Map<String, Object> obj, String key) {
-    assert obj.containsKey(key);
-    Object value = checkNotNull(obj.get(key), "no such key %s", key);
-    if (value instanceof Double) {
-      return (Double) value;
+  @Nullable
+  static Double getDouble(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
     }
-    throw new ClassCastException(
-        String.format("value %s for key %s in %s is not Double", value, key, obj));
+    Object value = obj.get(key);
+    if (!(value instanceof Double)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in '%s' is not Double", value, key, obj));
+    }
+    return (Double) value;
   }
 
   /**
-   * Gets a string from an object for the given key.
+   * Gets a string from an object for the given key.  If the key is not present, this returns null.
+   * If the value is not a String, throws an exception.
    */
-  @SuppressWarnings("unchecked")
-  static String getString(Map<String, Object> obj, String key) {
-    assert obj.containsKey(key);
-    Object value = checkNotNull(obj.get(key), "no such key %s", key);
-    if (value instanceof String) {
-      return (String) value;
+  @Nullable
+  static String getString(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
     }
-    throw new ClassCastException(
-        String.format("value %s for key %s in %s is not String", value, key, obj));
+    Object value = obj.get(key);
+    if (!(value instanceof String)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in '%s' is not String", value, key, obj));
+    }
+    return (String) value;
   }
 
   /**
-   * Gets a string from an object for the given index.
+   * Gets a boolean from an object for the given key.  If the key is not present, this returns null.
+   * If the value is not a Boolean, throws an exception.
    */
-  @SuppressWarnings("unchecked")
-  static String getString(List<Object> list, int i) {
-    assert i >= 0 && i < list.size();
-    Object value = checkNotNull(list.get(i), "idx %s in %s is null", i, list);
-    if (value instanceof String) {
-      return (String) value;
+  @Nullable
+  static Boolean getBoolean(Map<String, ?> obj, String key) {
+    assert key != null;
+    if (!obj.containsKey(key)) {
+      return null;
     }
-    throw new ClassCastException(
-        String.format("value %s for idx %d in %s is not String", value, i, list));
-  }
-
-  /**
-   * Gets a boolean from an object for the given key.
-   */
-  static Boolean getBoolean(Map<String, Object> obj, String key) {
-    assert obj.containsKey(key);
-    Object value = checkNotNull(obj.get(key), "no such key %s", key);
-    if (value instanceof Boolean) {
-      return (Boolean) value;
+    Object value = obj.get(key);
+    if (!(value instanceof Boolean)) {
+      throw new ClassCastException(
+          String.format("value '%s' for key '%s' in '%s' is not Boolean", value, key, obj));
     }
-    throw new ClassCastException(
-        String.format("value %s for key %s in %s is not Boolean", value, key, obj));
+    return (Boolean) value;
   }
 
   @SuppressWarnings("unchecked")
-  private static List<Map<String, Object>> checkObjectList(List<Object> rawList) {
+  static List<Map<String, ?>> checkObjectList(List<?> rawList) {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof Map)) {
         throw new ClassCastException(
             String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
       }
     }
-    return (List<Map<String, Object>>) (List<?>) rawList;
+    return (List<Map<String, ?>>) rawList;
   }
 
   @SuppressWarnings("unchecked")
-  static List<String> checkStringList(List<Object> rawList) {
+  static List<String> checkStringList(List<?> rawList) {
     for (int i = 0; i < rawList.size(); i++) {
       if (!(rawList.get(i) instanceof String)) {
         throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not string", rawList.get(i), i, rawList));
+            String.format(
+                "value '%s' for idx %d in '%s' is not string", rawList.get(i), i, rawList));
       }
     }
-    return (List<String>) (List<?>) rawList;
+    return (List<String>) rawList;
   }
 
   /**
@@ -588,5 +663,50 @@ public final class ServiceConfigUtil {
     }
     // we did over/under flow, if the sign is negative we should return MAX otherwise MIN
     return Long.MAX_VALUE + ((naiveSum >>> (Long.SIZE - 1)) ^ 1);
+  }
+
+  /**
+   * A LoadBalancingConfig that includes the policy name (the key) and its raw config value (parsed
+   * JSON).
+   */
+  public static final class LbConfig {
+    private final String policyName;
+    private final Map<String, ?> rawConfigValue;
+
+    public LbConfig(String policyName, Map<String, ?> rawConfigValue) {
+      this.policyName = checkNotNull(policyName, "policyName");
+      this.rawConfigValue = checkNotNull(rawConfigValue, "rawConfigValue");
+    }
+
+    public String getPolicyName() {
+      return policyName;
+    }
+
+    public Map<String, ?> getRawConfigValue() {
+      return rawConfigValue;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof LbConfig) {
+        LbConfig other = (LbConfig) o;
+        return policyName.equals(other.policyName)
+            && rawConfigValue.equals(other.rawConfigValue);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(policyName, rawConfigValue);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("policyName", policyName)
+          .add("rawConfigValue", rawConfigValue)
+          .toString();
+    }
   }
 }

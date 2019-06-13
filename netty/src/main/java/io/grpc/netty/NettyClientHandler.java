@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static io.netty.handler.codec.http2.DefaultHttp2LocalFlowController.DEFAULT_WINDOW_UPDATE_RATIO;
 import static io.netty.util.CharsetUtil.UTF_8;
+import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -30,6 +31,7 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.ClientTransport.PingCallback;
+import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.Http2Ping;
 import io.grpc.internal.InUseStateAggregator;
@@ -121,7 +123,7 @@ class NettyClientHandler extends AbstractNettyHandler {
 
   private WriteQueue clientWriteQueue;
   private Http2Ping ping;
-  private Attributes attributes = Attributes.EMPTY;
+  private Attributes attributes;
   private InternalChannelz.Security securityInfo;
 
   static NettyClientHandler newHandler(
@@ -247,6 +249,8 @@ class NettyClientHandler extends AbstractNettyHandler {
     this.transportTracer = Preconditions.checkNotNull(transportTracer);
     this.eagAttributes = eagAttributes;
     this.authority = authority;
+    this.attributes = Attributes.newBuilder()
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttributes).build();
 
     // Set the frame listener on the decoder.
     decoder().frameListener(new FrameListener());
@@ -371,7 +375,6 @@ class NettyClientHandler extends AbstractNettyHandler {
     }
   }
 
-
   /**
    * Handler for an inbound HTTP/2 RST_STREAM frame, terminating a stream.
    */
@@ -440,9 +443,20 @@ class NettyClientHandler extends AbstractNettyHandler {
   @Override
   public void handleProtocolNegotiationCompleted(
       Attributes attributes, InternalChannelz.Security securityInfo) {
-    this.attributes = attributes;
+    this.attributes = this.attributes.toBuilder().setAll(attributes).build();
     this.securityInfo = securityInfo;
     super.handleProtocolNegotiationCompleted(attributes, securityInfo);
+    writeBufferingAndRemove(ctx().channel());
+  }
+
+  static void writeBufferingAndRemove(Channel channel) {
+    checkNotNull(channel, "channel");
+    ChannelHandlerContext handlerCtx =
+        channel.pipeline().context(WriteBufferingAndExceptionHandler.class);
+    if (handlerCtx == null) {
+      return;
+    }
+    ((WriteBufferingAndExceptionHandler) handlerCtx.handler()).writeBufferedAndRemove(handlerCtx);
   }
 
   @Override
@@ -458,7 +472,6 @@ class NettyClientHandler extends AbstractNettyHandler {
   InternalChannelz.Security getSecurityInfo() {
     return securityInfo;
   }
-
 
   @Override
   protected void onConnectionError(ChannelHandlerContext ctx,  boolean outbound, Throwable cause,
@@ -498,6 +511,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void createStream(final CreateStreamCommand command, final ChannelPromise promise)
           throws Exception {
     if (lifecycleManager.getShutdownThrowable() != null) {
+      command.stream().setNonExistent();
       // The connection is going away (it is really the GOAWAY case),
       // just terminate the stream now.
       command.stream().transportReportStatus(
@@ -511,6 +525,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     try {
       streamId = incrementAndGetNextStreamId();
     } catch (StatusException e) {
+      command.stream().setNonExistent();
       // Stream IDs have been exhausted for this connection. Fail the promise immediately.
       promise.setFailure(e);
 
@@ -584,7 +599,11 @@ class NettyClientHandler extends AbstractNettyHandler {
     if (reason != null) {
       stream.transportReportStatus(reason, true, new Metadata());
     }
-    encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
+    if (!cmd.stream().isNonExistent()) {
+      encoder().writeRstStream(ctx, stream.id(), Http2Error.CANCEL.code(), promise);
+    } else {
+      promise.setSuccess();
+    }
   }
 
   /**

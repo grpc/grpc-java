@@ -37,6 +37,8 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.ProxiedSocketAddress;
+import io.grpc.ProxyDetector;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.SharedResourceHolder.Resource;
@@ -200,12 +202,7 @@ public final class GrpcUtil {
 
   public static final Splitter ACCEPT_ENCODING_SPLITTER = Splitter.on(',').trimResults();
 
-  private static final String IMPLEMENTATION_VERSION = "1.19.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
-
-  /**
-   * The default delay in nanos before we send a keepalive.
-   */
-  public static final long DEFAULT_KEEPALIVE_TIME_NANOS = TimeUnit.MINUTES.toNanos(1);
+  private static final String IMPLEMENTATION_VERSION = "1.22.0-SNAPSHOT"; // CURRENT_GRPC_VERSION
 
   /**
    * The default timeout in nanos for a keepalive ping request.
@@ -243,7 +240,7 @@ public final class GrpcUtil {
   public static final ProxyDetector NOOP_PROXY_DETECTOR = new ProxyDetector() {
     @Nullable
     @Override
-    public ProxyParameters proxyFor(SocketAddress targetServerAddress) {
+    public ProxiedSocketAddress proxyFor(SocketAddress targetServerAddress) {
       return null;
     }
   };
@@ -687,7 +684,7 @@ public final class GrpcUtil {
     final ClientTransport transport;
     Subchannel subchannel = result.getSubchannel();
     if (subchannel != null) {
-      transport = ((AbstractSubchannel) subchannel).obtainActiveTransport();
+      transport = ((TransportProvider) subchannel.getInternalSubchannel()).obtainActiveTransport();
     } else {
       transport = null;
     }

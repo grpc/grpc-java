@@ -120,6 +120,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     return false;
   }
 
+  @SuppressWarnings("MixedMutabilityReturnType")
   public static List<String> allSubjectAltNames(X509Certificate certificate) {
     List<String> altIpaNames = getSubjectAltNames(certificate, ALT_IPA_NAME);
     List<String> altDnsNames = getSubjectAltNames(certificate, ALT_DNS_NAME);
@@ -129,6 +130,7 @@ public final class OkHostnameVerifier implements HostnameVerifier {
     return result;
   }
 
+  @SuppressWarnings("MixedMutabilityReturnType")
   private static List<String> getSubjectAltNames(X509Certificate certificate, int type) {
     List<String> result = new ArrayList<>();
     try {

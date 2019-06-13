@@ -1,17 +1,19 @@
 syntax = "proto3";
 
 package envoy.api.v2.core;
-option java_package = "io.grpc.xds.shaded.envoy.api.v2.core";
+
+option java_outer_classname = "AddressProto";
 option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.api.v2.core";
 
 import "envoy/api/v2/core/base.proto";
 
 import "google/protobuf/wrappers.proto";
 
 import "validate/validate.proto";
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
 
 // [#protodoc-title: Network addresses]
 
@@ -25,6 +27,7 @@ message Pipe {
 
 message SocketAddress {
   enum Protocol {
+    option (gogoproto.goproto_enum_prefix) = false;
     TCP = 0;
     // [#not-implemented-hide:]
     UDP = 1;
@@ -50,13 +53,14 @@ message SocketAddress {
     // named resolver is capable of named port resolution.
     string named_port = 4;
   }
-  // The name of the resolver. This must have been registered with Envoy. If this is
-  // empty, a context dependent default applies. If address is a hostname this
-  // should be set for resolution other than DNS. If the address is a concrete
-  // IP address, no resolution will occur.
+  // The name of the custom resolver. This must have been registered with Envoy. If
+  // this is empty, a context dependent default applies. If the address is a concrete
+  // IP address, no resolution will occur. If address is a hostname this
+  // should be set for resolution other than DNS. Specifying a custom resolver with
+  // *STRICT_DNS* or *LOGICAL_DNS* will generate an error at runtime.
   string resolver_name = 5;
 
-  // When binding to an IPv6 address above, this enables `IPv4 compatibity
+  // When binding to an IPv6 address above, this enables `IPv4 compatibility
   // <https://tools.ietf.org/html/rfc3493#page-11>`_. Binding to ``::`` will
   // allow both IPv4 and IPv6 connections, with peer IPv4 addresses mapped into
   // IPv6 space as ``::FFFF:<IPv4-address>``.
@@ -80,7 +84,7 @@ message TcpKeepalive {
 message BindConfig {
   // The address to bind to when creating a socket.
   SocketAddress source_address = 1
-      [(validate.rules).message.required = true];
+      [(validate.rules).message.required = true, (gogoproto.nullable) = false];
 
   // Whether to set the *IP_FREEBIND* option when creating the socket. When this
   // flag is set to true, allows the :ref:`source_address

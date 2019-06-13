@@ -23,14 +23,12 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
-import io.grpc.NameResolver;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ProxyParameters;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import java.net.InetSocketAddress;
@@ -194,12 +192,6 @@ public final class CronetChannelBuilder extends
         transportTracerFactory.create());
   }
 
-  @Override
-  protected Attributes getNameResolverParams() {
-    return Attributes.newBuilder()
-        .set(NameResolver.Factory.PARAMS_DEFAULT_PORT, GrpcUtil.DEFAULT_PORT_SSL).build();
-  }
-
   @VisibleForTesting
   static class CronetTransportFactory implements ClientTransportFactory {
     private final ScheduledExecutorService timeoutService;
@@ -229,10 +221,11 @@ public final class CronetChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, ClientTransportOptions options) {
+        SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       return new CronetClientTransport(streamFactory, inetSocketAddr, options.getAuthority(),
-          options.getUserAgent(), executor, maxMessageSize, alwaysUsePut, transportTracer);
+          options.getUserAgent(), options.getEagAttributes(), executor, maxMessageSize,
+          alwaysUsePut, transportTracer);
     }
 
     @Override

@@ -19,7 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ServiceConfigInterceptor.HEDGING_POLICY_KEY;
 import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.CallOptions;
@@ -27,7 +27,7 @@ import io.grpc.Channel;
 import io.grpc.Deadline;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
-import io.grpc.internal.ServiceConfigInterceptor.MethodInfo;
+import io.grpc.internal.ManagedChannelServiceConfig.MethodInfo;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -99,6 +99,21 @@ public class ServiceConfigInterceptorTest {
 
     verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
     assertThat(callOptionsCap.getValue().isWaitForReady()).isTrue();
+  }
+
+  @Test
+  public void handleNullConfig() {
+    JsonObj name = new JsonObj("service", "service");
+    JsonObj methodConfig = new JsonObj("name", new JsonList(name), "waitForReady", true);
+    JsonObj serviceConfig = new JsonObj("methodConfig", new JsonList(methodConfig));
+
+    interceptor.handleUpdate(serviceConfig);
+    interceptor.handleUpdate(null);
+
+    interceptor.interceptCall(methodDescriptor, CallOptions.DEFAULT.withoutWaitForReady(), channel);
+
+    verify(channel).newCall(eq(methodDescriptor), callOptionsCap.capture());
+    assertThat(callOptionsCap.getValue().isWaitForReady()).isFalse();
   }
 
   @Test
@@ -345,13 +360,13 @@ public class ServiceConfigInterceptorTest {
 
     interceptor.handleUpdate(serviceConfig1);
 
-    assertThat(interceptor.serviceMap.get()).isNotEmpty();
-    assertThat(interceptor.serviceMethodMap.get()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isNotEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isEmpty();
 
     interceptor.handleUpdate(serviceConfig2);
 
-    assertThat(interceptor.serviceMap.get()).isEmpty();
-    assertThat(interceptor.serviceMethodMap.get()).isNotEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).isEmpty();
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap()).isNotEmpty();
   }
 
   @Test
@@ -363,11 +378,11 @@ public class ServiceConfigInterceptorTest {
 
     interceptor.handleUpdate(serviceConfig);
 
-    assertThat(interceptor.serviceMethodMap.get())
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMethodMap())
         .containsExactly(
             methodDescriptor.getFullMethodName(),
             new MethodInfo(methodConfig, false, 1, 1));
-    assertThat(interceptor.serviceMap.get()).containsExactly(
+    assertThat(interceptor.managedChannelServiceConfig.get().getServiceMap()).containsExactly(
         "service2", new MethodInfo(methodConfig, false, 1, 1));
   }
 

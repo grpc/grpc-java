@@ -18,7 +18,7 @@ package io.grpc.cronet;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,6 +51,11 @@ import org.robolectric.RobolectricTestRunner;
 public final class CronetClientTransportTest {
 
   private static final String AUTHORITY = "test.example.com";
+  private static final Attributes.Key<String> EAG_ATTR_KEY =
+      Attributes.Key.create("eag-attr");
+
+  private static final Attributes EAG_ATTRS =
+      Attributes.newBuilder().set(EAG_ATTR_KEY, "value").build();
 
   private CronetClientTransport transport;
   @Mock private StreamBuilderFactory streamFactory;
@@ -69,6 +74,7 @@ public final class CronetClientTransportTest {
             new InetSocketAddress("localhost", 443),
             AUTHORITY,
             null,
+            EAG_ATTRS,
             executor,
             5000,
             false,
@@ -84,6 +90,7 @@ public final class CronetClientTransportTest {
     Attributes attrs = transport.getAttributes();
     assertEquals(
         SecurityLevel.PRIVACY_AND_INTEGRITY, attrs.get(GrpcAttributes.ATTR_SECURITY_LEVEL));
+    assertEquals(EAG_ATTRS, attrs.get(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS));
   }
 
   @Test
@@ -120,5 +127,37 @@ public final class CronetClientTransportTest {
     callback2.onCanceled(cronetStream1, null);
     // All streams are gone now.
     verify(clientTransportListener, times(1)).transportTerminated();
+  }
+
+  @Test
+  public void startStreamAfterShutdown() throws Exception {
+    CronetClientStream stream =
+        transport.newStream(descriptor, new Metadata(), CallOptions.DEFAULT);
+    transport.shutdown();
+    BaseClientStreamListener listener = new BaseClientStreamListener();
+    stream.start(listener);
+
+    assertEquals(Status.UNAVAILABLE.getCode(), listener.status.getCode());
+  }
+
+  private static class BaseClientStreamListener implements ClientStreamListener {
+    private Status status;
+
+    @Override
+    public void messagesAvailable(MessageProducer producer) {}
+
+    @Override
+    public void onReady() {}
+
+    @Override
+    public void headersRead(Metadata headers) {}
+
+    @Override
+    public void closed(Status status, Metadata trailers) {}
+
+    @Override
+    public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
+      this.status = status;
+    }
   }
 }

@@ -18,7 +18,7 @@ package io.grpc.examples.routeguide;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +52,10 @@ import org.mockito.ArgumentCaptor;
  * Unit tests for {@link RouteGuideClient}.
  * For demonstrating how to write gRPC unit test only.
  * Not intended to provide a high code coverage or to test every major usecase.
+ *
+ * directExecutor() makes it easier to have deterministic tests.
+ * However, if your implementation uses another thread and uses streaming it is better to use
+ * the default executor, to avoid hitting bug #3084.
  *
  * <p>For basic unit test examples see {@link io.grpc.examples.helloworld.HelloWorldClientTest} and
  * {@link io.grpc.examples.helloworld.HelloWorldServerTest}.

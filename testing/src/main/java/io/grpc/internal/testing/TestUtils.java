@@ -67,11 +67,11 @@ public class TestUtils {
    * Creates a new {@link InetSocketAddress} on localhost that overrides the host with
    * {@link #TEST_SERVER_HOST}.
    */
-  public static InetSocketAddress testServerAddress(int port) {
+  public static InetSocketAddress testServerAddress(InetSocketAddress originalSockAddr) {
     try {
       InetAddress inetAddress = InetAddress.getByName("localhost");
       inetAddress = InetAddress.getByAddress(TEST_SERVER_HOST, inetAddress.getAddress());
-      return new InetSocketAddress(inetAddress, port);
+      return new InetSocketAddress(inetAddress, originalSockAddr.getPort());
     } catch (UnknownHostException e) {
       throw new RuntimeException(e);
     }
@@ -189,10 +189,14 @@ public class TestUtils {
     KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
     ks.load(null, null);
     CertificateFactory cf = CertificateFactory.getInstance("X.509");
-    X509Certificate cert = (X509Certificate) cf.generateCertificate(
-        new BufferedInputStream(new FileInputStream(certChainFile)));
-    X500Principal principal = cert.getSubjectX500Principal();
-    ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    BufferedInputStream in = new BufferedInputStream(new FileInputStream(certChainFile));
+    try {
+      X509Certificate cert = (X509Certificate) cf.generateCertificate(in);
+      X500Principal principal = cert.getSubjectX500Principal();
+      ks.setCertificateEntry(principal.getName("RFC2253"), cert);
+    } finally {
+      in.close();
+    }
 
     // Set up trust manager factory to use our key store.
     TrustManagerFactory trustManagerFactory =

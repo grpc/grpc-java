@@ -21,7 +21,7 @@ import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 import static java.lang.Double.parseDouble;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -60,7 +60,7 @@ public class RetryPolicyTest {
       assertTrue(serviceConfigObj instanceof Map);
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
+      Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
           /* retryEnabled = */ true, /* maxRetryAttemptsLimit = */ 4,
@@ -138,7 +138,7 @@ public class RetryPolicyTest {
       assertTrue(serviceConfigObj instanceof Map);
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
+      Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
           /* retryEnabled = */ false, /* maxRetryAttemptsLimit = */ 4,
@@ -175,7 +175,7 @@ public class RetryPolicyTest {
       assertTrue(serviceConfigObj instanceof Map);
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
+      Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
       Throttle throttle = ServiceConfigUtil.getThrottlePolicy(serviceConfig);
 
       assertEquals(new Throttle(10f, 0.1f), throttle);

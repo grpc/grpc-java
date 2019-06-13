@@ -42,18 +42,13 @@ To generate Java interfaces with protobuf lite:
 $ protoc --plugin=protoc-gen-grpc-java=build/exe/java_plugin/protoc-gen-grpc-java \
   --grpc-java_out=lite:"$OUTPUT_FILE" --proto_path="$DIR_OF_PROTO_FILE" "$PROTO_FILE"
 ```
-To generate Java interfaces with protobuf nano:
-```
-$ protoc --plugin=protoc-gen-grpc-java=build/exe/java_plugin/protoc-gen-grpc-java \
-  --grpc-java_out=nano:"$OUTPUT_FILE" --proto_path="$DIR_OF_PROTO_FILE" "$PROTO_FILE"
-```
 
 ## Installing the codegen to Maven local repository
 This will compile a codegen and put it under your ``~/.m2/repository``. This
 will make it available to any build tool that pulls codegens from Maven
 repostiories.
 ```
-$ ../gradlew install
+$ ../gradlew publishToMavenLocal
 ```
 
 ## Creating a release of GRPC Java

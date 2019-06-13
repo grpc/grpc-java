@@ -50,6 +50,7 @@ class NettyServerStream extends AbstractServerStream {
   private final Attributes attributes;
   private final String authority;
   private final TransportTracer transportTracer;
+  private final int streamId;
 
   public NettyServerStream(
       Channel channel,
@@ -65,6 +66,8 @@ class NettyServerStream extends AbstractServerStream {
     this.attributes = checkNotNull(transportAttrs);
     this.authority = authority;
     this.transportTracer = checkNotNull(transportTracer, "transportTracer");
+    // Read the id early to avoid reading transportState later.
+    this.streamId = transportState().id();
   }
 
   @Override
@@ -202,5 +205,10 @@ class NettyServerStream extends AbstractServerStream {
     public int id() {
       return http2Stream.id();
     }
+  }
+
+  @Override
+  public int streamId() {
+    return streamId;
   }
 }

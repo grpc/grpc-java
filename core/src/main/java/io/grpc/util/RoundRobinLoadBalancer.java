@@ -33,10 +33,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
@@ -72,7 +69,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
   private final Map<EquivalentAddressGroup, Subchannel> subchannels =
-      new HashMap<EquivalentAddressGroup, Subchannel>();
+      new HashMap<>();
   private final Random random;
 
   private ConnectivityState currentState;
@@ -87,15 +84,15 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
+    Attributes attributes = resolvedAddresses.getAttributes();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
     Set<EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
     Set<EquivalentAddressGroup> addedAddrs = setsDifference(latestAddrs, currentAddrs);
     Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs);
 
-    Map<String, Object> serviceConfig =
-        attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    Map<String, ?> serviceConfig = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     if (serviceConfig != null) {
       String stickinessMetadataKey =
           ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
@@ -122,15 +119,25 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
           // after creation but since we can mutate the values we leverage that and set
           // AtomicReference which will allow mutating state info for given channel.
           .set(STATE_INFO,
-              new Ref<ConnectivityStateInfo>(ConnectivityStateInfo.forNonError(IDLE)));
+              new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
 
       Ref<Subchannel> stickyRef = null;
       if (stickinessState != null) {
-        subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<Subchannel>(null));
+        subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<>(null));
       }
 
-      Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
+      final Subchannel subchannel = checkNotNull(
+          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(addressGroup)
+              .setAttributes(subchannelAttrs.build())
+              .build()),
+          "subchannel");
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo state) {
+            processSubchannelState(subchannel, state);
+          }
+        });
       if (stickyRef != null) {
         stickyRef.value = subchannel;
       }
@@ -138,13 +145,19 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       subchannel.requestConnection();
     }
 
-    // Shutdown subchannels for removed addresses.
+    ArrayList<Subchannel> removedSubchannels = new ArrayList<>();
     for (EquivalentAddressGroup addressGroup : removedAddrs) {
-      Subchannel subchannel = subchannels.remove(addressGroup);
-      shutdownSubchannel(subchannel);
+      removedSubchannels.add(subchannels.remove(addressGroup));
     }
 
+    // Update the picker before shutting down the subchannels, to reduce the chance of the race
+    // between picking a subchannel and shutting it down.
     updateBalancingState();
+
+    // Shutdown removed subchannels
+    for (Subchannel removedSubchannel : removedSubchannels) {
+      shutdownSubchannel(removedSubchannel);
+    }
   }
 
   @Override
@@ -154,8 +167,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
     if (subchannels.get(subchannel.getAddresses()) != subchannel) {
       return;
     }
@@ -248,7 +260,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
    * remove all attributes.
    */
   private static Set<EquivalentAddressGroup> stripAttrs(List<EquivalentAddressGroup> groupList) {
-    Set<EquivalentAddressGroup> addrs = new HashSet<EquivalentAddressGroup>(groupList.size());
+    Set<EquivalentAddressGroup> addrs = new HashSet<>(groupList.size());
     for (EquivalentAddressGroup group : groupList) {
       addrs.add(new EquivalentAddressGroup(group.getAddresses()));
     }
@@ -271,7 +283,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   private static <T> Set<T> setsDifference(Set<T> a, Set<T> b) {
-    Set<T> aCopy = new HashSet<T>(a);
+    Set<T> aCopy = new HashSet<>(a);
     aCopy.removeAll(b);
     return aCopy;
   }
@@ -293,9 +305,9 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
     final Key<String> key;
     final ConcurrentMap<String, Ref<Subchannel>> stickinessMap =
-        new ConcurrentHashMap<String, Ref<Subchannel>>();
+        new ConcurrentHashMap<>();
 
-    final Queue<String> evictionQueue = new ConcurrentLinkedQueue<String>();
+    final Queue<String> evictionQueue = new ConcurrentLinkedQueue<>();
 
     StickinessState(@Nonnull String stickinessKey) {
       this.key = Key.of(stickinessKey, Metadata.ASCII_STRING_MARSHALLER);
@@ -425,7 +437,7 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       // the lists cannot contain duplicate subchannels
       return other == this || (stickinessState == other.stickinessState
           && list.size() == other.list.size()
-          && new HashSet<Subchannel>(list).containsAll(other.list));
+          && new HashSet<>(list).containsAll(other.list));
     }
   }
 

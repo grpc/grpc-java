@@ -30,7 +30,7 @@ ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
-GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH $GRADLE_FLAGS"
+GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"
@@ -46,7 +46,7 @@ export CXXFLAGS="-I/tmp/protobuf/include"
 
 if [[ -z "${SKIP_TESTS:-}" ]]; then
   # Ensure all *.proto changes include *.java generated code
-  ./gradlew assemble generateTestProto install $GRADLE_FLAGS
+  ./gradlew assemble generateTestProto publishToMavenLocal $GRADLE_FLAGS
 
   if [[ -z "${SKIP_CLEAN_CHECK:-}" && ! -z $(git status --porcelain) ]]; then
     git status
@@ -70,10 +70,10 @@ fi
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
-  ./gradlew grpc-compiler:build grpc-compiler:uploadArchives $GRADLE_FLAGS \
+  ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 else
-  ./gradlew uploadArchives $GRADLE_FLAGS \
+  ./gradlew publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 fi
 

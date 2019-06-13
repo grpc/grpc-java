@@ -81,7 +81,7 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Marshaller<T> marshaller(T defaultInstance) {
     // TODO(ejona): consider changing return type to PrototypeMarshaller (assuming ABI safe)
-    return new MessageMarshaller<T>(defaultInstance);
+    return new MessageMarshaller<>(defaultInstance);
   }
 
   /**
@@ -91,14 +91,14 @@ public final class ProtoLiteUtils {
    */
   public static <T extends MessageLite> Metadata.BinaryMarshaller<T> metadataMarshaller(
       T defaultInstance) {
-    return new MetadataMarshaller<T>(defaultInstance);
+    return new MetadataMarshaller<>(defaultInstance);
   }
 
   /** Copies the data from input stream to output stream. */
   static long copy(InputStream from, OutputStream to) throws IOException {
     // Copied from guava com.google.common.io.ByteStreams because its API is unstable (beta)
-    checkNotNull(from);
-    checkNotNull(to);
+    checkNotNull(from, "inputStream cannot be null!");
+    checkNotNull(to, "outputStream cannot be null!");
     byte[] buf = new byte[BUF_SIZE];
     long total = 0;
     while (true) {
@@ -117,7 +117,7 @@ public final class ProtoLiteUtils {
 
   private static final class MessageMarshaller<T extends MessageLite>
       implements PrototypeMarshaller<T> {
-    private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<Reference<byte[]>>();
+    private static final ThreadLocal<Reference<byte[]>> bufs = new ThreadLocal<>();
 
     private final Parser<T> parser;
     private final T defaultInstance;
@@ -162,7 +162,7 @@ public final class ProtoLiteUtils {
             @SuppressWarnings("unchecked")
             T message = (T) ((ProtoInputStream) stream).message();
             return message;
-          } catch (IllegalStateException ex) {
+          } catch (IllegalStateException ignored) {
             // Stream must have been read from, which is a strange state. Since the point of this
             // optimization is to be transparent, instead of throwing an error we'll continue,
             // even though it seems likely there's a bug.
@@ -179,7 +179,7 @@ public final class ProtoLiteUtils {
             byte[] buf;
             if ((ref = bufs.get()) == null || (buf = ref.get()) == null || buf.length < size) {
               buf = new byte[size];
-              bufs.set(new WeakReference<byte[]>(buf));
+              bufs.set(new WeakReference<>(buf));
             }
 
             int remaining = size;

@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
@@ -34,10 +35,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.notNull;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -95,7 +95,7 @@ import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
@@ -128,7 +128,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
   @Mock
   private ClientStreamListener streamListener;
 
-  private final Queue<InputStream> streamListenerMessageQueue = new LinkedList<InputStream>();
+  private final Queue<InputStream> streamListenerMessageQueue = new LinkedList<>();
 
   @Override
   protected void manualSetUp() throws Exception {
@@ -156,7 +156,7 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
             }
           })
       .when(streamListener)
-      .messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+      .messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
 
     lifecycleManager = new ClientTransportLifecycleManager(listener);
     // This mocks the keepalive manager only for there's in which we verify it. For other tests
@@ -379,7 +379,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     // Read a GOAWAY that indicates our stream was never processed by the server.
     channelRead(goAwayFrame(0, 8 /* Cancel */, Unpooled.copiedBuffer("this is a test", UTF_8)));
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), same(REFUSED), notNull(Metadata.class));
+    verify(streamListener).closed(captor.capture(), same(REFUSED),
+        ArgumentMatchers.<Metadata>notNull());
     assertEquals(Status.CANCELLED.getCode(), captor.getValue().getCode());
     assertEquals("HTTP/2 error code: CANCEL\nReceived Goaway\nthis is a test",
         captor.getValue().getDescription());
@@ -486,7 +487,8 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
 
     handler().channelInactive(ctx());
     ArgumentCaptor<Status> captor = ArgumentCaptor.forClass(Status.class);
-    verify(streamListener).closed(captor.capture(), same(PROCESSED), notNull(Metadata.class));
+    verify(streamListener).closed(captor.capture(), same(PROCESSED),
+        ArgumentMatchers.<Metadata>notNull());
     assertEquals(Status.UNAVAILABLE.getCode(), captor.getValue().getCode());
   }
 
@@ -542,14 +544,36 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
     ChannelFuture future = createStream();
     assertTrue(future.isSuccess());
 
+    TransportStateImpl newStreamTransportState = new TransportStateImpl(
+        handler(),
+        channel().eventLoop(),
+        DEFAULT_MAX_MESSAGE_SIZE,
+        transportTracer);
+
     // This should fail - out of stream IDs.
-    future = createStream();
+    future = enqueue(newCreateStreamCommand(grpcHeaders, newStreamTransportState));
     assertTrue(future.isDone());
     assertFalse(future.isSuccess());
     Status status = lifecycleManager.getShutdownStatus();
     assertNotNull(status);
     assertTrue("status does not reference 'exhausted': " + status,
         status.getDescription().contains("exhausted"));
+  }
+
+  @Test
+  public void nonExistentStream() throws Exception {
+    Status status = Status.INTERNAL.withDescription("zz");
+
+    lifecycleManager.notifyShutdown(status);
+    // Stream creation can race with the transport shutting down, with the create command already
+    // enqueued.
+    ChannelFuture future1 = createStream();
+    future1.await();
+    assertNotNull(future1.cause());
+    assertThat(Status.fromThrowable(future1.cause()).getCode()).isEqualTo(status.getCode());
+
+    ChannelFuture future2 = enqueue(new CancelClientStreamCommand(streamTransportState, status));
+    future2.sync();
   }
 
   @Test

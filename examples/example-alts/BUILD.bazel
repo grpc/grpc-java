@@ -26,7 +26,7 @@ java_library(
         ":helloworld_java_grpc",
         ":helloworld_java_proto",
         "@io_grpc_grpc_java//alts",
-        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
     ],

@@ -65,7 +65,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
 
   @Nonnull
   @GuardedBy("lock")
-  private Collection<PendingStream> pendingStreams = new LinkedHashSet<PendingStream>();
+  private Collection<PendingStream> pendingStreams = new LinkedHashSet<>();
 
   /**
    * When {@code shutdownStatus != null && !hasPendingStreams()}, then the transport is considered
@@ -134,21 +134,24 @@ final class DelayedClientTransport implements ManagedClientTransport {
   public final ClientStream newStream(
       MethodDescriptor<?, ?> method, Metadata headers, CallOptions callOptions) {
     try {
-      SubchannelPicker picker;
       PickSubchannelArgs args = new PickSubchannelArgsImpl(method, headers, callOptions);
+      SubchannelPicker picker = null;
       long pickerVersion = -1;
-      synchronized (lock) {
-        if (shutdownStatus == null) {
+      while (true) {
+        synchronized (lock) {
+          if (shutdownStatus != null) {
+            return new FailingClientStream(shutdownStatus);
+          }
           if (lastPicker == null) {
+            return createPendingStream(args);
+          }
+          // Check for second time through the loop, and whether anything changed
+          if (picker != null && pickerVersion == lastPickerVersion) {
             return createPendingStream(args);
           }
           picker = lastPicker;
           pickerVersion = lastPickerVersion;
-        } else {
-          return new FailingClientStream(shutdownStatus);
         }
-      }
-      while (true) {
         PickResult pickResult = picker.pickSubchannel(args);
         ClientTransport transport = GrpcUtil.getTransportFromPickResult(pickResult,
             callOptions.isWaitForReady());
@@ -158,16 +161,6 @@ final class DelayedClientTransport implements ManagedClientTransport {
         }
         // This picker's conclusion is "buffer".  If there hasn't been a newer picker set (possible
         // race with reprocess()), we will buffer it.  Otherwise, will try with the new picker.
-        synchronized (lock) {
-          if (shutdownStatus != null) {
-            return new FailingClientStream(shutdownStatus);
-          }
-          if (pickerVersion == lastPickerVersion) {
-            return createPendingStream(args);
-          }
-          picker = lastPicker;
-          pickerVersion = lastPickerVersion;
-        }
       }
     } finally {
       syncContext.drain();
@@ -240,7 +233,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       savedReportTransportTerminated = reportTransportTerminated;
       reportTransportTerminated = null;
       if (!pendingStreams.isEmpty()) {
-        pendingStreams = Collections.<PendingStream>emptyList();
+        pendingStreams = Collections.emptyList();
       }
     }
     if (savedReportTransportTerminated != null) {
@@ -322,7 +315,7 @@ final class DelayedClientTransport implements ManagedClientTransport {
       // Because delayed transport is long-lived, we take this opportunity to down-size the
       // hashmap.
       if (pendingStreams.isEmpty()) {
-        pendingStreams = new LinkedHashSet<PendingStream>();
+        pendingStreams = new LinkedHashSet<>();
       }
       if (!hasPendingStreams()) {
         // There may be a brief gap between delayed transport clearing in-use state, and first real

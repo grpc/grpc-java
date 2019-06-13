@@ -17,9 +17,8 @@
 package io.grpc.testing.integration;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static io.grpc.stub.ClientCalls.blockingServerStreamingCall;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
-import static io.opencensus.trace.unsafe.ContextUtils.CONTEXT_SPAN_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -28,8 +27,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.timeout;
 
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.ComputeEngineCredentials;
@@ -130,10 +127,9 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.DisableOnDebug;
+import org.junit.rules.TestRule;
 import org.junit.rules.Timeout;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mockito;
-import org.mockito.verification.VerificationMode;
 
 /**
  * Abstract base class for all GRPC transport tests.
@@ -143,7 +139,7 @@ import org.mockito.verification.VerificationMode;
 public abstract class AbstractInteropTest {
   private static Logger logger = Logger.getLogger(AbstractInteropTest.class.getName());
 
-  @Rule public final Timeout globalTimeout = Timeout.seconds(30);
+  @Rule public final TestRule globalTimeout;
 
   /** Must be at least {@link #unaryPayloadLength()}, plus some to account for encoding overhead. */
   public static final int MAX_MESSAGE_SIZE = 16 * 1024 * 1024;
@@ -185,6 +181,21 @@ public abstract class AbstractInteropTest {
         return super.filterContext(context);
       }
     }
+  }
+
+  /**
+   * Constructor for tests.
+   */
+  public AbstractInteropTest() {
+    TestRule timeout = Timeout.seconds(30);
+    try {
+      timeout = new DisableOnDebug(timeout);
+    } catch (Throwable t) {
+      // This can happen on Android, which lacks some standard Java class.
+      // Seen at https://github.com/grpc/grpc-java/pull/5832#issuecomment-499698086
+      logger.log(Level.FINE, "Debugging not disabled.", t);
+    }
+    globalTimeout = timeout;
   }
 
   private final ServerStreamTracer.Factory serverStreamTracerFactory =
@@ -251,8 +262,8 @@ public abstract class AbstractInteropTest {
   }
 
   @VisibleForTesting
-  final int getPort() {
-    return server.getPort();
+  final SocketAddress getListenAddress() {
+    return server.getListenSockets().iterator().next();
   }
 
   protected ManagedChannel channel;
@@ -265,7 +276,8 @@ public abstract class AbstractInteropTest {
   private final ClientStreamTracer.Factory clientStreamTracerFactory =
       new ClientStreamTracer.Factory() {
         @Override
-        public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+        public ClientStreamTracer newClientStreamTracer(
+            ClientStreamTracer.StreamInfo info, Metadata headers) {
           TestClientStreamTracer tracer = new TestClientStreamTracer();
           clientStreamTracers.add(tracer);
           return tracer;
@@ -500,6 +512,26 @@ public abstract class AbstractInteropTest {
         Status.Code.OK,
         Collections.singleton(responseShouldBeUncompressed),
         Collections.singleton(goldenResponse));
+  }
+
+  /**
+   * Assuming "pick_first" policy is used, tests that all requests are sent to the same server.
+   */
+  public void pickFirstUnary() throws Exception {
+    SimpleRequest request = SimpleRequest.newBuilder()
+        .setResponseSize(1)
+        .setFillServerId(true)
+        .setPayload(Payload.newBuilder().setBody(ByteString.copyFrom(new byte[1])))
+        .build();
+
+    SimpleResponse firstResponse = blockingStub.unaryCall(request);
+    // Increase the chance of all servers are connected, in case the channel should be doing
+    // round_robin instead.
+    Thread.sleep(5000);
+    for (int i = 0; i < 100; i++) {
+      SimpleResponse response = blockingStub.unaryCall(request);
+      assertThat(response.getServerId()).isEqualTo(firstResponse.getServerId());
+    }
   }
 
   @Test
@@ -1217,7 +1249,7 @@ public abstract class AbstractInteropTest {
       fail();
     } catch (StatusRuntimeException ex) {
       Status s = ex.getStatus();
-      assertThat(s.getCode()).named(s.toString()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
+      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.RESOURCE_EXHAUSTED);
       assertThat(Throwables.getStackTraceAsString(ex)).contains("exceeds maximum");
     }
   }
@@ -1273,7 +1305,7 @@ public abstract class AbstractInteropTest {
       fail();
     } catch (StatusRuntimeException ex) {
       Status s = ex.getStatus();
-      assertThat(s.getCode()).named(s.toString()).isEqualTo(Status.Code.CANCELLED);
+      assertWithMessage(s.toString()).that(s.getCode()).isEqualTo(Status.Code.CANCELLED);
       assertThat(Throwables.getStackTraceAsString(ex)).contains("message too large");
     }
   }
@@ -1438,19 +1470,21 @@ public abstract class AbstractInteropTest {
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());
     Context ctx =
-        Context.ROOT.withValues(
-            TAG_CONTEXT_KEY,
-            tagger.emptyBuilder().put(
-                StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build(),
-            ContextUtils.CONTEXT_SPAN_KEY,
-            clientParentSpan);
+        io.opencensus.tags.unsafe.ContextUtils.withValue(
+            Context.ROOT,
+            tagger
+                .emptyBuilder()
+                .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                .build());
+    ctx = ContextUtils.withValue(ctx, clientParentSpan);
     Context origCtx = ctx.attach();
     try {
       blockingStub.unaryCall(SimpleRequest.getDefaultInstance());
       Context serverCtx = contextCapture.get();
       assertNotNull(serverCtx);
 
-      FakeTagContext statsCtx = (FakeTagContext) TAG_CONTEXT_KEY.get(serverCtx);
+      FakeTagContext statsCtx =
+          (FakeTagContext) io.opencensus.tags.unsafe.ContextUtils.getValue(serverCtx);
       assertNotNull(statsCtx);
       Map<TagKey, TagValue> tags = statsCtx.getTags();
       boolean tagFound = false;
@@ -1462,7 +1496,7 @@ public abstract class AbstractInteropTest {
       }
       assertTrue("tag not found", tagFound);
 
-      Span span = CONTEXT_SPAN_KEY.get(serverCtx);
+      Span span = ContextUtils.getValue(serverCtx);
       assertNotNull(span);
       SpanContext spanContext = span.getContext();
       assertEquals(clientParentSpan.getContext().getTraceId(), spanContext.getTraceId());
@@ -1497,19 +1531,18 @@ public abstract class AbstractInteropTest {
     assertStatsTrace("grpc.testing.TestService/UnaryCall", Status.Code.UNKNOWN);
 
     // Test FullDuplexCall
-    @SuppressWarnings("unchecked")
-    StreamObserver<StreamingOutputCallResponse> responseObserver =
-        mock(StreamObserver.class);
+    StreamRecorder<StreamingOutputCallResponse> responseObserver = StreamRecorder.create();
     StreamObserver<StreamingOutputCallRequest> requestObserver
         = asyncStub.fullDuplexCall(responseObserver);
     requestObserver.onNext(streamingRequest);
     requestObserver.onCompleted();
 
-    ArgumentCaptor<Throwable> captor = ArgumentCaptor.forClass(Throwable.class);
-    verify(responseObserver, timeout(operationTimeoutMillis())).onError(captor.capture());
-    assertEquals(Status.UNKNOWN.getCode(), Status.fromThrowable(captor.getValue()).getCode());
-    assertEquals(errorMessage, Status.fromThrowable(captor.getValue()).getDescription());
-    verifyNoMoreInteractions(responseObserver);
+    assertThat(responseObserver.awaitCompletion(operationTimeoutMillis(), TimeUnit.MILLISECONDS))
+        .isTrue();
+    assertThat(responseObserver.getError()).isNotNull();
+    Status status = Status.fromThrowable(responseObserver.getError());
+    assertEquals(Status.UNKNOWN.getCode(), status.getCode());
+    assertEquals(errorMessage, status.getDescription());
     assertStatsTrace("grpc.testing.TestService/FullDuplexCall", Status.Code.UNKNOWN);
   }
 
@@ -1666,6 +1699,26 @@ public abstract class AbstractInteropTest {
     assertResponse(goldenResponse, response);
   }
 
+  /** Sends an unary rpc with ComputeEngineChannelBuilder. */
+  public void computeEngineChannelCredentials(
+      String defaultServiceAccount,
+      TestServiceGrpc.TestServiceBlockingStub computeEngineStub) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillUsername(true)
+        .setResponseSize(314159)
+        .setPayload(Payload.newBuilder()
+        .setBody(ByteString.copyFrom(new byte[271828])))
+        .build();
+    final SimpleResponse response = computeEngineStub.unaryCall(request);
+    assertEquals(defaultServiceAccount, response.getUsername());
+    final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setUsername(defaultServiceAccount)
+        .setPayload(Payload.newBuilder()
+        .setBody(ByteString.copyFrom(new byte[314159])))
+        .build();
+    assertResponse(goldenResponse, response);
+  }
+
   /** Test JWT-based auth. */
   public void jwtTokenCreds(InputStream serviceAccountJson) throws Exception {
     final SimpleRequest request = SimpleRequest.newBuilder()
@@ -1717,6 +1770,27 @@ public abstract class AbstractInteropTest {
     // for that purpose.
     // So, this test is identical to oauth2_auth_token test.
     oauth2AuthToken(jsonKey, credentialsStream, oauthScope);
+  }
+
+  /** Sends an unary rpc with "google default credentials". */
+  public void googleDefaultCredentials(
+      String defaultServiceAccount,
+      TestServiceGrpc.TestServiceBlockingStub googleDefaultStub) throws Exception {
+    final SimpleRequest request = SimpleRequest.newBuilder()
+        .setFillUsername(true)
+        .setResponseSize(314159)
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[271828])))
+        .build();
+    final SimpleResponse response = googleDefaultStub.unaryCall(request);
+    assertEquals(defaultServiceAccount, response.getUsername());
+
+    final SimpleResponse goldenResponse = SimpleResponse.newBuilder()
+        .setUsername(defaultServiceAccount)
+        .setPayload(Payload.newBuilder()
+            .setBody(ByteString.copyFrom(new byte[314159])))
+        .build();
+    assertResponse(goldenResponse, response);
   }
 
   protected static void assertSuccess(StreamRecorder<?> recorder) {
@@ -1783,48 +1857,6 @@ public abstract class AbstractInteropTest {
     Assume.assumeTrue(
         actuallyFreeMemory + " is not sufficient to run this test",
         actuallyFreeMemory >= 64 * 1024 * 1024);
-  }
-
-  /**
-   * Wrapper around {@link Mockito#verify}, to keep log spam down on failure.
-   */
-  private static <T> T verify(T mock, VerificationMode mode) {
-    try {
-      return Mockito.verify(mock, mode);
-    } catch (final AssertionError e) {
-      String msg = e.getMessage();
-      if (msg.length() >= 256) {
-        // AssertionError(String, Throwable) only present in Android API 19+
-        throw new AssertionError(msg.substring(0, 256)) {
-          @Override
-          public synchronized Throwable getCause() {
-            return e;
-          }
-        };
-      }
-      throw e;
-    }
-  }
-
-  /**
-   * Wrapper around {@link Mockito#verify}, to keep log spam down on failure.
-   */
-  private static void verifyNoMoreInteractions(Object... mocks) {
-    try {
-      Mockito.verifyNoMoreInteractions(mocks);
-    } catch (final AssertionError e) {
-      String msg = e.getMessage();
-      if (msg.length() >= 256) {
-        // AssertionError(String, Throwable) only present in Android API 19+
-        throw new AssertionError(msg.substring(0, 256)) {
-          @Override
-          public synchronized Throwable getCause() {
-            return e;
-          }
-        };
-      }
-      throw e;
-    }
   }
 
   /**

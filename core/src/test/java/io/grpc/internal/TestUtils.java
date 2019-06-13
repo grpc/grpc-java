@@ -16,12 +16,13 @@
 
 package io.grpc.internal;
 
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.InternalLogId;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -69,7 +70,7 @@ final class TestUtils {
   static BlockingQueue<MockClientTransportInfo> captureTransports(
       ClientTransportFactory mockTransportFactory, @Nullable final Runnable startRunnable) {
     final BlockingQueue<MockClientTransportInfo> captor =
-        new LinkedBlockingQueue<MockClientTransportInfo>();
+        new LinkedBlockingQueue<>();
 
     doAnswer(new Answer<ConnectionClientTransport>() {
       @Override
@@ -94,7 +95,8 @@ final class TestUtils {
     }).when(mockTransportFactory)
         .newClientTransport(
             any(SocketAddress.class),
-            any(ClientTransportFactory.ClientTransportOptions.class));
+            any(ClientTransportFactory.ClientTransportOptions.class),
+            any(ChannelLogger.class));
 
     return captor;
   }

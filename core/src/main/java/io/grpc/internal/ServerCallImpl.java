@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.MESSAGE_ACCEPT_ENCODING_KEY;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.Codec;
@@ -36,6 +37,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
+import io.grpc.perfmark.PerfMark;
+import io.grpc.perfmark.PerfTag;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -51,6 +54,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
+  private final PerfTag tag;
   private final Context.CancellableContext context;
   private final byte[] messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
@@ -70,6 +74,8 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       CallTracer serverCallTracer) {
     this.stream = stream;
     this.method = method;
+    // TODO(carl-mastrangelo): consider moving this to the ServerImpl to record startCall.
+    this.tag = PerfMark.createTag(method.getFullMethodName());
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
@@ -85,6 +91,15 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void sendHeaders(Metadata headers) {
+    PerfMark.taskStart(tag, "ServerCall.sendHeaders");
+    try {
+      sendHeadersInternal(headers);
+    } finally {
+      PerfMark.taskEnd(tag, "ServerCall.sendHeaders");
+    }
+  }
+
+  private void sendHeadersInternal(Metadata headers) {
     checkState(!sendHeadersCalled, "sendHeaders has already been called");
     checkState(!closeCalled, "call is closed");
 
@@ -125,6 +140,15 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void sendMessage(RespT message) {
+    PerfMark.taskStart(tag, "ServerCall.sendMessage");
+    try {
+      sendMessageInternal(message);
+    } finally {
+      PerfMark.taskEnd(tag, "ServerCall.sendMessage");
+    }
+  }
+
+  private void sendMessageInternal(RespT message) {
     checkState(sendHeadersCalled, "sendHeaders has not been called");
     checkState(!closeCalled, "call is closed");
 
@@ -169,6 +193,15 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void close(Status status, Metadata trailers) {
+    PerfMark.taskStart(tag, "ServerCall.close");
+    try {
+      closeInternal(status, trailers);
+    } finally {
+      PerfMark.taskEnd(tag, "ServerCall.close");
+    }
+  }
+
+  private void closeInternal(Status status, Metadata trailers) {
     checkState(!closeCalled, "call already closed");
     try {
       closeCalled = true;
@@ -190,7 +223,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   }
 
   ServerStreamListener newServerStreamListener(ServerCall.Listener<ReqT> listener) {
-    return new ServerStreamListenerImpl<ReqT>(this, listener, context);
+    return new ServerStreamListenerImpl<>(this, listener, context);
   }
 
   @Override
@@ -256,6 +289,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
+      PerfMark.taskStart(call.tag, "ServerCall.messagesAvailable");
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
@@ -269,8 +303,10 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         }
       } catch (Throwable t) {
         GrpcUtil.closeQuietly(producer);
-        MoreThrowables.throwIfUnchecked(t);
+        Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);
+      } finally {
+        PerfMark.taskEnd(call.tag, "ServerCall.messagesAvailable");
       }
     }
 
@@ -280,22 +316,34 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         return;
       }
 
-      listener.onHalfClose();
+      PerfMark.taskStart(call.tag, "ServerCall.halfClosed");
+
+      try {
+        listener.onHalfClose();
+      } finally {
+        PerfMark.taskEnd(call.tag, "ServerCall.halfClosed");
+      }
     }
 
     @Override
     public void closed(Status status) {
+      PerfMark.taskStart(call.tag, "ServerCall.closed");
       try {
-        if (status.isOk()) {
-          listener.onComplete();
-        } else {
-          call.cancelled = true;
-          listener.onCancel();
+        try {
+          if (status.isOk()) {
+            listener.onComplete();
+          } else {
+            call.cancelled = true;
+            listener.onCancel();
+          }
+        } finally {
+          // Cancel context after delivering RPC closure notification to allow the application to
+          // clean up and update any state based on whether onComplete or onCancel was called.
+          context.cancel(null);
+
         }
       } finally {
-        // Cancel context after delivering RPC closure notification to allow the application to
-        // clean up and update any state based on whether onComplete or onCancel was called.
-        context.cancel(null);
+        PerfMark.taskEnd(call.tag, "ServerCall.closed");
       }
     }
 
@@ -304,7 +352,12 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
       if (call.cancelled) {
         return;
       }
-      listener.onReady();
+      PerfMark.taskStart(call.tag, "ServerCall.closed");
+      try {
+        listener.onReady();
+      } finally {
+        PerfMark.taskEnd(call.tag, "ServerCall.closed");
+      }
     }
   }
 }

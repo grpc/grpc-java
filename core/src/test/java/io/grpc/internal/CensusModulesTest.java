@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.opencensus.tags.unsafe.ContextUtils.TAG_CONTEXT_KEY;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,11 +26,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isNull;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -91,10 +89,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Test for {@link CensusStatsModule} and {@link CensusTracingModule}.
@@ -105,6 +105,8 @@ public class CensusModulesTest {
       CallOptions.Key.createWithDefault("option1", "default");
   private static final CallOptions CALL_OPTIONS =
       CallOptions.DEFAULT.withOption(CUSTOM_OPTION, "customvalue");
+  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   private static class StringInputStream extends InputStream {
     final String string;
@@ -133,6 +135,9 @@ public class CensusModulesTest {
           return ((StringInputStream) stream).string;
         }
       };
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final MethodDescriptor<String, String> method =
       MethodDescriptor.<String, String>newBuilder()
@@ -180,12 +185,11 @@ public class CensusModulesTest {
   @Before
   @SuppressWarnings("unchecked")
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     when(spyClientSpanBuilder.startSpan()).thenReturn(spyClientSpan);
-    when(tracer.spanBuilderWithExplicitParent(anyString(), any(Span.class)))
+    when(tracer.spanBuilderWithExplicitParent(anyString(), ArgumentMatchers.<Span>any()))
         .thenReturn(spyClientSpanBuilder);
     when(spyServerSpanBuilder.startSpan()).thenReturn(spyServerSpan);
-    when(tracer.spanBuilderWithRemoteParent(anyString(), any(SpanContext.class)))
+    when(tracer.spanBuilderWithRemoteParent(anyString(), ArgumentMatchers.<SpanContext>any()))
         .thenReturn(spyServerSpanBuilder);
     when(mockTracingPropagationHandler.toByteArray(any(SpanContext.class)))
         .thenReturn(binarySpanContext);
@@ -231,7 +235,7 @@ public class CensusModulesTest {
                 }
               }).build());
 
-    final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<CallOptions>();
+    final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<>();
     ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
         @Override
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
@@ -247,12 +251,13 @@ public class CensusModulesTest {
     ClientCall<String, String> call;
     if (nonDefaultContext) {
       Context ctx =
-          Context.ROOT.withValues(
-              TAG_CONTEXT_KEY,
-              tagger.emptyBuilder().put(
-                  StatsTestUtils.EXTRA_TAG, TagValue.create("extra value")).build(),
-              ContextUtils.CONTEXT_SPAN_KEY,
-              fakeClientParentSpan);
+          io.opencensus.tags.unsafe.ContextUtils.withValue(
+              Context.ROOT,
+              tagger
+                  .emptyBuilder()
+                  .putLocal(StatsTestUtils.EXTRA_TAG, TagValue.create("extra value"))
+                  .build());
+      ctx = ContextUtils.withValue(ctx, fakeClientParentSpan);
       Context origCtx = ctx.attach();
       try {
         call = interceptedChannel.newCall(method, CALL_OPTIONS);
@@ -260,8 +265,10 @@ public class CensusModulesTest {
         ctx.detach(origCtx);
       }
     } else {
-      assertEquals(TAG_CONTEXT_KEY.get(Context.ROOT), TAG_CONTEXT_KEY.get());
-      assertNull(ContextUtils.CONTEXT_SPAN_KEY.get());
+      assertEquals(
+          io.opencensus.tags.unsafe.ContextUtils.getValue(Context.ROOT),
+          io.opencensus.tags.unsafe.ContextUtils.getValue(Context.current()));
+      assertEquals(ContextUtils.getValue(Context.current()), BlankSpan.INSTANCE);
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
 
@@ -298,7 +305,7 @@ public class CensusModulesTest {
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     } else {
       verify(tracer).spanBuilderWithExplicitParent(
-          eq("Sent.package1.service2.method3"), isNull(Span.class));
+          eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNotNull());
       verify(spyClientSpanBuilder).setRecordEvents(eq(true));
     }
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
@@ -370,7 +377,7 @@ public class CensusModulesTest {
         localCensusStats.newClientCallTracer(
             tagger.empty(), method.getFullMethodName());
     Metadata headers = new Metadata();
-    ClientStreamTracer tracer = callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    ClientStreamTracer tracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
 
     if (recordStarts) {
       StatsTestUtils.MetricsRecord record = statsRecorder.pollRecord();
@@ -494,10 +501,9 @@ public class CensusModulesTest {
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(null, method);
     Metadata headers = new Metadata();
-    ClientStreamTracer clientStreamTracer =
-        callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    ClientStreamTracer clientStreamTracer = callTracer.newClientStreamTracer(STREAM_INFO, headers);
     verify(tracer).spanBuilderWithExplicitParent(
-        eq("Sent.package1.service2.method3"), isNull(Span.class));
+        eq("Sent.package1.service2.method3"), ArgumentMatchers.<Span>isNull());
     verify(spyClientSpan, never()).end(any(EndSpanOptions.class));
 
     clientStreamTracer.outboundMessage(0);
@@ -642,7 +648,7 @@ public class CensusModulesTest {
     // EXTRA_TAG is propagated by the FakeStatsContextFactory. Note that not all tags are
     // propagated.  The StatsContextFactory decides which tags are to propagated.  gRPC facilitates
     // the propagation by putting them in the headers.
-    TagContext clientCtx = tagger.emptyBuilder().put(
+    TagContext clientCtx = tagger.emptyBuilder().putLocal(
         StatsTestUtils.EXTRA_TAG, TagValue.create("extra-tag-value-897")).build();
     CensusStatsModule census =
         new CensusStatsModule(
@@ -655,7 +661,7 @@ public class CensusModulesTest {
     CensusStatsModule.ClientCallTracer callTracer =
         census.newClientCallTracer(clientCtx, method.getFullMethodName());
     // This propagates clientCtx to headers if propagates==true
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
     if (recordStats) {
       // Client upstart record
       StatsTestUtils.MetricsRecord clientRecord = statsRecorder.pollRecord();
@@ -683,11 +689,11 @@ public class CensusModulesTest {
     // It also put clientCtx in the Context seen by the call handler
     assertEquals(
         tagger.toBuilder(clientCtx)
-            .put(
+            .putLocal(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
-        TAG_CONTEXT_KEY.get(serverContext));
+        io.opencensus.tags.unsafe.ContextUtils.getValue(serverContext));
 
     // Verifies that the server tracer records the status with the propagated tag
     serverTracer.streamClosed(Status.OK);
@@ -744,9 +750,9 @@ public class CensusModulesTest {
     CensusStatsModule.ClientCallTracer callTracer =
         censusStats.newClientCallTracer(tagger.empty(), method.getFullMethodName());
     Metadata headers = new Metadata();
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
     assertFalse(headers.containsKey(censusStats.statsHeader));
-    // Clear recorded stats to satisfy the assertions in wrapUp() 
+    // Clear recorded stats to satisfy the assertions in wrapUp()
     statsRecorder.rolloverRecords();
   }
 
@@ -775,7 +781,7 @@ public class CensusModulesTest {
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
 
     verify(mockTracingPropagationHandler).toByteArray(same(fakeClientSpanContext));
     verifyNoMoreInteractions(mockTracingPropagationHandler);
@@ -794,7 +800,7 @@ public class CensusModulesTest {
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverTracer.filterContext(Context.ROOT);
-    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+    assertSame(spyServerSpan, ContextUtils.getValue(filteredContext));
   }
 
   @Test
@@ -803,7 +809,7 @@ public class CensusModulesTest {
         censusTracing.newClientCallTracer(fakeClientParentSpan, method);
     Metadata headers = new Metadata();
 
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
 
     assertThat(headers.keys()).isNotEmpty();
   }
@@ -817,7 +823,7 @@ public class CensusModulesTest {
 
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
 
     assertThat(headers.keys()).isEmpty();
   }
@@ -830,11 +836,11 @@ public class CensusModulesTest {
     headers.put(
         Metadata.Key.of("never-used-key-bin", Metadata.BINARY_BYTE_MARSHALLER),
         new byte[] {});
-    Set<String> originalHeaderKeys = new HashSet<String>(headers.keys());
+    Set<String> originalHeaderKeys = new HashSet<>(headers.keys());
 
     CensusTracingModule.ClientCallTracer callTracer =
         censusTracing.newClientCallTracer(BlankSpan.INSTANCE, method);
-    callTracer.newClientStreamTracer(CallOptions.DEFAULT, headers);
+    callTracer.newClientStreamTracer(STREAM_INFO, headers);
 
     assertThat(headers.keys()).containsExactlyElementsIn(originalHeaderKeys);
   }
@@ -861,7 +867,7 @@ public class CensusModulesTest {
     censusTracing.getServerTracerFactory().newServerStreamTracer(
         method.getFullMethodName(), headers);
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), isNull(SpanContext.class));
+        eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
   }
 
@@ -915,11 +921,11 @@ public class CensusModulesTest {
     }
 
     Context filteredContext = tracer.filterContext(Context.ROOT);
-    TagContext statsCtx = TAG_CONTEXT_KEY.get(filteredContext);
+    TagContext statsCtx = io.opencensus.tags.unsafe.ContextUtils.getValue(filteredContext);
     assertEquals(
         tagger
             .emptyBuilder()
-            .put(
+            .putLocal(
                 DeprecatedCensusConstants.RPC_METHOD,
                 TagValue.create(method.getFullMethodName()))
             .build(),
@@ -1013,14 +1019,14 @@ public class CensusModulesTest {
         tracerFactory.newServerStreamTracer(method.getFullMethodName(), new Metadata());
     verifyZeroInteractions(mockTracingPropagationHandler);
     verify(tracer).spanBuilderWithRemoteParent(
-        eq("Recv.package1.service2.method3"), isNull(SpanContext.class));
+        eq("Recv.package1.service2.method3"), ArgumentMatchers.<SpanContext>isNull());
     verify(spyServerSpanBuilder).setRecordEvents(eq(true));
 
     Context filteredContext = serverStreamTracer.filterContext(Context.ROOT);
-    assertSame(spyServerSpan, ContextUtils.CONTEXT_SPAN_KEY.get(filteredContext));
+    assertSame(spyServerSpan, ContextUtils.getValue(filteredContext));
 
     serverStreamTracer.serverCallStarted(
-        new ServerCallInfoImpl<String, String>(method, Attributes.EMPTY, null));
+        new ServerCallInfoImpl<>(method, Attributes.EMPTY, null));
 
     verify(spyServerSpan, never()).end(any(EndSpanOptions.class));
 
@@ -1063,7 +1069,7 @@ public class CensusModulesTest {
     serverStreamTracer.filterContext(Context.ROOT);
 
     serverStreamTracer.serverCallStarted(
-        new ServerCallInfoImpl<String, String>(sampledMethod, Attributes.EMPTY, null));
+        new ServerCallInfoImpl<>(sampledMethod, Attributes.EMPTY, null));
 
     serverStreamTracer.streamClosed(Status.CANCELLED);
 

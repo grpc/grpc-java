@@ -17,8 +17,8 @@
 package io.grpc.internal;
 
 import static org.junit.Assert.assertSame;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,7 +86,7 @@ public final class ForwardingManagedChannelTest {
 
   @Test
   public void newCall() {
-    NoopClientCall<Void, Void> clientCall = new NoopClientCall<Void, Void>();
+    NoopClientCall<Void, Void> clientCall = new NoopClientCall<>();
     CallOptions callOptions = CallOptions.DEFAULT.withoutWaitForReady();
     MethodDescriptor<Void, Void> method = TestMethodDescriptors.voidMethod();
     when(mock.newCall(same(method), same(callOptions))).thenReturn(clientCall);

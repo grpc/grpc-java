@@ -23,19 +23,22 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import io.grpc.Attributes;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
+import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Factory;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -48,14 +51,15 @@ import io.grpc.health.v1.HealthGrpc;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
-import io.grpc.internal.TimeProvider;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.util.ForwardingSubchannel;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -67,46 +71,40 @@ import javax.annotation.Nullable;
  * SynchronizationContext, or it will throw.
  */
 final class HealthCheckingLoadBalancerFactory extends Factory {
-  private static final Attributes.Key<HealthCheckState> KEY_HEALTH_CHECK_STATE =
-      Attributes.Key.create("io.grpc.services.HealthCheckingLoadBalancerFactory.healthCheckState");
+  private static final Logger logger =
+      Logger.getLogger(HealthCheckingLoadBalancerFactory.class.getName());
 
   private final Factory delegateFactory;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final TimeProvider time;
+  private final Supplier<Stopwatch> stopwatchSupplier;
 
   public HealthCheckingLoadBalancerFactory(
-      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider, TimeProvider time) {
+      Factory delegateFactory, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.delegateFactory = checkNotNull(delegateFactory, "delegateFactory");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.time = checkNotNull(time, "time");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
   }
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     HelperImpl wrappedHelper = new HelperImpl(helper);
     LoadBalancer delegateBalancer = delegateFactory.newLoadBalancer(wrappedHelper);
-    wrappedHelper.init(delegateBalancer);
     return new HealthCheckingLoadBalancer(wrappedHelper, delegateBalancer);
   }
 
   private final class HelperImpl extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
     private final SynchronizationContext syncContext;
-    
-    private LoadBalancer delegateBalancer;
+
     @Nullable String healthCheckedService;
     private boolean balancerShutdown;
 
-    final HashSet<HealthCheckState> hcStates = new HashSet<HealthCheckState>();
+    final HashSet<HealthCheckState> hcStates = new HashSet<>();
 
     HelperImpl(Helper delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
       this.syncContext = checkNotNull(delegate.getSynchronizationContext(), "syncContext");
-    }
-
-    void init(LoadBalancer delegateBalancer) {
-      checkState(this.delegateBalancer == null, "init() already called");
-      this.delegateBalancer = checkNotNull(delegateBalancer, "delegateBalancer");
     }
 
     @Override
@@ -115,16 +113,15 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
-    public Subchannel createSubchannel(List<EquivalentAddressGroup> addrs, Attributes attrs) {
+    public Subchannel createSubchannel(CreateSubchannelArgs args) {
       // HealthCheckState is not thread-safe, we are requiring the original LoadBalancer calls
       // createSubchannel() from the SynchronizationContext.
       syncContext.throwIfNotInThisSynchronizationContext();
+      Subchannel originalSubchannel = super.createSubchannel(args);
       HealthCheckState hcState = new HealthCheckState(
-          this, delegateBalancer, syncContext, delegate.getScheduledExecutorService());
+          this, originalSubchannel, syncContext, delegate.getScheduledExecutorService());
       hcStates.add(hcState);
-      Subchannel subchannel = super.createSubchannel(
-          addrs, attrs.toBuilder().set(KEY_HEALTH_CHECK_STATE, hcState).build());
-      hcState.init(subchannel);
+      Subchannel subchannel = new SubchannelImpl(originalSubchannel, this, hcState);
       if (healthCheckedService != null) {
         hcState.setServiceName(healthCheckedService);
       }
@@ -141,6 +138,37 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
+  }
+
+  @VisibleForTesting
+  static final class SubchannelImpl extends ForwardingSubchannel {
+    final Subchannel delegate;
+    final HelperImpl helperImpl;
+    final HealthCheckState hcState;
+
+    SubchannelImpl(Subchannel delegate, HelperImpl helperImpl, HealthCheckState hcState) {
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.helperImpl = checkNotNull(helperImpl, "helperImpl");
+      this.hcState = checkNotNull(hcState, "hcState");
+    }
+
+    @Override
+    protected Subchannel delegate() {
+      return delegate;
+    }
+
+    @Override
+    public void start(final SubchannelStateListener listener) {
+      hcState.init(listener);
+      delegate().start(hcState);
+    }
+
+    @Override
+    public void shutdown() {
+      helperImpl.getSynchronizationContext().throwIfNotInThisSynchronizationContext();
+      delegate().shutdown();
+      helperImpl.hcStates.remove(hcState);
     }
   }
 
@@ -163,25 +191,12 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     }
 
     @Override
-    public void handleResolvedAddressGroups(
-        List<EquivalentAddressGroup> servers, Attributes attributes) {
-      Map<String, Object> serviceConfig =
-          attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+      Map<String, ?> serviceConfig =
+          resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
       helper.setHealthCheckedService(serviceName);
-      super.handleResolvedAddressGroups(servers, attributes);
-    }
-
-    @Override
-    public void handleSubchannelState(
-        Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-      HealthCheckState hcState =
-          checkNotNull(subchannel.getAttributes().get(KEY_HEALTH_CHECK_STATE), "hcState");
-      hcState.updateRawState(stateInfo);
-
-      if (Objects.equal(stateInfo.getState(), SHUTDOWN)) {
-        helper.hcStates.remove(hcState);
-      }
+      super.handleResolvedAddresses(resolvedAddresses);
     }
 
     @Override
@@ -189,10 +204,10 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       super.shutdown();
       helper.balancerShutdown = true;
       for (HealthCheckState hcState : helper.hcStates) {
-        // ManagedChannel will stop calling handleSubchannelState() after shutdown() is called,
+        // ManagedChannel will stop calling onSubchannelState() after shutdown() is called,
         // which is required by LoadBalancer API semantics. We need to deliver the final SHUTDOWN
         // signal to health checkers so that they can cancel the streams.
-        hcState.updateRawState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+        hcState.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
       }
       helper.hcStates.clear();
     }
@@ -205,7 +220,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
   
   // All methods are run from syncContext
-  private final class HealthCheckState {
+  private final class HealthCheckState implements SubchannelStateListener {
     private final Runnable retryTask = new Runnable() {
         @Override
         public void run() {
@@ -213,13 +228,12 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
         }
       };
 
-    private final LoadBalancer delegate;
     private final SynchronizationContext syncContext;
     private final ScheduledExecutorService timerService;
     private final HelperImpl helperImpl;
-
-    private Subchannel subchannel;
-    private ChannelLogger subchannelLogger;
+    private final Subchannel subchannel;
+    private final ChannelLogger subchannelLogger;
+    private SubchannelStateListener stateListener;
 
     // Set when RPC started. Cleared when the RPC has closed or abandoned.
     @Nullable
@@ -241,18 +255,18 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     HealthCheckState(
         HelperImpl helperImpl,
-        LoadBalancer delegate, SynchronizationContext syncContext,
+        Subchannel subchannel, SynchronizationContext syncContext,
         ScheduledExecutorService timerService) {
       this.helperImpl = checkNotNull(helperImpl, "helperImpl");
-      this.delegate = checkNotNull(delegate, "delegate");
+      this.subchannel = checkNotNull(subchannel, "subchannel");
+      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
       this.syncContext = checkNotNull(syncContext, "syncContext");
       this.timerService = checkNotNull(timerService, "timerService");
     }
 
-    void init(Subchannel subchannel) {
-      checkState(this.subchannel == null, "init() already called");
-      this.subchannel = checkNotNull(subchannel, "subchannel");
-      this.subchannelLogger = checkNotNull(subchannel.getChannelLogger(), "subchannelLogger");
+    void init(SubchannelStateListener listener) {
+      checkState(this.stateListener == null, "init() already called");
+      this.stateListener = checkNotNull(listener, "listener");
     }
 
     void setServiceName(@Nullable String newServiceName) {
@@ -269,7 +283,8 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       adjustHealthCheck();
     }
 
-    void updateRawState(ConnectivityStateInfo rawState) {
+    @Override
+    public void onSubchannelState(ConnectivityStateInfo rawState) {
       if (Objects.equal(this.rawState.getState(), READY)
           && !Objects.equal(rawState.getState(), READY)) {
         // A connection was lost.  We will reset disabled flag because health check
@@ -334,7 +349,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       checkState(subchannel != null, "init() not called");
       if (!helperImpl.balancerShutdown && !Objects.equal(concludedState, newState)) {
         concludedState = newState;
-        delegate.handleSubchannelState(subchannel, concludedState);
+        stateListener.onSubchannelState(concludedState);
       }
     }
 
@@ -353,11 +368,11 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private class HcStream extends ClientCall.Listener<HealthCheckResponse> {
       private final ClientCall<HealthCheckRequest, HealthCheckResponse> call;
       private final String callServiceName;
-      private final long callCreationNanos;
+      private final Stopwatch stopwatch;
       private boolean callHasResponded;
 
       HcStream() {
-        callCreationNanos = time.currentTimeNanos();
+        stopwatch = stopwatchSupplier.get().start();
         callServiceName = serviceName;
         call = subchannel.asChannel().newCall(HealthGrpc.getWatchMethod(), CallOptions.DEFAULT);
       }
@@ -421,6 +436,9 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       void handleStreamClosed(Status status) {
         if (Objects.equal(status.getCode(), Code.UNIMPLEMENTED)) {
           disabled = true;
+          logger.log(
+              Level.SEVERE, "Health-check with {0} is disabled. Server returned: {1}",
+              new Object[] {subchannel.getAllAddresses(), status});
           subchannelLogger.log(ChannelLogLevel.ERROR, "Health-check disabled: {0}", status);
           subchannelLogger.log(ChannelLogLevel.INFO, "{0} (no health-check)", rawState);
           gotoState(rawState);
@@ -439,8 +457,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
           if (backoffPolicy == null) {
             backoffPolicy = backoffPolicyProvider.get();
           }
-          delayNanos =
-              callCreationNanos + backoffPolicy.nextBackoffNanos() - time.currentTimeNanos();
+          delayNanos = backoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
         }
         if (delayNanos <= 0) {
           startRpc();

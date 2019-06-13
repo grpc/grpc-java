@@ -17,13 +17,13 @@
 package io.grpc.okhttp;
 
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.AccessProtectedHack;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.testing.AbstractTransportTest;
 import io.grpc.netty.NettyServerBuilder;
 import java.net.InetSocketAddress;
 import java.util.List;
@@ -51,22 +51,22 @@ public class OkHttpTransportTest extends AbstractTransportTest {
   }
 
   @Override
-  protected InternalServer newServer(List<ServerStreamTracer.Factory> streamTracerFactories) {
+  protected List<? extends InternalServer> newServer(
+      List<ServerStreamTracer.Factory> streamTracerFactories) {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
-          .forPort(0)
-          .flowControlWindow(65 * 1024),
+            .forPort(0)
+            .flowControlWindow(65 * 1024),
         streamTracerFactories,
         fakeClockTransportTracer);
   }
 
   @Override
-  protected InternalServer newServer(
-      InternalServer server, List<ServerStreamTracer.Factory> streamTracerFactories) {
-    int port = server.getPort();
+  protected List<? extends InternalServer> newServer(
+      int port, List<ServerStreamTracer.Factory> streamTracerFactories) {
     return AccessProtectedHack.serverBuilderBuildTransportServer(
         NettyServerBuilder
-            .forPort(port)
+            .forAddress(new InetSocketAddress(port))
             .flowControlWindow(65 * 1024),
         streamTracerFactories,
         fakeClockTransportTracer);
@@ -74,16 +74,18 @@ public class OkHttpTransportTest extends AbstractTransportTest {
 
   @Override
   protected String testAuthority(InternalServer server) {
-    return "thebestauthority:" + server.getPort();
+    return "thebestauthority:" + server.getListenSocketAddress();
   }
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
-    int port = server.getPort();
+    int port = ((InetSocketAddress) server.getListenSocketAddress()).getPort();
     return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(testAuthority(server)));
+          .setAuthority(testAuthority(server))
+          .setEagAttributes(eagAttrs()),
+        transportLogger());
   }
 
   @Override

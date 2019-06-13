@@ -1,15 +1,20 @@
+PERFMARK_INTERNAL_ACCESSOR_SRCS = glob(
+    [
+        "src/main/java/io/grpc/perfmark/Internal*.java",
+    ],
+)
+
+PERFMARK_SRCS = glob(
+    [
+        "src/main/java/io/grpc/perfmark/*.java",
+    ],
+    exclude = PERFMARK_INTERNAL_ACCESSOR_SRCS,
+)
+
 java_library(
     name = "core",
-    srcs = glob([
-        "src/main/java/io/grpc/*.java",
-    ]),
     visibility = ["//visibility:public"],
-    deps = [
-        "//context",
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_guava_guava//jar",
-        "@com_google_j2objc_j2objc_annotations//jar",
-    ],
+    exports = ["//api"],
 )
 
 java_library(
@@ -19,8 +24,8 @@ java_library(
     ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
         "//context",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
@@ -34,12 +39,14 @@ java_library(
         "src/main/java/io/grpc/internal/*.java",
     ]),
     resources = glob([
-            "src/bazel-internal/resources/**",
-        ]),
+        "src/bazel-internal/resources/**",
+    ]),
     visibility = ["//:__subpackages__"],
     deps = [
-        ":core",
+        ":perfmark",
+        "//api",
         "//context",
+        "@com_google_android_annotations//jar",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_code_gson_gson//jar",
         "@com_google_errorprone_error_prone_annotations//jar",
@@ -57,14 +64,24 @@ java_library(
         "src/main/java/io/grpc/util/*.java",
     ]),
     resources = glob([
-            "src/bazel-util/resources/**",
-        ]),
+        "src/bazel-util/resources/**",
+    ]),
     visibility = ["//visibility:public"],
     deps = [
-        ":core",
         ":internal",
+        "//api",
         "@com_google_code_findbugs_jsr305//jar",
         "@com_google_guava_guava//jar",
         "@com_google_j2objc_j2objc_annotations//jar",
+    ],
+)
+
+java_library(
+    name = "perfmark",
+    srcs = PERFMARK_SRCS,
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_errorprone_error_prone_annotations//jar",
     ],
 )

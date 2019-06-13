@@ -47,6 +47,7 @@ public class TestCasesTest {
       "server_compressed_unary",
       "client_streaming",
       "client_compressed_streaming",
+      "compute_engine_channel_credentials",
       "server_streaming",
       "server_compressed_streaming",
       "ping_pong",
@@ -56,6 +57,7 @@ public class TestCasesTest {
       "jwt_token_creds",
       "oauth2_auth_token",
       "per_rpc_creds",
+      "google_default_credentials",
       "custom_metadata",
       "status_code_and_message",
       "special_status_message",
@@ -70,12 +72,13 @@ public class TestCasesTest {
     String[] additionalTestCases = {
       "client_compressed_unary_noprobe",
       "client_compressed_streaming_noprobe",
-      "very_large_request"
+      "very_large_request",
+      "pick_first_unary"
     };
 
     assertEquals(testCases.length + additionalTestCases.length, TestCases.values().length);
 
-    Set<TestCases> testCaseSet = new HashSet<TestCases>(testCases.length);
+    Set<TestCases> testCaseSet = new HashSet<>(testCases.length);
     for (String testCase : testCases) {
       testCaseSet.add(TestCases.fromString(testCase));
     }

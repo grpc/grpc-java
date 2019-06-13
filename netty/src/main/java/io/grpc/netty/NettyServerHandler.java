@@ -19,6 +19,7 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.SERVER_KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_IDLE_NANOS_DISABLED;
 import static io.grpc.netty.Utils.CONTENT_TYPE_HEADER;
@@ -98,7 +99,8 @@ import javax.annotation.Nullable;
 class NettyServerHandler extends AbstractNettyHandler {
   private static final Logger logger = Logger.getLogger(NettyServerHandler.class.getName());
   private static final long KEEPALIVE_PING = 0xDEADL;
-  private static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
+  @VisibleForTesting
+  static final long GRACEFUL_SHUTDOWN_PING = 0x97ACEF001L;
   private static final long GRACEFUL_SHUTDOWN_PING_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
 
   private final Http2Connection.PropertyKey streamKey;
@@ -586,6 +588,15 @@ class NettyServerHandler extends AbstractNettyHandler {
     }
   }
 
+  @Override
+  public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    if (gracefulShutdown == null) {
+      gracefulShutdown = new GracefulShutdown("app_requested", null);
+      gracefulShutdown.start(ctx);
+      ctx.flush();
+    }
+  }
+
   /**
    * Returns the given processed bytes back to inbound flow control.
    */
@@ -648,7 +659,7 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void forcefulClose(final ChannelHandlerContext ctx, final ForcefulCloseCommand msg,
       ChannelPromise promise) throws Exception {
-    close(ctx, promise);
+    super.close(ctx, promise);
     connection().forEachActiveStream(new Http2StreamVisitor() {
       @Override
       public boolean visit(Http2Stream stream) throws Http2Exception {
@@ -900,18 +911,26 @@ class NettyServerHandler extends AbstractNettyHandler {
 
       // gracefully shutdown with specified grace time
       long savedGracefulShutdownTimeMillis = gracefulShutdownTimeoutMillis();
-      long gracefulShutdownTimeoutMillis = savedGracefulShutdownTimeMillis;
-      if (graceTimeInNanos != null) {
-        gracefulShutdownTimeoutMillis = TimeUnit.NANOSECONDS.toMillis(graceTimeInNanos);
-      }
+      long overriddenGraceTime = graceTimeOverrideMillis(savedGracefulShutdownTimeMillis);
       try {
-        gracefulShutdownTimeoutMillis(gracefulShutdownTimeoutMillis);
-        close(ctx, ctx.newPromise());
+        gracefulShutdownTimeoutMillis(overriddenGraceTime);
+        NettyServerHandler.super.close(ctx, ctx.newPromise());
       } catch (Exception e) {
         onError(ctx, /* outbound= */ true, e);
       } finally {
         gracefulShutdownTimeoutMillis(savedGracefulShutdownTimeMillis);
       }
+    }
+
+    private long graceTimeOverrideMillis(long originalMillis) {
+      if (graceTimeInNanos == null) {
+        return originalMillis;
+      }
+      if (graceTimeInNanos == MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE) {
+        // netty treats -1 as "no timeout"
+        return -1L;
+      }
+      return TimeUnit.NANOSECONDS.toMillis(graceTimeInNanos);
     }
   }
 

@@ -1,4 +1,5 @@
 rootProject.name = "grpc"
+include ":grpc-api"
 include ":grpc-core"
 include ":grpc-context"
 include ":grpc-stub"
@@ -6,14 +7,12 @@ include ":grpc-auth"
 include ":grpc-okhttp"
 include ":grpc-protobuf"
 include ":grpc-protobuf-lite"
-include ":grpc-protobuf-nano"
 include ":grpc-netty"
 include ":grpc-netty-shaded"
 include ":grpc-grpclb"
 include ":grpc-testing"
 include ":grpc-testing-proto"
 include ":grpc-interop-testing"
-include ":grpc-gae-interop-testing-jdk7"
 include ":grpc-gae-interop-testing-jdk8"
 include ":grpc-all"
 include ":grpc-alts"
@@ -21,7 +20,9 @@ include ":grpc-benchmarks"
 include ":grpc-services"
 include ":grpc-servlet"
 include ":grpc-xds"
+include ":grpc-bom"
 
+project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
@@ -29,14 +30,12 @@ project(':grpc-auth').projectDir = "$rootDir/auth" as File
 project(':grpc-okhttp').projectDir = "$rootDir/okhttp" as File
 project(':grpc-protobuf').projectDir = "$rootDir/protobuf" as File
 project(':grpc-protobuf-lite').projectDir = "$rootDir/protobuf-lite" as File
-project(':grpc-protobuf-nano').projectDir = "$rootDir/protobuf-nano" as File
 project(':grpc-netty').projectDir = "$rootDir/netty" as File
 project(':grpc-netty-shaded').projectDir = "$rootDir/netty/shaded" as File
 project(':grpc-grpclb').projectDir = "$rootDir/grpclb" as File
 project(':grpc-testing').projectDir = "$rootDir/testing" as File
 project(':grpc-testing-proto').projectDir = "$rootDir/testing-proto" as File
 project(':grpc-interop-testing').projectDir = "$rootDir/interop-testing" as File
-project(':grpc-gae-interop-testing-jdk7').projectDir = "$rootDir/gae-interop-testing/gae-jdk7" as File
 project(':grpc-gae-interop-testing-jdk8').projectDir = "$rootDir/gae-interop-testing/gae-jdk8" as File
 project(':grpc-all').projectDir = "$rootDir/all" as File
 project(':grpc-alts').projectDir = "$rootDir/alts" as File
@@ -44,6 +43,7 @@ project(':grpc-benchmarks').projectDir = "$rootDir/benchmarks" as File
 project(':grpc-services').projectDir = "$rootDir/services" as File
 project(':grpc-servlet').projectDir = "$rootDir/servlet" as File
 project(':grpc-xds').projectDir = "$rootDir/xds" as File
+project(':grpc-bom').projectDir = "$rootDir/bom" as File
 
 if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     println '*** Skipping the build of codegen and compilation of proto files because skipCodegen=true'

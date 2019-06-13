@@ -72,6 +72,7 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyAlpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyAlpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyAlpnConfigured();
     }
     return jettyAlpnUnavailabilityCause;
@@ -93,6 +94,7 @@ final class JettyTlsUtil {
   static synchronized Throwable getJettyNpnUnavailabilityCause() {
     // This case should be unlikely
     if (jettyNpnUnavailabilityCause == null) {
+      @SuppressWarnings("UnusedVariable")
       boolean discard = isJettyNpnConfigured();
     }
     return jettyNpnUnavailabilityCause;

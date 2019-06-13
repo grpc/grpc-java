@@ -18,27 +18,18 @@ package io.grpc.alts;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import io.grpc.CallCredentials;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsClientOptions;
-import io.grpc.alts.internal.AltsTsiHandshaker;
-import io.grpc.alts.internal.GoogleDefaultProtocolNegotiator;
-import io.grpc.alts.internal.HandshakerServiceGrpc;
-import io.grpc.alts.internal.RpcProtocolVersionsUtil;
-import io.grpc.alts.internal.TsiHandshaker;
-import io.grpc.alts.internal.TsiHandshakerFactory;
+import io.grpc.alts.internal.AltsProtocolNegotiator.GoogleDefaultProtocolNegotiatorFactory;
 import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
@@ -53,12 +44,21 @@ public final class GoogleDefaultChannelBuilder
     extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
-  private GoogleDefaultProtocolNegotiator negotiatorForTest;
 
   private GoogleDefaultChannelBuilder(String target) {
     delegate = NettyChannelBuilder.forTarget(target);
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forClient().build();
+    } catch (SSLException e) {
+      throw new RuntimeException(e);
+    }
     InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        delegate(), new ProtocolNegotiatorFactory());
+        delegate(),
+        new GoogleDefaultProtocolNegotiatorFactory(
+            /* targetServiceAccounts= */ ImmutableList.<String>of(),
+            SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+            sslContext));
     @Nullable CallCredentials credentials = null;
     Status status = Status.OK;
     try {
@@ -69,7 +69,7 @@ public final class GoogleDefaultChannelBuilder
               .withDescription("Failed to get Google default credentials")
               .withCause(e);
     }
-    delegate().intercept(new GoogleDefaultInterceptor(credentials, status));
+    delegate().intercept(new CallCredentialsInterceptor(credentials, status));
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
@@ -88,63 +88,17 @@ public final class GoogleDefaultChannelBuilder
   }
 
   @VisibleForTesting
-  GoogleDefaultProtocolNegotiator getProtocolNegotiatorForTest() {
-    return negotiatorForTest;
-  }
-
-  private final class ProtocolNegotiatorFactory
-      implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
-    @Override
-    public GoogleDefaultProtocolNegotiator buildProtocolNegotiator() {
-      TsiHandshakerFactory altsHandshakerFactory =
-          new TsiHandshakerFactory() {
-            @Override
-            public TsiHandshaker newHandshaker(String authority) {
-              // Used the shared grpc channel to connecting to the ALTS handshaker service.
-              // TODO: Release the channel if it is not used.
-              // https://github.com/grpc/grpc-java/issues/4755.
-              Channel channel =
-                  SharedResourceHolder.get(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
-              AltsClientOptions handshakerOptions =
-                  new AltsClientOptions.Builder()
-                      .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
-                      .setTargetName(authority)
-                      .build();
-              return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(channel), handshakerOptions);
-            }
-          };
-      SslContext sslContext;
-      try {
-        sslContext = GrpcSslContexts.forClient().build();
-      } catch (SSLException ex) {
-        throw new RuntimeException(ex);
-      }
-      return negotiatorForTest =
-          new GoogleDefaultProtocolNegotiator(altsHandshakerFactory, sslContext);
+  ProtocolNegotiator getProtocolNegotiatorForTest() {
+    SslContext sslContext;
+    try {
+      sslContext = GrpcSslContexts.forClient().build();
+    } catch (SSLException e) {
+      throw new RuntimeException(e);
     }
-  }
-
-  /**
-   * An implementation of {@link ClientInterceptor} that adds Google call credentials on each call.
-   */
-  static final class GoogleDefaultInterceptor implements ClientInterceptor {
-
-    @Nullable private final CallCredentials credentials;
-    private final Status status;
-
-    public GoogleDefaultInterceptor(@Nullable CallCredentials credentials, Status status) {
-      this.credentials = credentials;
-      this.status = status;
-    }
-
-    @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      if (!status.isOk()) {
-        return new FailingClientCall<>(status);
-      }
-      return next.newCall(method, callOptions.withCallCredentials(credentials));
-    }
+    return new GoogleDefaultProtocolNegotiatorFactory(
+        /* targetServiceAccounts= */ ImmutableList.<String>of(),
+        SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL),
+        sslContext)
+            .buildProtocolNegotiator();
   }
 }

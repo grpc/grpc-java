@@ -1,8 +1,10 @@
 syntax = "proto3";
 
 package envoy.api.v2;
-option java_package = "io.grpc.xds.shaded.envoy.api.v2";
+
+option java_outer_classname = "CdsProto";
 option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.api.v2";
 
 option java_generic_services = true;
 
@@ -25,17 +27,17 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
 
 import "validate/validate.proto";
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
+option (gogoproto.stable_marshaler_all) = true;
 
 // Return list of all clusters this proxy will load balance to.
 service ClusterDiscoveryService {
   rpc StreamClusters(stream DiscoveryRequest) returns (stream DiscoveryResponse) {
   }
 
-  rpc IncrementalClusters(stream IncrementalDiscoveryRequest)
-      returns (stream IncrementalDiscoveryResponse) {
+  rpc DeltaClusters(stream DeltaDiscoveryRequest) returns (stream DeltaDiscoveryResponse) {
   }
 
   rpc FetchClusters(DiscoveryRequest) returns (DiscoveryResponse) {
@@ -49,16 +51,13 @@ service ClusterDiscoveryService {
 // [#protodoc-title: Clusters]
 
 // Configuration for a single upstream cluster.
-// [#comment:next free field: 38]
+// [#comment:next free field: 39]
 message Cluster {
   // Supplies the name of the cluster which must be unique across all clusters.
   // The cluster name is used when emitting
   // :ref:`statistics <config_cluster_manager_cluster_stats>` if :ref:`alt_stat_name
   // <envoy_api_field_Cluster.alt_stat_name>` is not provided.
   // Any ``:`` in the cluster name will be converted to ``_`` when emitting statistics.
-  // By default, the maximum length of a cluster name is limited to 60
-  // characters. This limit can be increased by setting the
-  // :option:`--max-obj-name-len` command line argument to the desired value.
   string name = 1 [(validate.rules).string.min_bytes = 1];
 
   // An optional alternative to the cluster name to be used while emitting stats.
@@ -93,9 +92,25 @@ message Cluster {
     // for an explanation.
     ORIGINAL_DST = 4;
   }
-  // The :ref:`service discovery type <arch_overview_service_discovery_types>`
-  // to use for resolving the cluster.
-  DiscoveryType type = 2 [(validate.rules).enum.defined_only = true];
+
+  // Extended cluster type.
+  message CustomClusterType {
+    // The type of the cluster to instantiate. The name must match a supported cluster type.
+    string name = 1 [(validate.rules).string.min_bytes = 1];
+
+    // Cluster specific configuration which depends on the cluster being instantiated.
+    // See the supported cluster for further documentation.
+    google.protobuf.Any typed_config = 2;
+  }
+
+  oneof cluster_discovery_type {
+    // The :ref:`service discovery type <arch_overview_service_discovery_types>`
+    // to use for resolving the cluster.
+    DiscoveryType type = 2 [(validate.rules).enum.defined_only = true];
+
+    // The custom cluster type.
+    CustomClusterType cluster_type = 38;
+  }
 
   // Only valid when discovery type is EDS.
   message EdsClusterConfig {
@@ -112,7 +127,9 @@ message Cluster {
 
   // The timeout for new network connections to hosts in the cluster.
   google.protobuf.Duration connect_timeout = 4 [
-    (validate.rules).duration.gt = {}
+    (validate.rules).duration.gt = {},
+    (gogoproto.stdduration) = true,
+    (gogoproto.nullable) = false
   ];
 
   // Soft limit on size of the cluster’s connections read and write buffers. If
@@ -174,7 +191,7 @@ message Cluster {
   // :ref:`STRICT_DNS<envoy_api_enum_value_Cluster.DiscoveryType.STRICT_DNS>`
   // or :ref:`LOGICAL_DNS<envoy_api_enum_value_Cluster.DiscoveryType.LOGICAL_DNS>` clusters.
   // This field supersedes :ref:`hosts<envoy_api_field_Cluster.hosts>` field.
-  // [#comment:TODO(dio): Deprecate the hosts field and add it to DEPRECATED.md
+  // [#comment:TODO(dio): Deprecate the hosts field and add it to :ref:`deprecated log<deprecated>`
   // once load_assignment is implemented.]
   //
   // .. attention::
@@ -233,7 +250,6 @@ message Cluster {
   // specific options.
   map<string, google.protobuf.Struct> extension_protocol_options = 35;
 
-  // [#not-implemented-hide:]
   // The extension_protocol_options field is used to provide extension-specific protocol options
   // for upstream connections. The key should match the extension filter name, such as
   // "envoy.filters.network.thrift_proxy". See the extension's documentation for details on
@@ -252,7 +268,7 @@ message Cluster {
   // and :ref:`LOGICAL_DNS<envoy_api_enum_value_Cluster.DiscoveryType.LOGICAL_DNS>`
   // this setting is ignored.
   google.protobuf.Duration dns_refresh_rate = 16
-      [(validate.rules).duration.gt = {}];
+      [(validate.rules).duration.gt = {}, (gogoproto.stdduration) = true];
 
   // When V4_ONLY is selected, the DNS resolver will only perform a lookup for
   // addresses in the IPv4 family. If V6_ONLY is selected, the DNS resolver will
@@ -306,7 +322,7 @@ message Cluster {
   // :ref:`ORIGINAL_DST<envoy_api_enum_value_Cluster.DiscoveryType.ORIGINAL_DST>`
   // this setting is ignored.
   google.protobuf.Duration cleanup_interval = 20
-      [(validate.rules).duration.gt = {}];
+      [(validate.rules).duration.gt = {}, (gogoproto.stdduration) = true];
 
   // Optional configuration used to bind newly established upstream connections.
   // This overrides any bind_config specified in the bootstrap proto.
@@ -382,6 +398,14 @@ message Cluster {
     // going to an individual locality if said locality is disproportionally affected by the
     // subset predicate.
     bool scale_locality_weight = 5;
+
+    // If true, when a fallback policy is configured and its corresponding subset fails to find
+    // a host this will cause any host to be selected instead.
+    //
+    // This is useful when using the default subset as the fallback policy, given the default
+    // subset might become empty. With this option enabled, if that happens the LB will attempt
+    // to select a host from the entire cluster.
+    bool panic_mode_any = 6;
   }
 
   // Configuration for load balancing subsetting.
@@ -397,31 +421,39 @@ message Cluster {
   // Specific configuration for the :ref:`RingHash<arch_overview_load_balancing_types_ring_hash>`
   // load balancing policy.
   message RingHashLbConfig {
-    // Minimum hash ring size, i.e. total virtual nodes. A larger size
-    // will provide better request distribution since each host in the
-    // cluster will have more virtual nodes. Defaults to 1024. In the case
-    // that total number of hosts is greater than the minimum, each host will
-    // be allocated a single virtual node. This field is limited to 8M to bound
-    // resource use.
+    // Minimum hash ring size. The larger the ring is (that is, the more hashes there are for each
+    // provided host) the better the request distribution will reflect the desired weights. Defaults
+    // to 1024 entries, and limited to 8M entries. See also
+    // :ref:`maximum_ring_size<envoy_api_field_Cluster.RingHashLbConfig.maximum_ring_size>`.
     google.protobuf.UInt64Value minimum_ring_size = 1 [(validate.rules).uint64.lte = 8388608];
 
-    // [#not-implemented-hide:] Hide from docs.
-    message DeprecatedV1 {
-      // Defaults to false, meaning that `xxHash <https://github.com/Cyan4973/xxHash>`_
-      // is to hash hosts onto the ketama ring.
-      google.protobuf.BoolValue use_std_hash = 1;
+    reserved 2;
+
+    // The hash function used to hash hosts onto the ketama ring.
+    enum HashFunction {
+      // Use `xxHash <https://github.com/Cyan4973/xxHash>`_, this is the default hash function.
+      XX_HASH = 0;
+      // Use `MurmurHash2 <https://sites.google.com/site/murmurhash/>`_, this is compatible with
+      // std:hash<string> in GNU libstdc++ 3.4.20 or above. This is typically the case when compiled
+      // on Linux and not macOS.
+      MURMUR_HASH_2 = 1;
     }
 
-    // Deprecated settings from v1 config.
-    // [#not-implemented-hide:] Hide from docs.
-    DeprecatedV1 deprecated_v1 = 2 [deprecated = true];
+    // The hash function used to hash hosts onto the ketama ring. The value defaults to
+    // :ref:`XX_HASH<envoy_api_enum_value_Cluster.RingHashLbConfig.HashFunction.XX_HASH>`.
+    HashFunction hash_function = 3 [(validate.rules).enum.defined_only = true];
+
+    // Maximum hash ring size. Defaults to 8M entries, and limited to 8M entries, but can be lowered
+    // to further constrain resource use. See also
+    // :ref:`minimum_ring_size<envoy_api_field_Cluster.RingHashLbConfig.minimum_ring_size>`.
+    google.protobuf.UInt64Value maximum_ring_size = 4 [(validate.rules).uint64.lte = 8388608];
   }
 
   // Specific configuration for the
   // :ref:`Original Destination <arch_overview_load_balancing_types_original_destination>`
   // load balancing policy.
   message OriginalDstLbConfig {
-    // When true, :ref:`x-envoy-orignal-dst-host
+    // When true, :ref:`x-envoy-original-dst-host
     // <config_http_conn_man_headers_x-envoy-original-dst-host>` can be used to override destination
     // address.
     //
@@ -494,6 +526,27 @@ message Cluster {
     // because merging those updates isn't currently safe. See
     // https://github.com/envoyproxy/envoy/pull/3941.
     google.protobuf.Duration update_merge_window = 4;
+
+    // If set to true, Envoy will not consider new hosts when computing load balancing weights until
+    // they have been health checked for the first time. This will have no effect unless
+    // active health checking is also configured.
+    //
+    // Ignoring a host means that for any load balancing calculations that adjust weights based
+    // on the ratio of eligible hosts and total hosts (priority spillover, locality weighting and
+    // panic mode) Envoy will exclude these hosts in the denominator.
+    //
+    // For example, with hosts in two priorities P0 and P1, where P0 looks like
+    // {healthy, unhealthy (new), unhealthy (new)}
+    // and where P1 looks like
+    // {healthy, healthy}
+    // all traffic will still hit P0, as 1 / (3 - 2) = 1.
+    //
+    // Enabling this will allow scaling up the number of hosts for a given cluster without entering
+    // panic mode or triggering priority spillover, assuming the hosts pass the first health check.
+    //
+    // If panic mode is triggered, new hosts are still eligible for traffic; they simply do not
+    // contribute to the calculation when deciding whether panic mode is enabled or not.
+    bool ignore_new_hosts_until_first_hc = 5;
   }
 
   // Common configuration for all load balancer implementations.

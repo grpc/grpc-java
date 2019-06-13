@@ -25,8 +25,6 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-- [Authentication](AUTHENTICATION_EXAMPLE.md)
-
 - [Google Authentication](example-gauth/GOOGLE_AUTH_EXAMPLE.md)
 
 ### To build the examples
@@ -79,7 +77,6 @@ $ mvn exec:java -Dexec.mainClass=io.grpc.examples.helloworld.HelloWorldClient
 
 If you prefer to use Bazel:
 ```
-(With Bazel v0.8.0 or above.)
 $ bazel build :hello-world-server :hello-world-client
 $ # Run the server
 $ bazel-bin/hello-world-server
@@ -109,6 +106,19 @@ In general, we DO NOT allow overriding the client stub.
 We encourage users to leverage `InProcessTransport` as demonstrated in the examples to
 write unit tests. `InProcessTransport` is light-weight and runs the server
 and client in the same process without any socket/TCP connection.
+
+Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses
+allows for tests that don't map to reality, causing the tests to pass, but the system-under-test to fail. 
+The gRPC client library is complicated, and accurately reproducing that complexity with mocks is very hard.
+You will be better off and write less code by using `InProcessTransport` instead.
+
+Example bugs not caught by mocked stub tests include:
+
+* Calling the stub with a `null` message
+* Not calling `close()`
+* Sending invalid headers
+* Ignoring deadlines
+* Ignoring cancellation
 
 For testing a gRPC client, create the client with a real stub
 using an

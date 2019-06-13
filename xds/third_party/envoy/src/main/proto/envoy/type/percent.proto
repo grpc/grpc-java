@@ -1,13 +1,15 @@
 syntax = "proto3";
 
 package envoy.type;
-option java_package = "io.grpc.xds.shaded.envoy.type";
+
+option java_outer_classname = "PercentProto";
 option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.type";
 
 import "validate/validate.proto";
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
 
 // [#protodoc-title: Percent]
 

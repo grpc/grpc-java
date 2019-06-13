@@ -1,8 +1,10 @@
 syntax = "proto3";
 
 package envoy.api.v2.core;
-option java_package = "io.grpc.xds.shaded.envoy.api.v2.core";
+
+option java_outer_classname = "BaseProto";
 option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.api.v2.core";
 option go_package = "core";
 
 import "google/protobuf/any.proto";
@@ -10,11 +12,12 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
 
 import "validate/validate.proto";
-
+import "gogoproto/gogo.proto";
 
 import "envoy/type/percent.proto";
 
-
+option (gogoproto.equal_all) = true;
+option (gogoproto.stable_marshaler_all) = true;
 
 // [#protodoc-title: Common types]
 
@@ -127,7 +130,7 @@ enum RoutingPriority {
 
 // HTTP request method.
 enum RequestMethod {
-  
+  option (gogoproto.goproto_enum_prefix) = false;
   METHOD_UNSPECIFIED = 0;
   GET = 1;
   HEAD = 2;
@@ -162,6 +165,11 @@ message HeaderValueOption {
   google.protobuf.BoolValue append = 2;
 }
 
+// Wrapper for a set of headers.
+message HeaderMap {
+  repeated HeaderValue headers = 1;
+}
+
 // Data source consisting of either a file or an inline value.
 message DataSource {
   oneof specifier {
@@ -192,7 +200,6 @@ message TransportSocket {
   oneof config_type {
     google.protobuf.Struct config = 2;
 
-    // [#not-implemented-hide:]
     google.protobuf.Any typed_config = 3;
   }
 }
@@ -216,6 +223,7 @@ message SocketOption {
     bytes buf_value = 5;
   }
   enum SocketState {
+    option (gogoproto.goproto_enum_prefix) = false;
     // Socket options are applied after socket creation but before binding the socket to a port
     STATE_PREBIND = 0;
     // Socket options are applied after binding the socket to a port but before calling listen()
@@ -237,4 +245,12 @@ message RuntimeFractionalPercent {
 
   // Runtime key for a YAML representation of a FractionalPercent.
   string runtime_key = 2;
+}
+
+// Identifies a specific ControlPlane instance that Envoy is connected to.
+message ControlPlane {
+  // An opaque control plane identifier that uniquely identifies an instance
+  // of control plane. This can be used to identify which control plane instance,
+  // the Envoy is connected to.
+  string identifier = 1;
 }

@@ -19,7 +19,7 @@ $ ./gradlew build
 To install the artifacts to your Maven local repository for use in your own
 project, run:
 ```
-$ ./gradlew install
+$ ./gradlew publishToMavenLocal
 ```
 
 ### Notes for IntelliJ
@@ -44,9 +44,9 @@ For Linux, Mac and MinGW:
 ```
 $ git clone https://github.com/google/protobuf.git
 $ cd protobuf
-$ git checkout v3.5.1
+$ git checkout v3.7.1
 $ ./autogen.sh
-$ ./configure
+$ ./configure --disable-shared
 $ make
 $ make check
 $ sudo make install
@@ -54,7 +54,7 @@ $ sudo make install
 
 If you are comfortable with C++ compilation and autotools, you can specify a
 ``--prefix`` for Protobuf and use ``-I`` in ``CXXFLAGS``, ``-L`` in
-``LDFLAGS``, ``LD_LIBRARY_PATH``, and ``PATH`` to reference it. The
+``LDFLAGS`` to reference it. The
 environment variables will be used when building grpc-java.
 
 Protobuf installs to ``/usr/local`` by default.
@@ -82,17 +82,17 @@ $ export CXXFLAGS="-I/usr/local/include" LDFLAGS="-L/usr/local/lib"
 When building on Windows and VC++, you need to specify project properties for
 Gradle to find protobuf:
 ```
-.\gradlew install ^
-    -PvcProtobufInclude=C:\path\to\protobuf-3.5.1\src ^
-    -PvcProtobufLibs=C:\path\to\protobuf-3.5.1\vsprojects\Release ^
+.\gradlew publishToMavenLocal ^
+    -PvcProtobufInclude=C:\path\to\protobuf-3.7.1\src ^
+    -PvcProtobufLibs=C:\path\to\protobuf-3.7.1\vsprojects\Release ^
     -PtargetArch=x86_32
 ```
 
 Since specifying those properties every build is bothersome, you can instead
 create ``<project-root>\gradle.properties`` with contents like:
 ```
-vcProtobufInclude=C:\\path\\to\\protobuf-3.5.1\\src
-vcProtobufLibs=C:\\path\\to\\protobuf-3.5.1\\vsprojects\\Release
+vcProtobufInclude=C:\\path\\to\\protobuf-3.7.1\\src
+vcProtobufLibs=C:\\path\\to\\protobuf-3.7.1\\vsprojects\\Release
 targetArch=x86_32
 ```
 

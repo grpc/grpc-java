@@ -27,10 +27,10 @@ dependencies {
             libraries.lang,
             libraries.protobuf
     compile (libraries.google_auth_oauth2_http) {
-        // prefer 3.0.2 from libraries instead of 1.3.9
-        exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 20.0 from libraries instead of 19.0
+        // prefer 26.0-android from libraries instead of 25.1-android
         exclude group: 'com.google.guava', module: 'guava'
+        // prefer 0.19.2 from libraries instead of 0.18.0
+        exclude group: 'io.opencensus', module: 'opencensus-api'
     }
     compileOnly libraries.javax_annotation
     runtime project(':grpc-grpclb')
@@ -42,6 +42,7 @@ dependencies {
             libraries.mockito,
             libraries.truth
     testRuntime libraries.netty_tcnative,
+            libraries.netty_epoll,
             libraries.conscrypt
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
@@ -61,15 +62,10 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 javadoc { exclude 'io/grpc/alts/internal/**' }
 
-artifacts {
-    archives shadowJar
-}
-
 jar {
     // Must use a different classifier to avoid conflicting with shadowJar
     classifier = 'original'
 }
-configurations.archives.artifacts.removeAll { it.classifier == "original" }
 
 // We want to use grpc-netty-shaded instead of grpc-netty. But we also want our
 // source to work with Bazel, so we rewrite the code as part of the build.
@@ -82,14 +78,24 @@ shadowJar {
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
 }
 
-[
-    install.repositories.mavenInstaller,
-    uploadArchives.repositories.mavenDeployer,
-]*.pom*.whenConfigured { pom ->
-    def netty = pom.dependencies.find {dep -> dep.artifactId == 'grpc-netty'}
-    // Swap our dependency to grpc-netty-shaded. Projects depending on this via
-    // project(':grpc-alts') will still be using the non-shaded form.
-    netty.artifactId = "grpc-netty-shaded"
-    // Depend on specific version of grpc-netty-shaded because it is unstable API
-    netty.version = "[" + netty.version + "]"
+publishing {
+    publications {
+        maven(MavenPublication) {
+            // use shadowJar and remove the original Jar
+            artifact shadowJar
+            def originalJar = artifacts.find { dep -> dep.classifier == 'original'}
+            artifacts.remove(originalJar)
+
+            pom.withXml {
+                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
+                // project(':grpc-alts') will still be using the non-shaded form.
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-netty'
+                }.each() { netty ->
+                    netty.artifactId*.value = 'grpc-netty-shaded'
+                    netty.version*.value = "[" + netty.version.text() + "]"
+                }
+            }
+        }
+    }
 }

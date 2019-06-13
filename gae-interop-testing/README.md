@@ -8,7 +8,7 @@ Prerequisites
 ==========================
 
 - Install the Google Cloud SDK and ensure that `gcloud` is in the path
-- Set up an [App Engine app](http://appengine.google.com) with your
+- Set up an [App Engine app](https://appengine.google.com) with your
   choice of a PROJECT_ID.
 - Associate your `gcloud` environment with your app:
   ```bash
@@ -24,11 +24,10 @@ Running the tests in GAE
 
 You can run the gradle task to execute the interop tests.
 ```bash
-# cd into either gae-jdk7 or gae-jdk8
+# cd into gae-jdk8
 $ ../../gradlew runInteropTestRemote
 
 # Or run one of these from the root gRPC Java directory:
-$ ./gradlew :grpc-gae-interop-testing-jdk7:runInteropTestRemote
 $ ./gradlew :grpc-gae-interop-testing-jdk8:runInteropTestRemote
 ```
 

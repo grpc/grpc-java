@@ -25,8 +25,10 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -56,10 +58,11 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -69,6 +72,7 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class AbstractClientStreamTest {
 
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
@@ -77,8 +81,6 @@ public class AbstractClientStreamTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -87,7 +89,7 @@ public class AbstractClientStreamTest {
         while (producer.next() != null) {}
         return null;
       }
-    }).when(mockListener).messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+    }).when(mockListener).messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
@@ -339,6 +341,24 @@ public class AbstractClientStreamTest {
   }
 
   @Test
+  public void statusOkFollowedByRstStreamNoError() {
+    AbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    stream.start(mockListener);
+    stream.transportState().deframe(ReadableBuffers.wrap(new byte[] {0, 0, 0, 0, 1, 1}));
+    stream.transportState().inboundTrailersReceived(new Metadata(), Status.OK);
+    Status status = Status.INTERNAL.withDescription("rst___stream");
+    // Simulate getting a reset
+    stream.transportState().transportReportStatus(status, false /*stop delivery*/, new Metadata());
+    stream.transportState().requestMessagesFromDeframer(1);
+
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+    verify(mockListener)
+        .closed(statusCaptor.capture(), any(RpcProgress.class), any(Metadata.class));
+    assertTrue(statusCaptor.getValue().isOk());
+  }
+
+  @Test
   public void trailerOkWithTruncatedMessage() {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
@@ -372,7 +392,7 @@ public class AbstractClientStreamTest {
     assertSame(Status.Code.DATA_LOSS, statusCaptor.getValue().getCode());
     assertEquals("data___loss", statusCaptor.getValue().getDescription());
   }
-  
+
   @Test
   public void getRequest() {
     AbstractClientStream.Sink sink = mock(AbstractClientStream.Sink.class);
@@ -396,8 +416,7 @@ public class AbstractClientStreamTest {
     assertTrue(payloadCaptor.getValue() != null);
     // GET requests don't have BODY.
     verify(sink, never())
-        .writeFrame(
-            any(WritableBuffer.class), any(Boolean.class), any(Boolean.class), any(Integer.class));
+        .writeFrame(any(WritableBuffer.class), anyBoolean(), anyBoolean(), anyInt());
     assertThat(tracer.nextOutboundEvent()).isEqualTo("outboundMessage(0)");
     assertThat(tracer.nextOutboundEvent()).matches("outboundMessageSent\\(0, [0-9]+, [0-9]+\\)");
     assertNull(tracer.nextOutboundEvent());
@@ -435,7 +454,7 @@ public class AbstractClientStreamTest {
     stream.start(mockListener);
 
     ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(sink).writeHeaders(headersCaptor.capture(), any(byte[].class));
+    verify(sink).writeHeaders(headersCaptor.capture(), ArgumentMatchers.<byte[]>any());
 
     Metadata headers = headersCaptor.getValue();
     assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));

@@ -23,13 +23,16 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 
 import com.squareup.okhttp.ConnectionSpec;
-import io.grpc.NameResolver;
+import io.grpc.ChannelLogger;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.concurrent.ScheduledExecutorService;
+import javax.net.SocketFactory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -113,24 +116,24 @@ public class OkHttpChannelBuilderTest {
   @Test
   public void usePlaintext_newClientTransportAllowed() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234).usePlaintext();
-    builder.buildTransportFactory().newClientTransport(new InetSocketAddress(5678),
-        new ClientTransportFactory.ClientTransportOptions());
+    builder.buildTransportFactory().newClientTransport(
+        new InetSocketAddress(5678),
+        new ClientTransportFactory.ClientTransportOptions(), new FakeChannelLogger());
   }
 
   @Test
   public void usePlaintextDefaultPort() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234).usePlaintext();
-    assertEquals(GrpcUtil.DEFAULT_PORT_PLAINTEXT,
-        builder.getNameResolverParams().get(NameResolver.Factory.PARAMS_DEFAULT_PORT).intValue());
+    assertEquals(GrpcUtil.DEFAULT_PORT_PLAINTEXT, builder.getDefaultPort());
   }
 
   @Test
   public void usePlaintextCreatesNullSocketFactory() {
     OkHttpChannelBuilder builder = OkHttpChannelBuilder.forAddress("host", 1234);
-    assertNotNull(builder.createSocketFactory());
+    assertNotNull(builder.createSslSocketFactory());
 
     builder.usePlaintext();
-    assertNull(builder.createSocketFactory());
+    assertNull(builder.createSslSocketFactory());
   }
 
   @Test
@@ -161,5 +164,73 @@ public class OkHttpChannelBuilderTest {
 
     clientTransportFactory.close();
   }
-}
 
+  @Test
+  public void socketFactory_default() {
+    OkHttpChannelBuilder builder = OkHttpChannelBuilder.forTarget("foo");
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+    OkHttpClientTransport transport =
+        (OkHttpClientTransport)
+            transportFactory.newClientTransport(
+                new InetSocketAddress(5678),
+                new ClientTransportFactory.ClientTransportOptions(),
+                new FakeChannelLogger());
+
+    assertSame(SocketFactory.getDefault(), transport.getSocketFactory());
+
+    transportFactory.close();
+  }
+
+  @Test
+  public void socketFactory_custom() {
+    SocketFactory socketFactory =
+        new SocketFactory() {
+          @Override
+          public Socket createSocket(String s, int i) {
+            return null;
+          }
+
+          @Override
+          public Socket createSocket(String s, int i, InetAddress inetAddress, int i1) {
+            return null;
+          }
+
+          @Override
+          public Socket createSocket(InetAddress inetAddress, int i) {
+            return null;
+          }
+
+          @Override
+          public Socket createSocket(
+              InetAddress inetAddress, int i, InetAddress inetAddress1, int i1) {
+            return null;
+          }
+        };
+    OkHttpChannelBuilder builder =
+        OkHttpChannelBuilder.forTarget("foo").socketFactory(socketFactory);
+    ClientTransportFactory transportFactory = builder.buildTransportFactory();
+    OkHttpClientTransport transport =
+        (OkHttpClientTransport)
+            transportFactory.newClientTransport(
+                new InetSocketAddress(5678),
+                new ClientTransportFactory.ClientTransportOptions(),
+                new FakeChannelLogger());
+
+    assertSame(socketFactory, transport.getSocketFactory());
+
+    transportFactory.close();
+  }
+
+  private static final class FakeChannelLogger extends ChannelLogger {
+
+    @Override
+    public void log(ChannelLogLevel level, String message) {
+
+    }
+
+    @Override
+    public void log(ChannelLogLevel level, String messageFormat, Object... args) {
+
+    }
+  }
+}

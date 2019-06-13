@@ -19,7 +19,6 @@ package io.grpc.grpclb;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.protobuf.util.Timestamps;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -64,7 +63,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
 
   // Specific finish types
   @GuardedBy("this")
-  private Map<String, LongHolder> callsDroppedPerToken = new HashMap<String, LongHolder>(1);
+  private Map<String, LongHolder> callsDroppedPerToken = new HashMap<>(1);
   @SuppressWarnings("unused")
   private volatile long callsFailedToSend;
   @SuppressWarnings("unused")
@@ -75,7 +74,8 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
   }
 
   @Override
-  public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+  public ClientStreamTracer newClientStreamTracer(
+      ClientStreamTracer.StreamInfo info, Metadata headers) {
     callsStartedUpdater.getAndIncrement(this);
     return new StreamTracer();
   }
@@ -112,7 +112,7 @@ final class GrpclbClientLoadRecorder extends ClientStreamTracer.Factory {
     synchronized (this) {
       if (!callsDroppedPerToken.isEmpty()) {
         localCallsDroppedPerToken = callsDroppedPerToken;
-        callsDroppedPerToken = new HashMap<String, LongHolder>(localCallsDroppedPerToken.size());
+        callsDroppedPerToken = new HashMap<>(localCallsDroppedPerToken.size());
       }
     }
     for (Entry<String, LongHolder> entry : localCallsDroppedPerToken.entrySet()) {

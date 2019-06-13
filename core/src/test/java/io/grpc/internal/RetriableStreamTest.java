@@ -27,9 +27,9 @@ import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -41,7 +41,6 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
-import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Codec;
 import io.grpc.Compressor;
@@ -90,6 +89,8 @@ public class RetriableStreamTest {
   private static final long MAX_BACKOFF_IN_SECONDS = 700;
   private static final double BACKOFF_MULTIPLIER = 2D;
   private static final double FAKE_RANDOM = .5D;
+  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
+      ClientStreamTracer.StreamInfo.newBuilder().build();
 
   static {
     RetriableStream.setRandom(
@@ -168,7 +169,7 @@ public class RetriableStreamTest {
     @Override
     ClientStream newSubstream(ClientStreamTracer.Factory tracerFactory, Metadata metadata) {
       bufferSizeTracer =
-          tracerFactory.newClientStreamTracer(CallOptions.DEFAULT, new Metadata());
+          tracerFactory.newClientStreamTracer(STREAM_INFO, new Metadata());
       int actualPreviousRpcAttemptsInHeader = metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS) == null
           ? 0 : Integer.valueOf(metadata.get(GRPC_PREVIOUS_RPC_ATTEMPTS));
       return retriableStreamRecorder.newSubstream(actualPreviousRpcAttemptsInHeader);
@@ -632,7 +633,7 @@ public class RetriableStreamTest {
     ArgumentCaptor<ClientStreamListener> sublistenerCaptor1 =
         ArgumentCaptor.forClass(ClientStreamListener.class);
     final AtomicReference<ClientStreamListener> sublistenerCaptor2 =
-        new AtomicReference<ClientStreamListener>();
+        new AtomicReference<>();
     final Status cancelStatus = Status.CANCELLED.withDescription("c");
     ClientStream mockStream1 =
         mock(
@@ -762,7 +763,7 @@ public class RetriableStreamTest {
   @Test
   public void isReady_whileDraining() {
     final AtomicReference<ClientStreamListener> sublistenerCaptor1 =
-        new AtomicReference<ClientStreamListener>();
+        new AtomicReference<>();
     final List<Boolean> readiness = new ArrayList<>();
     ClientStream mockStream1 =
         mock(
