@@ -39,6 +39,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.BackoffPolicy.Provider;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
@@ -60,6 +61,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
       = "com.googleapis.trafficdirector.grpc_hostname";
 
+  // The name of load-balanced service.
   private final String serviceName;
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
@@ -81,9 +83,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
-      BackoffPolicy.Provider backoffPolicyProvider) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider,
-        new XdsLoadStatsStore(checkNotNull(helper, "helper").getAuthority()));
+      BackoffPolicy.Provider backoffPolicyProvider,
+      StatsStore statsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
   }
 
   @VisibleForTesting
@@ -106,19 +108,25 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @Override
   public void startLoadReporting() {
-    checkState(!started, "load reporting has already started");
+    if (started) {
+      return;
+    }
     started = true;
     startLrsRpc();
   }
 
   @Override
   public void stopLoadReporting() {
+    if (!started) {
+      return;
+    }
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
       lrsStream.close(null);
     }
+    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
@@ -163,6 +171,10 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     boolean closed;
     long loadReportIntervalNano = -1;
     ScheduledHandle loadReportTimer;
+
+    // The name for the google service the client talks to. Received on LRS responses.
+    @Nullable
+    String clusterName;
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
@@ -222,6 +234,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       ClusterStats report =
           statsStore.generateLoadReport()
               .toBuilder()
+              .setClusterName(clusterName)
               .setLoadReportInterval(Durations.fromNanos(interval))
               .build();
       lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
@@ -263,11 +276,12 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
-      if (serviceList.size() != 1 || !serviceList.get(0).equals(serviceName)) {
-        logger.log(ChannelLogLevel.ERROR, "Unmatched cluster name(s): {0} with EDS response: {1}",
-            serviceList, serviceName);
+      if (serviceList.size() != 1) {
+        logger.log(ChannelLogLevel.ERROR, "Received clusters: {0}, expect exactly one",
+            serviceList);
         return;
       }
+      clusterName = serviceList.get(0);
       scheduleNextLoadReport();
     }
 
@@ -326,5 +340,27 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
+  }
+
+  abstract static class XdsLoadReportClientFactory {
+
+    private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
+        new XdsLoadReportClientFactory() {
+          @Override
+          XdsLoadReportClient createLoadReportClient(
+              ManagedChannel channel,
+              Helper helper,
+              Provider backoffPolicyProvider,
+              StatsStore statsStore) {
+            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+          }
+        };
+
+    static XdsLoadReportClientFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+        BackoffPolicy.Provider backoffPolicyProvider, StatsStore statsStore);
   }
 }

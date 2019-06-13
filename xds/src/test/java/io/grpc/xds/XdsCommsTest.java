@@ -174,14 +174,6 @@ public class XdsCommsTest {
   }
 
   @Test
-  public void shutdownLbComm() throws Exception {
-    xdsComms.shutdownChannel();
-    assertTrue(channel.isShutdown());
-    assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
-    assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
-  }
-
-  @Test
   public void shutdownLbRpc_verifyChannelNotShutdown() throws Exception {
     xdsComms.shutdownLbRpc("shutdown msg1");
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
@@ -301,7 +293,7 @@ public class XdsCommsTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
-    xdsComms.shutdownChannel();
+    xdsComms.shutdownLbRpc("End test");
   }
 
   @Test
@@ -437,7 +429,7 @@ public class XdsCommsTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
-    xdsComms.shutdownChannel();
+    xdsComms.shutdownLbRpc("End test");
   }
 
   @Test
@@ -446,7 +438,5 @@ public class XdsCommsTest {
 
     verify(adsStreamCallback).onError();
     verifyNoMoreInteractions(adsStreamCallback);
-
-    xdsComms.shutdownChannel();
   }
 }

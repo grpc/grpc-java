@@ -78,6 +78,7 @@ import org.mockito.stubbing.Answer;
 public class XdsLoadReportClientImplTest {
 
   private static final String SERVICE_AUTHORITY = "api.google.com";
+  private static final String CLUSTER_NAME = "gslb-namespace:gslb-service-name";
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -150,13 +151,13 @@ public class XdsLoadReportClientImplTest {
 
   private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
-        .setClusterName(SERVICE_AUTHORITY)
+        .setClusterName(CLUSTER_NAME)
         .setLoadReportInterval(Durations.fromNanos(loadReportIntervalNanos)).build();
   }
 
   private static LoadStatsResponse buildLrsResponse(long loadReportIntervalNanos) {
     return LoadStatsResponse.newBuilder()
-        .addClusters(SERVICE_AUTHORITY)
+        .addClusters(CLUSTER_NAME)
         .setLoadReportingInterval(Durations.fromNanos(loadReportIntervalNanos)).build();
   }
 
@@ -245,13 +246,35 @@ public class XdsLoadReportClientImplTest {
   }
 
   @Test
+  public void startAndStopCanBeCalledMultipleTimes() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(lrsRequestObservers).hasSize(1);
+    StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.peek();
+    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    lrsClient.startLoadReporting();
+    assertThat(lrsRequestObservers).hasSize(1);
+    lrsClient.startLoadReporting();
+    assertThat(lrsRequestObservers).hasSize(1);
+    verifyNoMoreInteractions(requestObserver);
+
+    lrsClient.stopLoadReporting();
+    verify(requestObserver).onCompleted();
+    assertThat(fakeClock.getPendingTasks(LRS_RPC_RETRY_TASK_FILTER)).isEmpty();
+    lrsClient.stopLoadReporting();
+    verifyNoMoreInteractions(requestObserver);
+
+    lrsClient.startLoadReporting();
+    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(lrsRequestObservers).hasSize(2);
+  }
+
+  @Test
   public void loadReportActualIntervalAsSpecified() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    when(statsStore.generateLoadReport())
-        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
+    when(statsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
     InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
@@ -270,8 +293,7 @@ public class XdsLoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
-    when(statsStore.generateLoadReport())
-        .thenReturn(ClusterStats.newBuilder().setClusterName(SERVICE_AUTHORITY).build());
+    when(statsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
 
     InOrder inOrder = inOrder(requestObserver, statsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
@@ -308,7 +330,7 @@ public class XdsLoadReportClientImplTest {
     long numThrottleDrops = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
 
     ClusterStats expectedStats1 = ClusterStats.newBuilder()
-        .setClusterName(SERVICE_AUTHORITY)
+        .setClusterName(CLUSTER_NAME)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
             .setLocality(TEST_LOCALITY)
@@ -325,7 +347,7 @@ public class XdsLoadReportClientImplTest {
         .setTotalDroppedRequests(numLbDrops + numThrottleDrops)
         .build();
     ClusterStats expectedStats2 = ClusterStats.newBuilder()
-        .setClusterName(SERVICE_AUTHORITY)
+        .setClusterName(CLUSTER_NAME)
         .setLoadReportInterval(Durations.fromNanos(1362))
         .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
             .setLocality(TEST_LOCALITY)
@@ -338,8 +360,7 @@ public class XdsLoadReportClientImplTest {
             .setDroppedCount(0))
         .setTotalDroppedRequests(0)
         .build();
-    when(statsStore.generateLoadReport())
-        .thenReturn(expectedStats1, expectedStats2);
+    when(statsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
 
     responseObserver.onNext(buildLrsResponse(1362));
     assertNextReport(inOrder, requestObserver, expectedStats1);

@@ -349,11 +349,6 @@ final class XdsComms {
         checkNotNull(localityStore, "localityStore"));
   }
 
-  void shutdownChannel() {
-    channel.shutdown();
-    shutdownLbRpc("Loadbalancer client shutdown");
-  }
-
   void refreshAdsStream() {
     checkState(!channel.isShutdown(), "channel is alreday shutdown");
 
@@ -362,6 +357,8 @@ final class XdsComms {
     }
   }
 
+  // TODO: Change method name to shutdown or shutdownXdsComms if that gives better semantics (
+  //  cancel LB RPC and clean up retry timer).
   void shutdownLbRpc(String message) {
     adsStream.cancelRpc(message, null);
   }

@@ -20,13 +20,20 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -43,6 +50,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.SynchronizationContext;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -50,6 +58,7 @@ import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +68,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -87,6 +97,14 @@ public class LocalityStoreTest {
       };
     }
   }
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
@@ -157,6 +175,8 @@ public class LocalityStoreTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
+  @Mock
+  private StatsStore statsStore;
 
   private LocalityStore localityStore;
 
@@ -164,8 +184,79 @@ public class LocalityStoreTest {
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
+    doReturn(syncContext).when(helper).getSynchronizationContext();
+    doAnswer(returnsFirstArg())
+        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random);
+    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void updateLocalityStore_updateStatsStoreLocalityTracking() {
+    Map<XdsLocality, LocalityInfo> localityInfoMap = new HashMap<>();
+    localityInfoMap
+        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1));
+    localityInfoMap
+        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality1);
+    verify(statsStore).addLocality(locality2);
+
+    localityInfoMap
+        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).addLocality(locality3);
+
+    localityInfoMap = ImmutableMap
+        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4));
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
+    verify(statsStore).removeLocality(locality3);
+    verify(statsStore).addLocality(locality4);
+
+    localityStore.updateLocalityStore(Collections.EMPTY_MAP);
+    verify(statsStore).removeLocality(locality4);
+    verifyNoMoreInteractions(statsStore);
+  }
+
+  @Test
+  public void updateLocalityStore_interceptPickResultUponPickReadySubchannel() {
+    // Simulate receiving two localities.
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    localityStore.updateLocalityStore(ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2));
+
+    // Two child balancers are created.
+    assertThat(loadBalancers).hasSize(2);
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    // Simulate picker updates for each of the two localities with dummy pickers.
+    final PickResult result1 = PickResult.withNoResult();
+    final PickResult result2 = PickResult.withNoResult();
+    SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
+    SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
+    when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(result1);
+    when(subchannelPicker2.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(result2);
+    childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker1);
+    childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
+    ArgumentCaptor<SubchannelPicker> interLocalityPickerCaptor = ArgumentCaptor.forClass(null);
+    verify(helper, times(2)).updateBalancingState(eq(READY), interLocalityPickerCaptor.capture());
+    SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      pickerFactory.nextIndex = i;
+      interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+    }
+    verify(statsStore).interceptPickResult(same(result1), eq(locality1));
+    verify(statsStore).interceptPickResult(same(result2), eq(locality2));
   }
 
   @Test
@@ -309,25 +400,30 @@ public class LocalityStoreTest {
     verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
 
     int times = 0;
+    InOrder inOrder = inOrder(statsStore);
     doReturn(365, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
 
     // subchannel12 goes to READY
     CreateSubchannelArgs createSubchannelArgs =
@@ -349,21 +445,26 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
+    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times + 2)).nextInt(1000_000);
+    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
+    inOrder.verifyNoMoreInteractions();
   }
 
   @Test
@@ -406,5 +507,7 @@ public class LocalityStoreTest {
 
     verify(loadBalancers.get("sz1")).shutdown();
     verify(loadBalancers.get("sz2")).shutdown();
+    verify(statsStore).removeLocality(locality1);
+    verify(statsStore).removeLocality(locality2);
   }
 }

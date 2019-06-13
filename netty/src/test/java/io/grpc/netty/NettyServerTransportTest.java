@@ -41,6 +41,12 @@ public class NettyServerTransportTest {
   }
 
   @Test
+  public void quiet_prefixed() {
+    assertEquals(Level.FINE, getLogLevel(new IOException(
+        "syscall:read(..) failed: Connection reset by peer")));
+  }
+
+  @Test
   public void nonquiet() {
     assertEquals(Level.INFO, getLogLevel(new IOException("foo")));
   }
