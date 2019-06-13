@@ -296,9 +296,9 @@ final class ClientLoadCounter {
   static final class LocalityMetricsListener implements OrcaPerRequestReportListener,
       OrcaOobReportListener {
 
-    private final ClientLoadCounter counter;
+    private final StatsCounter counter;
 
-    LocalityMetricsListener(ClientLoadCounter counter) {
+    LocalityMetricsListener(StatsCounter counter) {
       this.counter = checkNotNull(counter, "counter");
     }
 
