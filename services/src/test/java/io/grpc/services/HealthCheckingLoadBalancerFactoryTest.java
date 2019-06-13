@@ -258,7 +258,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verify(origHelper, atLeast(0)).getScheduledExecutorService();
     verifyNoMoreInteractions(origHelper);
     verifyNoMoreInteractions(origLb);
-    Subchannel[] wrappedSubchannels = new Subchannel[NUM_SUBCHANNELS];
 
     // Simulate that the orignal LB creates Subchannels
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
@@ -266,8 +265,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
       String subchannelAttrValue = "eag attr " + i;
       Attributes attrs = Attributes.newBuilder()
           .set(SUBCHANNEL_ATTR_KEY, subchannelAttrValue).build();
-      wrappedSubchannels[i] = createSubchannel(i, attrs);
-      assertThat(unwrap(wrappedSubchannels[i])).isSameInstanceAs(subchannels[i]);
+      // We don't wrap Subchannels, thus origLb gets the original Subchannels.
+      assertThat(unwrap(createSubchannel(i, attrs))).isSameInstanceAs(subchannels[i]);
       verify(origHelper, times(i + 1)).createSubchannel(createArgsCaptor.capture());
       assertThat(createArgsCaptor.getValue().getAddresses()).isEqualTo(eagLists[i]);
       assertThat(createArgsCaptor.getValue().getAttributes().get(SUBCHANNEL_ATTR_KEY))
@@ -341,17 +340,9 @@ public class HealthCheckingLoadBalancerFactoryTest {
       assertThat(serverCall.cancelled).isFalse();
       verifyNoMoreInteractions(mockStateListener);
 
-      assertThat(subchannels[i].isShutdown).isFalse();
-      final Subchannel wrappedSubchannel = wrappedSubchannels[i];
       // Subchannel enters SHUTDOWN state as a response to shutdown(), and that will cancel the
       // health check RPC
-      syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            wrappedSubchannel.shutdown();
-          }
-        });
-      assertThat(subchannels[i].isShutdown).isTrue();
+      subchannel.shutdown();
       assertThat(serverCall.cancelled).isTrue();
       verify(mockStateListener).onSubchannelState(
           eq(ConnectivityStateInfo.forNonError(SHUTDOWN)));
@@ -1013,38 +1004,34 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     verify(origLb).handleResolvedAddresses(result);
     verifyNoMoreInteractions(origLb);
-    ServerSideCall[] serverCalls = new ServerSideCall[NUM_SUBCHANNELS];
 
-    for (int i = 0; i < NUM_SUBCHANNELS; i++) {
-      Subchannel subchannel = createSubchannel(i, Attributes.EMPTY);
-      SubchannelStateListener mockListener = mockStateListeners[i];
-      assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[i]);
+    Subchannel subchannel = createSubchannel(0, Attributes.EMPTY);
+    SubchannelStateListener mockListener = mockStateListeners[0];
+    assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[0]);
 
-      // Trigger the health check
-      deliverSubchannelState(i, ConnectivityStateInfo.forNonError(READY));
+    // Trigger the health check
+    deliverSubchannelState(0, ConnectivityStateInfo.forNonError(READY));
 
-      HealthImpl healthImpl = healthImpls[i];
-      assertThat(healthImpl.calls).hasSize(1);
-      serverCalls[i] = healthImpl.calls.poll();
-      assertThat(serverCalls[i].cancelled).isFalse();
+    HealthImpl healthImpl = healthImpls[0];
+    assertThat(healthImpl.calls).hasSize(1);
+    ServerSideCall serverCall = healthImpl.calls.poll();
+    assertThat(serverCall.cancelled).isFalse();
 
-      verify(mockListener).onSubchannelState(
-          eq(ConnectivityStateInfo.forNonError(CONNECTING)));
-    }
+    verify(mockListener).onSubchannelState(
+        eq(ConnectivityStateInfo.forNonError(CONNECTING)));
 
     // Shut down the balancer
     hcLbEventDelivery.shutdown();
     verify(origLb).shutdown();
 
     // Health check stream should be cancelled
-    for (int i = 0; i < NUM_SUBCHANNELS; i++) {
-      assertThat(serverCalls[i].cancelled).isTrue();
-      // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
-      verifyNoMoreInteractions(origLb, mockStateListeners[i]);
-      // No more health check call is made or scheduled
-      assertThat(healthImpls[i].calls).isEmpty();
-    }
+    assertThat(serverCall.cancelled).isTrue();
 
+    // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
+    verifyNoMoreInteractions(origLb, mockListener);
+
+    // No more health check call is made or scheduled
+    assertThat(healthImpl.calls).isEmpty();
     assertThat(clock.getPendingTasks()).isEmpty();
   }
 
@@ -1169,7 +1156,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
     final ArrayList<String> logs = new ArrayList<>();
     final int index;
     SubchannelStateListener listener;
-    boolean isShutdown;
     private final ChannelLogger logger = new ChannelLogger() {
         @Override
         public void log(ChannelLogLevel level, String msg) {
@@ -1197,7 +1183,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
 
     @Override
     public void shutdown() {
-      isShutdown = true;
       deliverSubchannelState(index, ConnectivityStateInfo.forNonError(SHUTDOWN));
     }
 
