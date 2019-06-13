@@ -184,7 +184,7 @@ class NettyServerTransport implements ServerTransport {
   static Level getLogLevel(Throwable t) {
     if (t instanceof IOException && t.getMessage() != null) {
       for (String msg : QUIET_ERRORS) {
-        if (t.getMessage().equals(msg)) {
+        if (t.getMessage().contains(msg)) {
           return Level.FINE;
         }
       }
