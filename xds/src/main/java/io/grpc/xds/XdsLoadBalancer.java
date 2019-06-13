@@ -188,7 +188,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     LbConfig childPolicy = xdsConfig.childPolicy;
     ManagedChannel lbChannel;
     if (xdsLbState == null) {
-      lbChannel = initLbChannel(newBalancerName);
+      lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
               localityStore.getStatsStore());
@@ -196,7 +196,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       lrsClient.stopLoadReporting();
       ManagedChannel oldChannel = xdsLbState.shutdownAndReleaseChannel("Changing balancer name");
       oldChannel.shutdown();
-      lbChannel = initLbChannel(newBalancerName);
+      lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
               localityStore.getStatsStore());
@@ -212,7 +212,7 @@ final class XdsLoadBalancer extends LoadBalancer {
             adsStreamCallback);
   }
 
-  private ManagedChannel initLbChannel(String balancerName) {
+  private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
     ManagedChannel channel;
     try {
       channel = helper.createResolvingOobChannel(balancerName);
