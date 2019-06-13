@@ -36,6 +36,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
@@ -195,6 +196,9 @@ final class XdsComms {
                     return;
                   }
 
+                  helper.getChannelLogger().log(
+                      ChannelLogLevel.DEBUG,
+                      "Received an EDS response: {0}", clusterLoadAssignment);
                   if (!firstEdsResponseReceived) {
                     firstEdsResponseReceived = true;
                     adsStreamCallback.onWorking();
@@ -277,7 +281,7 @@ final class XdsComms {
       this.localityStore = localityStore;
 
       // Assuming standard mode, and send EDS request only
-      xdsRequestWriter.onNext(
+      DiscoveryRequest edsRequest =
           DiscoveryRequest.newBuilder()
               .setNode(Node.newBuilder()
                   .setMetadata(Struct.newBuilder()
@@ -288,7 +292,9 @@ final class XdsComms {
                       .putFields(
                           "endpoints_required",
                           Value.newBuilder().setBoolValue(true).build())))
-              .setTypeUrl(EDS_TYPE_URL).build());
+              .setTypeUrl(EDS_TYPE_URL).build();
+      helper.getChannelLogger().log(ChannelLogLevel.DEBUG, "Sending EDS request {0}", edsRequest);
+      xdsRequestWriter.onNext(edsRequest);
     }
 
     AdsStream(AdsStream adsStream) {
