@@ -21,7 +21,13 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.testing.EqualsTester;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+/**
+ * Unit tests for {@link XdsLocality}.
+ */
+@RunWith(JUnit4.class)
 public class XdsLocalityTest {
 
   @Test
