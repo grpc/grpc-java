@@ -791,6 +791,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
     channelStateManager.gotoState(TRANSIENT_FAILURE);
   }
 
+  @VisibleForTesting
+  boolean isInPanicMode() {
+    return panicMode;
+  }
+
   // Called from syncContext
   private void updateSubchannelPicker(SubchannelPicker newPicker) {
     subchannelPicker = newPicker;
