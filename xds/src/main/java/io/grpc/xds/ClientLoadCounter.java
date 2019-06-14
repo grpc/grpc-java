@@ -290,15 +290,17 @@ final class ClientLoadCounter {
   }
 
   /**
-   * Listener implementation to receive backend metrics with locality-level aggregation.
+   * Listener implementation to receive backend metrics and record metric values in the provided
+   * {@link StatsCounter}.
    */
+  @VisibleForTesting
   @ThreadSafe
-  static final class LocalityMetricsListener implements OrcaPerRequestReportListener,
+  static final class MetricsRecordingListener implements OrcaPerRequestReportListener,
       OrcaOobReportListener {
 
     private final StatsCounter counter;
 
-    LocalityMetricsListener(StatsCounter counter) {
+    MetricsRecordingListener(StatsCounter counter) {
       this.counter = checkNotNull(counter, "counter");
     }
 
@@ -310,5 +312,34 @@ final class ClientLoadCounter {
         counter.recordMetric(entry.getKey(), entry.getValue());
       }
     }
+  }
+
+  /**
+   * Factory class for creating {@link OrcaPerRequestReportListener} and
+   * {@link OrcaOobReportListener} that record received metric values in the provided
+   * {@link StatsCounter}.
+   */
+  abstract static class XdsMetricsRecordingListenerFactory {
+
+    private static final XdsMetricsRecordingListenerFactory DEFAULT_INSTANCE =
+        new XdsMetricsRecordingListenerFactory() {
+          @Override
+          OrcaPerRequestReportListener createOrcaPerRequestReportListener(StatsCounter counter) {
+            return new MetricsRecordingListener(counter);
+          }
+
+          @Override
+          OrcaOobReportListener createOrcaOobReportListener(StatsCounter counter) {
+            return new MetricsRecordingListener(counter);
+          }
+        };
+
+    static XdsMetricsRecordingListenerFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract OrcaPerRequestReportListener createOrcaPerRequestReportListener(StatsCounter counter);
+
+    abstract OrcaOobReportListener createOrcaOobReportListener(StatsCounter counter);
   }
 }
