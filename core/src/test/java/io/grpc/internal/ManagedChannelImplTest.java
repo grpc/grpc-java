@@ -269,6 +269,7 @@ public class ManagedChannelImplTest {
   private ChannelBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
+  private boolean panicExpected;
 
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
@@ -338,6 +339,9 @@ public class ManagedChannelImplTest {
     assertTrue(timer.getDueTasks() + " should be empty", timer.getDueTasks().isEmpty());
     assertEquals(executor.getPendingTasks() + " should be empty", 0, executor.numPendingTasks());
     if (channel != null) {
+      if (!panicExpected) {
+        assertFalse(channel.isInPanicMode());
+      }
       channel.shutdownNow();
       channel = null;
     }
@@ -405,15 +409,8 @@ public class ManagedChannelImplTest {
   @SuppressWarnings("deprecation")
   public void createSubchannel_old_propagateSubchannelStatesToOldApi() {
     createChannel();
-    final AtomicReference<Subchannel> subchannelCapture = new AtomicReference<>();
-    helper.getSynchronizationContext().execute(new Runnable() {
-        @Override
-        public void run() {
-          subchannelCapture.set(helper.createSubchannel(addressGroup, Attributes.EMPTY));
-        }
-      });
 
-    Subchannel subchannel = subchannelCapture.get();
+    Subchannel subchannel = helper.createSubchannel(addressGroup, Attributes.EMPTY);
     subchannel.requestConnection();
 
     verify(mockTransportFactory)
@@ -427,6 +424,15 @@ public class ManagedChannelImplTest {
 
     verify(mockLoadBalancer).handleSubchannelState(
         same(subchannel), eq(ConnectivityStateInfo.forNonError(READY)));
+
+    channel.shutdown();
+    verify(mockLoadBalancer).shutdown();
+    subchannel.shutdown();
+
+    verify(mockLoadBalancer, atLeast(0)).canHandleEmptyAddressListFromNameResolution();
+    verify(mockLoadBalancer, atLeast(0)).handleNameResolutionError(any(Status.class));
+    // handleSubchannelState() should not be called after shutdown()
+    verifyNoMoreInteractions(mockLoadBalancer);
   }
 
   @Test
@@ -2226,7 +2232,7 @@ public class ManagedChannelImplTest {
     verifyPanicMode(panicReason);
 
     // No new resolver or balancer are created
-    verifyNoMoreInteractions(mockLoadBalancerProvider);
+    verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     assertThat(nameResolverFactory.resolvers).isEmpty();
 
     // A misbehaving balancer that calls updateBalancingState() after it's shut down will not be
@@ -2235,7 +2241,12 @@ public class ManagedChannelImplTest {
     verifyPanicMode(panicReason);
 
     // Cannot be revived by exitIdleMode()
-    channel.exitIdleMode();
+    channel.syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          channel.exitIdleMode();
+        }
+      });
     verifyPanicMode(panicReason);
 
     // Can still shutdown normally
@@ -2282,11 +2293,11 @@ public class ManagedChannelImplTest {
     executor.runDueTasks();
     verifyCallListenerClosed(mockCallListener, Status.Code.INTERNAL, panicReason);
     verifyCallListenerClosed(mockCallListener2, Status.Code.INTERNAL, panicReason);
+    panicExpected = true;
   }
 
   private void verifyPanicMode(Throwable cause) {
-    Assume.assumeTrue("Panic mode disabled to resolve issues with some tests. See #3293", false);
-
+    panicExpected = true;
     @SuppressWarnings("unchecked")
     ClientCall.Listener<Integer> mockListener =
         (ClientCall.Listener<Integer>) mock(ClientCall.Listener.class);
