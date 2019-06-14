@@ -1,16 +1,3 @@
-PERFMARK_INTERNAL_ACCESSOR_SRCS = glob(
-    [
-        "src/main/java/io/grpc/perfmark/Internal*.java",
-    ],
-)
-
-PERFMARK_SRCS = glob(
-    [
-        "src/main/java/io/grpc/perfmark/*.java",
-    ],
-    exclude = PERFMARK_INTERNAL_ACCESSOR_SRCS,
-)
-
 java_library(
     name = "core",
     visibility = ["//visibility:public"],
@@ -43,7 +30,6 @@ java_library(
     ]),
     visibility = ["//:__subpackages__"],
     deps = [
-        ":perfmark",
         "//api",
         "//context",
         "@com_google_android_annotations//jar",
@@ -54,6 +40,7 @@ java_library(
         "@com_google_j2objc_j2objc_annotations//jar",
         "@io_opencensus_opencensus_api//jar",
         "@io_opencensus_opencensus_contrib_grpc_metrics//jar",
+        "@io_perfmark_perfmark_api//jar",
         "@org_codehaus_mojo_animal_sniffer_annotations//jar",
     ],
 )
@@ -76,12 +63,3 @@ java_library(
     ],
 )
 
-java_library(
-    name = "perfmark",
-    srcs = PERFMARK_SRCS,
-    visibility = ["//:__subpackages__"],
-    deps = [
-        "@com_google_code_findbugs_jsr305//jar",
-        "@com_google_errorprone_error_prone_annotations//jar",
-    ],
-)
