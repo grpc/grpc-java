@@ -81,6 +81,7 @@ class XdsLbState {
     if (xdsComms != null) {
       xdsComms.refreshAdsStream();
     } else {
+      // TODO(zdapeng): pass a helper that has the right ChannelLogger for the oobChannel
       xdsComms = new XdsComms(channel, helper, adsStreamCallback, localityStore);
     }
 
