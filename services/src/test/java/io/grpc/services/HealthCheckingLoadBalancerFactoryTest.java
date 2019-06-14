@@ -1324,7 +1324,6 @@ public class HealthCheckingLoadBalancerFactoryTest {
   }
 
   private void deliverSubchannelState(final int index, final ConnectivityStateInfo newState) {
-    new Throwable("XXX:" + index + " " + newState).printStackTrace();
     syncContext.execute(new Runnable() {
         @Override
         public void run() {
