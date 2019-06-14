@@ -228,7 +228,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
   private class ResponseDispatcher {
     private final Chunk completionChunk = new Chunk(0, 0, 0);
     private final Queue<Chunk> chunks;
-    private final ServerCallStreamObserver<StreamingOutputCallResponse> responseStream;
+    private final StreamObserver<StreamingOutputCallResponse> responseStream;
     private boolean scheduled;
     @GuardedBy("this") private boolean cancelled;
     private Throwable failure;
@@ -268,12 +268,7 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
      */
     public ResponseDispatcher(StreamObserver<StreamingOutputCallResponse> responseStream) {
       this.chunks = Queues.newLinkedBlockingQueue();
-      this.responseStream = (ServerCallStreamObserver<StreamingOutputCallResponse>) responseStream;
-      this.responseStream.setOnReadyHandler(new Runnable() {
-        @Override public void run() {
-          scheduleNextChunk();
-        }
-      });
+      this.responseStream = responseStream;
     }
 
     /**
@@ -351,11 +346,6 @@ public class TestServiceImpl extends TestServiceGrpc.TestServiceImplBase {
       synchronized (this) {
         if (scheduled) {
           // Dispatch task is already scheduled.
-          return;
-        }
-
-        if (chunks.peek() != completionChunk && !responseStream.isReady()) {
-          // Wait for the onReady handler to be called.
           return;
         }
 
