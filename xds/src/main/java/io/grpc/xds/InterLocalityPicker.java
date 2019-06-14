@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -50,6 +51,14 @@ final class InterLocalityPicker extends SubchannelPicker {
 
     SubchannelPicker getPicker() {
       return childPicker;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("weight", weight)
+          .add("childPicker", childPicker)
+          .toString();
     }
   }
 
@@ -98,5 +107,13 @@ final class InterLocalityPicker extends SubchannelPicker {
     }
 
     return childPicker.pickSubchannel(args);
+  }
+
+  @Override
+  public String toString() {
+    return MoreObjects.toStringHelper(this)
+        .add("weightedChildPickers", weightedChildPickers)
+        .add("totalWeight", totalWeight)
+        .toString();
   }
 }

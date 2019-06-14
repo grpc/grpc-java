@@ -158,6 +158,8 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
 
       if (!fallbackManager.isInFallbackMode()) {
+        delegate.getChannelLogger().log(
+            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", newState, newPicker);
         delegate.updateBalancingState(newState, newPicker);
       }
     }
@@ -349,6 +351,8 @@ final class XdsLoadBalancer extends LoadBalancer {
     void cancelFallback() {
       cancelFallbackTimer();
       if (fallbackBalancer != null) {
+        helper.getChannelLogger().log(
+            ChannelLogLevel.INFO, "Shutting down XDS fallback balancer");
         fallbackBalancer.shutdown();
         fallbackBalancer = null;
       }
@@ -362,7 +366,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       cancelFallbackTimer();
 
       helper.getChannelLogger().log(
-          ChannelLogLevel.INFO, "Using fallback policy");
+          ChannelLogLevel.INFO, "Using XDS fallback policy");
 
       final class FallbackBalancerHelper extends ForwardingLoadBalancerHelper {
         LoadBalancer balancer;
@@ -374,6 +378,9 @@ final class XdsLoadBalancer extends LoadBalancer {
             // ignore updates from a misbehaving shutdown fallback balancer
             return;
           }
+          helper.getChannelLogger().log(
+              ChannelLogLevel.INFO,
+              "Picker updated - state: {0}, picker: {1}", newState, newPicker);
           super.updateBalancingState(newState, newPicker);
         }
 

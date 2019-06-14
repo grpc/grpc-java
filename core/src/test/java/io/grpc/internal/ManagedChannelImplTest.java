@@ -136,7 +136,6 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -2231,7 +2230,7 @@ public class ManagedChannelImplTest {
     assertEquals(TRANSIENT_FAILURE, channel.getState(true));
     verifyPanicMode(panicReason);
 
-    // No new resolver or balancer are created
+    // Besides the resolver created initially, no new resolver or balancer are created.
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     assertThat(nameResolverFactory.resolvers).isEmpty();
 
