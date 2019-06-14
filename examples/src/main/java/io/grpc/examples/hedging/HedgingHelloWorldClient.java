@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package io.grpc.examples.hedging;
 
 import com.google.gson.Gson;
@@ -22,7 +38,7 @@ import java.util.logging.Logger;
  * A client that requests a greeting from the {@link HedgingHelloWorldServer} with a hedging policy.
  */
 public class HedgingHelloWorldClient {
-  static final String DISABLE_HEDGING = "DISABLE_HEDGING";
+  static final String ENV_DISABLE_HEDGING = "DISABLE_HEDGING_IN_HEDGING_EXAMPLE";
 
   private static final Logger logger = Logger.getLogger(HedgingHelloWorldClient.class.getName());
 
@@ -66,7 +82,6 @@ public class HedgingHelloWorldClient {
     } catch (StatusRuntimeException e) {
       failedRpcs.incrementAndGet();
       statusRuntimeException = e;
-      logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
     }
     long latencyMills = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
     latencies.offer(latencyMills);
@@ -125,17 +140,17 @@ public class HedgingHelloWorldClient {
       logger.log(
           Level.INFO,
           "To disable hedging, run the client with environment variable {0}=true.",
-          DISABLE_HEDGING);
+          ENV_DISABLE_HEDGING);
     } else {
       logger.log(
           Level.INFO,
           "To enable hedging, unset environment variable {0} and then run the client.",
-          DISABLE_HEDGING);
+          ENV_DISABLE_HEDGING);
     }
   }
 
   public static void main(String[] args) throws Exception {
-    boolean hedging = !Boolean.valueOf(System.getenv(DISABLE_HEDGING));
+    boolean hedging = !Boolean.valueOf(System.getenv(ENV_DISABLE_HEDGING));
     final HedgingHelloWorldClient client = new HedgingHelloWorldClient("localhost", 50051, hedging);
     ForkJoinPool executor = new ForkJoinPool();
 

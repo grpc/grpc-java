@@ -53,7 +53,7 @@ before trying out the examples.
           ]
         }
   ```
-  A summary of latency in the client log is typically like the following
+  a summary of latency in the client log is typically like the following
 
   ```text
   Total RPCs sent: 2,000. Total RPCs failed: 0
@@ -72,7 +72,7 @@ before trying out the examples.
   executables for the server and the client are `hedging-hello-world-server` and
   `hedging-hello-world-client`.
 
-  To disable hedging, set environment variable `DISABLE_HEDGING=true` before
+  To disable hedging, set environment variable `DISABLE_HEDGING_IN_HEDGING_EXAMPLE=true` before
   running the client. A summary of latency in the client log is typically like the following
 
   ```text
