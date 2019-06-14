@@ -42,7 +42,7 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.ClientLoadCounter.LocalityMetricsListener;
+import io.grpc.xds.ClientLoadCounter.XdsMetricsRecordingListenerFactory;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
@@ -85,19 +85,26 @@ interface LocalityStore {
     private final ThreadSafeRandom random;
     private final StatsStore statsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
+    private final XdsMetricsRecordingListenerFactory xdsMetricsRecordingListenerFactory;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance());
+          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance(),
+          XdsMetricsRecordingListenerFactory.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
-        Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random, StatsStore statsStore, OrcaPerRequestUtil orcaPerRequestUtil) {
+        Helper helper,
+        PickerFactory pickerFactory,
+        LoadBalancerRegistry lbRegistry,
+        ThreadSafeRandom random,
+        StatsStore statsStore,
+        OrcaPerRequestUtil orcaPerRequestUtil,
+        XdsMetricsRecordingListenerFactory xdsMetricsRecordingListenerFactory) {
       this.helper = checkNotNull(helper, "helper");
       this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
@@ -106,6 +113,8 @@ interface LocalityStore {
       this.random = checkNotNull(random, "random");
       this.statsStore = checkNotNull(statsStore, "statsStore");
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
+      this.xdsMetricsRecordingListenerFactory =
+          checkNotNull(xdsMetricsRecordingListenerFactory, "xdsMetricsRecordingListenerFactory");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -430,7 +439,9 @@ interface LocalityStore {
                   locality);
               return result;
             }
-            OrcaPerRequestReportListener listener = new LocalityMetricsListener(localityCounter);
+            OrcaPerRequestReportListener listener =
+                xdsMetricsRecordingListenerFactory
+                    .createOrcaPerRequestReportListener(localityCounter);
             ClientStreamTracer.Factory origFactory = result.getStreamTracerFactory();
             ClientStreamTracer.Factory orcaClientStreamTracerFactory;
             if (origFactory == null) {

@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -51,12 +52,15 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.ClientLoadCounter.XdsMetricsRecordingListenerFactory;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
+import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -179,6 +183,8 @@ public class LocalityStoreTest {
   private StatsStore statsStore;
   @Mock
   private OrcaPerRequestUtil orcaPerRequestUtil;
+  @Mock
+  private XdsMetricsRecordingListenerFactory xdsMetricsRecordingListenerFactory;
 
   private LocalityStore localityStore;
 
@@ -192,7 +198,7 @@ public class LocalityStoreTest {
     lbRegistry.register(lbProvider);
     localityStore =
         new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
-            orcaPerRequestUtil);
+            orcaPerRequestUtil, xdsMetricsRecordingListenerFactory);
   }
 
   @Test
@@ -235,13 +241,29 @@ public class LocalityStoreTest {
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
+    verify(statsStore).addLocality(locality1);
+    verify(statsStore).addLocality(locality2);
+    StatsCounter localityCounter1 = mock(StatsCounter.class);
+    StatsCounter localityCounter2 = mock(StatsCounter.class);
+    when(statsStore.getLocalityCounter(locality1)).thenReturn(localityCounter1);
+    when(statsStore.getLocalityCounter(locality2)).thenReturn(localityCounter2);
+    OrcaPerRequestReportListener listener1 = mock(OrcaPerRequestReportListener.class);
+    OrcaPerRequestReportListener listener2 = mock(OrcaPerRequestReportListener.class);
+    when(xdsMetricsRecordingListenerFactory.createOrcaPerRequestReportListener(localityCounter1))
+        .thenReturn(listener1);
+    when(xdsMetricsRecordingListenerFactory.createOrcaPerRequestReportListener(localityCounter2))
+        .thenReturn(listener2);
+
     // Two child balancers are created.
     assertThat(loadBalancers).hasSize(2);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     // Simulate picker updates for each of the two localities with dummy pickers.
-    final PickResult result1 = PickResult.withNoResult();
-    final PickResult result2 = PickResult.withNoResult();
+    final PickResult result1 = PickResult.withSubchannel(mock(Subchannel.class));
+    ClientStreamTracer.Factory mockClientStreamTracerFactory =
+        mock(ClientStreamTracer.Factory.class);
+    final PickResult result2 =
+        PickResult.withSubchannel(mock(Subchannel.class), mockClientStreamTracerFactory);
     SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
     SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
     when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -261,6 +283,16 @@ public class LocalityStoreTest {
     }
     verify(statsStore).interceptPickResult(same(result1), eq(locality1));
     verify(statsStore).interceptPickResult(same(result2), eq(locality2));
+
+    verify(xdsMetricsRecordingListenerFactory)
+        .createOrcaPerRequestReportListener(same(localityCounter1));
+    verify(xdsMetricsRecordingListenerFactory)
+        .createOrcaPerRequestReportListener(same(localityCounter2));
+    verify(orcaPerRequestUtil)
+        .newOrcaClientStreamTracerFactory(same(listener1));
+    verify(orcaPerRequestUtil)
+        .newOrcaClientStreamTracerFactory(same(mockClientStreamTracerFactory), same(listener2));
+
   }
 
   @Test
