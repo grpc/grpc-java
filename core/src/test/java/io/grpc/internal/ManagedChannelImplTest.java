@@ -2226,7 +2226,7 @@ public class ManagedChannelImplTest {
     assertEquals(TRANSIENT_FAILURE, channel.getState(true));
     verifyPanicMode(panicReason);
 
-    // No new resolver or balancer are created
+    // Besides the resolver created initially, no new resolver or balancer are created.
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
     assertThat(nameResolverFactory.resolvers).isEmpty();
 
