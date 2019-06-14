@@ -248,7 +248,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     boolean deadlineExceeded = effectiveDeadline != null && effectiveDeadline.isExpired();
     if (!deadlineExceeded) {
       logIfContextNarrowedTimeout(
-          effectiveDeadline, callOptions.getDeadline(), context.getDeadline());
+          effectiveDeadline, context.getDeadline(), callOptions.getDeadline());
       if (retryEnabled) {
         stream = clientTransportProvider.newRetriableStream(method, callOptions, headers, context);
       } else {
