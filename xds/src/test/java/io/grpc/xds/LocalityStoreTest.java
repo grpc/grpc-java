@@ -52,7 +52,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
-import io.grpc.xds.ClientLoadCounter.XdsMetricsRecordingListenerFactory;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -183,8 +183,6 @@ public class LocalityStoreTest {
   private StatsStore statsStore;
   @Mock
   private OrcaPerRequestUtil orcaPerRequestUtil;
-  @Mock
-  private XdsMetricsRecordingListenerFactory xdsMetricsRecordingListenerFactory;
 
   private LocalityStore localityStore;
 
@@ -198,7 +196,7 @@ public class LocalityStoreTest {
     lbRegistry.register(lbProvider);
     localityStore =
         new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
-            orcaPerRequestUtil, xdsMetricsRecordingListenerFactory);
+            orcaPerRequestUtil);
   }
 
   @Test
@@ -247,12 +245,10 @@ public class LocalityStoreTest {
     StatsCounter localityCounter2 = mock(StatsCounter.class);
     when(statsStore.getLocalityCounter(locality1)).thenReturn(localityCounter1);
     when(statsStore.getLocalityCounter(locality2)).thenReturn(localityCounter2);
-    OrcaPerRequestReportListener listener1 = mock(OrcaPerRequestReportListener.class);
-    OrcaPerRequestReportListener listener2 = mock(OrcaPerRequestReportListener.class);
-    when(xdsMetricsRecordingListenerFactory.createOrcaPerRequestReportListener(localityCounter1))
-        .thenReturn(listener1);
-    when(xdsMetricsRecordingListenerFactory.createOrcaPerRequestReportListener(localityCounter2))
-        .thenReturn(listener2);
+    ArgumentCaptor<OrcaPerRequestReportListener> orcaPerRequestReportListenerCaptor1 =
+        ArgumentCaptor.forClass(null);
+    ArgumentCaptor<OrcaPerRequestReportListener> orcaPerRequestReportListenerCaptor2 =
+        ArgumentCaptor.forClass(null);
 
     // Two child balancers are created.
     assertThat(loadBalancers).hasSize(2);
@@ -284,15 +280,17 @@ public class LocalityStoreTest {
     verify(statsStore).interceptPickResult(same(result1), eq(locality1));
     verify(statsStore).interceptPickResult(same(result2), eq(locality2));
 
-    verify(xdsMetricsRecordingListenerFactory)
-        .createOrcaPerRequestReportListener(same(localityCounter1));
-    verify(xdsMetricsRecordingListenerFactory)
-        .createOrcaPerRequestReportListener(same(localityCounter2));
     verify(orcaPerRequestUtil)
-        .newOrcaClientStreamTracerFactory(same(listener1));
+        .newOrcaClientStreamTracerFactory(orcaPerRequestReportListenerCaptor1.capture());
     verify(orcaPerRequestUtil)
-        .newOrcaClientStreamTracerFactory(same(mockClientStreamTracerFactory), same(listener2));
-
+        .newOrcaClientStreamTracerFactory(same(mockClientStreamTracerFactory),
+            orcaPerRequestReportListenerCaptor2.capture());
+    MetricsRecordingListener listener1 =
+        (MetricsRecordingListener) orcaPerRequestReportListenerCaptor1.getValue();
+    MetricsRecordingListener listener2 =
+        (MetricsRecordingListener) orcaPerRequestReportListenerCaptor2.getValue();
+    assertThat(listener1.getCounter()).isSameInstanceAs(localityCounter1);
+    assertThat(listener2.getCounter()).isSameInstanceAs(localityCounter2);
   }
 
   @Test
