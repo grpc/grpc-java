@@ -98,7 +98,6 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
     private final SynchronizationContext syncContext;
 
     @Nullable String healthCheckedService;
-    private boolean balancerShutdown;
 
     final HashSet<HealthCheckState> hcStates = new HashSet<>();
 
@@ -188,19 +187,6 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
       String serviceName = ServiceConfigUtil.getHealthCheckedServiceName(serviceConfig);
       helper.setHealthCheckedService(serviceName);
       super.handleResolvedAddresses(resolvedAddresses);
-    }
-
-    @Override
-    public void shutdown() {
-      super.shutdown();
-      helper.balancerShutdown = true;
-      for (HealthCheckState hcState : helper.hcStates) {
-        // ManagedChannel will stop calling onSubchannelState() after shutdown() is called,
-        // which is required by LoadBalancer API semantics. We need to deliver the final SHUTDOWN
-        // signal to health checkers so that they can cancel the streams.
-        hcState.onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
-      }
-      helper.hcStates.clear();
     }
 
     @Override
@@ -341,7 +327,7 @@ final class HealthCheckingLoadBalancerFactory extends Factory {
 
     private void gotoState(ConnectivityStateInfo newState) {
       checkState(subchannel != null, "init() not called");
-      if (!helperImpl.balancerShutdown && !Objects.equal(concludedState, newState)) {
+      if (!Objects.equal(concludedState, newState)) {
         concludedState = newState;
         stateListener.onSubchannelState(concludedState);
       }
