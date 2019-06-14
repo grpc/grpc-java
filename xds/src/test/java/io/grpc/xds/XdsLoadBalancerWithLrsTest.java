@@ -63,10 +63,17 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+/**
+ * Unit tests for {@link XdsLoadBalancer}, especially for interactions between
+ * {@link XdsLoadBalancer} and {@link XdsLoadReportClient}.
+ */
+@RunWith(JUnit4.class)
 public class XdsLoadBalancerWithLrsTest {
   private static final String SERVICE_AUTHORITY = "test authority";
 
