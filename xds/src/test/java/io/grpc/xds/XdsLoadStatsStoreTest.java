@@ -316,9 +316,9 @@ public class XdsLoadStatsStoreTest {
     PickResult interceptedDroppedResult =
         loadStore.interceptPickResult(droppedResult, LOCALITY1);
     PickResult interceptedEmptyResult = loadStore.interceptPickResult(emptyResult, LOCALITY1);
-    assertThat(interceptedErrorResult).isEqualTo(errorResult);
-    assertThat(interceptedDroppedResult).isEqualTo(droppedResult);
-    assertThat(interceptedEmptyResult).isEqualTo(emptyResult);
+    assertThat(interceptedErrorResult).isSameInstanceAs(errorResult);
+    assertThat(interceptedDroppedResult).isSameInstanceAs(droppedResult);
+    assertThat(interceptedEmptyResult).isSameInstanceAs(emptyResult);
   }
 
   @Test
