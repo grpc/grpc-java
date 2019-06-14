@@ -784,11 +784,15 @@ public class ManagedChannelImplTest {
     subchannel1.shutdown();
     subchannel2.shutdown();
 
-    // No more callback are delivered to LoadBalancer or the state listeners after it's shut down
+    // Since subchannels are shutdown, SubchannelStateListeners will only get SHUTDOWN regardless of
+    // the transport states.
     transportInfo1.listener.transportShutdown(Status.UNAVAILABLE);
     transportInfo2.listener.transportReady();
+    verify(stateListener1).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
+    verify(stateListener2).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
     verifyNoMoreInteractions(stateListener1, stateListener2);
 
+    // No more callback should be delivered to LoadBalancer after it's shut down
     resolver.listener.onError(resolutionError);
     resolver.resolved();
     verifyNoMoreInteractions(mockLoadBalancer);

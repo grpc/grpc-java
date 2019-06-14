@@ -1076,6 +1076,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
           new LoadBalancer.SubchannelStateListener() {
             @Override
             public void onSubchannelState(ConnectivityStateInfo newState) {
+              // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
+              if (LbHelperImpl.this != ManagedChannelImpl.this.lbHelper) {
+                return;
+              }
               lb.handleSubchannelState(subchannel, newState);
             }
           };
@@ -1459,11 +1463,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         void onStateChange(InternalSubchannel is, ConnectivityStateInfo newState) {
           handleInternalSubchannelState(newState);
-          // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
-          if (helper == ManagedChannelImpl.this.lbHelper) {
-            checkState(listener != null, "listener is null");
-            listener.onSubchannelState(newState);
-          }
+          checkState(listener != null, "listener is null");
+          listener.onSubchannelState(newState);
         }
 
         @Override

@@ -349,9 +349,9 @@ public abstract class LoadBalancer {
   }
 
   /**
-   * The channel asks the load-balancer to shutdown.  No more callbacks will be called after this
-   * method.  The implementation should shutdown all Subchannels and OOB channels, and do any other
-   * cleanup as necessary.
+   * The channel asks the load-balancer to shutdown.  No more methods on this class will be called
+   * after this method.  The implementation should shutdown all Subchannels and OOB channels, and do
+   * any other cleanup as necessary.
    *
    * @since 1.2.0
    */
