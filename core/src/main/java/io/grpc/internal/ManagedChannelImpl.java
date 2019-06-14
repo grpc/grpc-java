@@ -1080,7 +1080,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
               if (LbHelperImpl.this != ManagedChannelImpl.this.lbHelper) {
                 return;
               }
-              System.err.println("XXX: " + newState);
               lb.handleSubchannelState(subchannel, newState);
             }
           };
