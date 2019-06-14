@@ -287,6 +287,11 @@ final class ClientLoadCounter {
         }
       };
     }
+
+    @VisibleForTesting
+    ClientLoadCounter getCounter() {
+      return counter;
+    }
   }
 
   /**

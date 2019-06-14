@@ -34,6 +34,7 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -296,7 +297,7 @@ public class XdsLoadStatsStoreTest {
   }
 
   @Test
-  public void invalidPickResultNotIntercepted() {
+  public void interceptPickResult_invalidPickResultNotIntercepted() {
     localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
     PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
     PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
@@ -311,17 +312,31 @@ public class XdsLoadStatsStoreTest {
   }
 
   @Test
-  public void interceptPreservesOriginStreamTracer() {
+  public void interceptPickResult_applyLoadRecorderToPickResult() {
     ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
     ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
     when(mockFactory
         .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
         .thenReturn(mockTracer);
-    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
-    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
+    ClientLoadCounter localityCounter1 = new ClientLoadCounter();
+    ClientLoadCounter localityCounter2 = new ClientLoadCounter();
+    localityLoadCounters.put(LOCALITY1, localityCounter1);
+    localityLoadCounters.put(LOCALITY2, localityCounter2);
+    PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class), mockFactory);
+    PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
+    PickResult interceptedPickResult1 = loadStore.interceptPickResult(pickResult1, LOCALITY1);
+    PickResult interceptedPickResult2 = loadStore.interceptPickResult(pickResult2, LOCALITY2);
+    XdsClientLoadRecorder recorder1 =
+        (XdsClientLoadRecorder) interceptedPickResult1.getStreamTracerFactory();
+    XdsClientLoadRecorder recorder2 =
+        (XdsClientLoadRecorder) interceptedPickResult2.getStreamTracerFactory();
+    assertThat(recorder1.getCounter()).isSameInstanceAs(localityCounter1);
+    assertThat(recorder2.getCounter()).isSameInstanceAs(localityCounter2);
+
+    // Stream tracing is propagated to downstream tracers, which preserves PickResult's original
+    // tracing functionality.
     Metadata metadata = new Metadata();
-    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
+    interceptedPickResult1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
         .streamClosed(Status.OK);
     verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
     verify(mockTracer).streamClosed(Status.OK);
