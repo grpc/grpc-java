@@ -107,15 +107,20 @@ public class HedgingHelloWorldClient {
       long latency = latencies.poll();
       if (i == rpcCount * 50 / 100 - 1) {
         latency50 = latency;
-      } else if (i == rpcCount * 90 / 100 - 1) {
+      }
+      if (i == rpcCount * 90 / 100 - 1) {
         latency90 = latency;
-      } else if (i == rpcCount * 95 / 100 - 1) {
+      }
+      if (i == rpcCount * 95 / 100 - 1) {
         latency95 = latency;
-      } else if (i == rpcCount * 99 / 100 - 1) {
+      }
+      if (i == rpcCount * 99 / 100 - 1) {
         latency99 = latency;
-      } else if (i == rpcCount * 999 / 1000 - 1) {
+      }
+      if (i == rpcCount * 999 / 1000 - 1) {
         latency999 = latency;
-      } else if (i == rpcCount - 1) {
+      }
+      if (i == rpcCount - 1) {
         latencyMax = latency;
       }
     }
