@@ -94,6 +94,18 @@ class DelayedStream implements ClientStream {
     });
   }
 
+  @Override
+  public String getDebugString() {
+    ClientStream savedRealStream = realStream;
+    String realStreamString;
+    if (savedRealStream != null) {
+      realStreamString = savedRealStream.getDebugString();
+    } else {
+      realStreamString = "not_set";
+    }
+    return "[DelayedStream realStream=" + realStreamString + "]";
+  }
+
   /**
    * Transfers all pending and future requests and mutations to the given stream.
    *

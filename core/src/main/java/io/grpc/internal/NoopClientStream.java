@@ -83,4 +83,9 @@ public class NoopClientStream implements ClientStream {
 
   @Override
   public void setDeadline(@Nonnull Deadline deadline) {}
+
+  @Override
+  public String getDebugString() {
+    return getClass().getSimpleName();
+  }
 }

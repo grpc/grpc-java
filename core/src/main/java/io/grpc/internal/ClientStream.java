@@ -97,4 +97,9 @@ public interface ClientStream extends Stream {
    * Attributes that the stream holds at the current moment.
    */
   Attributes getAttributes();
+
+  /**
+   * Returns a debug string that reflects the current states.
+   */
+  String getDebugString();
 }

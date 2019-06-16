@@ -806,6 +806,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
         headers.put(TIMEOUT_KEY, effectiveTimeout);
       }
+
+      @Override
+      public String getDebugString() {
+        return getClass().getSimpleName();
+      }
     }
   }
 

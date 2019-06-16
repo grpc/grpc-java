@@ -30,6 +30,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Supplier;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -85,6 +86,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
+  private final Supplier<String> channelStateDebugStringProvider;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -94,6 +96,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
+      Supplier<String> channelStateDebugStringProvider,
       boolean retryEnabled) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -105,6 +108,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         ? new SerializeReentrantCallsDirectExecutor()
         : new SerializingExecutor(executor);
     this.channelCallsTracer = channelCallsTracer;
+    this.channelStateDebugStringProvider =
+        checkNotNull(channelStateDebugStringProvider, "channelStateDebugStringProvider");
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
@@ -265,7 +270,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
     } else {
       stream = new FailingClientStream(
-          DEADLINE_EXCEEDED.withDescription("deadline exceeded: " + effectiveDeadline));
+          DEADLINE_EXCEEDED.withDescription(
+              "ClientCall started after deadline exceeded: " + effectiveDeadline));
     }
 
     if (callOptions.getAuthority() != null) {
@@ -350,7 +356,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-          String.format("deadline exceeded after %dns", remainingNanos)));
+          String.format(
+              "deadline exceeded after %dns. Channel state: %s. Stream: %s",
+              remainingNanos, channelStateDebugStringProvider.get(), stream.getDebugString())));
     }
   }
 
@@ -654,7 +662,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // description. Since our timer may be delayed in firing, we double-check the deadline and
         // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
         if (deadline.isExpired()) {
-          status = DEADLINE_EXCEEDED;
+          status = DEADLINE_EXCEEDED.augmentDescription(
+              "ClientCall was cancelled at or after deadline. Stream: " + stream.getDebugString());
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }

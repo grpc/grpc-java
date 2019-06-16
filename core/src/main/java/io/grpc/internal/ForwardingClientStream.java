@@ -111,4 +111,9 @@ abstract class ForwardingClientStream implements ClientStream {
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }
+
+  @Override
+  public String getDebugString() {
+    return "[" + getClass().getSimpleName() + " delegate=" + delegate().getDebugString() + "]";
+  }
 }

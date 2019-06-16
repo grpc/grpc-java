@@ -274,6 +274,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ManagedClientTransport.Listener delayedTransportListener =
       new DelayedTransportListener();
 
+  private final Supplier<String> channelStateDebugStringProvider = new Supplier<String>() {
+      @Override
+      public String get() {
+        // TODO(zhangkun83): add more information
+        //   - Latest events from channel trace
+        //   - Last error from LoadBalancer with timestamp
+        return channelStateManager.getState().toString();
+      }
+    };
+
   // Must be called from syncContext
   private void maybeShutdownNowSubchannels() {
     if (shutdownNowed) {
@@ -858,6 +868,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           transportProvider,
           terminated ? null : transportFactory.getScheduledExecutorService(),
           channelCallTracer,
+          channelStateDebugStringProvider,
           retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)

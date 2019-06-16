@@ -21,6 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -97,6 +98,13 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
       throw new UnsupportedOperationException("OobChannel should not create retriable streams");
     }
   };
+
+  private final Supplier<String> debugStringProvider = new Supplier<String>() {
+      @Override
+      public String get() {
+        return "OobChannel: " + subchannel.getState();
+      }
+    };
 
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
@@ -194,7 +202,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     return new ClientCallImpl<>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
         callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer,
-        false /* retryEnabled */);
+        debugStringProvider, false /* retryEnabled */);
   }
 
   @Override

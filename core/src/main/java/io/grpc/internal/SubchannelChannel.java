@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Supplier;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -47,6 +48,12 @@ final class SubchannelChannel extends Channel {
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CallTracer callsTracer;
+  private final Supplier<String> debugStringProvider = new Supplier<String>() {
+      @Override
+      public String get() {
+        return "SubchannelChannel: " + subchannel.getState();
+      }
+    };
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
       @Override
@@ -109,7 +116,8 @@ final class SubchannelChannel extends Channel {
     return new ClientCallImpl<>(methodDescriptor,
         effectiveExecutor,
         callOptions.withOption(GrpcUtil.CALL_OPTIONS_RPC_OWNED_BY_BALANCER, Boolean.TRUE),
-        transportProvider, deadlineCancellationExecutor, callsTracer, false /* retryEnabled */);
+        transportProvider, deadlineCancellationExecutor, callsTracer, debugStringProvider,
+        false /* retryEnabled */);
   }
 
   @Override

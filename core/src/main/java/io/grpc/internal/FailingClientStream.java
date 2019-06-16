@@ -58,4 +58,9 @@ public final class FailingClientStream extends NoopClientStream {
   Status getError() {
     return error;
   }
+
+  @Override
+  public String getDebugString() {
+    return "[" + getClass().getSimpleName() + " error=" + error + " progress=" + rpcProgress + "]";
+  }
 }

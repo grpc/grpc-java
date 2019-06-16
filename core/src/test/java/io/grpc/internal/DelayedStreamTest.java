@@ -347,4 +347,18 @@ public class DelayedStreamTest {
     delayedListener.closed(status, trailers);
     verify(listener).closed(status, trailers);
   }
+
+  @Test
+  public void getDebugString_realStreamNotSet() {
+    assertEquals("[DelayedStream realStream=not_set]", stream.getDebugString());
+  }
+
+  @Test
+  public void getDebugString_realStreamSet() {
+    when(realStream.getDebugString()).thenReturn("[real stream debug string]");
+    stream.start(listener);
+    stream.setStream(realStream);
+
+    assertEquals("[DelayedStream realStream=[real stream debug string]]", stream.getDebugString());
+  }
 }

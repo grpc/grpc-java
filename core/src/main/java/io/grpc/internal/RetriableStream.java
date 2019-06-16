@@ -642,6 +642,12 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     return Attributes.EMPTY;
   }
 
+  @Override
+  public String getDebugString() {
+    // TODO(zhangkun83): add more useful information
+    return "[" + getClass().getSimpleName() + " attrs=" + getAttributes() + "]";
+  }
+
   private static Random random = new Random();
 
   @VisibleForTesting

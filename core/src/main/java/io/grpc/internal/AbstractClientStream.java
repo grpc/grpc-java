@@ -217,6 +217,11 @@ public abstract class AbstractClientStream extends AbstractStream
     return super.isReady() && !cancelled;
   }
 
+  @Override
+  public String getDebugString() {
+    return "[" + getClass().getSimpleName() + " attrs=" + getAttributes() + "]";
+  }
+
   protected TransportTracer getTransportTracer() {
     return transportTracer;
   }
