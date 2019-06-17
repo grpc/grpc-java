@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -23,6 +24,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -31,6 +33,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Attributes.Key;
 import io.grpc.Codec;
@@ -48,8 +52,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link DelayedStream}.  Most of the state checking is enforced by
@@ -349,16 +355,38 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void getDebugString_realStreamNotSet() {
-    assertEquals("[DelayedStream realStream=not_set]", stream.getDebugString());
+  public void appendTimeoutDetails_notStarted() {
+    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    stream.appendTimeoutDetails(helper);
+    assertThat(helper.toString()).isEqualTo("DelayedStreamTest{}");
   }
 
   @Test
-  public void getDebugString_realStreamSet() {
-    when(realStream.getDebugString()).thenReturn("[real stream debug string]");
+  public void appendTimeoutDetails_realStreamNotSet() {
+    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    stream.start(listener);
+    stream.appendTimeoutDetails(helper);
+    assertThat(helper.toString())
+        .matches("DelayedStreamTest\\{has_real_stream=false, buffered_nanos=[0-9]+\\}");
+  }
+
+  @Test
+  public void appendTimeoutDetails_realStreamSet() {
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
+          helper.add("server_addr", "127.0.0.1:443");
+          return null;
+        }
+      }).when(realStream).appendTimeoutDetails(any(ToStringHelper.class));
     stream.start(listener);
     stream.setStream(realStream);
 
-    assertEquals("[DelayedStream realStream=[real stream debug string]]", stream.getDebugString());
+    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    stream.appendTimeoutDetails(helper);
+    assertThat(helper.toString())
+        .matches("DelayedStreamTest\\{has_real_stream=true, buffered_nanos=[0-9]+, "
+            + "server_addr=127\\.0\\.0\\.1:443\\}");
   }
 }

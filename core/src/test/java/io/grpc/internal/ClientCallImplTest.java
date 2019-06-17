@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -36,7 +37,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.Supplier;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -55,6 +56,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
+import io.grpc.internal.ClientCallImpl.TimeoutDetailsProvider;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.ByteArrayInputStream;
@@ -79,8 +81,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Test for {@link ClientCallImpl}.
@@ -101,12 +105,13 @@ public class ClientCallImplTest {
       .setResponseMarshaller(TestMethodDescriptors.voidMarshaller())
       .build();
 
-  private final Supplier<String> channelStateDebugStringProvider = new Supplier<String>() {
-      @Override
-      public String get() {
-        return "[Channel state debug string]";
-      }
-    };
+  private final TimeoutDetailsProvider channelTimeoutDetailsProvider =
+      new TimeoutDetailsProvider() {
+        @Override
+        public void appendTimeoutDetails(ToStringHelper toStringHelper) {
+          toStringHelper.add("channel_state", "TEST_FAKE_STATE");
+        }
+      };
 
   @Rule
   public final MockitoRule mocks = MockitoJUnit.rule();
@@ -144,7 +149,14 @@ public class ClientCallImplTest {
     when(transport.newStream(
             any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(stream);
-    when(stream.getDebugString()).thenReturn("[stream debug string]");
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
+          helper.add("server_addr", "127.0.0.1:443");
+          return null;
+        }
+      }).when(stream).appendTimeoutDetails(any(ToStringHelper.class));
     baseCallOptions = CallOptions.DEFAULT.withStreamTracerFactory(streamTracerFactory);
   }
 
@@ -163,7 +175,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
     verify(stream).start(listenerArgumentCaptor.capture());
@@ -186,7 +198,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
     verify(stream).start(listenerArgumentCaptor.capture());
@@ -225,7 +237,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
     verify(stream).start(listenerArgumentCaptor.capture());
@@ -262,7 +274,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
     verify(stream).start(listenerArgumentCaptor.capture());
@@ -298,7 +310,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -323,7 +335,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -341,7 +353,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
         .setDecompressorRegistry(decompressorRegistry);
     final Metadata metadata = new Metadata();
@@ -361,7 +373,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -533,7 +545,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -612,7 +624,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -643,7 +655,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
         .setDecompressorRegistry(decompressorRegistry);
 
@@ -689,7 +701,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
     call.start(callListener, new Metadata());
@@ -715,7 +727,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
 
@@ -741,7 +753,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
 
@@ -767,7 +779,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
 
@@ -789,7 +801,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
 
@@ -808,7 +820,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
 
@@ -827,7 +839,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
 
     call.start(callListener, new Metadata());
@@ -837,8 +849,8 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after .*ns. Channel state: "
-            + "\\[Channel state debug string\\]\\. Stream: \\[stream debug string\\]");
+        .matches("deadline exceeded after [0-9]+ns. "
+            + "TimeoutDetails\\{channel_state=TEST_FAKE_STATE, server_addr=127\\.0\\.0\\.1:443\\}");
   }
 
   @Test
@@ -856,7 +868,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
 
     context.detach(origContext);
@@ -881,7 +893,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     call.start(callListener, new Metadata());
     call.cancel("canceled", null);
@@ -907,7 +919,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
 
     Metadata headers = new Metadata();
@@ -926,7 +938,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     final Exception cause = new Exception();
     ClientCall.Listener<Void> callListener =
@@ -965,7 +977,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        channelStateDebugStringProvider,
+        channelTimeoutDetailsProvider,
         false /* retryEnabled */)
             .setDecompressorRegistry(decompressorRegistry);
 
@@ -979,7 +991,7 @@ public class ClientCallImplTest {
   public void getAttributes() {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method, MoreExecutors.directExecutor(), baseCallOptions, provider,
-        deadlineCancellationExecutor, channelCallTracer, channelStateDebugStringProvider,
+        deadlineCancellationExecutor, channelCallTracer, channelTimeoutDetailsProvider,
         false /* retryEnabled */);
     Attributes attrs =
         Attributes.newBuilder().set(Key.<String>create("fake key"), "fake value").build();

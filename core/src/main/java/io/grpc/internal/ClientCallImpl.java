@@ -30,7 +30,7 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Supplier;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -60,6 +60,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Implementation of {@link ClientCall}.
@@ -86,17 +87,26 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
-  private final Supplier<String> channelStateDebugStringProvider;
+  private final TimeoutDetailsProvider channelTimeoutDetailsProvider;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+
+  // We just use this class for its name as it will appear in ToStringHelper's output
+  private static final class TimeoutDetails {
+    ToStringHelper newToStringHelper() {
+      return MoreObjects.toStringHelper(this);
+    }
+  }
+
+  private static TimeoutDetails timeoutDetailsStarter = new TimeoutDetails();
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
-      Supplier<String> channelStateDebugStringProvider,
+      TimeoutDetailsProvider channelTimeoutDetailsProvider,
       boolean retryEnabled) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -108,8 +118,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         ? new SerializeReentrantCallsDirectExecutor()
         : new SerializingExecutor(executor);
     this.channelCallsTracer = channelCallsTracer;
-    this.channelStateDebugStringProvider =
-        checkNotNull(channelStateDebugStringProvider, "channelStateDebugStringProvider");
+    this.channelTimeoutDetailsProvider =
+        checkNotNull(channelTimeoutDetailsProvider, "channelTimeoutDetailsProvider");
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
@@ -146,6 +156,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         Metadata headers,
         Context context);
 
+  }
+
+  /**
+   * Provider of channel states to be returned to user along with DEADLINE_EXCEEDED errors.
+   */
+  @ThreadSafe
+  interface TimeoutDetailsProvider {
+    void appendTimeoutDetails(ToStringHelper toStringHelper);
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -355,10 +373,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     public void run() {
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
+      ToStringHelper timeoutDetails = timeoutDetailsStarter.newToStringHelper();
+      channelTimeoutDetailsProvider.appendTimeoutDetails(timeoutDetails);
+      stream.appendTimeoutDetails(timeoutDetails);
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-          String.format(
-              "deadline exceeded after %dns. Channel state: %s. Stream: %s",
-              remainingNanos, channelStateDebugStringProvider.get(), stream.getDebugString())));
+          String.format("deadline exceeded after %dns. %s", remainingNanos, timeoutDetails)));
     }
   }
 
@@ -662,8 +681,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // description. Since our timer may be delayed in firing, we double-check the deadline and
         // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
         if (deadline.isExpired()) {
+          ToStringHelper timeoutDetails = timeoutDetailsStarter.newToStringHelper();
+          stream.appendTimeoutDetails(timeoutDetails);
           status = DEADLINE_EXCEEDED.augmentDescription(
-              "ClientCall was cancelled at or after deadline. Stream: " + stream.getDebugString());
+              "ClientCall was cancelled at or after deadline. " + timeoutDetails);
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }

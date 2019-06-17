@@ -1097,7 +1097,7 @@ public abstract class AbstractInteropTest {
       assertTrue(desc,
           // If client expires first, it'd generate this message
           Pattern.matches(
-              "deadline exceeded after .*ns. Channel state: READY. Stream: .*", desc)
+              "deadline exceeded after .*ns. TimeoutDetails\\{channel_state=READY.*", desc)
           // If server expires first, it'd reset the stream and client would generate a different
           // message
           || desc.startsWith("ClientCall was cancelled at or after deadline."));

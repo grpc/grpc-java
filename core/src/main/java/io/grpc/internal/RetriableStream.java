@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
@@ -643,9 +644,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public String getDebugString() {
-    // TODO(zhangkun83): add more useful information
-    return "[" + getClass().getSimpleName() + " attrs=" + getAttributes() + "]";
+  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
+    // TODO(zhangkun83): add number of attempts etc.
   }
 
   private static Random random = new Random();

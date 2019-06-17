@@ -40,14 +40,12 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class ForwardingClientStreamTest {
   private ClientStream mock = mock(ClientStream.class);
-  private class ForwardStream extends ForwardingClientStream {
+  private ForwardingClientStream forward = new ForwardingClientStream() {
     @Override
     protected ClientStream delegate() {
       return mock;
     }
-  }
-
-  private ForwardingClientStream forward = new ForwardStream();
+  };
 
   @Test
   public void allMethodsForwarded() throws Exception {
@@ -154,11 +152,5 @@ public class ForwardingClientStreamTest {
     Attributes attr = Attributes.newBuilder().build();
     when(mock.getAttributes()).thenReturn(attr);
     assertSame(attr, forward.getAttributes());
-  }
-
-  @Test
-  public void getDebugStringTest() {
-    when(mock.getDebugString()).thenReturn("[delegate debug string]");
-    assertEquals("[ForwardStream delegate=[delegate debug string]]", forward.getDebugString());
   }
 }

@@ -24,14 +24,17 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.io.ByteStreams;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -218,8 +221,9 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
-  public String getDebugString() {
-    return "[" + getClass().getSimpleName() + " attrs=" + getAttributes() + "]";
+  public final void appendTimeoutDetails(ToStringHelper toStringHelper) {
+    Attributes attrs = getAttributes();
+    toStringHelper.add("server_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 
   protected TransportTracer getTransportTracer() {

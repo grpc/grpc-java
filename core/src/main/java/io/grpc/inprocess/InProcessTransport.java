@@ -21,6 +21,7 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
@@ -808,8 +809,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       }
 
       @Override
-      public String getDebugString() {
-        return getClass().getSimpleName();
+      public void appendTimeoutDetails(ToStringHelper toStringHelper) {
       }
     }
   }

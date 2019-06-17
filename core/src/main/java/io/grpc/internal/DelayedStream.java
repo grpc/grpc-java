@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -55,6 +56,10 @@ class DelayedStream implements ClientStream {
   private List<Runnable> pendingCalls = new ArrayList<>();
   @GuardedBy("this")
   private DelayedStreamListener delayedListener;
+  @GuardedBy("this")
+  private long startTimeNanos;
+  @GuardedBy("this")
+  private long streamSetTimeNanos;
 
   @Override
   public void setMaxInboundMessageSize(final int maxSize) {
@@ -95,15 +100,19 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public String getDebugString() {
-    ClientStream savedRealStream = realStream;
-    String realStreamString;
-    if (savedRealStream != null) {
-      realStreamString = savedRealStream.getDebugString();
-    } else {
-      realStreamString = "not_set";
+  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
+    synchronized (this) {
+      if (listener == null) {
+        return;
+      }
+      toStringHelper.add("has_real_stream", realStream != null);
+      if (realStream != null) {
+        toStringHelper.add("buffered_nanos", streamSetTimeNanos - startTimeNanos);
+        realStream.appendTimeoutDetails(toStringHelper);
+      } else {
+        toStringHelper.add("buffered_nanos", System.nanoTime() - startTimeNanos);
+      }
     }
-    return "[DelayedStream realStream=" + realStreamString + "]";
   }
 
   /**
@@ -118,7 +127,7 @@ class DelayedStream implements ClientStream {
       if (realStream != null) {
         return;
       }
-      realStream = checkNotNull(stream, "stream");
+      setRealStream(checkNotNull(stream, "stream"));
     }
 
     drainPendingCalls();
@@ -204,6 +213,7 @@ class DelayedStream implements ClientStream {
       if (!savedPassThrough) {
         listener = delayedListener = new DelayedStreamListener(listener);
       }
+      startTimeNanos = System.nanoTime();
     }
     if (savedError != null) {
       listener.closed(savedError, new Metadata());
@@ -267,9 +277,8 @@ class DelayedStream implements ClientStream {
     synchronized (this) {
       // If realStream != null, then either setStream() or cancel() has been called
       if (realStream == null) {
-        realStream = NoopClientStream.INSTANCE;
+        setRealStream(NoopClientStream.INSTANCE);
         delegateToRealStream = false;
-
         // If listener == null, then start() will later call listener with 'error'
         listenerToClose = listener;
         error = reason;
@@ -288,6 +297,13 @@ class DelayedStream implements ClientStream {
       }
       drainPendingCalls();
     }
+  }
+
+  @GuardedBy("this")
+  private void setRealStream(ClientStream realStream) {
+    checkState(this.realStream == null, "realStream already set to %s", this.realStream);
+    this.realStream = realStream;
+    streamSetTimeNanos = System.nanoTime();
   }
 
   @Override

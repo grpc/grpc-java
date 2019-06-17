@@ -2267,11 +2267,6 @@ public class RetriableStreamTest {
     assertEquals(0, fakeClock.numPendingTasks());
   }
 
-  @Test
-  public void getDebugStringTest() {
-    assertEquals("[RecordedRetriableStream attrs={}]", retriableStream.getDebugString());
-  }
-
   /**
    * Used to stub a retriable stream as well as to record methods of the retriable stream being
    * called.
