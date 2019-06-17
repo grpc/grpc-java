@@ -28,7 +28,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.Metadata;
-import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
@@ -55,17 +54,17 @@ final class XdsLoadStatsStore implements StatsStore {
         }
       };
 
-  private final ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
+  private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
   XdsLoadStatsStore() {
-    this(new ConcurrentHashMap<XdsLocality, StatsCounter>(),
+    this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadStatsStore(ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
+  XdsLoadStatsStore(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
@@ -78,7 +77,7 @@ final class XdsLoadStatsStore implements StatsStore {
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
-    for (Map.Entry<XdsLocality, StatsCounter> entry : localityLoadCounters.entrySet()) {
+    for (Map.Entry<XdsLocality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
@@ -119,7 +118,7 @@ final class XdsLoadStatsStore implements StatsStore {
    */
   @Override
   public void addLocality(final XdsLocality locality) {
-    StatsCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active counter for locality %s already exists", locality);
     if (counter == null) {
@@ -130,19 +129,19 @@ final class XdsLoadStatsStore implements StatsStore {
   }
 
   /**
-   * Deactivate the {@link StatsCounter} for the provided locality in by this
+   * Deactivate the {@link ClientLoadCounter} for the provided locality in by this
    * {@link XdsLoadStatsStore}.
    */
   @Override
   public void removeLocality(final XdsLocality locality) {
-    StatsCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active counter for locality %s exists", locality);
     counter.setActive(false);
   }
 
   @Override
-  public StatsCounter getLocalityCounter(final XdsLocality locality) {
+  public ClientLoadCounter getLocalityCounter(final XdsLocality locality) {
     return localityLoadCounters.get(locality);
   }
 
@@ -166,7 +165,7 @@ final class XdsLoadStatsStore implements StatsStore {
     if (pickResult.getSubchannel() == null) {
       return pickResult;
     }
-    StatsCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     if (counter == null) {
       // TODO (chengyuanzhang): this should not happen if this method is called in a correct
       //  order with other methods in this class, but we might want to have some logs or warnings.
@@ -178,31 +177,5 @@ final class XdsLoadStatsStore implements StatsStore {
     }
     XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
     return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
-  }
-
-
-  /**
-   * Blueprint for counters that can can record number of calls in-progress, succeeded, failed,
-   * issued and backend metrics.
-   */
-  abstract static class StatsCounter {
-
-    private boolean active = true;
-
-    abstract void recordCallStarted();
-
-    abstract void recordCallFinished(Status status);
-
-    abstract void recordMetric(String name, double value);
-
-    abstract ClientLoadSnapshot snapshot();
-
-    boolean isActive() {
-      return active;
-    }
-
-    void setActive(boolean value) {
-      active = value;
-    }
   }
 }

@@ -20,10 +20,10 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
@@ -33,12 +33,9 @@ import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -63,7 +60,7 @@ public class XdsLoadStatsStoreTest {
   private static final ClientStreamTracer.StreamInfo STREAM_INFO =
       ClientStreamTracer.StreamInfo.newBuilder().build();
   private Subchannel mockSubchannel = mock(Subchannel.class);
-  private ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
+  private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private XdsLoadStatsStore loadStore;
 
@@ -216,41 +213,38 @@ public class XdsLoadStatsStoreTest {
 
   @Test
   public void removeInactiveCountersAfterGeneratingLoadReport() {
-    StatsCounter counter1 = mock(StatsCounter.class);
-    when(counter1.isActive()).thenReturn(true);
-    when(counter1.snapshot()).thenReturn(ClientLoadSnapshot.EMPTY_SNAPSHOT);
-    StatsCounter counter2 = mock(StatsCounter.class);
-    when(counter2.isActive()).thenReturn(false);
-    when(counter2.snapshot()).thenReturn(ClientLoadSnapshot.EMPTY_SNAPSHOT);
-    localityLoadCounters.put(LOCALITY1, counter1);
-    localityLoadCounters.put(LOCALITY2, counter2);
+    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
+    ClientLoadCounter inactiveCounter = new ClientLoadCounter();
+    inactiveCounter.setActive(false);
+    localityLoadCounters.put(LOCALITY2, inactiveCounter);
     loadStore.generateLoadReport();
     assertThat(localityLoadCounters).containsKey(LOCALITY1);
     assertThat(localityLoadCounters).doesNotContainKey(LOCALITY2);
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  public void loadReportMatchesSnapshots() {
-    StatsCounter counter1 = mock(StatsCounter.class);
-    Map<String, MetricValue> metrics1 = new HashMap<>();
-    metrics1.put("cpu_utilization", new MetricValue(15, 12.5435));
-    metrics1.put("mem_utilization", new MetricValue(8, 0.421));
-    metrics1.put("named_cost_or_utilization", new MetricValue(3, 2.5435));
-    when(counter1.isActive()).thenReturn(true);
-    when(counter1.snapshot()).thenReturn(new ClientLoadSnapshot(4315, 3421, 23, 593, metrics1),
-        new ClientLoadSnapshot(0, 543, 0, 0, Collections.EMPTY_MAP));
-    StatsCounter counter2 = mock(StatsCounter.class);
-    Map<String, MetricValue> metrics2 = new HashMap<>();
-    metrics2.put("cpu_utilization", new MetricValue(344, 132.74));
-    metrics2.put("mem_utilization", new MetricValue(41, 23.453));
-    metrics2.put("named_cost_or_utilization", new MetricValue(12, 423));
-    when(counter2.snapshot()).thenReturn(new ClientLoadSnapshot(41234, 432, 431, 702, metrics2),
-        new ClientLoadSnapshot(0, 432, 0, 0, Collections.EMPTY_MAP));
-    when(counter2.isActive()).thenReturn(true);
+  public void loadReportContainsRecordedStats() {
+    ClientLoadCounter counter1 = new ClientLoadCounter(4315, 3421, 23, 593);
+    counter1.recordMetric("cpu_utilization", 0.3244);
+    counter1.recordMetric("mem_utilization", 0.01233);
+    counter1.recordMetric("named_cost_or_utilization", 3221.6543);
+    ClientLoadCounter counter2 = new ClientLoadCounter(41234, 432, 431, 702);
+    counter2.recordMetric("cpu_utilization", 0.6526);
+    counter2.recordMetric("mem_utilization", 0.3473);
+    counter2.recordMetric("named_cost_or_utilization", 87653.4234);
     localityLoadCounters.put(LOCALITY1, counter1);
     localityLoadCounters.put(LOCALITY2, counter2);
 
+    Map<String, MetricValue> metrics1 =
+        ImmutableMap.of(
+            "cpu_utilization", new MetricValue(1, 0.3244),
+            "mem_utilization", new MetricValue(1, 0.01233),
+            "named_cost_or_utilization", new MetricValue(1, 3221.6543));
+    Map<String, MetricValue> metrics2 =
+        ImmutableMap.of(
+            "cpu_utilization", new MetricValue(1, 0.6526),
+            "mem_utilization", new MetricValue(1, 0.3473),
+            "named_cost_or_utilization", new MetricValue(1, 87653.4234));
     ClusterStats expectedReport =
         buildClusterStats(
             Arrays.asList(
@@ -260,21 +254,16 @@ public class XdsLoadStatsStoreTest {
                     buildEndpointLoadMetricStatsList(metrics2))
             ),
             null);
-
     assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
-    verify(counter1).snapshot();
-    verify(counter2).snapshot();
 
     expectedReport =
         buildClusterStats(
             Arrays.asList(
-                buildUpstreamLocalityStats(LOCALITY1, 0, 543, 0, 0, null),
+                buildUpstreamLocalityStats(LOCALITY1, 0, 3421, 0, 0, null),
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0, 0, null)
             ),
             null);
     assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
-    verify(counter1, times(2)).snapshot();
-    verify(counter2, times(2)).snapshot();
   }
 
   @Test
@@ -308,7 +297,7 @@ public class XdsLoadStatsStoreTest {
 
   @Test
   public void invalidPickResultNotIntercepted() {
-    localityLoadCounters.put(LOCALITY1, mock(StatsCounter.class));
+    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
     PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
     PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
     PickResult emptyResult = PickResult.withNoResult();
@@ -328,7 +317,7 @@ public class XdsLoadStatsStoreTest {
     when(mockFactory
         .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
         .thenReturn(mockTracer);
-    localityLoadCounters.put(LOCALITY1, mock(StatsCounter.class));
+    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
     PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
     PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
     Metadata metadata = new Metadata();
