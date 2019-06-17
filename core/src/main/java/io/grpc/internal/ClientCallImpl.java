@@ -92,15 +92,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
 
-  // We just use this class for its name as it will appear in ToStringHelper's output
-  private static final class TimeoutDetails {
-    ToStringHelper newToStringHelper() {
-      return MoreObjects.toStringHelper(this);
-    }
-  }
-
-  private static TimeoutDetails timeoutDetailsStarter = new TimeoutDetails();
-
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
       ClientTransportProvider clientTransportProvider,
@@ -371,11 +362,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void run() {
-      // DelayedStream.cancel() is safe to call from a thread that is different from where the
-      // stream is created.
-      ToStringHelper timeoutDetails = timeoutDetailsStarter.newToStringHelper();
+      ToStringHelper timeoutDetails = MoreObjects.toStringHelper("");
       channelTimeoutDetailsProvider.appendTimeoutDetails(timeoutDetails);
       stream.appendTimeoutDetails(timeoutDetails);
+      // DelayedStream.cancel() is safe to call from a thread that is different from where the
+      // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
           String.format("deadline exceeded after %dns. %s", remainingNanos, timeoutDetails)));
     }
@@ -681,7 +672,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // description. Since our timer may be delayed in firing, we double-check the deadline and
         // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
         if (deadline.isExpired()) {
-          ToStringHelper timeoutDetails = timeoutDetailsStarter.newToStringHelper();
+          ToStringHelper timeoutDetails = MoreObjects.toStringHelper("");
           stream.appendTimeoutDetails(timeoutDetails);
           status = DEADLINE_EXCEEDED.augmentDescription(
               "ClientCall was cancelled at or after deadline. " + timeoutDetails);

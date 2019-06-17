@@ -646,6 +646,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   @Override
   public void appendTimeoutDetails(ToStringHelper toStringHelper) {
     // TODO(zhangkun83): add number of attempts etc.
+    
   }
 
   private static Random random = new Random();

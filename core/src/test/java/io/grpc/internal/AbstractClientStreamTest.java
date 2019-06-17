@@ -477,12 +477,11 @@ public class AbstractClientStreamTest {
 
   @Test
   public void appendTimeoutDetails() {
-    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    ToStringHelper helper = MoreObjects.toStringHelper("");
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString())
-        .isEqualTo("AbstractClientStreamTest{server_addr=fake_server_addr}");
+    assertThat(helper.toString()).isEqualTo("{server_addr=fake_server_addr}");
   }
 
   /**

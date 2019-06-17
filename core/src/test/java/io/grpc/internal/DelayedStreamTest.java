@@ -356,18 +356,17 @@ public class DelayedStreamTest {
 
   @Test
   public void appendTimeoutDetails_notStarted() {
-    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    ToStringHelper helper = MoreObjects.toStringHelper("");
     stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString()).isEqualTo("DelayedStreamTest{}");
+    assertThat(helper.toString()).isEqualTo("{}");
   }
 
   @Test
   public void appendTimeoutDetails_realStreamNotSet() {
-    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    ToStringHelper helper = MoreObjects.toStringHelper("");
     stream.start(listener);
     stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString())
-        .matches("DelayedStreamTest\\{has_real_stream=false, buffered_nanos=[0-9]+\\}");
+    assertThat(helper.toString()).matches("\\{has_real_stream=false, buffered_nanos=[0-9]+\\}");
   }
 
   @Test
@@ -383,10 +382,10 @@ public class DelayedStreamTest {
     stream.start(listener);
     stream.setStream(realStream);
 
-    ToStringHelper helper = MoreObjects.toStringHelper(this);
+    ToStringHelper helper = MoreObjects.toStringHelper("");
     stream.appendTimeoutDetails(helper);
     assertThat(helper.toString())
-        .matches("DelayedStreamTest\\{has_real_stream=true, buffered_nanos=[0-9]+, "
+        .matches("\\{has_real_stream=true, buffered_nanos=[0-9]+, "
             + "server_addr=127\\.0\\.0\\.1:443\\}");
   }
 }

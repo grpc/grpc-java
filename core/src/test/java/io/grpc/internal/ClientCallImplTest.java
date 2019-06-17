@@ -850,7 +850,7 @@ public class ClientCallImplTest {
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .matches("deadline exceeded after [0-9]+ns. "
-            + "TimeoutDetails\\{channel_state=TEST_FAKE_STATE, server_addr=127\\.0\\.0\\.1:443\\}");
+            + "\\{channel_state=TEST_FAKE_STATE, server_addr=127\\.0\\.0\\.1:443\\}");
   }
 
   @Test
