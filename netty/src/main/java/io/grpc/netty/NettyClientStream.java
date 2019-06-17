@@ -43,7 +43,9 @@ import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
+import io.perfmark.Link;
 import io.perfmark.PerfMark;
+import io.perfmark.Tag;
 import javax.annotation.Nullable;
 
 /**
@@ -215,9 +217,20 @@ class NettyClientStream extends AbstractClientStream {
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
         channel.eventLoop().execute(new Runnable() {
+          final Link link = PerfMark.link();
           @Override
           public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
+            PerfMark.startTask(
+                "NettyClientStream$Sink.requestMessagesFromDeframer",
+                transportState().tag());
+            link.link();
+            try {
+              transportState().requestMessagesFromDeframer(numMessages);
+            } finally {
+              PerfMark.stopTask(
+                  "NettyClientStream$Sink.requestMessagesFromDeframer",
+                  transportState().tag());
+            }
           }
         });
       }
@@ -249,20 +262,25 @@ class NettyClientStream extends AbstractClientStream {
       implements StreamIdHolder {
     private static final int NON_EXISTENT_ID = -1;
 
+    private final String methodName;
     private final NettyClientHandler handler;
     private final EventLoop eventLoop;
     private int id;
     private Http2Stream http2Stream;
+    private Tag tag;
 
     public TransportState(
         NettyClientHandler handler,
         EventLoop eventLoop,
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer,
+        String methodName) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
+      this.methodName = checkNotNull(methodName, "methodName");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");
+      tag = PerfMark.createTag(methodName);
     }
 
     @Override
@@ -275,6 +293,7 @@ class NettyClientStream extends AbstractClientStream {
       checkArgument(id > 0, "id must be positive %s", id);
       checkState(this.id == 0, "id has been previously set: %s", this.id);
       this.id = id;
+      this.tag = PerfMark.createTag(methodName, id);
     }
 
     /**
@@ -358,6 +377,11 @@ class NettyClientStream extends AbstractClientStream {
 
     void transportDataReceived(ByteBuf frame, boolean endOfStream) {
       transportDataReceived(new NettyReadableBuffer(frame.retain()), endOfStream);
+    }
+
+    @Override
+    public final Tag tag() {
+      return tag;
     }
   }
 }

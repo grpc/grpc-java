@@ -466,7 +466,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
     @Override
     public void streamCreated(ServerStream stream, String methodName, Metadata headers) {
-      Tag tag = PerfMark.createTag(methodName, stream.hashCode());
+      Tag tag = PerfMark.createTag(methodName, stream.streamId());
       PerfMark.startTask("ServerTransportListener.streamCreated", tag);
       try {
         streamCreatedInternal(stream, methodName, headers, tag);

@@ -789,7 +789,13 @@ public class NettyClientHandlerTest extends NettyHandlerTestBase<NettyClientHand
         EventLoop eventLoop,
         int maxMessageSize,
         TransportTracer transportTracer) {
-      super(handler, eventLoop, maxMessageSize, StatsTraceContext.NOOP, transportTracer);
+      super(
+          handler,
+          eventLoop,
+          maxMessageSize,
+          StatsTraceContext.NOOP,
+          transportTracer,
+          "methodName");
     }
 
     @Override
