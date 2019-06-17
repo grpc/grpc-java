@@ -25,6 +25,8 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
+- [Authentication](AUTHENTICATION_EXAMPLE.md)
+
 - <details>
   <summary>Hedging</summary>
 

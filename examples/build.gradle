@@ -33,6 +33,10 @@ dependencies {
     // examples/advanced need this for JsonFormat
     implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
 
+    // examples/authentication need this to create and verify JSON Web Tokens (JWTs)
+    implementation "io.jsonwebtoken:jjwt:0.9.1"
+    implementation "javax.xml.bind:jaxb-api:2.3.1"
+
     runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
@@ -104,6 +108,20 @@ task hedgingHelloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task authServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.authentication.AuthServer'
+    applicationName = 'auth-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task authClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.authentication.AuthClient'
+    applicationName = 'auth-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
     applicationName = 'compressing-hello-world-client'
@@ -118,6 +136,8 @@ applicationDistribution.into('bin') {
     from(helloWorldClient)
     from(hedgingHelloWorldClient)
     from(hedgingHelloWorldServer)
+    from(authServer)
+    from(authClient)
     from(compressingHelloWorldClient)
     fileMode = 0755
 }
