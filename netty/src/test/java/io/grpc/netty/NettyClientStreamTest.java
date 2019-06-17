@@ -556,7 +556,7 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
           maxMessageSize,
           StatsTraceContext.NOOP,
           transportTracer,
-          "no name");
+          "methodName");
     }
 
     @Override
