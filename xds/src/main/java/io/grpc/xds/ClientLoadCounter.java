@@ -291,15 +291,15 @@ final class ClientLoadCounter {
 
   /**
    * Listener implementation to receive backend metrics and record metric values in the provided
-   * {@link StatsCounter}.
+   * {@link ClientLoadCounter}.
    */
   @ThreadSafe
   static final class MetricsRecordingListener implements OrcaPerRequestReportListener,
       OrcaOobReportListener {
 
-    private final StatsCounter counter;
+    private final ClientLoadCounter counter;
 
-    MetricsRecordingListener(StatsCounter counter) {
+    MetricsRecordingListener(ClientLoadCounter counter) {
       this.counter = checkNotNull(counter, "counter");
     }
 
@@ -313,7 +313,7 @@ final class ClientLoadCounter {
     }
 
     @VisibleForTesting
-    StatsCounter getCounter() {
+    ClientLoadCounter getCounter() {
       return counter;
     }
   }

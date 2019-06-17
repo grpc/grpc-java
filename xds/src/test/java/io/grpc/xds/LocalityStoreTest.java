@@ -60,7 +60,6 @@ import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
@@ -241,8 +240,8 @@ public class LocalityStoreTest {
 
     verify(statsStore).addLocality(locality1);
     verify(statsStore).addLocality(locality2);
-    StatsCounter localityCounter1 = mock(StatsCounter.class);
-    StatsCounter localityCounter2 = mock(StatsCounter.class);
+    ClientLoadCounter localityCounter1 = new ClientLoadCounter();
+    ClientLoadCounter localityCounter2 = new ClientLoadCounter();
     when(statsStore.getLocalityCounter(locality1)).thenReturn(localityCounter1);
     when(statsStore.getLocalityCounter(locality2)).thenReturn(localityCounter2);
     ArgumentCaptor<OrcaPerRequestReportListener> orcaPerRequestReportListenerCaptor1 =

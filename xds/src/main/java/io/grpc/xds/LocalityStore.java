@@ -47,7 +47,6 @@ import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -427,7 +426,7 @@ interface LocalityStore {
             if (result.getSubchannel() == null) {
               return result;
             }
-            StatsCounter localityCounter = statsStore.getLocalityCounter(locality);
+            ClientLoadCounter localityCounter = statsStore.getLocalityCounter(locality);
             if (localityCounter == null) {
               getChannelLogger().log(ChannelLogLevel.ERROR,
                   "Locality counter for {0} does not exist, cannot record backend metrics.",
