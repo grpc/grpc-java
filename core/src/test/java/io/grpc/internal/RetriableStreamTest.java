@@ -30,6 +30,7 @@ import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -39,6 +40,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.MoreObjects;
+import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ClientStreamTracer;
@@ -69,6 +72,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link RetriableStream}. */
 @RunWith(JUnit4.class)
@@ -212,6 +217,15 @@ public class RetriableStreamTest {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     ClientStream mockStream3 = mock(ClientStream.class);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
+          helper.add("server_addr", "2.2.2.2:443");
+          return null;
+        }
+      }).when(mockStream2).appendTimeoutDetails(any(ToStringHelper.class));
+
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     InOrder inOrder =
         inOrder(retriableStreamRecorder, masterListener, mockStream1, mockStream2, mockStream3);
@@ -355,6 +369,11 @@ public class RetriableStreamTest {
     inOrder.verify(retriableStreamRecorder).postCommit();
     inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
+
+    ToStringHelper toStringHelper = MoreObjects.toStringHelper("");
+    retriableStream.appendTimeoutDetails(toStringHelper);
+    assertThat(toStringHelper.toString())
+        .isEqualTo("{attempts=[{}, {server_addr=2.2.2.2:443}, {}]}");
   }
 
   @Test
