@@ -28,7 +28,6 @@ import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,7 +41,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
 @NotThreadSafe
-final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
+final class ClientLoadCounter {
 
   private static final int THREAD_BALANCING_FACTOR = 64;
   private final AtomicLong callsInProgress = new AtomicLong();
@@ -51,10 +50,15 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   private final AtomicLong callsIssued = new AtomicLong();
   private final MetricRecorder[] metricRecorders = new MetricRecorder[THREAD_BALANCING_FACTOR];
 
+  // True if this counter continues to record stats after next snapshot. Otherwise, it will be
+  // discarded.
+  private boolean active;
+
   ClientLoadCounter() {
     for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
       metricRecorders[i] = new MetricRecorder();
     }
+    active = true;
   }
 
   /**
@@ -69,13 +73,11 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
     this.callsIssued.set(callsIssued);
   }
 
-  @Override
   void recordCallStarted() {
     callsIssued.getAndIncrement();
     callsInProgress.getAndIncrement();
   }
 
-  @Override
   void recordCallFinished(Status status) {
     callsInProgress.getAndDecrement();
     if (status.isOk()) {
@@ -85,7 +87,6 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
     }
   }
 
-  @Override
   void recordMetric(String name, double value) {
     MetricRecorder recorder =
         metricRecorders[(int) (Thread.currentThread().getId() % THREAD_BALANCING_FACTOR)];
@@ -98,7 +99,6 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
    * <p>This method is not thread-safe and must be called from {@link
    * io.grpc.LoadBalancer.Helper#getSynchronizationContext()}.
    */
-  @Override
   public ClientLoadSnapshot snapshot() {
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
     for (MetricRecorder recorder : metricRecorders) {
@@ -119,6 +119,14 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
         callsFailed.getAndSet(0),
         callsIssued.getAndSet(0),
         aggregatedValues);
+  }
+
+  void setActive(boolean value) {
+    active = value;
+  }
+
+  boolean isActive() {
+    return active;
   }
 
   /**
@@ -255,9 +263,9 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
     private final ClientStreamTracer.Factory delegate;
-    private final StatsCounter counter;
+    private final ClientLoadCounter counter;
 
-    XdsClientLoadRecorder(StatsCounter counter, ClientStreamTracer.Factory delegate) {
+    XdsClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
       this.counter = checkNotNull(counter, "counter");
       this.delegate = checkNotNull(delegate, "delegate");
     }

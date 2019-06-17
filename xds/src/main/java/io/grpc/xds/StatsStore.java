@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.LoadBalancer.PickResult;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import javax.annotation.Nullable;
 
 /**
@@ -71,13 +70,13 @@ interface StatsStore {
   PickResult interceptPickResult(PickResult pickResult, XdsLocality locality);
 
   /**
-   * Returns the {@link StatsCounter} that does locality level stats aggregation for the provided
-   * locality. If the provided locality is not tracked, {@code null} will be returned.
+   * Returns the {@link ClientLoadCounter} that does locality level stats aggregation for the
+   * provided locality. If the provided locality is not tracked, {@code null} will be returned.
    *
    * <p>This method is thread-safe.
    */
   @Nullable
-  StatsCounter getLocalityCounter(XdsLocality locality);
+  ClientLoadCounter getLocalityCounter(XdsLocality locality);
 
   /**
    * Records a drop decision made by a {@link io.grpc.LoadBalancer.SubchannelPicker} instance
