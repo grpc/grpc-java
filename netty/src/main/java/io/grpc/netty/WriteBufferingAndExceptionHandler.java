@@ -56,6 +56,8 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
     ctx.pipeline().addBefore(ctx.name(), null, next);
     super.handlerAdded(ctx);
+    // kick off protocol negotiation.
+    ctx.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
   }
 
   @Override
