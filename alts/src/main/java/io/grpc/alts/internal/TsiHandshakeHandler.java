@@ -149,7 +149,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
-      checkState(pne == null, "negotiation already complete");
+      checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
     } else {
       super.userEventTriggered(ctx, evt);

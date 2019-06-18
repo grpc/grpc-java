@@ -352,7 +352,7 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
-        checkState(pne == null, "negotiation already complete");
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt instanceof SslHandshakeCompletionEvent) {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
@@ -500,7 +500,7 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
-        checkState(pne == null, "negotiation already complete");
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
         checkState(pne != null, "negotiation not yet complete");
@@ -878,7 +878,7 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
-        checkState(pne == null, "negotiation already complete");
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
         if (ctx.channel().isActive()) {
           fireProtocolNegotiationEvent(ctx);
