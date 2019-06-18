@@ -85,7 +85,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
 
-  private ProtocolNegotiationEvent pne;
+  // TODO(carl-mastrangelo): make this null after NettyServerTransport uses WBAEH
+  private ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
 
   /**
    * Constructs a TsiHandshakeHandler.
@@ -149,7 +150,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
-      checkState(pne == null, "negotiation already started");
+      // TODO(carl-mastrangelo): re-enable after NettyServerTransport uses WBAEH
+      // checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
     } else {
       super.userEventTriggered(ctx, evt);
