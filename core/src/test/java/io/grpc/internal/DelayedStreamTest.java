@@ -366,7 +366,7 @@ public class DelayedStreamTest {
     ToStringHelper helper = MoreObjects.toStringHelper("");
     stream.start(listener);
     stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString()).matches("\\{has_real_stream=false, buffered_nanos=[0-9]+\\}");
+    assertThat(helper.toString()).matches("\\{waiting_for_connection, buffered_nanos=[0-9]+\\}");
   }
 
   @Test
@@ -385,7 +385,6 @@ public class DelayedStreamTest {
     ToStringHelper helper = MoreObjects.toStringHelper("");
     stream.appendTimeoutDetails(helper);
     assertThat(helper.toString())
-        .matches("\\{has_real_stream=true, buffered_nanos=[0-9]+, "
-            + "server_addr=127\\.0\\.0\\.1:443\\}");
+        .matches("\\{buffered_nanos=[0-9]+, server_addr=127\\.0\\.0\\.1:443\\}");
   }
 }

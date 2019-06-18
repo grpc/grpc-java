@@ -105,11 +105,11 @@ class DelayedStream implements ClientStream {
       if (listener == null) {
         return;
       }
-      toStringHelper.add("has_real_stream", realStream != null);
       if (realStream != null) {
         toStringHelper.add("buffered_nanos", streamSetTimeNanos - startTimeNanos);
         realStream.appendTimeoutDetails(toStringHelper);
       } else {
+        toStringHelper.addValue("waiting_for_connection");
         toStringHelper.add("buffered_nanos", System.nanoTime() - startTimeNanos);
       }
     }
