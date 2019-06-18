@@ -22,7 +22,8 @@ import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
 import java.util.UUID;
-import org.apache.logging.log4j.ThreadContext;
+import org.apache.logging.log4j.CloseableThreadContext;
+import org.apache.logging.log4j.CloseableThreadContext.Instance;
 
 /**
  * A interceptor to handle server header.
@@ -40,70 +41,47 @@ public class HeaderServerInterceptor implements ServerInterceptor {
       final Metadata requestHeaders,
       ServerCallHandler<ReqT, RespT> next) {
 
-    Context ctx = Context.current();
-
-
     final String requestId = UUID.randomUUID().toString();
     final String clientName = String.valueOf(requestHeaders.get(CLIENT_NAME_KEY));
 
     return new SimpleForwardingServerCallListener<ReqT>(next.startCall(call, requestHeaders)) {
       @Override
       public void onCancel() {
-        ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
-        try {
+        try (Instance closeable = CloseableThreadContext.put(REQUEST_ID_NAME, requestId)
+            .put(CLIENT_NAME_KEY.originalName(), clientName)) {
           super.onCancel();
-        } finally {
-          ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onComplete() {
-        ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
-        try {
+        try (Instance closeable = CloseableThreadContext.put(REQUEST_ID_NAME, requestId)
+            .put(CLIENT_NAME_KEY.originalName(), clientName)) {
           super.onComplete();
-        } finally {
-          ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onMessage(ReqT message) {
-        ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
-        try {
+        try (Instance closeable = CloseableThreadContext.put(REQUEST_ID_NAME, requestId)
+            .put(CLIENT_NAME_KEY.originalName(), clientName)) {
           super.onMessage(message);
-        } finally {
-          ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onReady() {
-        ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
-        try {
+        try (Instance closeable = CloseableThreadContext.put(REQUEST_ID_NAME, requestId)
+            .put(CLIENT_NAME_KEY.originalName(), clientName)) {
           super.onReady();
-        } finally {
-          ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
 
       @Override
       public void onHalfClose() {
-        ThreadContext.put(REQUEST_ID_NAME, requestId);
-        ThreadContext.put(CLIENT_NAME_KEY.originalName(), clientName);
-        try {
+        try (Instance closeable = CloseableThreadContext.put(REQUEST_ID_NAME, requestId)
+            .put(CLIENT_NAME_KEY.originalName(), clientName)) {
           super.onHalfClose();
-        } finally {
-          ThreadContext.remove(REQUEST_ID_NAME);
-          ThreadContext.remove(CLIENT_NAME_KEY.originalName());
         }
       }
     };
