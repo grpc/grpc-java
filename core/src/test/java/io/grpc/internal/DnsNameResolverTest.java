@@ -43,6 +43,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
+import io.grpc.StaticTestingClassLoader;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
@@ -71,6 +72,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import org.junit.After;
 import org.junit.Before;
@@ -585,6 +587,17 @@ public class DnsNameResolverTest {
         return super.loadClass(name, resolve);
       }
     };
+
+    ResourceResolverFactory factory = DnsNameResolver.getResourceResolverFactory(cl);
+
+    assertThat(factory).isNull();
+  }
+
+  @Test
+  public void skipWrongJndiResolverResolver() throws Exception {
+    ClassLoader cl = new StaticTestingClassLoader(
+        DnsNameResolverTest.class.getClassLoader(),
+        Pattern.compile("io\\.grpc\\..+"));
 
     ResourceResolverFactory factory = DnsNameResolver.getResourceResolverFactory(cl);
 
