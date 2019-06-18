@@ -60,7 +60,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Implementation of {@link ClientCall}.
@@ -87,7 +86,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final ClientTransportProvider clientTransportProvider;
   private final CancellationListener cancellationListener = new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
-  private final TimeoutDetailsProvider channelTimeoutDetailsProvider;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
@@ -97,7 +95,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
-      TimeoutDetailsProvider channelTimeoutDetailsProvider,
       boolean retryEnabled) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -109,8 +106,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         ? new SerializeReentrantCallsDirectExecutor()
         : new SerializingExecutor(executor);
     this.channelCallsTracer = channelCallsTracer;
-    this.channelTimeoutDetailsProvider =
-        checkNotNull(channelTimeoutDetailsProvider, "channelTimeoutDetailsProvider");
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
@@ -147,14 +142,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         Metadata headers,
         Context context);
 
-  }
-
-  /**
-   * Provider of channel states to be returned to user along with DEADLINE_EXCEEDED errors.
-   */
-  @ThreadSafe
-  interface TimeoutDetailsProvider {
-    void appendTimeoutDetails(ToStringHelper toStringHelper);
   }
 
   ClientCallImpl<ReqT, RespT> setFullStreamDecompression(boolean fullStreamDecompression) {
@@ -363,7 +350,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void run() {
       ToStringHelper timeoutDetails = MoreObjects.toStringHelper("");
-      channelTimeoutDetailsProvider.appendTimeoutDetails(timeoutDetails);
       stream.appendTimeoutDetails(timeoutDetails);
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.

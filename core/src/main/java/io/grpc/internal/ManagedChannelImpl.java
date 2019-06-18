@@ -27,7 +27,6 @@ import static io.grpc.internal.ServiceConfigInterceptor.RETRY_POLICY_KEY;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -73,7 +72,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.AutoConfiguredLoadBalancerFactory.AutoConfiguredLoadBalancer;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.internal.ClientCallImpl.TimeoutDetailsProvider;
 import io.grpc.internal.RetriableStream.ChannelBufferMeter;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.net.URI;
@@ -275,16 +273,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Called from syncContext
   private final ManagedClientTransport.Listener delayedTransportListener =
       new DelayedTransportListener();
-
-  private final TimeoutDetailsProvider timeoutDetailsProvider = new TimeoutDetailsProvider() {
-      @Override
-      public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-        // TODO(zhangkun83): add more information
-        //   - Latest events from channel trace
-        //   - Last error from LoadBalancer with timestamp
-        toStringHelper.add("channel_state", channelStateManager.getState());
-      }
-    };
 
   // Must be called from syncContext
   private void maybeShutdownNowSubchannels() {
@@ -870,7 +858,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           transportProvider,
           terminated ? null : transportFactory.getScheduledExecutorService(),
           channelCallTracer,
-          timeoutDetailsProvider,
           retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)

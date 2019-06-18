@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -48,7 +47,6 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.internal.ClientCallImpl.TimeoutDetailsProvider;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -99,13 +97,6 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
       throw new UnsupportedOperationException("OobChannel should not create retriable streams");
     }
   };
-
-  private final TimeoutDetailsProvider timeoutDetailsProvider = new TimeoutDetailsProvider() {
-      @Override
-      public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-        toStringHelper.add("oob_channel_state", subchannel.getState());
-      }
-    };
 
   OobChannel(
       String authority, ObjectPool<? extends Executor> executorPool,
@@ -203,7 +194,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     return new ClientCallImpl<>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
         callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer,
-        timeoutDetailsProvider, false /* retryEnabled */);
+        false /* retryEnabled */);
   }
 
   @Override

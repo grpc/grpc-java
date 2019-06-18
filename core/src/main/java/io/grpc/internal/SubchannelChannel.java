@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -29,7 +28,6 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
-import io.grpc.internal.ClientCallImpl.TimeoutDetailsProvider;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
 import io.grpc.internal.GrpcUtil;
 import java.util.concurrent.Executor;
@@ -49,12 +47,6 @@ final class SubchannelChannel extends Channel {
   private final Executor executor;
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private final CallTracer callsTracer;
-  private final TimeoutDetailsProvider timeoutDetailsProvider = new TimeoutDetailsProvider() {
-      @Override
-      public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-        toStringHelper.add("subchannel_channel_state", subchannel.getState());
-      }
-    };
 
   private final ClientTransportProvider transportProvider = new ClientTransportProvider() {
       @Override
@@ -117,8 +109,7 @@ final class SubchannelChannel extends Channel {
     return new ClientCallImpl<>(methodDescriptor,
         effectiveExecutor,
         callOptions.withOption(GrpcUtil.CALL_OPTIONS_RPC_OWNED_BY_BALANCER, Boolean.TRUE),
-        transportProvider, deadlineCancellationExecutor, callsTracer, timeoutDetailsProvider,
-        false /* retryEnabled */);
+        transportProvider, deadlineCancellationExecutor, callsTracer, false /* retryEnabled */);
   }
 
   @Override
