@@ -169,6 +169,7 @@ public class ProtocolNegotiatorsTest {
       @Override
       public void channelActive(ChannelHandlerContext ctx) throws Exception {
         ctx.pipeline().addLast(handler);
+        ctx.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
         // do not propagate channelActive().
       }
     };
@@ -226,6 +227,7 @@ public class ProtocolNegotiatorsTest {
     assertEquals(1, latch.getCount());
 
     chan.connect(addr).sync();
+    chan.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
     assertTrue(latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
     assertNull(chan.pipeline().context(WaitUntilActiveHandler.class));
   }
@@ -571,6 +573,7 @@ public class ProtocolNegotiatorsTest {
         .connect(addr)
         .sync()
         .channel();
+    c.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
     SocketAddress localAddr = c.localAddress();
     ProtocolNegotiationEvent expectedEvent = ProtocolNegotiationEvent.DEFAULT
         .withAttributes(

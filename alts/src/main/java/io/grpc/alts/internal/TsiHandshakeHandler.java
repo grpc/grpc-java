@@ -17,6 +17,7 @@
 package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.AUTH_CONTEXT_KEY;
 import static io.grpc.alts.internal.AltsProtocolNegotiator.TSI_PEER_KEY;
 
@@ -84,7 +85,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
 
-  private ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+  private ProtocolNegotiationEvent pne;
 
   /**
    * Constructs a TsiHandshakeHandler.
@@ -148,6 +149,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
+      checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
     } else {
       super.userEventTriggered(ctx, evt);
@@ -156,6 +158,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
 
   private void fireProtocolNegotiationEvent(
       ChannelHandlerContext ctx, TsiPeer peer, Object authContext, SecurityDetails details) {
+    checkState(pne != null, "negotiation not yet complete");
     InternalProtocolNegotiators.negotiationLogger(ctx)
         .log(ChannelLogLevel.INFO, "TsiHandshake finished");
     ProtocolNegotiationEvent localPne = pne;

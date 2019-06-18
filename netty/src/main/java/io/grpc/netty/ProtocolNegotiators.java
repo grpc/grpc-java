@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.netty.GrpcSslContexts.NEXT_PROTOCOL_VERSIONS;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -327,7 +328,7 @@ final class ProtocolNegotiators {
     private final String host;
     private final int port;
 
-    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+    private ProtocolNegotiationEvent pne;
 
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority) {
       this.next = checkNotNull(next, "next");
@@ -351,6 +352,7 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt instanceof SslHandshakeCompletionEvent) {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
@@ -376,6 +378,7 @@ final class ProtocolNegotiators {
     }
 
     private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx, SSLSession session) {
+      checkState(pne != null, "negotiation not yet complete");
       negotiationLogger(ctx).log(ChannelLogLevel.INFO, "ClientTls finished");
       Security security = new Security(new Tls(session));
       Attributes attrs = pne.getAttributes().toBuilder()
@@ -466,7 +469,7 @@ final class ProtocolNegotiators {
     private final String authority;
     private final GrpcHttp2ConnectionHandler next;
 
-    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+    private ProtocolNegotiationEvent pne;
 
     Http2UpgradeAndGrpcHandler(String authority, GrpcHttp2ConnectionHandler next) {
       this.authority = checkNotNull(authority, "authority");
@@ -497,8 +500,10 @@ final class ProtocolNegotiators {
     @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
       } else if (evt == HttpClientUpgradeHandler.UpgradeEvent.UPGRADE_SUCCESSFUL) {
+        checkState(pne != null, "negotiation not yet complete");
         negotiationLogger(ctx).log(ChannelLogLevel.INFO, "Http2Upgrade finished");
         ctx.pipeline().remove(ctx.name());
         next.handleProtocolNegotiationCompleted(pne.getAttributes(), pne.getSecurity());
@@ -848,7 +853,7 @@ final class ProtocolNegotiators {
    */
   static final class WaitUntilActiveHandler extends ChannelInboundHandlerAdapter {
     private final ChannelHandler next;
-    private ProtocolNegotiationEvent pne = ProtocolNegotiationEvent.DEFAULT;
+    private ProtocolNegotiationEvent pne;
 
     public WaitUntilActiveHandler(ChannelHandler next) {
       this.next = checkNotNull(next, "next");
@@ -859,31 +864,34 @@ final class ProtocolNegotiators {
       negotiationLogger(ctx).log(ChannelLogLevel.INFO, "WaitUntilActive started");
       // This should be a noop, but just in case...
       super.handlerAdded(ctx);
-      if (ctx.channel().isActive()) {
-        ctx.pipeline().replace(ctx.name(), null, next);
+    }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+      // Still propagate channelActive to the new handler.
+      super.channelActive(ctx);
+      if (pne != null) {
         fireProtocolNegotiationEvent(ctx);
       }
     }
 
     @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
-      ctx.pipeline().replace(ctx.name(), null, next);
-      // Still propagate channelActive to the new handler.
-      super.channelActive(ctx);
-      fireProtocolNegotiationEvent(ctx);
-    }
-
-    @Override
     public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProtocolNegotiationEvent) {
+        checkState(pne == null, "negotiation already started");
         pne = (ProtocolNegotiationEvent) evt;
+        if (ctx.channel().isActive()) {
+          fireProtocolNegotiationEvent(ctx);
+        }
       } else {
         super.userEventTriggered(ctx, evt);
       }
     }
 
     private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx) {
+      checkState(pne != null, "negotiation not yet complete");
       negotiationLogger(ctx).log(ChannelLogLevel.INFO, "WaitUntilActive finished");
+      ctx.pipeline().replace(ctx.name(), /* newName= */ null, next);
       Attributes attrs = pne.getAttributes().toBuilder()
           .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, ctx.channel().localAddress())
           .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, ctx.channel().remoteAddress())

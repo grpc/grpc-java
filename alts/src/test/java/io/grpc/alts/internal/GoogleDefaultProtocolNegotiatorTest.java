@@ -29,6 +29,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -96,6 +97,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
     // Add the negotiator handler last, but to the front.  Putting this in ctor above would make it
     // throw early.
     chan.pipeline().addFirst(h);
+    chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
 
     // Check that the message complained about the ALTS code, rather than SSL.  ALTS throws on
     // being added, so it's hard to catch it at the right time to make this assertion.
@@ -111,6 +113,7 @@ public final class GoogleDefaultProtocolNegotiatorTest {
 
     ChannelHandler h = googleProtocolNegotiator.newHandler(mockHandler);
     EmbeddedChannel chan = new EmbeddedChannel(h);
+    chan.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
 
     assertThat(chan.pipeline().first().getClass().getSimpleName()).isEqualTo("SslHandler");
   }
