@@ -26,13 +26,13 @@ example requires the server to be running before starting the client.
 For example, to try the hello world example first run:
 
 ```
-$ ./build/install/examples/bin/hello-world-server
+$ ./build/install/examples-log4j2/bin/hello-world-logcontext-server
 ```
 
 And in a different terminal window run:
 
 ```
-$ ./build/install/examples/bin/hello-world-client
+$ ./build/install/examples-log4j2/bin/hello-world-logcontext-client
 ```
 
 That's it!

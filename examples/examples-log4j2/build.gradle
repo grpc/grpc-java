@@ -27,6 +27,7 @@ def protocVersion = '3.7.1'
 
 dependencies {
     implementation "org.apache.logging.log4j:log4j-api:2.11.2"
+    runtime "org.apache.logging.log4j:log4j-core:2.11.2"
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
     implementation "io.grpc:grpc-netty:${grpcVersion}"
