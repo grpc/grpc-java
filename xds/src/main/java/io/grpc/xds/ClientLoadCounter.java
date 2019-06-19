@@ -259,17 +259,17 @@ final class ClientLoadCounter {
   }
 
   /**
-   * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
+   * An {@link ClientLoadRecorder} instance records and aggregates client-side load data into an
    * {@link ClientLoadCounter} object.
    */
   @ThreadSafe
   @VisibleForTesting
-  static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+  static final class ClientLoadRecorder extends ClientStreamTracer.Factory {
 
     private final ClientStreamTracer.Factory delegate;
     private final ClientLoadCounter counter;
 
-    XdsClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
+    ClientLoadRecorder(ClientLoadCounter counter, ClientStreamTracer.Factory delegate) {
       this.counter = checkNotNull(counter, "counter");
       this.delegate = checkNotNull(delegate, "delegate");
     }
@@ -399,7 +399,7 @@ final class ClientLoadCounter {
     @Override
     protected ClientStreamTracer.Factory wrapTracerFactory(
         ClientStreamTracer.Factory originFactory) {
-      return new XdsClientLoadRecorder(counter, originFactory);
+      return new ClientLoadRecorder(counter, originFactory);
     }
   }
 

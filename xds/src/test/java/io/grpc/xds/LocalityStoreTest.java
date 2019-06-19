@@ -51,8 +51,8 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.ClientLoadCounter.ClientLoadRecorder;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -274,8 +274,8 @@ public class LocalityStoreTest {
     MetricsRecordingListener listener1 = (MetricsRecordingListener) listenerCaptor1.getValue();
     assertThat(listener1.getCounter())
         .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality1));
-    assertThat(pickResult1.getStreamTracerFactory()).isInstanceOf(XdsClientLoadRecorder.class);
-    XdsClientLoadRecorder recorder1 = (XdsClientLoadRecorder) pickResult1.getStreamTracerFactory();
+    assertThat(pickResult1.getStreamTracerFactory()).isInstanceOf(ClientLoadRecorder.class);
+    ClientLoadRecorder recorder1 = (ClientLoadRecorder) pickResult1.getStreamTracerFactory();
     assertThat(recorder1.getCounter())
         .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality1));
     assertThat(recorder1.delegate()).isSameInstanceAs(metricsRecorder1);
@@ -290,8 +290,8 @@ public class LocalityStoreTest {
     MetricsRecordingListener listener2 = (MetricsRecordingListener) listenerCaptor2.getValue();
     assertThat(listener2.getCounter())
         .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality2));
-    assertThat(pickResult2.getStreamTracerFactory()).isInstanceOf(XdsClientLoadRecorder.class);
-    XdsClientLoadRecorder recorder2 = (XdsClientLoadRecorder) pickResult2.getStreamTracerFactory();
+    assertThat(pickResult2.getStreamTracerFactory()).isInstanceOf(ClientLoadRecorder.class);
+    ClientLoadRecorder recorder2 = (ClientLoadRecorder) pickResult2.getStreamTracerFactory();
     assertThat(recorder2.getCounter())
         .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality2));
     assertThat(recorder2.delegate()).isSameInstanceAs(metricsRecorder2);

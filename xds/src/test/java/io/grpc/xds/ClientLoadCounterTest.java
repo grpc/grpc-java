@@ -33,13 +33,13 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.xds.ClientLoadCounter.ClientLoadRecorder;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.ClientLoadCounter.StreamInstrumentedSubchannelPicker;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
@@ -135,8 +135,8 @@ public class ClientLoadCounterTest {
 
   @Test
   public void xdsClientLoadRecorder_clientSideQueryCountsAggregation() {
-    XdsClientLoadRecorder recorder1 =
-        new XdsClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
+    ClientLoadRecorder recorder1 =
+        new ClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
     ClientStreamTracer tracer = recorder1.newClientStreamTracer(STREAM_INFO, new Metadata());
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertQueryCounts(snapshot, 0, 1, 0, 1);
@@ -145,8 +145,8 @@ public class ClientLoadCounterTest {
     assertQueryCounts(snapshot, 1, 0, 0, 0);
 
     // Create a second XdsClientLoadRecorder with the same counter, stats are aggregated together.
-    XdsClientLoadRecorder recorder2 =
-        new XdsClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
+    ClientLoadRecorder recorder2 =
+        new ClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
     recorder1.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.ABORTED);
     recorder2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
     snapshot = counter.snapshot();
@@ -275,10 +275,10 @@ public class ClientLoadCounterTest {
     PickResult interceptedPickResult1 = loadRecordingPicker1.pickSubchannel(args);
     PickResult interceptedPickResult2 = loadRecordingPicker2.pickSubchannel(args);
 
-    XdsClientLoadRecorder recorder1 =
-        (XdsClientLoadRecorder) interceptedPickResult1.getStreamTracerFactory();
-    XdsClientLoadRecorder recorder2 =
-        (XdsClientLoadRecorder) interceptedPickResult2.getStreamTracerFactory();
+    ClientLoadRecorder recorder1 =
+        (ClientLoadRecorder) interceptedPickResult1.getStreamTracerFactory();
+    ClientLoadRecorder recorder2 =
+        (ClientLoadRecorder) interceptedPickResult2.getStreamTracerFactory();
     assertThat(recorder1.getCounter()).isSameInstanceAs(localityCounter1);
     assertThat(recorder2.getCounter()).isSameInstanceAs(localityCounter2);
 
