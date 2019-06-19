@@ -353,7 +353,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-          String.format("deadline exceeded after %dns. %s", remainingNanos, insight)));
+              "deadline exceeded after " + remainingNanos + "ns. " + insight));
     }
   }
 
