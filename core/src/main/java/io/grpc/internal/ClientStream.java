@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
@@ -100,9 +99,9 @@ public interface ClientStream extends Stream {
   Attributes getAttributes();
 
   /**
-   * Append information that will be included in the locally generated DEADLINE_EXCEEDED errors, in
-   * order to tell the user about the state of the stream so that they can better diagnose the cause
-   * of the error.
+   * Append information that will be included in the locally generated DEADLINE_EXCEEDED errors to
+   * the given {@link InsightBuilder}, in order to tell the user about the state of the stream so
+   * that they can better diagnose the cause of the error.
    */
-  void appendTimeoutDetails(ToStringHelper toStringHelper);
+  void appendTimeoutInsight(InsightBuilder insight);
 }

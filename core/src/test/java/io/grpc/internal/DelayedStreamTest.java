@@ -33,8 +33,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Attributes.Key;
 import io.grpc.Codec;
@@ -355,36 +353,36 @@ public class DelayedStreamTest {
   }
 
   @Test
-  public void appendTimeoutDetails_notStarted() {
-    ToStringHelper helper = MoreObjects.toStringHelper("");
-    stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString()).isEqualTo("{}");
+  public void appendTimeoutInsight_notStarted() {
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[]");
   }
 
   @Test
-  public void appendTimeoutDetails_realStreamNotSet() {
-    ToStringHelper helper = MoreObjects.toStringHelper("");
+  public void appendTimeoutInsight_realStreamNotSet() {
+    InsightBuilder insight = new InsightBuilder();
     stream.start(listener);
-    stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString()).matches("\\{waiting_for_connection, buffered_nanos=[0-9]+\\}");
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).matches("\\[waiting_for_connection, buffered_nanos=[0-9]+\\]");
   }
 
   @Test
-  public void appendTimeoutDetails_realStreamSet() {
+  public void appendTimeoutInsight_realStreamSet() {
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock in) {
-          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
-          helper.add("server_addr", "127.0.0.1:443");
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("server_addr", "127.0.0.1:443");
           return null;
         }
-      }).when(realStream).appendTimeoutDetails(any(ToStringHelper.class));
+      }).when(realStream).appendTimeoutInsight(any(InsightBuilder.class));
     stream.start(listener);
     stream.setStream(realStream);
 
-    ToStringHelper helper = MoreObjects.toStringHelper("");
-    stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString())
-        .matches("\\{buffered_nanos=[0-9]+, server_addr=127\\.0\\.0\\.1:443\\}");
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .matches("\\[buffered_nanos=[0-9]+, server_addr=127\\.0\\.0\\.1:443\\]");
   }
 }

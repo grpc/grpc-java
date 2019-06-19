@@ -30,7 +30,6 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
@@ -349,12 +348,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void run() {
-      ToStringHelper timeoutDetails = MoreObjects.toStringHelper("");
-      stream.appendTimeoutDetails(timeoutDetails);
+      InsightBuilder insight = new InsightBuilder();
+      stream.appendTimeoutInsight(insight);
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-          String.format("deadline exceeded after %dns. %s", remainingNanos, timeoutDetails)));
+          String.format("deadline exceeded after %dns. %s", remainingNanos, insight)));
     }
   }
 
@@ -658,10 +657,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // description. Since our timer may be delayed in firing, we double-check the deadline and
         // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
         if (deadline.isExpired()) {
-          ToStringHelper timeoutDetails = MoreObjects.toStringHelper("");
-          stream.appendTimeoutDetails(timeoutDetails);
+          InsightBuilder insight = new InsightBuilder();
+          stream.appendTimeoutInsight(insight);
           status = DEADLINE_EXCEEDED.augmentDescription(
-              "ClientCall was cancelled at or after deadline. " + timeoutDetails);
+              "ClientCall was cancelled at or after deadline. " + insight);
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }

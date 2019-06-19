@@ -24,7 +24,6 @@ import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import com.google.common.io.ByteStreams;
 import io.grpc.Attributes;
@@ -221,9 +220,9 @@ public abstract class AbstractClientStream extends AbstractStream
   }
 
   @Override
-  public final void appendTimeoutDetails(ToStringHelper toStringHelper) {
+  public final void appendTimeoutInsight(InsightBuilder insight) {
     Attributes attrs = getAttributes();
-    toStringHelper.add("server_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+    insight.appendKeyValue("server_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 
   protected TransportTracer getTransportTracer() {

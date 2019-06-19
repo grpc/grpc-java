@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -100,17 +99,17 @@ class DelayedStream implements ClientStream {
   }
 
   @Override
-  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
+  public void appendTimeoutInsight(InsightBuilder insight) {
     synchronized (this) {
       if (listener == null) {
         return;
       }
       if (realStream != null) {
-        toStringHelper.add("buffered_nanos", streamSetTimeNanos - startTimeNanos);
-        realStream.appendTimeoutDetails(toStringHelper);
+        insight.appendKeyValue("buffered_nanos", streamSetTimeNanos - startTimeNanos);
+        realStream.appendTimeoutInsight(insight);
       } else {
-        toStringHelper.addValue("waiting_for_connection");
-        toStringHelper.add("buffered_nanos", System.nanoTime() - startTimeNanos);
+        insight.append("waiting_for_connection");
+        insight.appendKeyValue("buffered_nanos", System.nanoTime() - startTimeNanos);
       }
     }
   }

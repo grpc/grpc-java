@@ -16,7 +16,6 @@
 
 package io.grpc.internal;
 
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -86,7 +85,7 @@ public class NoopClientStream implements ClientStream {
   public void setDeadline(@Nonnull Deadline deadline) {}
 
   @Override
-  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-    toStringHelper.addValue("noop");
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.append("noop");
   }
 }

@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
@@ -114,7 +113,7 @@ abstract class ForwardingClientStream implements ClientStream {
   }
 
   @Override
-  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-    delegate().appendTimeoutDetails(toStringHelper);
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    delegate().appendTimeoutInsight(insight);
   }
 }

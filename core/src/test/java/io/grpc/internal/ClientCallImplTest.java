@@ -37,7 +37,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.SettableFuture;
@@ -143,11 +142,11 @@ public class ClientCallImplTest {
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock in) {
-          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
-          helper.add("server_addr", "127.0.0.1:443");
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("server_addr", "127.0.0.1:443");
           return null;
         }
-      }).when(stream).appendTimeoutDetails(any(ToStringHelper.class));
+      }).when(stream).appendTimeoutInsight(any(InsightBuilder.class));
     baseCallOptions = CallOptions.DEFAULT.withStreamTracerFactory(streamTracerFactory);
   }
 
@@ -822,7 +821,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+ns. \\{server_addr=127\\.0\\.0\\.1:443\\}");
+        .matches("deadline exceeded after [0-9]+ns. \\[server_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test

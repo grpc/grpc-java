@@ -35,8 +35,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
@@ -476,12 +474,12 @@ public class AbstractClientStreamTest {
   }
 
   @Test
-  public void appendTimeoutDetails() {
-    ToStringHelper helper = MoreObjects.toStringHelper("");
+  public void appendTimeoutInsight() {
+    InsightBuilder insight = new InsightBuilder();
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
-    stream.appendTimeoutDetails(helper);
-    assertThat(helper.toString()).isEqualTo("{server_addr=fake_server_addr}");
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[server_addr=fake_server_addr]");
   }
 
   /**

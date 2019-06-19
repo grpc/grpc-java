@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Preconditions;
 import io.grpc.Metadata;
 import io.grpc.Status;
@@ -61,7 +60,7 @@ public final class FailingClientStream extends NoopClientStream {
   }
 
   @Override
-  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-    toStringHelper.add("error", error).add("progress", rpcProgress);
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.appendKeyValue("error", error).appendKeyValue("progress", rpcProgress);
   }
 }

@@ -20,8 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.base.Objects;
 import io.grpc.Attributes;
 import io.grpc.ClientStreamTracer;
@@ -651,14 +649,14 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   }
 
   @Override
-  public void appendTimeoutDetails(ToStringHelper toStringHelper) {
-    ArrayList<String> subdetails = new ArrayList<String>(allSubstreams.size());
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    InsightBuilder attempts = new InsightBuilder();
     for (Substream sub : allSubstreams) {
-      ToStringHelper subhelper = MoreObjects.toStringHelper("");
-      sub.stream.appendTimeoutDetails(subhelper);
-      subdetails.add(subhelper.toString());
+      InsightBuilder substreamInsight = new InsightBuilder();
+      sub.stream.appendTimeoutInsight(substreamInsight);
+      attempts.append(substreamInsight.toString());
     }
-    toStringHelper.add("attempts", subdetails);
+    insight.appendKeyValue("attempts", attempts);
   }
 
   private static Random random = new Random();

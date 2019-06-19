@@ -40,8 +40,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.MoreObjects.ToStringHelper;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.ClientStreamTracer;
@@ -220,11 +218,11 @@ public class RetriableStreamTest {
     doAnswer(new Answer<Void>() {
         @Override
         public Void answer(InvocationOnMock in) {
-          ToStringHelper helper = (ToStringHelper) in.getArguments()[0];
-          helper.add("server_addr", "2.2.2.2:443");
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("server_addr", "2.2.2.2:443");
           return null;
         }
-      }).when(mockStream2).appendTimeoutDetails(any(ToStringHelper.class));
+      }).when(mockStream2).appendTimeoutInsight(any(InsightBuilder.class));
 
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     InOrder inOrder =
@@ -370,10 +368,9 @@ public class RetriableStreamTest {
     inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
 
-    ToStringHelper toStringHelper = MoreObjects.toStringHelper("");
-    retriableStream.appendTimeoutDetails(toStringHelper);
-    assertThat(toStringHelper.toString())
-        .isEqualTo("{attempts=[{}, {server_addr=2.2.2.2:443}, {}]}");
+    InsightBuilder insight = new InsightBuilder();
+    retriableStream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[attempts=[[], [server_addr=2.2.2.2:443], []]]");
   }
 
   @Test
