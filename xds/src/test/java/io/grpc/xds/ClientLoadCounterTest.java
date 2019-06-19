@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.Factory;
 import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -35,8 +36,11 @@ import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
+import io.grpc.xds.ClientLoadCounter.StreamInstrumentedSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
+import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
 import org.junit.Test;
@@ -210,9 +214,20 @@ public class ClientLoadCounterTest {
   }
 
   @Test
-  public void loadRecordingSubchannelPicker_interceptPickResult_invalidPickResultNotIntercepted() {
-    SubchannelPicker picker = mock(SubchannelPicker.class);
-    SubchannelPicker loadRecordingPicker = new LoadRecordingSubchannelPicker(counter, picker);
+  public void streamInstrSubchannelPicker_interceptPickResult_invalidPickResultNotIntercepted() {
+    final SubchannelPicker picker = mock(SubchannelPicker.class);
+    SubchannelPicker streamInstrSubchannelPicker = new StreamInstrumentedSubchannelPicker() {
+      @Override
+      protected SubchannelPicker delegate() {
+        return picker;
+      }
+
+      @Override
+      protected Factory wrapTracerFactory(Factory originFactory) {
+        // NO-OP
+        return originFactory;
+      }
+    };
     PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
     PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
     PickResult emptyResult = PickResult.withNoResult();
@@ -220,9 +235,9 @@ public class ClientLoadCounterTest {
         .thenReturn(errorResult, droppedResult, emptyResult);
     PickSubchannelArgs args = mock(PickSubchannelArgs.class);
 
-    PickResult interceptedErrorResult = loadRecordingPicker.pickSubchannel(args);
-    PickResult interceptedDroppedResult = loadRecordingPicker.pickSubchannel(args);
-    PickResult interceptedEmptyResult = loadRecordingPicker.pickSubchannel(args);
+    PickResult interceptedErrorResult = streamInstrSubchannelPicker.pickSubchannel(args);
+    PickResult interceptedDroppedResult = streamInstrSubchannelPicker.pickSubchannel(args);
+    PickResult interceptedEmptyResult = streamInstrSubchannelPicker.pickSubchannel(args);
     assertThat(interceptedErrorResult).isSameInstanceAs(errorResult);
     assertThat(interceptedDroppedResult).isSameInstanceAs(droppedResult);
     assertThat(interceptedEmptyResult).isSameInstanceAs(emptyResult);
@@ -274,6 +289,52 @@ public class ClientLoadCounterTest {
         .streamClosed(Status.OK);
     verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
     verify(mockTracer).streamClosed(Status.OK);
+  }
+
+  @Test
+  public void metricsObservingSubchannelPicker_interceptPickResult_applyOrcaListenerToPickResult() {
+    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    when(mockFactory
+        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+        .thenReturn(mockTracer);
+
+    final PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class), mockFactory);
+    final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
+    SubchannelPicker picker1 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pickResult1;
+      }
+    };
+    SubchannelPicker picker2 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pickResult2;
+      }
+    };
+    OrcaPerRequestUtil orcaPerRequestUtil = mock(OrcaPerRequestUtil.class);
+    ClientStreamTracer.Factory metricsRecorder1 = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer.Factory metricsRecorder2 = mock(ClientStreamTracer.Factory.class);
+    when(orcaPerRequestUtil.newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
+        any(OrcaPerRequestReportListener.class))).thenReturn(metricsRecorder1, metricsRecorder2);
+    OrcaPerRequestReportListener listener1 = mock(OrcaPerRequestReportListener.class);
+    OrcaPerRequestReportListener listener2 = mock(OrcaPerRequestReportListener.class);
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+
+    SubchannelPicker metricsObservingPicker1 =
+        new MetricsObservingSubchannelPicker(listener1, picker1, orcaPerRequestUtil);
+    SubchannelPicker metricsObservingPicker2 =
+        new MetricsObservingSubchannelPicker(listener2, picker2, orcaPerRequestUtil);
+    PickResult interceptedPickResult1 = metricsObservingPicker1.pickSubchannel(args);
+    PickResult interceptedPickResult2 = metricsObservingPicker2.pickSubchannel(args);
+
+    verify(orcaPerRequestUtil)
+        .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class), same(listener1));
+    verify(orcaPerRequestUtil)
+        .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class), same(listener2));
+    assertThat(interceptedPickResult1.getStreamTracerFactory()).isSameInstanceAs(metricsRecorder1);
+    assertThat(interceptedPickResult2.getStreamTracerFactory()).isSameInstanceAs(metricsRecorder2);
   }
 
   private void assertQueryCounts(ClientLoadSnapshot snapshot,

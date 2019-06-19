@@ -41,6 +41,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -80,19 +82,24 @@ interface LocalityStore {
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final StatsStore statsStore;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore());
+          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
-        Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random, StatsStore statsStore) {
+        Helper helper,
+        PickerFactory pickerFactory,
+        LoadBalancerRegistry lbRegistry,
+        ThreadSafeRandom random,
+        StatsStore statsStore,
+        OrcaPerRequestUtil orcaPerRequestUtil) {
       this.helper = checkNotNull(helper, "helper");
       this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
@@ -100,6 +107,7 @@ interface LocalityStore {
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
       this.random = checkNotNull(random, "random");
       this.statsStore = checkNotNull(statsStore, "statsStore");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -378,12 +386,24 @@ interface LocalityStore {
 
       // This is triggered by child balancer
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      public void updateBalancingState(ConnectivityState newState,
+          final SubchannelPicker newPicker) {
         checkNotNull(newState, "newState");
         checkNotNull(newPicker, "newPicker");
 
         currentChildState = newState;
-        currentChildPicker = new LoadRecordingSubchannelPicker(counter, newPicker);
+        currentChildPicker =
+            new SubchannelPicker() {
+              SubchannelPicker instance =
+                  new LoadRecordingSubchannelPicker(counter,
+                      new MetricsObservingSubchannelPicker(
+                          new MetricsRecordingListener(counter), newPicker, orcaPerRequestUtil));
+
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return instance.pickSubchannel(args);
+              }
+            };
 
         // delegate to parent helper
         updateChildState(locality, newState, currentChildPicker);

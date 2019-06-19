@@ -296,6 +296,11 @@ final class ClientLoadCounter {
     ClientLoadCounter getCounter() {
       return counter;
     }
+
+    @VisibleForTesting
+    ClientStreamTracer.Factory delegate() {
+      return delegate;
+    }
   }
 
   /**
@@ -320,17 +325,20 @@ final class ClientLoadCounter {
         counter.recordMetric(entry.getKey(), entry.getValue());
       }
     }
+
+    @VisibleForTesting
+    ClientLoadCounter getCounter() {
+      return counter;
+    }
   }
 
   /**
-   * A wrapper class that wraps a {@link SubchannelPicker} instance and associate it with a {@link
-   * ClientLoadCounter}. All "RPC-capable" {@link PickResult}s picked will be intercepted with
-   * client side load recording logic such that RPC activities occurring in the {@link PickResult}'s
-   * {@link io.grpc.LoadBalancer.Subchannel} will be recorded in the associated {@link
-   * ClientLoadCounter}.
+   * Base class for {@link SubchannelPicker} wrapper classes that intercept "RPC-capable"
+   * {@link PickResult}s with applying a custom {@link ClientStreamTracer.Factory} for stream
+   * instrumenting purposes.
    */
-  @ThreadSafe
-  static final class LoadRecordingSubchannelPicker extends SubchannelPicker {
+  @VisibleForTesting
+  abstract static class StreamInstrumentedSubchannelPicker extends SubchannelPicker {
 
     private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
         new ClientStreamTracer() {
@@ -343,17 +351,14 @@ final class ClientLoadCounter {
           }
         };
 
-    private final ClientLoadCounter counter;
-    private final SubchannelPicker delegate;
+    protected abstract SubchannelPicker delegate();
 
-    LoadRecordingSubchannelPicker(ClientLoadCounter counter, SubchannelPicker delegate) {
-      this.counter = checkNotNull(counter, "counter");
-      this.delegate = checkNotNull(delegate, "delegate");
-    }
+    protected abstract ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory);
 
     @Override
     public PickResult pickSubchannel(PickSubchannelArgs args) {
-      PickResult result = delegate.pickSubchannel(args);
+      PickResult result = delegate().pickSubchannel(args);
       if (!result.getStatus().isOk()) {
         return result;
       }
@@ -364,8 +369,69 @@ final class ClientLoadCounter {
       if (originFactory == null) {
         originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
       }
-      XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-      return PickResult.withSubchannel(result.getSubchannel(), recorder);
+      return PickResult.withSubchannel(result.getSubchannel(), wrapTracerFactory(originFactory));
+    }
+  }
+
+  /**
+   * A wrapper class that wraps a {@link SubchannelPicker} instance and associate it with a {@link
+   * ClientLoadCounter}. All "RPC-capable" {@link PickResult}s picked will be intercepted with
+   * client side load recording logic such that RPC activities occurring in the {@link PickResult}'s
+   * {@link io.grpc.LoadBalancer.Subchannel} will be recorded in the associated {@link
+   * ClientLoadCounter}.
+   */
+  @ThreadSafe
+  static final class LoadRecordingSubchannelPicker extends StreamInstrumentedSubchannelPicker {
+
+    private final ClientLoadCounter counter;
+    private final SubchannelPicker delegate;
+
+    LoadRecordingSubchannelPicker(ClientLoadCounter counter, SubchannelPicker delegate) {
+      this.counter = checkNotNull(counter, "counter");
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    protected SubchannelPicker delegate() {
+      return delegate;
+    }
+
+    @Override
+    protected ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory) {
+      return new XdsClientLoadRecorder(counter, originFactory);
+    }
+  }
+
+  /**
+   * A wrapper class that wraps {@link SubchannelPicker} instance and associate it with an {@link
+   * OrcaPerRequestReportListener}. All "RPC-capable" {@link PickResult}s picked will be intercepted
+   * with the logic of registering the listener for observing backend metrics.
+   */
+  @ThreadSafe
+  static final class MetricsObservingSubchannelPicker extends StreamInstrumentedSubchannelPicker {
+
+    private final OrcaPerRequestReportListener listener;
+    private final SubchannelPicker delegate;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
+
+    MetricsObservingSubchannelPicker(OrcaPerRequestReportListener listener,
+        SubchannelPicker delegate,
+        OrcaPerRequestUtil orcaPerRequestUtil) {
+      this.listener = checkNotNull(listener, "listener");
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
+    }
+
+    @Override
+    protected SubchannelPicker delegate() {
+      return delegate;
+    }
+
+    @Override
+    protected ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory) {
+      return orcaPerRequestUtil.newOrcaClientStreamTracerFactory(originFactory, listener);
     }
   }
 }
