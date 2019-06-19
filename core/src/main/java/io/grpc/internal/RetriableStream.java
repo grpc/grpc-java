@@ -668,7 +668,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       for (Substream sub : currentState.drainedSubstreams) {
         InsightBuilder substreamInsight = new InsightBuilder();
         sub.stream.appendTimeoutInsight(substreamInsight);
-        openSubstreamsInsight.append(substreamInsight.toString());
+        openSubstreamsInsight.append(substreamInsight);
         insight.appendKeyValue("open", openSubstreamsInsight);
       }
     }
@@ -741,7 +741,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       synchronized (lock) {
         state = state.substreamClosed(substream);
-        closedSubstreamsInsight.append(status.getCode().toString());
+        closedSubstreamsInsight.append(status.getCode());
       }
 
       // handle a race between buffer limit exceeded and closed, when setting

@@ -28,10 +28,11 @@ public final class InsightBuilder {
   private final ArrayList<String> buffer = new ArrayList<String>();
 
   /**
-   * Appends a piece of information which is a plain string.
+   * Appends a piece of information which is a plain string.  The given object is immediately
+   * converted to string and recorded.
    */
-  public InsightBuilder append(String insight) {
-    buffer.add(insight);
+  public InsightBuilder append(@Nullable Object insight) {
+    buffer.add(String.valueOf(insight));
     return this;
   }
 
