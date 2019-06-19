@@ -90,6 +90,20 @@ task helloWorldClient(type: CreateStartScripts) {
     classpath = startScripts.classpath
 }
 
+task hedgingHelloWorldServer(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldServer'
+    applicationName = 'hedging-hello-world-server'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
+task hedgingHelloWorldClient(type: CreateStartScripts) {
+    mainClassName = 'io.grpc.examples.hedging.HedgingHelloWorldClient'
+    applicationName = 'hedging-hello-world-client'
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = startScripts.classpath
+}
+
 task compressingHelloWorldClient(type: CreateStartScripts) {
     mainClassName = 'io.grpc.examples.experimental.CompressingHelloWorldClient'
     applicationName = 'compressing-hello-world-client'
@@ -102,6 +116,8 @@ applicationDistribution.into('bin') {
     from(routeGuideClient)
     from(helloWorldServer)
     from(helloWorldClient)
+    from(hedgingHelloWorldClient)
+    from(hedgingHelloWorldServer)
     from(compressingHelloWorldClient)
     fileMode = 0755
 }
