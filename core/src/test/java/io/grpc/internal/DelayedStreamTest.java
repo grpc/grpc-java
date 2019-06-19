@@ -364,7 +364,7 @@ public class DelayedStreamTest {
     InsightBuilder insight = new InsightBuilder();
     stream.start(listener);
     stream.appendTimeoutInsight(insight);
-    assertThat(insight.toString()).matches("\\[waiting_for_connection, buffered_nanos=[0-9]+\\]");
+    assertThat(insight.toString()).matches("\\[buffered_nanos=[0-9]+\\, waiting_for_connection]");
   }
 
   @Test

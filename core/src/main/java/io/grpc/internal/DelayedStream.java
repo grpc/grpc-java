@@ -108,8 +108,8 @@ class DelayedStream implements ClientStream {
         insight.appendKeyValue("buffered_nanos", streamSetTimeNanos - startTimeNanos);
         realStream.appendTimeoutInsight(insight);
       } else {
-        insight.append("waiting_for_connection");
         insight.appendKeyValue("buffered_nanos", System.nanoTime() - startTimeNanos);
+        insight.append("waiting_for_connection");
       }
     }
   }
