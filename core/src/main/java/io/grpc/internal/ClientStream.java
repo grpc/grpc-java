@@ -94,7 +94,8 @@ public interface ClientStream extends Stream {
   void setDeadline(@Nonnull Deadline deadline);
 
   /**
-   * Attributes that the stream holds at the current moment.
+   * Attributes that the stream holds at the current moment.  Thread-safe and can be called at any
+   * time, although some attributes are there only after a certain point.
    */
   Attributes getAttributes();
 }
