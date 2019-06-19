@@ -217,6 +217,15 @@ public class RetriableStreamTest {
     ClientStream mockStream3 = mock(ClientStream.class);
 
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("server_addr", "2.2.2.2:443");
+          return null;
+        }
+      }).when(mockStream3).appendTimeoutInsight(any(InsightBuilder.class));
+
     InOrder inOrder =
         inOrder(retriableStreamRecorder, masterListener, mockStream1, mockStream2, mockStream3);
 
@@ -352,6 +361,11 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream3, times(7)).writeMessage(any(InputStream.class));
     inOrder.verifyNoMoreInteractions();
 
+    InsightBuilder insight = new InsightBuilder();
+    retriableStream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo(
+        "[closed=[DATA_LOSS, UNAVAILABLE], open=[[server_addr=2.2.2.2:443]]]");
+
     // no more retry
     sublistenerCaptor3.getValue().closed(
         Status.fromCode(NON_RETRIABLE_STATUS_CODE), new Metadata());
@@ -360,24 +374,15 @@ public class RetriableStreamTest {
     inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
 
-    InsightBuilder insight = new InsightBuilder();
+    insight = new InsightBuilder();
     retriableStream.appendTimeoutInsight(insight);
-    assertThat(insight.toString())
-        .isEqualTo("[finished=[DATA_LOSS, UNAVAILABLE, INTERNAL], drained=[]]");
+    assertThat(insight.toString()).isEqualTo(
+        "[closed=[DATA_LOSS, UNAVAILABLE, INTERNAL], committed=[server_addr=2.2.2.2:443]]");
   }
 
   @Test
   public void headersRead_cancel() {
     ClientStream mockStream1 = mock(ClientStream.class);
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock in) {
-          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
-          insight.appendKeyValue("server_addr", "2.2.2.2:443");
-          return null;
-        }
-      }).when(mockStream1).appendTimeoutInsight(any(InsightBuilder.class));
-
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     InOrder inOrder = inOrder(retriableStreamRecorder);
 
@@ -394,11 +399,6 @@ public class RetriableStreamTest {
     retriableStream.cancel(Status.CANCELLED);
 
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
-
-    InsightBuilder insight = new InsightBuilder();
-    retriableStream.appendTimeoutInsight(insight);
-    assertThat(insight.toString())
-        .isEqualTo("[finished=[], drained=[[server_addr=2.2.2.2:443]]]");
   }
 
   @Test

@@ -646,16 +646,32 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public void appendTimeoutInsight(InsightBuilder insight) {
+    State currentState;
     synchronized (lock) {
-      insight.appendKeyValue("finished", closedSubstreamsInsight);
+      insight.appendKeyValue("closed", closedSubstreamsInsight);
+      currentState = state;
     }
-    InsightBuilder drainedSubstreamsInsight = new InsightBuilder();
-    for (Substream sub : state.drainedSubstreams) {
+    if (currentState.winningSubstream != null) {
+      // TODO(zhangkun83): in this case while other drained substreams have been cancelled in favor
+      // of the winning substream, they may not have received closed() notifications yet, thus they
+      // may be missing from closedSubstreamsInsight.  This may be a little confusing to the user.
       InsightBuilder substreamInsight = new InsightBuilder();
-      sub.stream.appendTimeoutInsight(substreamInsight);
-      drainedSubstreamsInsight.append(substreamInsight.toString());
+      currentState.winningSubstream.stream.appendTimeoutInsight(substreamInsight);
+      insight.appendKeyValue("committed", substreamInsight);
+    } else {
+      InsightBuilder openSubstreamsInsight = new InsightBuilder();
+      // drainedSubstreams doesn't include all open substreams.  Those who have just been created
+      // and are still catching up with buffered requests (in other words, still draining) will not
+      // show up.  We think this is benign, because the draining should be typically fast, and it'd
+      // be indistinguishable from the case where those streams are to be created a little late due
+      // to delays in the timer.
+      for (Substream sub : currentState.drainedSubstreams) {
+        InsightBuilder substreamInsight = new InsightBuilder();
+        sub.stream.appendTimeoutInsight(substreamInsight);
+        openSubstreamsInsight.append(substreamInsight.toString());
+        insight.appendKeyValue("open", openSubstreamsInsight);
+      }
     }
-    insight.appendKeyValue("drained", drainedSubstreamsInsight);
   }
 
   private static Random random = new Random();
@@ -930,8 +946,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     @Nullable final List<BufferEntry> buffer;
 
     /**
-     * Unmodifiable collection of all the substreams that are drained. Exceptional cases: Singleton
-     * once passThrough; Empty if committed but not passTrough.
+     * Unmodifiable collection of all the open substreams that are drained. Singleton once
+     * passThrough; Empty if committed but not passTrough.
      */
     final Collection<Substream> drainedSubstreams;
 
