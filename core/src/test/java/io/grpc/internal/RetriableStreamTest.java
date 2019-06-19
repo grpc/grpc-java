@@ -215,14 +215,6 @@ public class RetriableStreamTest {
     ClientStream mockStream1 = mock(ClientStream.class);
     ClientStream mockStream2 = mock(ClientStream.class);
     ClientStream mockStream3 = mock(ClientStream.class);
-    doAnswer(new Answer<Void>() {
-        @Override
-        public Void answer(InvocationOnMock in) {
-          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
-          insight.appendKeyValue("server_addr", "2.2.2.2:443");
-          return null;
-        }
-      }).when(mockStream2).appendTimeoutInsight(any(InsightBuilder.class));
 
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     InOrder inOrder =
@@ -370,12 +362,22 @@ public class RetriableStreamTest {
 
     InsightBuilder insight = new InsightBuilder();
     retriableStream.appendTimeoutInsight(insight);
-    assertThat(insight.toString()).isEqualTo("[attempts=[[], [server_addr=2.2.2.2:443], []]]");
+    assertThat(insight.toString())
+        .isEqualTo("[finished=[DATA_LOSS, UNAVAILABLE, INTERNAL], drained=[]]");
   }
 
   @Test
   public void headersRead_cancel() {
     ClientStream mockStream1 = mock(ClientStream.class);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("server_addr", "2.2.2.2:443");
+          return null;
+        }
+      }).when(mockStream1).appendTimeoutInsight(any(InsightBuilder.class));
+
     doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
     InOrder inOrder = inOrder(retriableStreamRecorder);
 
@@ -392,6 +394,11 @@ public class RetriableStreamTest {
     retriableStream.cancel(Status.CANCELLED);
 
     inOrder.verify(retriableStreamRecorder, never()).postCommit();
+
+    InsightBuilder insight = new InsightBuilder();
+    retriableStream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .isEqualTo("[finished=[], drained=[[server_addr=2.2.2.2:443]]]");
   }
 
   @Test

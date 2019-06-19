@@ -35,7 +35,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
@@ -80,6 +79,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
   private final long channelBufferLimit;
   @Nullable
   private final Throttle throttle;
+  @GuardedBy("lock")
+  private final InsightBuilder closedSubstreamsInsight = new InsightBuilder();
 
   private volatile State state = new State(
       new ArrayList<BufferEntry>(8), Collections.<Substream>emptyList(), null, null, false, false,
@@ -89,10 +90,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
    * Either transparent retry happened or reached server's application logic.
    */
   private final AtomicBoolean noMoreTransparentRetry = new AtomicBoolean();
-
-  /** Keeps track of all substreams for informative purposes. */
-  private final ConcurrentLinkedQueue<Substream> allSubstreams =
-      new ConcurrentLinkedQueue<Substream>();
 
   // Used for recording the share of buffer used for the current call out of the channel buffer.
   // This field would not be necessary if there is no channel buffer limit.
@@ -207,7 +204,6 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     Metadata newHeaders = updateHeaders(headers, previousAttemptCount);
     // NOTICE: This set _must_ be done before stream.start() and it actually is.
     sub.stream = newSubstream(tracerFactory, newHeaders);
-    allSubstreams.add(sub);
     return sub;
   }
 
@@ -650,13 +646,16 @@ abstract class RetriableStream<ReqT> implements ClientStream {
 
   @Override
   public void appendTimeoutInsight(InsightBuilder insight) {
-    InsightBuilder attempts = new InsightBuilder();
-    for (Substream sub : allSubstreams) {
+    synchronized (lock) {
+      insight.appendKeyValue("finished", closedSubstreamsInsight);
+    }
+    InsightBuilder drainedSubstreamsInsight = new InsightBuilder();
+    for (Substream sub : state.drainedSubstreams) {
       InsightBuilder substreamInsight = new InsightBuilder();
       sub.stream.appendTimeoutInsight(substreamInsight);
-      attempts.append(substreamInsight.toString());
+      drainedSubstreamsInsight.append(substreamInsight.toString());
     }
-    insight.appendKeyValue("attempts", attempts);
+    insight.appendKeyValue("drained", drainedSubstreamsInsight);
   }
 
   private static Random random = new Random();
@@ -726,6 +725,7 @@ abstract class RetriableStream<ReqT> implements ClientStream {
     public void closed(Status status, RpcProgress rpcProgress, Metadata trailers) {
       synchronized (lock) {
         state = state.substreamClosed(substream);
+        closedSubstreamsInsight.append(status.getCode().toString());
       }
 
       // handle a race between buffer limit exceeded and closed, when setting
