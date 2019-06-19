@@ -34,8 +34,8 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
-import io.grpc.xds.ClientLoadCounter.LocalityMetricsListener;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
@@ -150,8 +150,8 @@ public class ClientLoadCounterTest {
   }
 
   @Test
-  public void metricListener_backendMetricsAggregation() {
-    LocalityMetricsListener listener1 = new LocalityMetricsListener(counter);
+  public void metricsRecordingListener_backendMetricsAggregation() {
+    MetricsRecordingListener listener1 = new MetricsRecordingListener(counter);
     OrcaLoadReport report =
         OrcaLoadReport.newBuilder()
             .setCpuUtilization(0.5345)
@@ -184,7 +184,7 @@ public class ClientLoadCounterTest {
     snapshot = counter.snapshot();
     assertThat(snapshot.getMetricValues()).isEmpty();
 
-    LocalityMetricsListener listener2 = new LocalityMetricsListener(counter);
+    MetricsRecordingListener listener2 = new MetricsRecordingListener(counter);
     report =
         OrcaLoadReport.newBuilder()
             .setCpuUtilization(0.3423)

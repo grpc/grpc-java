@@ -299,15 +299,16 @@ final class ClientLoadCounter {
   }
 
   /**
-   * Listener implementation to receive backend metrics with locality-level aggregation.
+   * Listener implementation to receive backend metrics and record metric values in the provided
+   * {@link ClientLoadCounter}.
    */
   @ThreadSafe
-  static final class LocalityMetricsListener implements OrcaPerRequestReportListener,
-      OrcaOobReportListener {
+  static final class MetricsRecordingListener
+      implements OrcaPerRequestReportListener, OrcaOobReportListener {
 
     private final ClientLoadCounter counter;
 
-    LocalityMetricsListener(ClientLoadCounter counter) {
+    MetricsRecordingListener(ClientLoadCounter counter) {
       this.counter = checkNotNull(counter, "counter");
     }
 
