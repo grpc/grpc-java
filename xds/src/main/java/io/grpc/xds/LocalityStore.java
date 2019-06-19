@@ -393,17 +393,9 @@ interface LocalityStore {
 
         currentChildState = newState;
         currentChildPicker =
-            new SubchannelPicker() {
-              SubchannelPicker instance =
-                  new LoadRecordingSubchannelPicker(counter,
-                      new MetricsObservingSubchannelPicker(
-                          new MetricsRecordingListener(counter), newPicker, orcaPerRequestUtil));
-
-              @Override
-              public PickResult pickSubchannel(PickSubchannelArgs args) {
-                return instance.pickSubchannel(args);
-              }
-            };
+            new LoadRecordingSubchannelPicker(counter,
+                new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
+                    newPicker, orcaPerRequestUtil));
 
         // delegate to parent helper
         updateChildState(locality, newState, currentChildPicker);
