@@ -143,7 +143,7 @@ public class ClientCallImplTest {
         @Override
         public Void answer(InvocationOnMock in) {
           InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
-          insight.appendKeyValue("server_addr", "127.0.0.1:443");
+          insight.appendKeyValue("remote_addr", "127.0.0.1:443");
           return null;
         }
       }).when(stream).appendTimeoutInsight(any(InsightBuilder.class));
@@ -821,7 +821,7 @@ public class ClientCallImplTest {
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+ns. \\[server_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test

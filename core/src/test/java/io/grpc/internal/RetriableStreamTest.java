@@ -221,7 +221,7 @@ public class RetriableStreamTest {
         @Override
         public Void answer(InvocationOnMock in) {
           InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
-          insight.appendKeyValue("server_addr", "2.2.2.2:443");
+          insight.appendKeyValue("remote_addr", "2.2.2.2:443");
           return null;
         }
       }).when(mockStream3).appendTimeoutInsight(any(InsightBuilder.class));
@@ -364,7 +364,7 @@ public class RetriableStreamTest {
     InsightBuilder insight = new InsightBuilder();
     retriableStream.appendTimeoutInsight(insight);
     assertThat(insight.toString()).isEqualTo(
-        "[closed=[DATA_LOSS, UNAVAILABLE], open=[[server_addr=2.2.2.2:443]]]");
+        "[closed=[DATA_LOSS, UNAVAILABLE], open=[[remote_addr=2.2.2.2:443]]]");
 
     // no more retry
     sublistenerCaptor3.getValue().closed(
@@ -377,7 +377,7 @@ public class RetriableStreamTest {
     insight = new InsightBuilder();
     retriableStream.appendTimeoutInsight(insight);
     assertThat(insight.toString()).isEqualTo(
-        "[closed=[DATA_LOSS, UNAVAILABLE, INTERNAL], committed=[server_addr=2.2.2.2:443]]");
+        "[closed=[DATA_LOSS, UNAVAILABLE, INTERNAL], committed=[remote_addr=2.2.2.2:443]]");
   }
 
   @Test

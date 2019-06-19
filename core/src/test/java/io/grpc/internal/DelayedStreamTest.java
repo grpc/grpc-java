@@ -373,7 +373,7 @@ public class DelayedStreamTest {
         @Override
         public Void answer(InvocationOnMock in) {
           InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
-          insight.appendKeyValue("server_addr", "127.0.0.1:443");
+          insight.appendKeyValue("remote_addr", "127.0.0.1:443");
           return null;
         }
       }).when(realStream).appendTimeoutInsight(any(InsightBuilder.class));
@@ -383,6 +383,6 @@ public class DelayedStreamTest {
     InsightBuilder insight = new InsightBuilder();
     stream.appendTimeoutInsight(insight);
     assertThat(insight.toString())
-        .matches("\\[buffered_nanos=[0-9]+, server_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 }

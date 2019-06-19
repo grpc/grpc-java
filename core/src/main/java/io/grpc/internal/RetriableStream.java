@@ -655,12 +655,13 @@ abstract class RetriableStream<ReqT> implements ClientStream {
       // TODO(zhangkun83): in this case while other drained substreams have been cancelled in favor
       // of the winning substream, they may not have received closed() notifications yet, thus they
       // may be missing from closedSubstreamsInsight.  This may be a little confusing to the user.
+      // We need to figure out how to include them.
       InsightBuilder substreamInsight = new InsightBuilder();
       currentState.winningSubstream.stream.appendTimeoutInsight(substreamInsight);
       insight.appendKeyValue("committed", substreamInsight);
     } else {
       InsightBuilder openSubstreamsInsight = new InsightBuilder();
-      // drainedSubstreams doesn't include all open substreams.  Those who have just been created
+      // drainedSubstreams doesn't include all open substreams.  Those which have just been created
       // and are still catching up with buffered requests (in other words, still draining) will not
       // show up.  We think this is benign, because the draining should be typically fast, and it'd
       // be indistinguishable from the case where those streams are to be created a little late due

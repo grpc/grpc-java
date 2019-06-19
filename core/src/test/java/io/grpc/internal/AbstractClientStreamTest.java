@@ -479,7 +479,7 @@ public class AbstractClientStreamTest {
     AbstractClientStream stream =
         new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
     stream.appendTimeoutInsight(insight);
-    assertThat(insight.toString()).isEqualTo("[server_addr=fake_server_addr]");
+    assertThat(insight.toString()).isEqualTo("[remote_addr=fake_server_addr]");
   }
 
   /**

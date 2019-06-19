@@ -222,7 +222,7 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public final void appendTimeoutInsight(InsightBuilder insight) {
     Attributes attrs = getAttributes();
-    insight.appendKeyValue("server_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
+    insight.appendKeyValue("remote_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 
   protected TransportTracer getTransportTracer() {
