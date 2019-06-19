@@ -19,7 +19,6 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
@@ -186,12 +185,7 @@ public class DelayedStreamTest {
 
     stream.start(listener);
 
-    try {
-      stream.getAttributes(); // expect to throw IllegalStateException, otherwise fail()
-      fail();
-    } catch (IllegalStateException expected) {
-      // ignore
-    }
+    assertEquals(Attributes.EMPTY, stream.getAttributes());
 
     stream.setStream(realStream);
     assertEquals(attributes, stream.getAttributes());

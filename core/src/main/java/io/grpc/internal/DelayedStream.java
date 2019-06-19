@@ -213,8 +213,15 @@ class DelayedStream implements ClientStream {
 
   @Override
   public Attributes getAttributes() {
-    checkState(passThrough, "Called getAttributes before attributes are ready");
-    return realStream.getAttributes();
+    ClientStream savedRealStream;
+    synchronized (this) {
+      savedRealStream = realStream;
+    }
+    if (savedRealStream != null) {
+      return savedRealStream.getAttributes();
+    } else {
+      return Attributes.EMPTY;
+    }
   }
 
   @Override
