@@ -670,8 +670,8 @@ abstract class RetriableStream<ReqT> implements ClientStream {
         InsightBuilder substreamInsight = new InsightBuilder();
         sub.stream.appendTimeoutInsight(substreamInsight);
         openSubstreamsInsight.append(substreamInsight);
-        insight.appendKeyValue("open", openSubstreamsInsight);
       }
+      insight.appendKeyValue("open", openSubstreamsInsight);
     }
   }
 

@@ -1632,10 +1632,22 @@ public class RetriableStreamTest {
     ClientStream mockStream2 = mock(ClientStream.class);
     ClientStream mockStream3 = mock(ClientStream.class);
     ClientStream mockStream4 = mock(ClientStream.class);
-    doReturn(mockStream1).when(retriableStreamRecorder).newSubstream(0);
-    doReturn(mockStream2).when(retriableStreamRecorder).newSubstream(1);
-    doReturn(mockStream3).when(retriableStreamRecorder).newSubstream(2);
-    doReturn(mockStream4).when(retriableStreamRecorder).newSubstream(3);
+    ClientStream[] mockStreams =
+        new ClientStream[]{mockStream1, mockStream2, mockStream3, mockStream4};
+
+    for (int i = 0; i < mockStreams.length; i++) {
+      doReturn(mockStreams[i]).when(retriableStreamRecorder).newSubstream(i);
+      final int fakePort = 80 + i;
+      doAnswer(new Answer<Void>() {
+          @Override
+          public Void answer(InvocationOnMock in) {
+            InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+            insight.appendKeyValue("remote_addr", "2.2.2.2:" + fakePort);
+            return null;
+          }
+        }).when(mockStreams[i]).appendTimeoutInsight(any(InsightBuilder.class));
+    }
+
     InOrder inOrder = inOrder(
         retriableStreamRecorder,
         masterListener,
@@ -1795,6 +1807,12 @@ public class RetriableStreamTest {
     inOrder.verify(mockStream4, times(4)).writeMessage(any(InputStream.class));
     inOrder.verifyNoMoreInteractions();
 
+    InsightBuilder insight = new InsightBuilder();
+    hedgingStream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo(
+        "[closed=[UNAVAILABLE], "
+        + "open=[[remote_addr=2.2.2.2:80], [remote_addr=2.2.2.2:81], [remote_addr=2.2.2.2:83]]]");
+
     // commit
     sublistenerCaptor2.getValue().closed(
         Status.fromCode(FATAL_STATUS_CODE), new Metadata());
@@ -1809,6 +1827,11 @@ public class RetriableStreamTest {
     inOrder.verify(retriableStreamRecorder).postCommit();
     inOrder.verify(masterListener).closed(any(Status.class), any(Metadata.class));
     inOrder.verifyNoMoreInteractions();
+
+    insight = new InsightBuilder();
+    hedgingStream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo(
+        "[closed=[UNAVAILABLE, INTERNAL], committed=[remote_addr=2.2.2.2:81]]");
   }
 
   @Test
