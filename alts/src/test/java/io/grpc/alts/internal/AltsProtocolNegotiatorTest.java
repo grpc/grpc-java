@@ -36,7 +36,6 @@ import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
-import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -150,7 +149,6 @@ public class AltsProtocolNegotiatorTest {
         new AltsProtocolNegotiator.ServerAltsProtocolNegotiator(handshakerFactory, lazyFakeChannel)
             .newHandler(grpcHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler);
-    channel.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
   }
 
   @After
