@@ -371,6 +371,11 @@ final class ClientLoadCounter {
       }
       return PickResult.withSubchannel(result.getSubchannel(), wrapTracerFactory(originFactory));
     }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
   }
 
   /**
