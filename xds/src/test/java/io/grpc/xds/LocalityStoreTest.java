@@ -20,23 +20,22 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.ChannelLogger;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -51,6 +50,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
@@ -62,6 +62,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -175,8 +176,8 @@ public class LocalityStoreTest {
   private PickSubchannelArgs pickSubchannelArgs;
   @Mock
   private ThreadSafeRandom random;
-  @Mock
-  private StatsStore statsStore;
+
+  private StatsStore statsStore = mock(StatsStore.class, delegatesTo(new FakeLoadStatsStore()));
 
   private LocalityStore localityStore;
 
@@ -185,8 +186,6 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doReturn(syncContext).when(helper).getSynchronizationContext();
-    doAnswer(returnsFirstArg())
-        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
     localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
   }
@@ -218,7 +217,6 @@ public class LocalityStoreTest {
 
     localityStore.updateLocalityStore(Collections.EMPTY_MAP);
     verify(statsStore).removeLocality(locality4);
-    verifyNoMoreInteractions(statsStore);
   }
 
   @Test
@@ -236,8 +234,8 @@ public class LocalityStoreTest {
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     // Simulate picker updates for each of the two localities with dummy pickers.
-    final PickResult result1 = PickResult.withNoResult();
-    final PickResult result2 = PickResult.withNoResult();
+    final PickResult result1 = PickResult.withSubchannel(mock(Subchannel.class));
+    final PickResult result2 = PickResult.withSubchannel(mock(Subchannel.class));
     SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
     SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
     when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -253,10 +251,9 @@ public class LocalityStoreTest {
     SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
     for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
       pickerFactory.nextIndex = i;
-      interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      assertThat(pickResult.getStreamTracerFactory()).isInstanceOf(XdsClientLoadRecorder.class);
     }
-    verify(statsStore).interceptPickResult(same(result1), eq(locality1));
-    verify(statsStore).interceptPickResult(same(result2), eq(locality2));
   }
 
   @Test
@@ -509,5 +506,38 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz2")).shutdown();
     verify(statsStore).removeLocality(locality1);
     verify(statsStore).removeLocality(locality2);
+  }
+
+  private static final class FakeLoadStatsStore implements StatsStore {
+
+    Map<XdsLocality, ClientLoadCounter> localityCounters = new HashMap<>();
+
+    @Override
+    public ClusterStats generateLoadReport() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public void addLocality(XdsLocality locality) {
+      assertThat(localityCounters).doesNotContainKey(locality);
+      localityCounters.put(locality, new ClientLoadCounter());
+    }
+
+    @Override
+    public void removeLocality(XdsLocality locality) {
+      assertThat(localityCounters).containsKey(locality);
+      localityCounters.remove(locality);
+    }
+
+    @Nullable
+    @Override
+    public ClientLoadCounter getLocalityCounter(XdsLocality locality) {
+      return localityCounters.get(locality);
+    }
+
+    @Override
+    public void recordDroppedRequest(String category) {
+      // NO-OP, verify by invocations.
+    }
   }
 }

@@ -17,13 +17,23 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.LocalityMetricsListener;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
@@ -197,6 +207,73 @@ public class ClientLoadCounterTest {
     MetricValue namedMetric = snapshot.getMetricValues().get("named-cost-or-utilization");
     assertThat(namedMetric.getNumReports()).isEqualTo(2);
     assertThat(namedMetric.getTotalValue()).isEqualTo(3534.0 + 3534.0);
+  }
+
+  @Test
+  public void loadRecordingSubchannelPicker_interceptPickResult_invalidPickResultNotIntercepted() {
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    SubchannelPicker loadRecordingPicker = new LoadRecordingSubchannelPicker(counter, picker);
+    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
+    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
+    PickResult emptyResult = PickResult.withNoResult();
+    when(picker.pickSubchannel(any(PickSubchannelArgs.class)))
+        .thenReturn(errorResult, droppedResult, emptyResult);
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+
+    PickResult interceptedErrorResult = loadRecordingPicker.pickSubchannel(args);
+    PickResult interceptedDroppedResult = loadRecordingPicker.pickSubchannel(args);
+    PickResult interceptedEmptyResult = loadRecordingPicker.pickSubchannel(args);
+    assertThat(interceptedErrorResult).isSameInstanceAs(errorResult);
+    assertThat(interceptedDroppedResult).isSameInstanceAs(droppedResult);
+    assertThat(interceptedEmptyResult).isSameInstanceAs(emptyResult);
+  }
+
+  @Test
+  public void loadRecordingSubchannelPicker_interceptPickResult_applyLoadRecorderToPickResult() {
+    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
+    when(mockFactory
+        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
+        .thenReturn(mockTracer);
+
+    ClientLoadCounter localityCounter1 = new ClientLoadCounter();
+    ClientLoadCounter localityCounter2 = new ClientLoadCounter();
+    final PickResult pickResult1 = PickResult.withSubchannel(mock(Subchannel.class), mockFactory);
+    final PickResult pickResult2 = PickResult.withSubchannel(mock(Subchannel.class));
+    SubchannelPicker picker1 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pickResult1;
+      }
+    };
+    SubchannelPicker picker2 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return pickResult2;
+      }
+    };
+    SubchannelPicker loadRecordingPicker1 =
+        new LoadRecordingSubchannelPicker(localityCounter1, picker1);
+    SubchannelPicker loadRecordingPicker2 =
+        new LoadRecordingSubchannelPicker(localityCounter2, picker2);
+    PickSubchannelArgs args = mock(PickSubchannelArgs.class);
+    PickResult interceptedPickResult1 = loadRecordingPicker1.pickSubchannel(args);
+    PickResult interceptedPickResult2 = loadRecordingPicker2.pickSubchannel(args);
+
+    XdsClientLoadRecorder recorder1 =
+        (XdsClientLoadRecorder) interceptedPickResult1.getStreamTracerFactory();
+    XdsClientLoadRecorder recorder2 =
+        (XdsClientLoadRecorder) interceptedPickResult2.getStreamTracerFactory();
+    assertThat(recorder1.getCounter()).isSameInstanceAs(localityCounter1);
+    assertThat(recorder2.getCounter()).isSameInstanceAs(localityCounter2);
+
+    // Stream tracing is propagated to downstream tracers, which preserves PickResult's original
+    // tracing functionality.
+    Metadata metadata = new Metadata();
+    interceptedPickResult1.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
+        .streamClosed(Status.OK);
+    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
+    verify(mockTracer).streamClosed(Status.OK);
   }
 
   private void assertQueryCounts(ClientLoadSnapshot snapshot,

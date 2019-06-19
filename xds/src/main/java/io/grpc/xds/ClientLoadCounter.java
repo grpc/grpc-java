@@ -23,6 +23,9 @@ import com.google.common.base.MoreObjects;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
@@ -260,6 +263,7 @@ final class ClientLoadCounter {
    * {@link ClientLoadCounter} object.
    */
   @ThreadSafe
+  @VisibleForTesting
   static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
 
     private final ClientStreamTracer.Factory delegate;
@@ -287,6 +291,11 @@ final class ClientLoadCounter {
         }
       };
     }
+
+    @VisibleForTesting
+    ClientLoadCounter getCounter() {
+      return counter;
+    }
   }
 
   /**
@@ -309,6 +318,53 @@ final class ClientLoadCounter {
       for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
         counter.recordMetric(entry.getKey(), entry.getValue());
       }
+    }
+  }
+
+  /**
+   * A wrapper class that wraps a {@link SubchannelPicker} instance and associate it with a {@link
+   * ClientLoadCounter}. All "RPC-capable" {@link PickResult}s picked will be intercepted with
+   * client side load recording logic such that RPC activities occurring in the {@link PickResult}'s
+   * {@link io.grpc.LoadBalancer.Subchannel} will be recorded in the associated {@link
+   * ClientLoadCounter}.
+   */
+  @ThreadSafe
+  static final class LoadRecordingSubchannelPicker extends SubchannelPicker {
+
+    private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+        new ClientStreamTracer() {
+        };
+    private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+        new ClientStreamTracer.Factory() {
+          @Override
+          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+            return NOOP_CLIENT_STREAM_TRACER;
+          }
+        };
+
+    private final ClientLoadCounter counter;
+    private final SubchannelPicker delegate;
+
+    LoadRecordingSubchannelPicker(ClientLoadCounter counter, SubchannelPicker delegate) {
+      this.counter = checkNotNull(counter, "counter");
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      PickResult result = delegate.pickSubchannel(args);
+      if (!result.getStatus().isOk()) {
+        return result;
+      }
+      if (result.getSubchannel() == null) {
+        return result;
+      }
+      ClientStreamTracer.Factory originFactory = result.getStreamTracerFactory();
+      if (originFactory == null) {
+        originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+      }
+      XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
+      return PickResult.withSubchannel(result.getSubchannel(), recorder);
     }
   }
 }
