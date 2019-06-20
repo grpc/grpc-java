@@ -100,7 +100,7 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
     if (ctx.channel().isActive() && previousFailure == null) {
       final class LogOnFailure implements ChannelFutureListener {
         @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
+        public void operationComplete(ChannelFuture future) {
           if (!future.isSuccess()) {
             logger.log(Level.FINE, "Failed closing channel", future.cause());
           }
