@@ -42,7 +42,9 @@ public interface InternalServer {
   /**
    * Initiates an orderly shutdown of the server. Existing transports continue, but new transports
    * will not be created (once {@link ServerListener#serverShutdown()} callback is called). This
-   * method may only be called once.
+   * method may only be called once.  Blocks until the listening socket(s) have been closed.  If
+   * interrupted, this method will not wait for the close to complete, but it will happen
+   * asynchronously.
    */
   void shutdown();
 
