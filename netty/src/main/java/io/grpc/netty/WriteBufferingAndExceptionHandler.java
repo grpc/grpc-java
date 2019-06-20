@@ -82,7 +82,7 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, final Throwable cause) {
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     assert cause != null;
     Throwable previousFailure = failCause;
     Status status = Utils.statusFromThrowable(cause);
