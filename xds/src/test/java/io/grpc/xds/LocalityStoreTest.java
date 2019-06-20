@@ -240,10 +240,11 @@ public class LocalityStoreTest {
     assertThat(loadBalancers).hasSize(2);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
-    ClientStreamTracer.Factory metricsRecorder1 = mock(ClientStreamTracer.Factory.class);
-    ClientStreamTracer.Factory metricsRecorder2 = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer.Factory metricsTracingFactory1 = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer.Factory metricsTracingFactory2 = mock(ClientStreamTracer.Factory.class);
     when(orcaPerRequestUtil.newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
-        any(OrcaPerRequestReportListener.class))).thenReturn(metricsRecorder1, metricsRecorder2);
+        any(OrcaPerRequestReportListener.class)))
+        .thenReturn(metricsTracingFactory1, metricsTracingFactory2);
 
     final PickResult result1 = PickResult.withSubchannel(mock(Subchannel.class));
     final PickResult result2 =
@@ -264,41 +265,30 @@ public class LocalityStoreTest {
     verify(helper, times(2)).updateBalancingState(eq(READY), interLocalityPickerCaptor.capture());
     SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
 
-    pickerFactory.nextIndex = 0;
-    PickResult pickResult1 = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
-    ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor1 = ArgumentCaptor.forClass(null);
-    verify(orcaPerRequestUtil)
-        .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
-            listenerCaptor1.capture());
-    assertThat(listenerCaptor1.getValue()).isInstanceOf(MetricsRecordingListener.class);
-    MetricsRecordingListener listener1 = (MetricsRecordingListener) listenerCaptor1.getValue();
-    assertThat(listener1.getCounter())
-        .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality1));
-    assertThat(pickResult1.getStreamTracerFactory())
-        .isInstanceOf(LoadRecordingStreamTracerFactory.class);
-    LoadRecordingStreamTracerFactory factory1 =
-        (LoadRecordingStreamTracerFactory) pickResult1.getStreamTracerFactory();
-    assertThat(factory1.getCounter())
-        .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality1));
-    assertThat(factory1.delegate()).isSameInstanceAs(metricsRecorder1);
-
-    pickerFactory.nextIndex = 1;
-    PickResult pickResult2 = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
-    ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor2 = ArgumentCaptor.forClass(null);
-    verify(orcaPerRequestUtil, times(2))
-        .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
-            listenerCaptor2.capture());
-    assertThat(listenerCaptor2.getValue()).isInstanceOf(MetricsRecordingListener.class);
-    MetricsRecordingListener listener2 = (MetricsRecordingListener) listenerCaptor2.getValue();
-    assertThat(listener2.getCounter())
-        .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality2));
-    assertThat(pickResult2.getStreamTracerFactory())
-        .isInstanceOf(LoadRecordingStreamTracerFactory.class);
-    LoadRecordingStreamTracerFactory factory2 =
-        (LoadRecordingStreamTracerFactory) pickResult2.getStreamTracerFactory();
-    assertThat(factory2.getCounter())
-        .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(locality2));
-    assertThat(factory2.delegate()).isSameInstanceAs(metricsRecorder2);
+    // Verify each PickResult picked is intercepted with client stream tracer factory for
+    // recording load and backend metrics.
+    List<XdsLocality> localities = ImmutableList.of(locality1, locality2);
+    List<ClientStreamTracer.Factory> metricsTracingFactories =
+        ImmutableList.of(metricsTracingFactory1, metricsTracingFactory2);
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      pickerFactory.nextIndex = i;
+      PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
+      verify(orcaPerRequestUtil, times(i + 1))
+          .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
+              listenerCaptor.capture());
+      assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
+      MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
+      assertThat(listener.getCounter())
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
+      assertThat(pickResult.getStreamTracerFactory())
+          .isInstanceOf(LoadRecordingStreamTracerFactory.class);
+      LoadRecordingStreamTracerFactory loadRecordingFactory =
+          (LoadRecordingStreamTracerFactory) pickResult.getStreamTracerFactory();
+      assertThat(loadRecordingFactory.getCounter())
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
+      assertThat(loadRecordingFactory.delegate()).isSameInstanceAs(metricsTracingFactories.get(i));
+    }
   }
 
   @Test
