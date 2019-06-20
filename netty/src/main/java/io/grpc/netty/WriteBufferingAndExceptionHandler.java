@@ -19,6 +19,8 @@ package io.grpc.netty;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.grpc.Status;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -34,7 +36,7 @@ import java.util.logging.Logger;
 
 /**
  * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
- * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
+ * {@link #failWrites(Throwable)} is called. This handler allows us to
  * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
  * i.e.  before it's active or the TLS Handshake is complete.
  */
@@ -80,7 +82,7 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+  public void exceptionCaught(ChannelHandlerContext ctx, final Throwable cause) {
     assert cause != null;
     Throwable previousFailure = failCause;
     Status status = Utils.statusFromThrowable(cause);
@@ -96,7 +98,16 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
     // 4c. active, prev!=null[handlerRemoved]: channel will be closed out-of-band by buffered write.
     // 4d. active, prev!=null[connect]: impossible, channel can't be active after a failed connect.
     if (ctx.channel().isActive() && previousFailure == null) {
-      ctx.close();
+      final class LogOnFailure implements ChannelFutureListener {
+        @Override
+        public void operationComplete(ChannelFuture future) throws Exception {
+          if (!future.isSuccess()) {
+            logger.log(Level.FINE, "Failed closing channel", future.cause());
+          }
+        }
+      }
+
+      ctx.close().addListener(new LogOnFailure());
     }
   }
 
@@ -137,6 +148,22 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
 
     super.connect(ctx, remoteAddress, localAddress, promise);
     promise.addListener(new ConnectListener());
+  }
+
+  @Override
+  public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    if (logger.isLoggable(Level.FINE)) {
+      Object loggedMsg = msg instanceof ByteBuf ? ByteBufUtil.hexDump((ByteBuf) msg) : msg;
+      logger.log(
+          Level.FINE,
+          "Unexpected read {0} reached end of pipeline {1}",
+          new Object[] {loggedMsg, ctx.pipeline().names()});
+    }
+    ReferenceCountUtil.safeRelease(msg);
+    exceptionCaught(
+        ctx,
+        Status.INTERNAL.withDescription("read() missed by ProtocolNegotiator handler")
+            .asRuntimeException());
   }
 
   /**
