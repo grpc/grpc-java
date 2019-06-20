@@ -24,13 +24,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.Metadata;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -42,17 +37,6 @@ import javax.annotation.concurrent.NotThreadSafe;
  */
 @NotThreadSafe
 final class XdsLoadStatsStore implements StatsStore {
-
-  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
-      new ClientStreamTracer() {
-      };
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return NOOP_CLIENT_STREAM_TRACER;
-        }
-      };
 
   private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category specified in the DropOverload policy.
@@ -155,27 +139,5 @@ final class XdsLoadStatsStore implements StatsStore {
       }
     }
     counter.getAndIncrement();
-  }
-
-  @Override
-  public PickResult interceptPickResult(PickResult pickResult, XdsLocality locality) {
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    if (pickResult.getSubchannel() == null) {
-      return pickResult;
-    }
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    if (counter == null) {
-      // TODO (chengyuanzhang): this should not happen if this method is called in a correct
-      //  order with other methods in this class, but we might want to have some logs or warnings.
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
   }
 }

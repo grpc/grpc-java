@@ -20,24 +20,24 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.ChannelLogger;
+import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -51,9 +51,12 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
+import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -62,6 +65,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -176,7 +180,9 @@ public class LocalityStoreTest {
   @Mock
   private ThreadSafeRandom random;
   @Mock
-  private StatsStore statsStore;
+  private OrcaPerRequestUtil orcaPerRequestUtil;
+  private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
+  private StatsStore statsStore = mock(StatsStore.class, delegatesTo(fakeLoadStatsStore));
 
   private LocalityStore localityStore;
 
@@ -185,10 +191,10 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doReturn(syncContext).when(helper).getSynchronizationContext();
-    doAnswer(returnsFirstArg())
-        .when(statsStore).interceptPickResult(any(PickResult.class), any(XdsLocality.class));
     lbRegistry.register(lbProvider);
-    localityStore = new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore);
+    localityStore =
+        new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
+            orcaPerRequestUtil);
   }
 
   @Test
@@ -218,11 +224,10 @@ public class LocalityStoreTest {
 
     localityStore.updateLocalityStore(Collections.EMPTY_MAP);
     verify(statsStore).removeLocality(locality4);
-    verifyNoMoreInteractions(statsStore);
   }
 
   @Test
-  public void updateLocalityStore_interceptPickResultUponPickReadySubchannel() {
+  public void updateLocalityStore_pickResultInterceptedForLoadRecordingWhenSubchannelReady() {
     // Simulate receiving two localities.
     LocalityInfo localityInfo1 =
         new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
@@ -235,15 +240,23 @@ public class LocalityStoreTest {
     assertThat(loadBalancers).hasSize(2);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
-    // Simulate picker updates for each of the two localities with dummy pickers.
-    final PickResult result1 = PickResult.withNoResult();
-    final PickResult result2 = PickResult.withNoResult();
+    ClientStreamTracer.Factory metricsTracingFactory1 = mock(ClientStreamTracer.Factory.class);
+    ClientStreamTracer.Factory metricsTracingFactory2 = mock(ClientStreamTracer.Factory.class);
+    when(orcaPerRequestUtil.newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
+        any(OrcaPerRequestReportListener.class)))
+        .thenReturn(metricsTracingFactory1, metricsTracingFactory2);
+
+    final PickResult result1 = PickResult.withSubchannel(mock(Subchannel.class));
+    final PickResult result2 =
+        PickResult.withSubchannel(mock(Subchannel.class), mock(ClientStreamTracer.Factory.class));
     SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
     SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
     when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(result1);
     when(subchannelPicker2.pickSubchannel(any(PickSubchannelArgs.class)))
         .thenReturn(result2);
+
+    // Simulate picker updates for the two localities with dummy pickers.
     childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker1);
     childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
 
@@ -251,12 +264,31 @@ public class LocalityStoreTest {
     ArgumentCaptor<SubchannelPicker> interLocalityPickerCaptor = ArgumentCaptor.forClass(null);
     verify(helper, times(2)).updateBalancingState(eq(READY), interLocalityPickerCaptor.capture());
     SubchannelPicker interLocalityPicker = interLocalityPickerCaptor.getValue();
+
+    // Verify each PickResult picked is intercepted with client stream tracer factory for
+    // recording load and backend metrics.
+    List<XdsLocality> localities = ImmutableList.of(locality1, locality2);
+    List<ClientStreamTracer.Factory> metricsTracingFactories =
+        ImmutableList.of(metricsTracingFactory1, metricsTracingFactory2);
     for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
       pickerFactory.nextIndex = i;
-      interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
+      verify(orcaPerRequestUtil, times(i + 1))
+          .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
+              listenerCaptor.capture());
+      assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
+      MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
+      assertThat(listener.getCounter())
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
+      assertThat(pickResult.getStreamTracerFactory())
+          .isInstanceOf(LoadRecordingStreamTracerFactory.class);
+      LoadRecordingStreamTracerFactory loadRecordingFactory =
+          (LoadRecordingStreamTracerFactory) pickResult.getStreamTracerFactory();
+      assertThat(loadRecordingFactory.getCounter())
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
+      assertThat(loadRecordingFactory.delegate()).isSameInstanceAs(metricsTracingFactories.get(i));
     }
-    verify(statsStore).interceptPickResult(same(result1), eq(locality1));
-    verify(statsStore).interceptPickResult(same(result2), eq(locality2));
   }
 
   @Test
@@ -509,5 +541,38 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz2")).shutdown();
     verify(statsStore).removeLocality(locality1);
     verify(statsStore).removeLocality(locality2);
+  }
+
+  private static final class FakeLoadStatsStore implements StatsStore {
+
+    Map<XdsLocality, ClientLoadCounter> localityCounters = new HashMap<>();
+
+    @Override
+    public ClusterStats generateLoadReport() {
+      throw new AssertionError("Should not be called");
+    }
+
+    @Override
+    public void addLocality(XdsLocality locality) {
+      assertThat(localityCounters).doesNotContainKey(locality);
+      localityCounters.put(locality, new ClientLoadCounter());
+    }
+
+    @Override
+    public void removeLocality(XdsLocality locality) {
+      assertThat(localityCounters).containsKey(locality);
+      localityCounters.remove(locality);
+    }
+
+    @Nullable
+    @Override
+    public ClientLoadCounter getLocalityCounter(XdsLocality locality) {
+      return localityCounters.get(locality);
+    }
+
+    @Override
+    public void recordDroppedRequest(String category) {
+      // NO-OP, verify by invocations.
+    }
   }
 }

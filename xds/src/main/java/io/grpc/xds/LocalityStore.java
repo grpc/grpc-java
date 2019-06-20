@@ -40,6 +40,9 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -79,19 +82,24 @@ interface LocalityStore {
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
     private final StatsStore statsStore;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore());
+          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
-        Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random, StatsStore statsStore) {
+        Helper helper,
+        PickerFactory pickerFactory,
+        LoadBalancerRegistry lbRegistry,
+        ThreadSafeRandom random,
+        StatsStore statsStore,
+        OrcaPerRequestUtil orcaPerRequestUtil) {
       this.helper = checkNotNull(helper, "helper");
       this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
@@ -99,6 +107,7 @@ interface LocalityStore {
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
       this.random = checkNotNull(random, "random");
       this.statsStore = checkNotNull(statsStore, "statsStore");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -211,7 +220,7 @@ interface LocalityStore {
               childHelper);
         } else {
           statsStore.addLocality(newLocality);
-          childHelper = new ChildHelper(newLocality);
+          childHelper = new ChildHelper(newLocality, statsStore.getLocalityCounter(newLocality));
           localityLbInfo =
               new LocalityLbInfo(
                   localityInfoMap.get(newLocality).localityWeight,
@@ -360,12 +369,14 @@ interface LocalityStore {
     class ChildHelper extends ForwardingLoadBalancerHelper {
 
       private final XdsLocality locality;
+      private final ClientLoadCounter counter;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
-      ChildHelper(XdsLocality locality) {
+      ChildHelper(XdsLocality locality, ClientLoadCounter counter) {
         this.locality = checkNotNull(locality, "locality");
+        this.counter = checkNotNull(counter, "counter");
       }
 
       @Override
@@ -375,33 +386,16 @@ interface LocalityStore {
 
       // This is triggered by child balancer
       @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
+      public void updateBalancingState(ConnectivityState newState,
+          final SubchannelPicker newPicker) {
         checkNotNull(newState, "newState");
         checkNotNull(newPicker, "newPicker");
 
-        class LoadRecordPicker extends SubchannelPicker {
-          private final SubchannelPicker delegate;
-
-          private LoadRecordPicker(SubchannelPicker delegate) {
-            this.delegate = delegate;
-          }
-
-          @Override
-          public PickResult pickSubchannel(PickSubchannelArgs args) {
-            return statsStore.interceptPickResult(delegate.pickSubchannel(args), locality);
-          }
-
-          @Override
-          public String toString() {
-            return MoreObjects.toStringHelper(this)
-                .add("delegate", delegate)
-                .add("locality", locality)
-                .toString();
-          }
-        }
-
         currentChildState = newState;
-        currentChildPicker = new LoadRecordPicker(newPicker);
+        currentChildPicker =
+            new LoadRecordingSubchannelPicker(counter,
+                new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
+                    newPicker, orcaPerRequestUtil));
 
         // delegate to parent helper
         updateChildState(locality, newState, currentChildPicker);

@@ -17,22 +17,12 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.ClientStreamTracer;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.Metadata;
-import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -57,9 +47,6 @@ public class XdsLoadStatsStoreTest {
       new XdsLocality("test_region1", "test_zone", "test_subzone");
   private static final XdsLocality LOCALITY2 =
       new XdsLocality("test_region2", "test_zone", "test_subzone");
-  private static final ClientStreamTracer.StreamInfo STREAM_INFO =
-      ClientStreamTracer.StreamInfo.newBuilder().build();
-  private Subchannel mockSubchannel = mock(Subchannel.class);
   private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private XdsLoadStatsStore loadStore;
@@ -285,45 +272,5 @@ public class XdsLoadStatsStoreTest {
     assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);
-  }
-
-  @Test
-  public void loadNotRecordedForUntrackedLocality() {
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel);
-    // If the per-locality counter does not exist, nothing should happen.
-    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
-    assertThat(interceptedPickResult.getStreamTracerFactory()).isNull();
-  }
-
-  @Test
-  public void invalidPickResultNotIntercepted() {
-    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
-    PickResult errorResult = PickResult.withError(Status.UNAVAILABLE.withDescription("Error"));
-    PickResult droppedResult = PickResult.withDrop(Status.UNAVAILABLE.withDescription("Dropped"));
-    PickResult emptyResult = PickResult.withNoResult();
-    PickResult interceptedErrorResult = loadStore.interceptPickResult(errorResult, LOCALITY1);
-    PickResult interceptedDroppedResult =
-        loadStore.interceptPickResult(droppedResult, LOCALITY1);
-    PickResult interceptedEmptyResult = loadStore.interceptPickResult(emptyResult, LOCALITY1);
-    assertThat(interceptedErrorResult).isSameInstanceAs(errorResult);
-    assertThat(interceptedDroppedResult).isSameInstanceAs(droppedResult);
-    assertThat(interceptedEmptyResult).isSameInstanceAs(emptyResult);
-  }
-
-  @Test
-  public void interceptPreservesOriginStreamTracer() {
-    ClientStreamTracer.Factory mockFactory = mock(ClientStreamTracer.Factory.class);
-    ClientStreamTracer mockTracer = mock(ClientStreamTracer.class);
-    when(mockFactory
-        .newClientStreamTracer(any(ClientStreamTracer.StreamInfo.class), any(Metadata.class)))
-        .thenReturn(mockTracer);
-    localityLoadCounters.put(LOCALITY1, new ClientLoadCounter());
-    PickResult pickResult = PickResult.withSubchannel(mockSubchannel, mockFactory);
-    PickResult interceptedPickResult = loadStore.interceptPickResult(pickResult, LOCALITY1);
-    Metadata metadata = new Metadata();
-    interceptedPickResult.getStreamTracerFactory().newClientStreamTracer(STREAM_INFO, metadata)
-        .streamClosed(Status.OK);
-    verify(mockFactory).newClientStreamTracer(same(STREAM_INFO), same(metadata));
-    verify(mockTracer).streamClosed(Status.OK);
   }
 }
