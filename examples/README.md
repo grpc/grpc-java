@@ -157,7 +157,7 @@ $ bazel-bin/hello-world-client
 
   + [ALTS examples](example-alts)
 
-- [Google Authentication](example-gauth/README.md)
+- [Google Authentication](example-gauth)
 
 - [Kotlin examples](example-kotlin)
 
