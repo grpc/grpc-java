@@ -118,6 +118,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -1081,7 +1082,7 @@ public abstract class AbstractInteropTest {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(10, TimeUnit.MILLISECONDS);
+        blockingStub.withDeadlineAfter(100, TimeUnit.MILLISECONDS);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
             .setIntervalUs((int) TimeUnit.SECONDS.toMicros(20)))
@@ -1091,6 +1092,14 @@ public abstract class AbstractInteropTest {
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.DEADLINE_EXCEEDED.getCode(), ex.getStatus().getCode());
+      String desc = ex.getStatus().getDescription();
+      assertTrue(desc,
+          // There is a race between client and server-side deadline expiration.
+          // If client expires first, it'd generate this message
+          Pattern.matches("deadline exceeded after .*ns. \\[.*\\]", desc)
+          // If server expires first, it'd reset the stream and client would generate a different
+          // message
+          || desc.startsWith("ClientCall was cancelled at or after deadline."));
     }
 
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
@@ -1155,6 +1164,8 @@ public abstract class AbstractInteropTest {
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertThat(ex.getStatus().getDescription())
+        .startsWith("ClientCall started after deadline exceeded");
     }
 
     // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -1178,6 +1189,8 @@ public abstract class AbstractInteropTest {
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertThat(ex.getStatus().getDescription())
+        .startsWith("ClientCall started after deadline exceeded");
     }
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {

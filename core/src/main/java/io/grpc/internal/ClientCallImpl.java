@@ -265,7 +265,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
     } else {
       stream = new FailingClientStream(
-          DEADLINE_EXCEEDED.withDescription("deadline exceeded: " + effectiveDeadline));
+          DEADLINE_EXCEEDED.withDescription(
+              "ClientCall started after deadline exceeded: " + effectiveDeadline));
     }
 
     if (callOptions.getAuthority() != null) {
@@ -347,10 +348,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void run() {
+      InsightBuilder insight = new InsightBuilder();
+      stream.appendTimeoutInsight(insight);
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
       stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-          String.format("deadline exceeded after %dns", remainingNanos)));
+              "deadline exceeded after " + remainingNanos + "ns. " + insight));
     }
   }
 
@@ -654,7 +657,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         // description. Since our timer may be delayed in firing, we double-check the deadline and
         // turn the failure into the likely more helpful DEADLINE_EXCEEDED status.
         if (deadline.isExpired()) {
-          status = DEADLINE_EXCEEDED;
+          InsightBuilder insight = new InsightBuilder();
+          stream.appendTimeoutInsight(insight);
+          status = DEADLINE_EXCEEDED.augmentDescription(
+              "ClientCall was cancelled at or after deadline. " + insight);
           // Replace trailers to prevent mixing sources of status and trailers.
           trailers = new Metadata();
         }

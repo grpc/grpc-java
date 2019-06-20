@@ -44,6 +44,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InUseStateAggregator;
+import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
 import io.grpc.internal.ObjectPool;
@@ -805,6 +806,10 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         headers.discardAll(TIMEOUT_KEY);
         long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
         headers.put(TIMEOUT_KEY, effectiveTimeout);
+      }
+
+      @Override
+      public void appendTimeoutInsight(InsightBuilder insight) {
       }
     }
   }

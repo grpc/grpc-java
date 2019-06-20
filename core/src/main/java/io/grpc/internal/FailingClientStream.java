@@ -58,4 +58,9 @@ public final class FailingClientStream extends NoopClientStream {
   Status getError() {
     return error;
   }
+
+  @Override
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.appendKeyValue("error", error).appendKeyValue("progress", rpcProgress);
+  }
 }

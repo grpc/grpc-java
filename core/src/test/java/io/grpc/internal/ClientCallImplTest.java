@@ -28,6 +28,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -78,8 +79,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Test for {@link ClientCallImpl}.
@@ -136,6 +139,14 @@ public class ClientCallImplTest {
     when(transport.newStream(
             any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(stream);
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("remote_addr", "127.0.0.1:443");
+          return null;
+        }
+      }).when(stream).appendTimeoutInsight(any(InsightBuilder.class));
     baseCallOptions = CallOptions.DEFAULT.withStreamTracerFactory(streamTracerFactory);
   }
 
@@ -676,6 +687,8 @@ public class ClientCallImplTest {
         .newStream(any(MethodDescriptor.class), any(Metadata.class), any(CallOptions.class));
     verify(callListener, timeout(1000)).onClose(statusCaptor.capture(), any(Metadata.class));
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+    assertThat(statusCaptor.getValue().getDescription())
+        .startsWith("ClientCall started after deadline exceeded");
     verifyZeroInteractions(provider);
   }
 
@@ -807,6 +820,8 @@ public class ClientCallImplTest {
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+    assertThat(statusCaptor.getValue().getDescription())
+        .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test
@@ -834,6 +849,7 @@ public class ClientCallImplTest {
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+    assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
   }
 
   @Test

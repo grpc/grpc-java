@@ -98,4 +98,11 @@ public interface ClientStream extends Stream {
    * time, although some attributes are there only after a certain point.
    */
   Attributes getAttributes();
+
+  /**
+   * Append information that will be included in the locally generated DEADLINE_EXCEEDED errors to
+   * the given {@link InsightBuilder}, in order to tell the user about the state of the stream so
+   * that they can better diagnose the cause of the error.
+   */
+  void appendTimeoutInsight(InsightBuilder insight);
 }

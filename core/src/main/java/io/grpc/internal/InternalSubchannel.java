@@ -480,7 +480,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     return channelStatsFuture;
   }
 
-  @VisibleForTesting
   ConnectivityState getState() {
     return state.getState();
   }
