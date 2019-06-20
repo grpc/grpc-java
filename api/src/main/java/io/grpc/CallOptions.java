@@ -69,8 +69,7 @@ public final class CallOptions {
   /**
    * Opposite to fail fast.
    */
-  @Nullable
-  private Boolean waitForReady;
+  private boolean waitForReady;
 
   @Nullable
   private Integer maxInboundMessageSize;
@@ -155,7 +154,7 @@ public final class CallOptions {
    */
   public CallOptions withWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
-    newOptions.waitForReady = Boolean.TRUE;
+    newOptions.waitForReady = true;
     return newOptions;
   }
 
@@ -165,7 +164,7 @@ public final class CallOptions {
    */
   public CallOptions withoutWaitForReady() {
     CallOptions newOptions = new CallOptions(this);
-    newOptions.waitForReady = Boolean.FALSE;
+    newOptions.waitForReady = false;
     return newOptions;
   }
 
@@ -370,10 +369,6 @@ public final class CallOptions {
    * calls and 'wait for ready' is the opposite to it.
    */
   public boolean isWaitForReady() {
-    return Boolean.TRUE.equals(waitForReady);
-  }
-
-  Boolean getWaitForReady() {
     return waitForReady;
   }
 
