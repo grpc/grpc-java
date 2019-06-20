@@ -104,8 +104,8 @@ public abstract class Server {
 
   /**
    * Initiates an orderly shutdown in which preexisting calls continue but new calls are rejected.
-   * After calling this method, clients may no longer connect to the listening socket(s).
-   * Additionally, other servers may bind to the originally listening socket(s).
+   * After this call returns, this server has released the listening socket(s) and may be reused by
+   * another server.
    *
    * @return {@code this} object
    * @since 1.0.0
@@ -115,9 +115,8 @@ public abstract class Server {
   /**
    * Initiates a forceful shutdown in which preexisting and new calls are rejected. Although
    * forceful, the shutdown process is still not instantaneous; {@link #isTerminated()} will likely
-   * return {@code false} immediately after this method returns. After calling this method, clients
-   * may no longer connect to the listening socket(s). Additionally, other servers may bind to the
-   * originally listening socket(s).
+   * return {@code false} immediately after this method returns. After this call returns, this
+   * server has released the listening socket(s) and may be reused by another server.
    *
    * @return {@code this} object
    * @since 1.0.0

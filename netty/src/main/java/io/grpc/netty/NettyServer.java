@@ -283,9 +283,6 @@ class NettyServer implements InternalServer, InternalWithLogId {
         eventLoopReferenceCounter.release();
       }
     });
-    if (Thread.currentThread().isInterrupted()) {
-      return;
-    }
     try {
       channel.closeFuture().sync();
     } catch (InterruptedException e) {
