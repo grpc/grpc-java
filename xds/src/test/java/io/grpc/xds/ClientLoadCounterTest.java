@@ -39,7 +39,7 @@ import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.ClientLoadCounter.StreamInstrumentedSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.TracerWrappingSubchannelPicker;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import java.util.concurrent.ThreadLocalRandom;
 import org.junit.Before;
@@ -215,9 +215,9 @@ public class ClientLoadCounterTest {
   }
 
   @Test
-  public void streamInstrSubchannelPicker_interceptPickResult_invalidPickResultNotIntercepted() {
+  public void tracerWrappingSubchannelPicker_interceptPickResult_invalidPickResultNotIntercepted() {
     final SubchannelPicker picker = mock(SubchannelPicker.class);
-    SubchannelPicker streamInstrSubchannelPicker = new StreamInstrumentedSubchannelPicker() {
+    SubchannelPicker streamInstrSubchannelPicker = new TracerWrappingSubchannelPicker() {
       @Override
       protected SubchannelPicker delegate() {
         return picker;

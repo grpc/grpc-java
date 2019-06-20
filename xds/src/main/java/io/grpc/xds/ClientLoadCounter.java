@@ -339,7 +339,7 @@ final class ClientLoadCounter {
    * instrumenting purposes.
    */
   @VisibleForTesting
-  abstract static class StreamInstrumentedSubchannelPicker extends SubchannelPicker {
+  abstract static class TracerWrappingSubchannelPicker extends SubchannelPicker {
 
     private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
         new ClientStreamTracer() {
@@ -387,7 +387,7 @@ final class ClientLoadCounter {
    * ClientLoadCounter}.
    */
   @ThreadSafe
-  static final class LoadRecordingSubchannelPicker extends StreamInstrumentedSubchannelPicker {
+  static final class LoadRecordingSubchannelPicker extends TracerWrappingSubchannelPicker {
 
     private final ClientLoadCounter counter;
     private final SubchannelPicker delegate;
@@ -415,7 +415,7 @@ final class ClientLoadCounter {
    * with the logic of registering the listener for observing backend metrics.
    */
   @ThreadSafe
-  static final class MetricsObservingSubchannelPicker extends StreamInstrumentedSubchannelPicker {
+  static final class MetricsObservingSubchannelPicker extends TracerWrappingSubchannelPicker {
 
     private final OrcaPerRequestReportListener listener;
     private final SubchannelPicker delegate;
