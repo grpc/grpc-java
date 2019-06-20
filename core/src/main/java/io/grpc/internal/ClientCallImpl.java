@@ -534,7 +534,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     Boolean hasOnReady = onReadies.get().get(clz);
     if (hasOnReady == null) {
       try {
-        hasOnReady = clz.getDeclaredMethod("onReady").getDeclaringClass() != Listener.class;
+        hasOnReady = clz.getMethod("onReady").getDeclaringClass() != Listener.class;
       } catch (NoSuchMethodException e) {
         return true;
       }
