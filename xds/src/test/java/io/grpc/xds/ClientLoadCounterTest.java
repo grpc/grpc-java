@@ -33,8 +33,8 @@ import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
-import io.grpc.xds.ClientLoadCounter.ClientLoadRecorder;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
+import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
@@ -134,21 +134,22 @@ public class ClientLoadCounterTest {
   }
 
   @Test
-  public void xdsClientLoadRecorder_clientSideQueryCountsAggregation() {
-    ClientLoadRecorder recorder1 =
-        new ClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
-    ClientStreamTracer tracer = recorder1.newClientStreamTracer(STREAM_INFO, new Metadata());
+  public void loadRecordingStreamTracerFactory_clientSideQueryCountsAggregation() {
+    LoadRecordingStreamTracerFactory factory1 =
+        new LoadRecordingStreamTracerFactory(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
+    ClientStreamTracer tracer = factory1.newClientStreamTracer(STREAM_INFO, new Metadata());
     ClientLoadSnapshot snapshot = counter.snapshot();
     assertQueryCounts(snapshot, 0, 1, 0, 1);
     tracer.streamClosed(Status.OK);
     snapshot = counter.snapshot();
     assertQueryCounts(snapshot, 1, 0, 0, 0);
 
-    // Create a second XdsClientLoadRecorder with the same counter, stats are aggregated together.
-    ClientLoadRecorder recorder2 =
-        new ClientLoadRecorder(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
-    recorder1.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.ABORTED);
-    recorder2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
+    // Create a second LoadRecordingStreamTracerFactory with the same counter, stats are aggregated
+    // together.
+    LoadRecordingStreamTracerFactory factory2 =
+        new LoadRecordingStreamTracerFactory(counter, NOOP_CLIENT_STREAM_TRACER_FACTORY);
+    factory1.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.ABORTED);
+    factory2.newClientStreamTracer(STREAM_INFO, new Metadata()).streamClosed(Status.CANCELLED);
     snapshot = counter.snapshot();
     assertQueryCounts(snapshot, 0, 0, 2, 2);
   }
@@ -275,10 +276,10 @@ public class ClientLoadCounterTest {
     PickResult interceptedPickResult1 = loadRecordingPicker1.pickSubchannel(args);
     PickResult interceptedPickResult2 = loadRecordingPicker2.pickSubchannel(args);
 
-    ClientLoadRecorder recorder1 =
-        (ClientLoadRecorder) interceptedPickResult1.getStreamTracerFactory();
-    ClientLoadRecorder recorder2 =
-        (ClientLoadRecorder) interceptedPickResult2.getStreamTracerFactory();
+    LoadRecordingStreamTracerFactory recorder1 =
+        (LoadRecordingStreamTracerFactory) interceptedPickResult1.getStreamTracerFactory();
+    LoadRecordingStreamTracerFactory recorder2 =
+        (LoadRecordingStreamTracerFactory) interceptedPickResult2.getStreamTracerFactory();
     assertThat(recorder1.getCounter()).isSameInstanceAs(localityCounter1);
     assertThat(recorder2.getCounter()).isSameInstanceAs(localityCounter2);
 
