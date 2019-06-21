@@ -25,7 +25,7 @@ import javax.annotation.Nullable;
  * information.
  */
 public final class InsightBuilder {
-  private final ArrayList<String> buffer = new ArrayList<String>();
+  private final ArrayList<String> buffer = new ArrayList<>();
 
   /**
    * Appends a piece of information which is a plain string.  The given object is immediately

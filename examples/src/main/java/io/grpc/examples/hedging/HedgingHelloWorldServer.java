@@ -29,7 +29,6 @@ import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.stub.StreamObserver;
 import java.io.IOException;
 import java.util.Random;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -97,9 +96,9 @@ public class HedgingHelloWorldServer {
   static class LatencyInjectionInterceptor implements ServerInterceptor {
 
     @Override
-    public <HelloRequest, HelloReply> Listener<HelloRequest> interceptCall(
-        ServerCall<HelloRequest, HelloReply> call,
-        Metadata headers, ServerCallHandler<HelloRequest, HelloReply> next) {
+    public <HelloRequestT, HelloReplyT> Listener<HelloRequestT> interceptCall(
+        ServerCall<HelloRequestT, HelloReplyT> call,
+        Metadata headers, ServerCallHandler<HelloRequestT, HelloReplyT> next) {
       int random = new Random().nextInt(100);
       long delay = 0;
       if (random < 1) {

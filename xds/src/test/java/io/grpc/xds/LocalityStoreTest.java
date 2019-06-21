@@ -182,7 +182,7 @@ public class LocalityStoreTest {
   @Mock
   private OrcaPerRequestUtil orcaPerRequestUtil;
   private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
-  private StatsStore statsStore = mock(StatsStore.class, delegatesTo(fakeLoadStatsStore));
+  private final StatsStore statsStore = mock(StatsStore.class, delegatesTo(fakeLoadStatsStore));
 
   private LocalityStore localityStore;
 
