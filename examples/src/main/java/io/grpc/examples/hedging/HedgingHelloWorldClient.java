@@ -16,6 +16,8 @@
 
 package io.grpc.examples.hedging;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import com.google.gson.Gson;
 import com.google.gson.stream.JsonReader;
 import io.grpc.ManagedChannel;
@@ -50,10 +52,15 @@ public class HedgingHelloWorldClient {
 
   /** Construct client connecting to HelloWorld server at {@code host:port}. */
   public HedgingHelloWorldClient(String host, int port, boolean hedging) {
-    Map<String, ?> hedgingServiceConfig = new Gson().fromJson(
-        new JsonReader(new InputStreamReader(HedgingHelloWorldClient.class.getResourceAsStream(
-            "hedging_service_config.json"), Charset.forName("UTF-8"))),
-        Map.class);
+    Map<String, ?> hedgingServiceConfig =
+      new Gson()
+          .fromJson(
+              new JsonReader(
+                  new InputStreamReader(
+                      HedgingHelloWorldClient.class.getResourceAsStream(
+                          "hedging_service_config.json"),
+                      UTF_8)),
+              Map.class);
 
     ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder.forAddress(host, port)
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
@@ -101,8 +108,12 @@ public class HedgingHelloWorldClient {
 
   void printSummary() {
     int rpcCount = latencies.size();
-    long latency50, latency90, latency95, latency99, latency999, latencyMax;
-    latency50 = latency90 = latency95 = latency99 = latency999 = latencyMax = 0;
+    long latency50 = 0L;
+    long latency90 = 0L;
+    long latency95 = 0L;
+    long latency99 = 0L;
+    long latency999 = 0L;
+    long latencyMax = 0L;
     for (int i = 0; i < rpcCount; i++) {
       long latency = latencies.poll();
       if (i == rpcCount * 50 / 100 - 1) {
@@ -155,7 +166,7 @@ public class HedgingHelloWorldClient {
   }
 
   public static void main(String[] args) throws Exception {
-    boolean hedging = !Boolean.valueOf(System.getenv(ENV_DISABLE_HEDGING));
+    boolean hedging = !Boolean.parseBoolean(System.getenv(ENV_DISABLE_HEDGING));
     final HedgingHelloWorldClient client = new HedgingHelloWorldClient("localhost", 50051, hedging);
     ForkJoinPool executor = new ForkJoinPool();
 
