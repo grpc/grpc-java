@@ -58,17 +58,17 @@ Download [the JARs][]. Or for Maven with non-Android, add to your `pom.xml`:
 
 Or for Gradle with non-Android, add to your dependencies:
 ```gradle
-compile 'io.grpc:grpc-netty-shaded:1.21.0'
-compile 'io.grpc:grpc-protobuf:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+implementation 'io.grpc:grpc-netty-shaded:1.21.0'
+implementation 'io.grpc:grpc-protobuf:1.21.0'
+implementation 'io.grpc:grpc-stub:1.21.0'
 ```
 
 For Android client, use `grpc-okhttp` instead of `grpc-netty-shaded` and
 `grpc-protobuf-lite` instead of `grpc-protobuf`:
 ```gradle
-compile 'io.grpc:grpc-okhttp:1.21.0'
-compile 'io.grpc:grpc-protobuf-lite:1.21.0'
-compile 'io.grpc:grpc-stub:1.21.0'
+implementation 'io.grpc:grpc-okhttp:1.21.0'
+implementation 'io.grpc:grpc-protobuf-lite:1.21.0'
+implementation 'io.grpc:grpc-stub:1.21.0'
 ```
 
 [the JARs]:
