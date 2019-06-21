@@ -26,6 +26,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -83,7 +84,7 @@ interface LocalityStore {
     private final StatsStore statsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = new LinkedHashMap<>();
+    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -176,7 +177,7 @@ interface LocalityStore {
         localityMap.get(locality).shutdown();
         statsStore.removeLocality(locality);
       }
-      localityMap = new LinkedHashMap<>();
+      localityMap = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
@@ -233,7 +234,7 @@ interface LocalityStore {
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
-      localityMap = updatedLocalityMap;
+      localityMap = Collections.unmodifiableMap(updatedLocalityMap);
 
       updatePicker(newState, childPickers);
 
