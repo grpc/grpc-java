@@ -17,7 +17,6 @@
 package io.grpc.internal;
 
 import java.util.ArrayList;
-import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -26,7 +25,7 @@ import javax.annotation.Nullable;
  * information.
  */
 public final class InsightBuilder {
-  private final List<String> buffer = new ArrayList<>();
+  private final ArrayList<String> buffer = new ArrayList<>();
 
   /**
    * Appends a piece of information which is a plain string.  The given object is immediately
