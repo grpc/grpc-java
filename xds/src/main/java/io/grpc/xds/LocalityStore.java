@@ -49,9 +49,8 @@ import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -84,7 +83,7 @@ interface LocalityStore {
     private final StatsStore statsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
+    private Map<XdsLocality, LocalityLbInfo> localityMap = new LinkedHashMap<>();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -177,7 +176,7 @@ interface LocalityStore {
         localityMap.get(locality).shutdown();
         statsStore.removeLocality(locality);
       }
-      localityMap = new HashMap<>();
+      localityMap = new LinkedHashMap<>();
     }
 
     // This is triggered by EDS response.
@@ -185,20 +184,14 @@ interface LocalityStore {
     public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
+      Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
 
       final Set<XdsLocality> toRemove = new HashSet<>();
-      Iterator<XdsLocality> iterator = oldLocalities.iterator();
-      while (iterator.hasNext()) {
-        XdsLocality oldLocality = iterator.next();
+      for (XdsLocality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
           toRemove.add(oldLocality);
           // No graceful transition until a high-level lb graceful transition design is available.
           localityMap.get(oldLocality).shutdown();
-          iterator.remove();
-          if (localityMap.isEmpty()) {
-            // down-size the map
-            localityMap = new HashMap<>();
-          }
         }
       }
 
@@ -211,13 +204,12 @@ interface LocalityStore {
         LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          LocalityLbInfo oldLocalityLbInfo
-              = localityMap.get(newLocality);
+          LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
           childHelper = oldLocalityLbInfo.childHelper;
-          localityLbInfo = new LocalityLbInfo(
-              localityInfoMap.get(newLocality).localityWeight,
-              oldLocalityLbInfo.childBalancer,
-              childHelper);
+          localityLbInfo =
+              new LocalityLbInfo(oldLocalityLbInfo.localityWeight,
+                  oldLocalityLbInfo.childBalancer,
+                  childHelper);
         } else {
           statsStore.addLocality(newLocality);
           childHelper = new ChildHelper(newLocality, statsStore.getLocalityCounter(newLocality));
@@ -226,8 +218,8 @@ interface LocalityStore {
                   localityInfoMap.get(newLocality).localityWeight,
                   loadBalancerProvider.newLoadBalancer(childHelper),
                   childHelper);
-          localityMap.put(newLocality, localityLbInfo);
         }
+        updatedLocalityMap.put(newLocality, localityLbInfo);
         // TODO: put endPointWeights into attributes for WRR.
         localityLbInfo.childBalancer
             .handleResolvedAddresses(
@@ -241,6 +233,7 @@ interface LocalityStore {
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
+      localityMap = updatedLocalityMap;
 
       updatePicker(newState, childPickers);
 
