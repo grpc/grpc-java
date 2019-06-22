@@ -47,10 +47,7 @@ before trying out the examples.
   ```json
         "hedgingPolicy": {
           "maxAttempts": 3,
-          "hedgingDelay": "1s",
-          "nonFatalStatusCodes": [
-            "UNAVAILABLE"
-          ]
+          "hedgingDelay": "1s"
         }
   ```
   Then the latency summary in the client log is like the following

@@ -18,21 +18,17 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Verify.verify;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import io.grpc.MethodDescriptor;
-import io.grpc.Status.Code;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
@@ -256,21 +252,9 @@ final class ManagedChannelServiceConfig {
           "backoffMultiplier must be greater than 0: %s",
           backoffMultiplier);
 
-      List<String> rawCodes =
-          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> retryableStatusCodes = Collections.unmodifiableSet(codes);
-
       return new RetryPolicy(
           maxAttempts, initialBackoffNanos, maxBackoffNanos, backoffMultiplier,
-          retryableStatusCodes);
+          ServiceConfigUtil.getRetryableStatusCodesFromRetryPolicy(retryPolicy));
     }
 
     private static HedgingPolicy hedgingPolicy(
@@ -287,19 +271,9 @@ final class ManagedChannelServiceConfig {
       checkArgument(
           hedgingDelayNanos >= 0, "hedgingDelay must not be negative: %s", hedgingDelayNanos);
 
-      List<String> rawCodes =
-          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy);
-      checkNotNull(rawCodes, "rawCodes must be present");
-      checkArgument(!rawCodes.isEmpty(), "rawCodes can't be empty");
-      EnumSet<Code> codes = EnumSet.noneOf(Code.class);
-      // service config doesn't say if duplicates are allowed, so just accept them.
-      for (String rawCode : rawCodes) {
-        verify(!"OK".equals(rawCode), "rawCode can not be \"OK\"");
-        codes.add(Code.valueOf(rawCode));
-      }
-      Set<Code> nonFatalStatusCodes = Collections.unmodifiableSet(codes);
-
-      return new HedgingPolicy(maxAttempts, hedgingDelayNanos, nonFatalStatusCodes);
+      return new HedgingPolicy(
+          maxAttempts, hedgingDelayNanos,
+          ServiceConfigUtil.getNonFatalStatusCodesFromHedgingPolicy(hedgingPolicy));
     }
   }
 }
