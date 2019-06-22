@@ -19,7 +19,9 @@ package io.grpc.helloworldexample
 import android.app.Activity
 import android.content.Context
 import android.os.AsyncTask
+import android.os.Build
 import android.os.Bundle
+import android.support.annotation.RequiresApi
 import android.support.v7.app.AppCompatActivity
 import android.text.TextUtils
 import android.text.method.ScrollingMovementMethod
@@ -31,33 +33,38 @@ import io.grpc.ManagedChannel
 import io.grpc.ManagedChannelBuilder
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloRequest
+import kotlinx.android.synthetic.main.activity_helloworld.grpc_response_text
+import kotlinx.android.synthetic.main.activity_helloworld.send_button
+import kotlinx.android.synthetic.main.activity_helloworld.host_edit_text
+import kotlinx.android.synthetic.main.activity_helloworld.message_edit_text
+import kotlinx.android.synthetic.main.activity_helloworld.port_edit_text
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
-import kotlinx.android.synthetic.main.activity_helloworld.*
 
 class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     setContentView(R.layout.activity_helloworld)
-    grpc_response_text!!.movementMethod = ScrollingMovementMethod()
-    send_button!!.setOnClickListener(this)
+    grpc_response_text?.movementMethod = ScrollingMovementMethod()
+    send_button?.setOnClickListener(this)
   }
 
+  @RequiresApi(Build.VERSION_CODES.CUPCAKE)
   override fun onClick(view: View) {
     (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
-        .hideSoftInputFromWindow(host_edit_text!!.windowToken, 0)
-    send_button!!.isEnabled = false
-    grpc_response_text!!.text = ""
+        .hideSoftInputFromWindow(host_edit_text?.windowToken, 0)
+    send_button?.isEnabled = false
+    grpc_response_text?.text = ""
     GrpcTask(this)
         .execute(
-            host_edit_text!!.text.toString(),
-            message_edit_text!!.text.toString(),
-            port_edit_text!!.text.toString())
+            host_edit_text?.text.toString(),
+            message_edit_text?.text.toString(),
+            port_edit_text?.text.toString())
   }
 
-  private class GrpcTask constructor(activity: Activity) : AsyncTask<String, Void, String>() {
+  private class GrpcTask(activity: Activity) : AsyncTask<String, Void, String>() {
     private val activityReference: WeakReference<Activity> = WeakReference(activity)
     private var channel: ManagedChannel? = null
 
