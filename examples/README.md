@@ -25,8 +25,6 @@ before trying out the examples.
 
 - [Json serialization](src/main/java/io/grpc/examples/advanced)
 
-- [Authentication](AUTHENTICATION_EXAMPLE.md)
-
 - <details>
   <summary>Hedging</summary>
 
@@ -160,6 +158,8 @@ $ bazel-bin/hello-world-client
   + [ALTS examples](example-alts)
 
 - [Google Authentication](example-gauth)
+
+- [JWT-based Authentication](example-jwt-auth/README.md)
 
 - [Kotlin examples](example-kotlin)
 
