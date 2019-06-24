@@ -80,6 +80,8 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @Nullable
   private LrsStream lrsStream;
+  @Nullable
+  private XdsLoadReportCallback callback;
 
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
@@ -107,10 +109,11 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   }
 
   @Override
-  public void startLoadReporting() {
+  public void startLoadReporting(XdsLoadReportCallback callback) {
     if (started) {
       return;
     }
+    this.callback = callback;
     started = true;
     startLrsRpc();
   }
@@ -273,6 +276,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
+      callback.onReportResponse(loadReportIntervalNano);
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
@@ -340,6 +344,23 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
+  }
+
+  /**
+   * Callbacks for passing information received from client load reporting responses to xDS load
+   * balancer, such as the load reporting interval requested by the traffic director.
+   *
+   * <p>Implementations are not required to be thread-safe as callbacks will be invoked in xDS load
+   * balancer's {@link SynchronizationContext}.
+   */
+  interface XdsLoadReportCallback {
+
+    /**
+     * The load reporting interval has been received.
+     *
+     * @param reportIntervalNano load reporting interval requested by remote traffic director.
+     */
+    void onReportResponse(long reportIntervalNano);
   }
 
   abstract static class XdsLoadReportClientFactory {

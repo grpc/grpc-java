@@ -232,7 +232,6 @@ interface LocalityStore {
           if (metricsReportIntervalNano > 0) {
             localityLbInfo.childHelper.updateMetricsReportInterval(metricsReportIntervalNano);
           }
-          localityMap.put(newLocality, localityLbInfo);
         }
         updatedLocalityMap.put(newLocality, localityLbInfo);
         // TODO: put endPointWeights into attributes for WRR.

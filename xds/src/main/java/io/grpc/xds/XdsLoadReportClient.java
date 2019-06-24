@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportCallback;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -33,8 +34,11 @@ interface XdsLoadReportClient {
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   *
+   * @param callback containing methods to be invoked for passing information received from load
+   *                 reporting responses to xDS load balancer.
    */
-  void startLoadReporting();
+  void startLoadReporting(XdsLoadReportCallback callback);
 
   /**
    * Terminates load reporting. Calling this method on an already stopped
