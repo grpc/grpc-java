@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.IDLE;
@@ -23,6 +24,7 @@ import static io.grpc.ConnectivityState.READY;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
@@ -56,6 +58,9 @@ import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
+import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
@@ -72,10 +77,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link LocalityStore}.
@@ -113,6 +121,7 @@ public class LocalityStoreTest {
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
   private final Map<String, Helper> childHelpers = new HashMap<>();
+  private final Map<String, FakeOrcaReportingHelperWrapper> childHelperWrappers = new HashMap<>();
 
   private final LoadBalancerProvider lbProvider = new LoadBalancerProvider() {
 
@@ -181,6 +190,8 @@ public class LocalityStoreTest {
   private ThreadSafeRandom random;
   @Mock
   private OrcaPerRequestUtil orcaPerRequestUtil;
+  @Mock
+  private OrcaOobUtil orcaOobUtil;
   private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
   private final StatsStore statsStore = mock(StatsStore.class, delegatesTo(fakeLoadStatsStore));
 
@@ -191,10 +202,22 @@ public class LocalityStoreTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doReturn(syncContext).when(helper).getSynchronizationContext();
+    when(orcaOobUtil.newOrcaReportingHelperWrapper(any(Helper.class),
+        any(OrcaOobReportListener.class)))
+        .thenAnswer(new Answer<OrcaReportingHelperWrapper>() {
+          @Override
+          public OrcaReportingHelperWrapper answer(InvocationOnMock invocation) {
+            Helper h = invocation.getArgument(0);
+            FakeOrcaReportingHelperWrapper res =
+                new FakeOrcaReportingHelperWrapper(h);
+            childHelperWrappers.put(h.getAuthority(), res);
+            return res;
+          }
+        });
     lbRegistry.register(lbProvider);
     localityStore =
         new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
-            orcaPerRequestUtil);
+            orcaPerRequestUtil, orcaOobUtil);
   }
 
   @Test
@@ -288,6 +311,83 @@ public class LocalityStoreTest {
       assertThat(loadRecordingFactory.getCounter())
           .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
       assertThat(loadRecordingFactory.delegate()).isSameInstanceAs(metricsTracingFactories.get(i));
+    }
+  }
+
+  @Test
+  public void childLbPerformOobBackendMetricsAggregation() {
+    // Simulate receiving two localities.
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    localityStore.updateLocalityStore(ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2));
+
+    // Two child balancers are created.
+    assertThat(loadBalancers).hasSize(2);
+    assertThat(childHelperWrappers).hasSize(2);
+
+    class HelperMatcher implements ArgumentMatcher<Helper> {
+
+      private final String authority;
+
+      private HelperMatcher(String authority) {
+        this.authority = checkNotNull(authority, "authority");
+      }
+
+      @Override
+      public boolean matches(Helper argument) {
+        return authority.equals(argument.getAuthority());
+      }
+    }
+
+    Map<String, XdsLocality> localities = ImmutableMap.of("sz1", locality1, "sz2", locality2);
+    for (Helper h : childHelpers.values()) {
+      ArgumentCaptor<OrcaOobReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
+      verify(orcaOobUtil)
+          .newOrcaReportingHelperWrapper(argThat(new HelperMatcher(h.getAuthority())),
+              listenerCaptor.capture());
+      assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
+      MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
+      assertThat(listener.getCounter())
+          .isSameInstanceAs(fakeLoadStatsStore
+              .localityCounters.get(localities.get(h.getAuthority())));
+    }
+
+    // Simulate receiving updates for backend metrics reporting interval.
+    localityStore.updateOobMetricsReportInterval(1952);
+    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
+      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(1952);
+    }
+
+    localityStore.updateOobMetricsReportInterval(9251);
+    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
+      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(9251);
+    }
+  }
+
+  @Test
+  public void updateOobMetricsReportIntervalBeforeChildLbCreated() {
+    // Simulate receiving update for backend metrics reporting interval.
+    localityStore.updateOobMetricsReportInterval(1952);
+
+    assertThat(loadBalancers).hasSize(0);
+
+    // Simulate receiving two localities.
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    localityStore.updateLocalityStore(ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2));
+
+    // Two child balancers are created.
+    assertThat(loadBalancers).hasSize(2);
+    assertThat(childHelperWrappers).hasSize(2);
+
+    for (FakeOrcaReportingHelperWrapper orcaWrapper : childHelperWrappers.values()) {
+      assertThat(orcaWrapper.reportIntervalNanos).isEqualTo(1952);
     }
   }
 
@@ -573,6 +673,26 @@ public class LocalityStoreTest {
     @Override
     public void recordDroppedRequest(String category) {
       // NO-OP, verify by invocations.
+    }
+  }
+
+  private static final class FakeOrcaReportingHelperWrapper extends OrcaReportingHelperWrapper {
+
+    final Helper delegate;
+    long reportIntervalNanos = -1;
+
+    FakeOrcaReportingHelperWrapper(Helper delegate) {
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    public void setReportingConfig(OrcaReportingConfig config) {
+      reportIntervalNanos = config.getReportIntervalNanos();
+    }
+
+    @Override
+    public Helper asHelper() {
+      return delegate;
     }
   }
 }

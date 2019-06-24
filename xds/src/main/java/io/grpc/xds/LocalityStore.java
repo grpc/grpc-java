@@ -45,6 +45,8 @@ import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
@@ -55,6 +57,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -72,6 +75,8 @@ interface LocalityStore {
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
+  void updateOobMetricsReportInterval(long reportIntervalNano);
+
   StatsStore getStatsStore();
 
   final class LocalityStoreImpl implements LocalityStore {
@@ -83,13 +88,15 @@ interface LocalityStore {
     private final ThreadSafeRandom random;
     private final StatsStore statsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
+    private final OrcaOobUtil orcaOobUtil;
 
     private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
+    private long metricsReportIntervalNano = -1;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance());
+          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
@@ -99,7 +106,8 @@ interface LocalityStore {
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
         StatsStore statsStore,
-        OrcaPerRequestUtil orcaPerRequestUtil) {
+        OrcaPerRequestUtil orcaPerRequestUtil,
+        OrcaOobUtil orcaOobUtil) {
       this.helper = checkNotNull(helper, "helper");
       this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
@@ -108,6 +116,7 @@ interface LocalityStore {
       this.random = checkNotNull(random, "random");
       this.statsStore = checkNotNull(statsStore, "statsStore");
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
+      this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -213,12 +222,16 @@ interface LocalityStore {
                   childHelper);
         } else {
           statsStore.addLocality(newLocality);
-          childHelper = new ChildHelper(newLocality, statsStore.getLocalityCounter(newLocality));
+          childHelper =
+              new ChildHelper(newLocality, statsStore.getLocalityCounter(newLocality), orcaOobUtil);
           localityLbInfo =
               new LocalityLbInfo(
                   localityInfoMap.get(newLocality).localityWeight,
                   loadBalancerProvider.newLoadBalancer(childHelper),
                   childHelper);
+          if (metricsReportIntervalNano > 0) {
+            localityLbInfo.childHelper.updateMetricsReportInterval(metricsReportIntervalNano);
+          }
         }
         updatedLocalityMap.put(newLocality, localityLbInfo);
         // TODO: put endPointWeights into attributes for WRR.
@@ -261,6 +274,14 @@ interface LocalityStore {
     @Override
     public StatsStore getStatsStore() {
       return statsStore;
+    }
+
+    @Override
+    public void updateOobMetricsReportInterval(long reportIntervalNano) {
+      metricsReportIntervalNano = reportIntervalNano;
+      for (LocalityLbInfo lbInfo : localityMap.values()) {
+        lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
+      }
     }
 
     @Nullable
@@ -362,48 +383,63 @@ interface LocalityStore {
 
     class ChildHelper extends ForwardingLoadBalancerHelper {
 
-      private final XdsLocality locality;
-      private final ClientLoadCounter counter;
+      private final OrcaReportingHelperWrapper orcaReportingHelperWrapper;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
-      ChildHelper(XdsLocality locality, ClientLoadCounter counter) {
-        this.locality = checkNotNull(locality, "locality");
-        this.counter = checkNotNull(counter, "counter");
+      ChildHelper(final XdsLocality locality, final ClientLoadCounter counter,
+          OrcaOobUtil orcaOobUtil) {
+        checkNotNull(locality, "locality");
+        checkNotNull(counter, "counter");
+        checkNotNull(orcaOobUtil, "orcaOobUtil");
+        Helper delegate = new ForwardingLoadBalancerHelper() {
+          @Override
+          protected Helper delegate() {
+            return helper;
+          }
+
+          @Override
+          public void updateBalancingState(ConnectivityState newState,
+              final SubchannelPicker newPicker) {
+            checkNotNull(newState, "newState");
+            checkNotNull(newPicker, "newPicker");
+
+            currentChildState = newState;
+            currentChildPicker =
+                new LoadRecordingSubchannelPicker(counter,
+                    new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
+                        newPicker, orcaPerRequestUtil));
+
+            // delegate to parent helper
+            updateChildState(locality, newState, currentChildPicker);
+          }
+
+          @Override
+          public String toString() {
+            return MoreObjects.toStringHelper(this).add("locality", locality).toString();
+          }
+
+          @Override
+          public String getAuthority() {
+            //FIXME: This should be a new proposed field of Locality, locality_name
+            return locality.getSubzone();
+          }
+        };
+        orcaReportingHelperWrapper =
+            checkNotNull(orcaOobUtil, "orcaOobUtil")
+                .newOrcaReportingHelperWrapper(delegate, new MetricsRecordingListener(counter));
+      }
+
+      void updateMetricsReportInterval(long intervalNanos) {
+        orcaReportingHelperWrapper
+            .setReportingConfig(OrcaReportingConfig.newBuilder()
+                .setReportInterval(intervalNanos, TimeUnit.NANOSECONDS).build());
       }
 
       @Override
       protected Helper delegate() {
-        return helper;
-      }
-
-      // This is triggered by child balancer
-      @Override
-      public void updateBalancingState(ConnectivityState newState,
-          final SubchannelPicker newPicker) {
-        checkNotNull(newState, "newState");
-        checkNotNull(newPicker, "newPicker");
-
-        currentChildState = newState;
-        currentChildPicker =
-            new LoadRecordingSubchannelPicker(counter,
-                new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
-                    newPicker, orcaPerRequestUtil));
-
-        // delegate to parent helper
-        updateChildState(locality, newState, currentChildPicker);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this).add("locality", locality).toString();
-      }
-
-      @Override
-      public String getAuthority() {
-        //FIXME: This should be a new proposed field of Locality, locality_name
-        return locality.getSubzone();
+        return orcaReportingHelperWrapper.asHelper();
       }
     }
   }

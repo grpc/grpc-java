@@ -45,6 +45,7 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
@@ -80,7 +81,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
 
       fallbackManager.childBalancerWorked = true;
-      lrsClient.startLoadReporting();
+      lrsClient.startLoadReporting(lrsCallback);
     }
 
     @Override
@@ -98,6 +99,15 @@ final class XdsLoadBalancer extends LoadBalancer {
       fallbackManager.cancelFallback();
     }
   };
+
+  private final XdsLoadReportCallback lrsCallback =
+      new XdsLoadReportCallback() {
+
+        @Override
+        public void onReportResponse(long reportIntervalNano) {
+          localityStore.updateOobMetricsReportInterval(reportIntervalNano);
+        }
+      };
 
   private LbConfig fallbackPolicy;
 

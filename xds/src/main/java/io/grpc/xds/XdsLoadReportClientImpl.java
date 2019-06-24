@@ -80,6 +80,8 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
 
   @Nullable
   private LrsStream lrsStream;
+  @Nullable
+  private XdsLoadReportCallback callback;
 
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
@@ -107,10 +109,11 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   }
 
   @Override
-  public void startLoadReporting() {
+  public void startLoadReporting(XdsLoadReportCallback callback) {
     if (started) {
       return;
     }
+    this.callback = callback;
     started = true;
     startLrsRpc();
   }
@@ -273,6 +276,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
+      callback.onReportResponse(loadReportIntervalNano);
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.

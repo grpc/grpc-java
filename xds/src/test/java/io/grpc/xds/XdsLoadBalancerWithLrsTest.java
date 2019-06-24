@@ -55,6 +55,7 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import java.util.Collections;
 import java.util.Map;
@@ -65,6 +66,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -254,11 +256,13 @@ public class XdsLoadBalancerWithLrsTest {
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
     assertThat(fallBackLbHelper).isNotNull();
 
-    verify(lrsClient, never()).startLoadReporting();
+    verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
 
     // Simulates a syntactically incorrect EDS response.
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    verify(lrsClient, never()).startLoadReporting();
+    verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
+
+    ArgumentCaptor<XdsLoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -267,7 +271,9 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    verify(lrsClient).startLoadReporting();
+    verify(lrsClient).startLoadReporting(lrsCallbackCaptor.capture());
+    lrsCallbackCaptor.getValue().onReportResponse(19543);
+    verify(localityStore).updateOobMetricsReportInterval(19543);
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);
@@ -299,7 +305,7 @@ public class XdsLoadBalancerWithLrsTest {
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
             same(statsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
-    inOrder.verify(lrsClient, never()).startLoadReporting();
+    inOrder.verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed before xDS protocol is
     // established.
@@ -326,7 +332,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting();
+    inOrder.verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed.
     newLbConfig = (Map<String, ?>) JsonParser.parse(
@@ -346,7 +352,7 @@ public class XdsLoadBalancerWithLrsTest {
             same(statsStore));
 
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting();
+    inOrder.verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
 
     inOrder.verifyNoMoreInteractions();
   }
@@ -374,7 +380,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    verify(lrsClient).startLoadReporting();
+    verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
 
     // Simulate receiving a new service config with child policy changed.
     @SuppressWarnings("unchecked")

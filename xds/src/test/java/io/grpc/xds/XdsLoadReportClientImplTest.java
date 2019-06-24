@@ -53,6 +53,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;
@@ -148,6 +149,8 @@ public class XdsLoadReportClientImplTest {
   private BackoffPolicy backoffPolicy2;
   @Mock
   private StatsStore statsStore;
+  @Mock
+  private XdsLoadReportCallback callback;
 
   private static ClusterStats buildEmptyClusterStats(long loadReportIntervalNanos) {
     return ClusterStats.newBuilder()
@@ -203,7 +206,7 @@ public class XdsLoadReportClientImplTest {
         new XdsLoadReportClientImpl(channel, helper, fakeClock.getStopwatchSupplier(),
             backoffPolicyProvider,
             statsStore);
-    lrsClient.startLoadReporting();
+    lrsClient.startLoadReporting(callback);
   }
 
   @After
@@ -251,9 +254,9 @@ public class XdsLoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.peek();
     verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
-    lrsClient.startLoadReporting();
+    lrsClient.startLoadReporting(callback);
     assertThat(lrsRequestObservers).hasSize(1);
-    lrsClient.startLoadReporting();
+    lrsClient.startLoadReporting(callback);
     assertThat(lrsRequestObservers).hasSize(1);
     verifyNoMoreInteractions(requestObserver);
 
@@ -263,7 +266,7 @@ public class XdsLoadReportClientImplTest {
     lrsClient.stopLoadReporting();
     verifyNoMoreInteractions(requestObserver);
 
-    lrsClient.startLoadReporting();
+    lrsClient.startLoadReporting(callback);
     verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
     assertThat(lrsRequestObservers).hasSize(2);
   }
@@ -284,6 +287,7 @@ public class XdsLoadReportClientImplTest {
     assertThat(logs).containsExactly(
         "DEBUG: Received LRS initial response: " + buildLrsResponse(1453));
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1453));
+    verify(callback).onReportResponse(1453);
   }
 
   @Test
@@ -305,12 +309,14 @@ public class XdsLoadReportClientImplTest {
         "DEBUG: Received LRS initial response: " + buildLrsResponse(1362));
     logs.poll();
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(1362));
+    verify(callback).onReportResponse(1362);
 
     responseObserver.onNext(buildLrsResponse(2183345));
     assertThat(logs).containsExactly(
         "DEBUG: Received an LRS response: " + buildLrsResponse(2183345));
     // Updated load reporting interval becomes effective immediately.
     assertNextReport(inOrder, requestObserver, buildEmptyClusterStats(2183345));
+    verify(callback).onReportResponse(2183345);
   }
 
   @Test
