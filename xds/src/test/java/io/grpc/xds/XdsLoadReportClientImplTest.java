@@ -53,7 +53,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportCallback;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;

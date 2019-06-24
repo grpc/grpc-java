@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportCallback;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -48,4 +47,21 @@ interface XdsLoadReportClient {
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
   void stopLoadReporting();
+
+  /**
+   * Callbacks for passing information received from client load reporting responses to xDS load
+   * balancer, such as the load reporting interval requested by the traffic director.
+   *
+   * <p>Implementations are not required to be thread-safe as callbacks will be invoked in xDS load
+   * balancer's {@link io.grpc.SynchronizationContext}.
+   */
+  interface XdsLoadReportCallback {
+
+    /**
+     * The load reporting interval has been received.
+     *
+     * @param reportIntervalNano load reporting interval requested by remote traffic director.
+     */
+    void onReportResponse(long reportIntervalNano);
+  }
 }

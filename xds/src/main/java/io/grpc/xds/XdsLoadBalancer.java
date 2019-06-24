@@ -45,7 +45,7 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportCallback;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;

@@ -55,7 +55,7 @@ import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportCallback;
+import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
 import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import java.util.Collections;
 import java.util.Map;
