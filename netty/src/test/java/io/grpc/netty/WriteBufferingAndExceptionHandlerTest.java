@@ -377,7 +377,7 @@ public class WriteBufferingAndExceptionHandlerTest {
     } catch (Exception e) {
       Status status = Status.fromThrowable(e);
       assertThat(status.getCode()).isEqualTo(Code.INTERNAL);
-      assertThat(status.getDescription()).contains("read() missed");
+      assertThat(status.getDescription()).contains("channelRead() missed");
     }
   }
 }
