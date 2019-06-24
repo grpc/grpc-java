@@ -156,13 +156,14 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
       Object loggedMsg = msg instanceof ByteBuf ? ByteBufUtil.hexDump((ByteBuf) msg) : msg;
       logger.log(
           Level.FINE,
-          "Unexpected read {0} reached end of pipeline {1}",
+          "Unexpected channelRead()->{0} reached end of pipeline {1}",
           new Object[] {loggedMsg, ctx.pipeline().names()});
     }
     ReferenceCountUtil.safeRelease(msg);
     exceptionCaught(
         ctx,
-        Status.INTERNAL.withDescription("read() missed by ProtocolNegotiator handler")
+        Status.INTERNAL.withDescription(
+            "channelRead() missed by ProtocolNegotiator handler: " + msg.getClass())
             .asRuntimeException());
   }
 
