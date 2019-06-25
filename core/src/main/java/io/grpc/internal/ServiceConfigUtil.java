@@ -188,9 +188,9 @@ public final class ServiceConfigUtil {
       if (status instanceof Double) {
         Double statusD = (Double) status;
         int codeValue = statusD.intValue();
-        verify((double) codeValue == statusD,"Status code %s is not integral", status);
+        verify((double) codeValue == statusD, "Status code %s is not integral", status);
         code = Status.fromCodeValue(codeValue).getCode();
-        verify(code.value() == statusD.intValue(),"Status code %s is not valid", status);
+        verify(code.value() == statusD.intValue(), "Status code %s is not valid", status);
       } else if (status instanceof String) {
         try {
           code = Status.Code.valueOf((String) status);
