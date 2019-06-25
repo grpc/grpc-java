@@ -203,7 +203,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
-              localityStore.getStatsStore());
+              localityStore.getLoadStatsStore());
     } else if (!newBalancerName.equals(xdsLbState.balancerName)) {
       lrsClient.stopLoadReporting();
       ManagedChannel oldChannel =
@@ -214,7 +214,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
-              localityStore.getStatsStore());
+              localityStore.getLoadStatsStore());
     } else if (!Objects.equal(
         getPolicyNameOrNull(childPolicy),
         getPolicyNameOrNull(xdsLbState.childPolicy))) {

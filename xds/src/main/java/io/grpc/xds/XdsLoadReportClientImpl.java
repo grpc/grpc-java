@@ -70,7 +70,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final StatsStore statsStore;
+  private final XdsLoadStatsStore loadStatsStore;
   private boolean started;
 
   @Nullable
@@ -86,8 +86,8 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
+      XdsLoadStatsStore loadStatsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, loadStatsStore);
   }
 
   @VisibleForTesting
@@ -95,7 +95,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
+      XdsLoadStatsStore loadStatsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -104,7 +104,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.statsStore = checkNotNull(statsStore, "statsStore");
+    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
     started = false;
   }
 
@@ -235,7 +235,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       ClusterStats report =
-          statsStore.generateLoadReport()
+          loadStatsStore.generateLoadReport()
               .toBuilder()
               .setClusterName(clusterName)
               .setLoadReportInterval(Durations.fromNanos(interval))
@@ -355,8 +355,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
               ManagedChannel channel,
               Helper helper,
               Provider backoffPolicyProvider,
-              StatsStore statsStore) {
-            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+              XdsLoadStatsStore loadStatsStore) {
+            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider,
+                loadStatsStore);
           }
         };
 
@@ -365,6 +366,6 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     }
 
     abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-        BackoffPolicy.Provider backoffPolicyProvider, StatsStore statsStore);
+        BackoffPolicy.Provider backoffPolicyProvider, XdsLoadStatsStore loadStatsStore);
   }
 }

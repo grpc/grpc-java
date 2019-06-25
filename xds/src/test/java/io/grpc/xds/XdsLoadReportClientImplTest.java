@@ -148,7 +148,7 @@ public class XdsLoadReportClientImplTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
-  private StatsStore statsStore;
+  private XdsLoadStatsStore loadStatsStore;
   @Mock
   private XdsLoadReportCallback callback;
 
@@ -205,7 +205,7 @@ public class XdsLoadReportClientImplTest {
     lrsClient =
         new XdsLoadReportClientImpl(channel, helper, fakeClock.getStopwatchSupplier(),
             backoffPolicyProvider,
-            statsStore);
+            loadStatsStore);
     lrsClient.startLoadReporting(callback);
   }
 
@@ -222,7 +222,7 @@ public class XdsLoadReportClientImplTest {
     assertEquals(1, fakeClock.forwardTime(1, TimeUnit.NANOSECONDS));
     // A second load report is scheduled upon the first is sent.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
-    inOrder.verify(statsStore).generateLoadReport();
+    inOrder.verify(loadStatsStore).generateLoadReport();
     ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
     inOrder.verify(requestObserver).onNext(reportCaptor.capture());
     LoadStatsRequest report = reportCaptor.getValue();
@@ -277,8 +277,8 @@ public class XdsLoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    when(statsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
-    InOrder inOrder = inOrder(requestObserver, statsStore);
+    when(loadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
+    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -297,9 +297,9 @@ public class XdsLoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
-    when(statsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
+    when(loadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
 
-    InOrder inOrder = inOrder(requestObserver, statsStore);
+    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
     logs.poll();
@@ -325,7 +325,7 @@ public class XdsLoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver, statsStore);
+    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     long callsInProgress = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
@@ -366,7 +366,7 @@ public class XdsLoadReportClientImplTest {
             .setDroppedCount(0))
         .setTotalDroppedRequests(0)
         .build();
-    when(statsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
+    when(loadStatsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
 
     responseObserver.onNext(buildLrsResponse(1362));
     assertNextReport(inOrder, requestObserver, expectedStats1);

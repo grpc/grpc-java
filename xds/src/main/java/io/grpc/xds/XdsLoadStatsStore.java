@@ -16,128 +16,95 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
-import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
-import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
-import io.grpc.xds.ClientLoadCounter.MetricValue;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.concurrent.NotThreadSafe;
+import javax.annotation.Nullable;
 
 /**
- * An {@link XdsLoadStatsStore} instance holds the client side load stats for a cluster.
+ * Interface for client side load stats store. An {@code XdsLoadStatsStore} maintains load stats for
+ * a service cluster (i.e., GSLB service) exposed by traffic director from a gRPC client's
+ * perspective, including dropped calls instructed by traffic director. Load stats for endpoints
+ * (i.e., Google backends) are aggregated in locality granularity (i.e., Google cluster) while the
+ * numbers of dropped calls are aggregated in cluster granularity.
+ *
+ * <p>An {@code XdsLoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer} and
+ * only tracks loads for localities exposed by remote traffic director. A proper usage should be
+ *
+ * <ol>
+ *   <li>Let {@link XdsLoadStatsStore} track the locality newly exposed by traffic director by
+ *       calling {@link #addLocality(XdsLocality)}.
+ *   <li>Use the locality counter returned by {@link #getLocalityCounter(XdsLocality)} to record
+ *       load stats for the corresponding locality.
+ *   <li>Tell {@link XdsLoadStatsStore} to stop tracking the locality no longer exposed by traffic
+ *       director by calling {@link #removeLocality(XdsLocality)}.
+ * </ol>
+ *
+ * <p>No locality information is needed for recording dropped calls since they are aggregated in
+ * cluster granularity.
+ *
+ * <p>Note implementations should only be responsible for keeping track of loads and generating
+ * load reports with load data, any load reporting information should be opaque to {@code
+ * XdsLoadStatsStore} and be set outside.
  */
-@NotThreadSafe
-final class XdsLoadStatsStore implements StatsStore {
-
-  private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
-  // Cluster level dropped request counts for each category specified in the DropOverload policy.
-  private final ConcurrentMap<String, AtomicLong> dropCounters;
-
-  XdsLoadStatsStore() {
-    this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
-        new ConcurrentHashMap<String, AtomicLong>());
-  }
-
-  @VisibleForTesting
-  XdsLoadStatsStore(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
-      ConcurrentMap<String, AtomicLong> dropCounters) {
-    this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
-    this.dropCounters = checkNotNull(dropCounters, "dropCounters");
-  }
+interface XdsLoadStatsStore {
 
   /**
-   * Generates a {@link ClusterStats} containing client side load stats and backend metrics
-   * (if any) in locality granularity.
+   * Generates a {@link ClusterStats} proto message as the load report based on recorded load stats
+   * (including RPC * counts, backend metrics and dropped calls) for the interval since the previous
+   * call of this method.
+   *
+   * <p>Loads for localities no longer under tracking will not be included in generated load reports
+   * once all of theirs loads are completed and reported.
+   *
+   * <p>The fields {@code cluster_name} and {@code load_report_interval} in the returned {@link
+   * ClusterStats} needs to be set before it is ready to be sent to the traffic directory for load
+   * reporting.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
-  @Override
-  public ClusterStats generateLoadReport() {
-    ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
-    for (Map.Entry<XdsLocality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
-      ClientLoadSnapshot snapshot = entry.getValue().snapshot();
-      UpstreamLocalityStats.Builder localityStatsBuilder =
-          UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
-      localityStatsBuilder
-          .setTotalSuccessfulRequests(snapshot.getCallsSucceeded())
-          .setTotalErrorRequests(snapshot.getCallsFailed())
-          .setTotalRequestsInProgress(snapshot.getCallsInProgress())
-          .setTotalIssuedRequests(snapshot.getCallsIssued());
-      for (Map.Entry<String, MetricValue> metric : snapshot.getMetricValues().entrySet()) {
-        localityStatsBuilder.addLoadMetricStats(
-            EndpointLoadMetricStats.newBuilder()
-                .setMetricName(metric.getKey())
-                .setNumRequestsFinishedWithMetric(metric.getValue().getNumReports())
-                .setTotalMetricValue(metric.getValue().getTotalValue()));
-      }
-      statsBuilder.addUpstreamLocalityStats(localityStatsBuilder);
-      // Discard counters for localities that are no longer exposed by the remote balancer and
-      // no RPCs ongoing.
-      if (!entry.getValue().isActive() && snapshot.getCallsInProgress() == 0) {
-        localityLoadCounters.remove(entry.getKey());
-      }
-    }
-    long totalDrops = 0;
-    for (Map.Entry<String, AtomicLong> entry : dropCounters.entrySet()) {
-      long drops = entry.getValue().getAndSet(0);
-      totalDrops += drops;
-      statsBuilder.addDroppedRequests(DroppedRequests.newBuilder()
-          .setCategory(entry.getKey())
-          .setDroppedCount(drops));
-    }
-    statsBuilder.setTotalDroppedRequests(totalDrops);
-    return statsBuilder.build();
-  }
+  ClusterStats generateLoadReport();
 
   /**
-   * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadStatsStore}.
+   * Starts tracking load stats for endpoints in the provided locality. Only load stats for
+   * endpoints in added localities will be recorded and included in generated load reports.
+   *
+   * <p>This method needs to be called at locality updates only for newly assigned localities in
+   * balancer discovery responses before recording loads for those localities.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
-  @Override
-  public void addLocality(final XdsLocality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter == null || !counter.isActive(),
-        "An active counter for locality %s already exists", locality);
-    if (counter == null) {
-      localityLoadCounters.put(locality, new ClientLoadCounter());
-    } else {
-      counter.setActive(true);
-    }
-  }
+  void addLocality(XdsLocality locality);
 
   /**
-   * Deactivate the {@link ClientLoadCounter} for the provided locality in by this
-   * {@link XdsLoadStatsStore}.
+   * Stops tracking load stats for endpoints in the provided locality. gRPC clients are expected not
+   * to send loads to localities no longer exposed by traffic director. Load stats for endpoints in
+   * removed localities will no longer be included in future generated load reports after their
+   * recorded and ongoing loads have been reported.
+   *
+   * <p>This method needs to be called at locality updates only for newly removed localities.
+   * Forgetting calling this method for localities no longer under track will result in memory
+   * waste and keep including zero-load upstream locality stats in generated load reports.
+   *
+   * <p>This method is not thread-safe and should be called from the same synchronized context
+   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
    */
-  @Override
-  public void removeLocality(final XdsLocality locality) {
-    ClientLoadCounter counter = localityLoadCounters.get(locality);
-    checkState(counter != null && counter.isActive(),
-        "No active counter for locality %s exists", locality);
-    counter.setActive(false);
-  }
+  void removeLocality(XdsLocality locality);
 
-  @Override
-  public ClientLoadCounter getLocalityCounter(final XdsLocality locality) {
-    return localityLoadCounters.get(locality);
-  }
+  /**
+   * Returns the locality counter that does locality level stats aggregation for the provided
+   * locality. If the provided locality is not tracked, {@code null} will be returned.
+   *
+   * <p>This method is thread-safe.
+   */
+  @Nullable
+  ClientLoadCounter getLocalityCounter(XdsLocality locality);
 
-  @Override
-  public void recordDroppedRequest(String category) {
-    AtomicLong counter = dropCounters.get(category);
-    if (counter == null) {
-      counter = dropCounters.putIfAbsent(category, new AtomicLong());
-      if (counter == null) {
-        counter = dropCounters.get(category);
-      }
-    }
-    counter.getAndIncrement();
-  }
+  /**
+   * Records a drop decision made by a {@link io.grpc.LoadBalancer.SubchannelPicker} instance
+   * with the provided category. Drops are aggregated in cluster granularity.
+   *
+   * <p>This method is thread-safe.
+   */
+  void recordDroppedRequest(String category);
 }
