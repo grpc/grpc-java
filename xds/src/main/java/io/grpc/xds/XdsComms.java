@@ -297,6 +297,9 @@ final class XdsComms {
                 cancelled || closed,
                 "Scheduling retry while the stream is neither cancelled nor closed");
 
+            checkState(
+                adsRpcRetryTimer == null, "Scheduling retry while a retry is already pending");
+
             class AdsRpcRetryTask implements Runnable {
               @Override
               public void run() {
