@@ -18,18 +18,23 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.base.Verify.verify;
 import static com.google.common.math.LongMath.checkedAdd;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.common.base.VerifyException;
+import io.grpc.Status;
 import io.grpc.internal.RetriableStream.Throttle;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
@@ -176,12 +181,43 @@ public final class ServiceConfigUtil {
     return getDouble(retryPolicy, RETRY_POLICY_BACKOFF_MULTIPLIER_KEY);
   }
 
-  @Nullable
-  static List<String> getRetryableStatusCodesFromRetryPolicy(Map<String, ?> retryPolicy) {
-    if (!retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY)) {
-      return null;
+  private static Set<Status.Code> getStatusCodesFromList(List<?> statuses) {
+    EnumSet<Status.Code> codes = EnumSet.noneOf(Status.Code.class);
+    for (Object status : statuses) {
+      Status.Code code;
+      if (status instanceof Double) {
+        Double statusD = (Double) status;
+        int codeValue = statusD.intValue();
+        verify((double) codeValue == statusD, "Status code %s is not integral", status);
+        code = Status.fromCodeValue(codeValue).getCode();
+        verify(code.value() == statusD.intValue(), "Status code %s is not valid", status);
+      } else if (status instanceof String) {
+        try {
+          code = Status.Code.valueOf((String) status);
+        } catch (IllegalArgumentException iae) {
+          throw new VerifyException("Status code " + status + " is not valid", iae);
+        }
+      } else {
+        throw new VerifyException(
+            "Can not convert status code " + status + " to Status.Code, because it's type is "
+                + status.getClass());
+      }
+      codes.add(code);
     }
-    return checkStringList(getList(retryPolicy, RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY));
+    return Collections.unmodifiableSet(codes);
+  }
+
+  static Set<Status.Code> getRetryableStatusCodesFromRetryPolicy(Map<String, ?> retryPolicy) {
+    verify(
+        retryPolicy.containsKey(RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY),
+        "%s is required in retry policy", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
+    Set<Status.Code> codes =
+        getStatusCodesFromList(getList(retryPolicy, RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY));
+    verify(!codes.isEmpty(), "%s must not be empty", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
+    verify(
+        !codes.contains(Status.Code.OK),
+        "%s must not contain OK", RETRY_POLICY_RETRYABLE_STATUS_CODES_KEY);
+    return codes;
   }
 
   @Nullable
@@ -205,12 +241,16 @@ public final class ServiceConfigUtil {
     }
   }
 
-  @Nullable
-  static List<String> getNonFatalStatusCodesFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
+  static Set<Status.Code> getNonFatalStatusCodesFromHedgingPolicy(Map<String, ?> hedgingPolicy) {
     if (!hedgingPolicy.containsKey(HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY)) {
-      return null;
+      return Collections.unmodifiableSet(EnumSet.noneOf(Status.Code.class));
     }
-    return checkStringList(getList(hedgingPolicy, HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY));
+    Set<Status.Code> codes =
+        getStatusCodesFromList(getList(hedgingPolicy, HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY));
+    verify(
+        !codes.contains(Status.Code.OK),
+        "%s must not contain OK", HEDGING_POLICY_NON_FATAL_STATUS_CODES_KEY);
+    return codes;
   }
 
   @Nullable
