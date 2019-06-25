@@ -19,9 +19,14 @@ package io.grpc.xds;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadReportClient} is in charge of recording client side load stats, collecting
- * backend cost metrics and sending load reports to the remote balancer. It shares the same
- * channel with {@link XdsLoadBalancer} and its lifecycle is managed by {@link XdsLoadBalancer}.
+ * An {@link XdsLoadReportClient} is the gRPC client's load reporting agent that establishes
+ * connections to traffic director for reporting load stats from gRPC client's perspective.
+ *
+ * <p>Its operations should be self-contained and running independently along with xDS load
+ * balancer's load balancing protocol, although it shares the same channel to traffic director with
+ * xDS load balancer's load balancing protocol.
+ *
+ * <p>Its lifecycle is managed by the high-level xDS load balancer.
  */
 @NotThreadSafe
 interface XdsLoadReportClient {

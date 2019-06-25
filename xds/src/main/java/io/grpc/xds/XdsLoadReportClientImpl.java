@@ -50,9 +50,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of XDS load reporting service. Methods in this class are expected to be called in
- * the same synchronized context that {@link XdsLoadBalancer.Helper#getSynchronizationContext}
- * returns.
+ * Client of xDS load reporting service.
+ *
+ * <p>Methods in this class are expected to be called in the same synchronized context that {@link
+ * XdsLoadBalancer.Helper#getSynchronizationContext} returns.
  */
 @NotThreadSafe
 final class XdsLoadReportClientImpl implements XdsLoadReportClient {
@@ -77,13 +78,12 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
-
   @Nullable
   private LrsStream lrsStream;
   @Nullable
   private XdsLoadReportCallback callback;
 
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  private XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
       XdsLoadStatsStore loadStatsStore) {
@@ -346,6 +346,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     }
   }
 
+  /**
+   * Factory class for creating {@link XdsLoadReportClient} instances.
+   */
   abstract static class XdsLoadReportClientFactory {
 
     private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
