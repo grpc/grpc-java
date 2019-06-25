@@ -33,6 +33,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -60,6 +61,8 @@ public class XdsLbStateTest {
   private AdsStreamCallback adsStreamCallback;
   @Mock
   private LocalityStore localityStore;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -122,8 +125,9 @@ public class XdsLbStateTest {
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
 
-    xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback);
+    xdsLbState = new XdsLbState(
+        BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
+        backoffPolicyProvider);
   }
 
   @Test

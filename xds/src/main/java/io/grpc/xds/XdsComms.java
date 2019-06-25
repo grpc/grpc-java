@@ -23,6 +23,8 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
@@ -41,6 +43,8 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -49,6 +53,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import javax.annotation.CheckForNull;
 
 /**
  * ADS client implementation.
@@ -56,7 +62,14 @@ import java.util.Map;
 final class XdsComms {
   private final ManagedChannel channel;
   private final Helper helper;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final Supplier<Stopwatch> stopwatchSupplier;
 
+  @CheckForNull
+  private ScheduledHandle adsRpcRetryTimer;
+
+  // never null
+  private BackoffPolicy adsRpcRetryPolicy;
   // never null
   private AdsStream adsStream;
 
@@ -169,9 +182,12 @@ final class XdsComms {
 
     final StreamObserver<DiscoveryRequest> xdsRequestWriter;
 
+    final Stopwatch retryStopwatch = stopwatchSupplier.get().start();
+
     final StreamObserver<DiscoveryResponse> xdsResponseReader =
         new StreamObserver<DiscoveryResponse>() {
 
+          // Must be accessed in SynchronizationContext
           boolean firstEdsResponseReceived;
 
           @Override
@@ -193,6 +209,7 @@ final class XdsComms {
                   } catch (InvalidProtocolBufferException | RuntimeException e) {
                     cancelRpc("Received invalid EDS response", e);
                     adsStreamCallback.onError();
+                    scheduleRetry();
                     return;
                   }
 
@@ -254,12 +271,12 @@ final class XdsComms {
                 new Runnable() {
                   @Override
                   public void run() {
-                    // TODO: schedule retry
                     closed = true;
                     if (cancelled) {
                       return;
                     }
                     adsStreamCallback.onError();
+                    scheduleRetry();
                   }
                 });
           }
@@ -268,6 +285,42 @@ final class XdsComms {
           public void onCompleted() {
             onError(Status.INTERNAL.withDescription("Server closed the ADS streaming RPC")
                 .asException());
+          }
+
+          // run in SynchronizationContext
+          void scheduleRetry() {
+            if (channel.isShutdown()) {
+              return;
+            }
+
+            checkState(
+                cancelled || closed,
+                "Scheduling retry while the stream is neither cancelled nor closed");
+
+            checkState(
+                adsRpcRetryTimer == null, "Scheduling retry while a retry is already pending");
+
+            class AdsRpcRetryTask implements Runnable {
+              @Override
+              public void run() {
+                adsRpcRetryTimer = null;
+                refreshAdsStream();
+              }
+            }
+
+            if (firstEdsResponseReceived) {
+              // Reset the backoff sequence if balancer has sent the initial response
+              adsRpcRetryPolicy = backoffPolicyProvider.get();
+              // Retry immediately
+              helper.getSynchronizationContext().execute(new AdsRpcRetryTask());
+              return;
+            }
+
+            adsRpcRetryTimer = helper.getSynchronizationContext().schedule(
+                new AdsRpcRetryTask(),
+                adsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS),
+                TimeUnit.NANOSECONDS,
+                helper.getScheduledExecutorService());
           }
         };
 
@@ -280,6 +333,7 @@ final class XdsComms {
           .streamAggregatedResources(xdsResponseReader);
       this.localityStore = localityStore;
 
+      checkState(adsRpcRetryTimer == null, "Creating AdsStream while retry is pending");
       // Assuming standard mode, and send EDS request only
       DiscoveryRequest edsRequest =
           DiscoveryRequest.newBuilder()
@@ -301,6 +355,7 @@ final class XdsComms {
       this(adsStream.adsStreamCallback, adsStream.localityStore);
     }
 
+    // run in SynchronizationContext
     void cancelRpc(String message, Throwable cause) {
       if (cancelled) {
         return;
@@ -341,26 +396,42 @@ final class XdsComms {
    */
   XdsComms(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      LocalityStore localityStore) {
+      LocalityStore localityStore, BackoffPolicy.Provider backoffPolicyProvider,
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.adsStream = new AdsStream(
         checkNotNull(adsStreamCallback, "adsStreamCallback"),
         checkNotNull(localityStore, "localityStore"));
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.adsRpcRetryPolicy = backoffPolicyProvider.get();
   }
 
+  // run in SynchronizationContext
   void refreshAdsStream() {
     checkState(!channel.isShutdown(), "channel is alreday shutdown");
 
     if (adsStream.closed || adsStream.cancelled) {
+      cancelRetryTimer();
       adsStream = new AdsStream(adsStream);
     }
   }
 
+  // run in SynchronizationContext
   // TODO: Change method name to shutdown or shutdownXdsComms if that gives better semantics (
   //  cancel LB RPC and clean up retry timer).
   void shutdownLbRpc(String message) {
     adsStream.cancelRpc(message, null);
+    cancelRetryTimer();
+  }
+
+  // run in SynchronizationContext
+  private void cancelRetryTimer() {
+    if (adsRpcRetryTimer != null) {
+      adsRpcRetryTimer.cancel();
+      adsRpcRetryTimer = null;
+    }
   }
 
   /**

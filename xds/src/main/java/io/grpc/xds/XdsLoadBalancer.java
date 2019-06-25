@@ -228,7 +228,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
     xdsLbState =
         new XdsLbState(newBalancerName, childPolicy, helper, localityStore, lbChannel,
-            adsStreamCallback);
+            adsStreamCallback, backoffPolicyProvider);
   }
 
   private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
