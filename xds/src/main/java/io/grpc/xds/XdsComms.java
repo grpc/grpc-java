@@ -304,7 +304,7 @@ final class XdsComms {
               @Override
               public void run() {
                 adsRpcRetryTimer = null;
-                adsStream = new AdsStream(adsStream);
+                refreshAdsStream();
               }
             }
 
@@ -333,7 +333,7 @@ final class XdsComms {
           .streamAggregatedResources(xdsResponseReader);
       this.localityStore = localityStore;
 
-      cancelRetryTimer();
+      checkState(adsRpcRetryTimer == null, "Creating AdsStream while retry is pending");
       // Assuming standard mode, and send EDS request only
       DiscoveryRequest edsRequest =
           DiscoveryRequest.newBuilder()
@@ -413,6 +413,7 @@ final class XdsComms {
     checkState(!channel.isShutdown(), "channel is alreday shutdown");
 
     if (adsStream.closed || adsStream.cancelled) {
+      cancelRetryTimer();
       adsStream = new AdsStream(adsStream);
     }
   }
