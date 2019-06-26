@@ -56,7 +56,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * XdsLoadBalancer.Helper#getSynchronizationContext} returns.
  */
 @NotThreadSafe
-final class XdsLoadReportClientImpl implements XdsLoadReportClient {
+final class LoadReportClientImpl implements LoadReportClient {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
@@ -81,9 +81,9 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   @Nullable
   private LrsStream lrsStream;
   @Nullable
-  private XdsLoadReportCallback callback;
+  private LoadReportCallback callback;
 
-  private XdsLoadReportClientImpl(ManagedChannel channel,
+  private LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
       LoadStatsStore loadStatsStore) {
@@ -91,7 +91,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   }
 
   @VisibleForTesting
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
@@ -109,7 +109,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   }
 
   @Override
-  public void startLoadReporting(XdsLoadReportCallback callback) {
+  public void startLoadReporting(LoadReportCallback callback) {
     if (started) {
       return;
     }
@@ -347,28 +347,28 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   }
 
   /**
-   * Factory class for creating {@link XdsLoadReportClient} instances.
+   * Factory class for creating {@link LoadReportClient} instances.
    */
-  abstract static class XdsLoadReportClientFactory {
+  abstract static class LoadReportClientFactory {
 
-    private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
-        new XdsLoadReportClientFactory() {
+    private static final LoadReportClientFactory DEFAULT_INSTANCE =
+        new LoadReportClientFactory() {
           @Override
-          XdsLoadReportClient createLoadReportClient(
+          LoadReportClient createLoadReportClient(
               ManagedChannel channel,
               Helper helper,
               Provider backoffPolicyProvider,
               LoadStatsStore loadStatsStore) {
-            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider,
+            return new LoadReportClientImpl(channel, helper, backoffPolicyProvider,
                 loadStatsStore);
           }
         };
 
-    static XdsLoadReportClientFactory getInstance() {
+    static LoadReportClientFactory getInstance() {
       return DEFAULT_INSTANCE;
     }
 
-    abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
         BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
   }
 }

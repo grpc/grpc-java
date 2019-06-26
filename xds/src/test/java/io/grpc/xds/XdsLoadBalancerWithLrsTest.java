@@ -54,9 +54,9 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
-import io.grpc.xds.XdsLoadReportClient.XdsLoadReportCallback;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -73,7 +73,7 @@ import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for {@link XdsLoadBalancer}, especially for interactions between
- * {@link XdsLoadBalancer} and {@link XdsLoadReportClient}.
+ * {@link XdsLoadBalancer} and {@link LoadReportClient}.
  */
 @RunWith(JUnit4.class)
 public class XdsLoadBalancerWithLrsTest {
@@ -97,9 +97,9 @@ public class XdsLoadBalancerWithLrsTest {
   @Mock
   private LocalityStore localityStore;
   @Mock
-  private XdsLoadReportClientFactory lrsClientFactory;
+  private LoadReportClientFactory lrsClientFactory;
   @Mock
-  private XdsLoadReportClient lrsClient;
+  private LoadReportClient lrsClient;
   @Mock
   private LoadStatsStore loadStatsStore;
   @Mock
@@ -256,13 +256,13 @@ public class XdsLoadBalancerWithLrsTest {
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
     assertThat(fallBackLbHelper).isNotNull();
 
-    verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
+    verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulates a syntactically incorrect EDS response.
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
+    verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
-    ArgumentCaptor<XdsLoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
+    ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -305,7 +305,7 @@ public class XdsLoadBalancerWithLrsTest {
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
             same(loadStatsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
-    inOrder.verify(lrsClient, never()).startLoadReporting(any(XdsLoadReportCallback.class));
+    inOrder.verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed before xDS protocol is
     // established.
@@ -332,7 +332,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
+    inOrder.verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed.
     newLbConfig = (Map<String, ?>) JsonParser.parse(
@@ -352,7 +352,7 @@ public class XdsLoadBalancerWithLrsTest {
             same(loadStatsStore));
 
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
+    inOrder.verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     inOrder.verifyNoMoreInteractions();
   }
@@ -380,7 +380,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    verify(lrsClient).startLoadReporting(any(XdsLoadReportCallback.class));
+    verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with child policy changed.
     @SuppressWarnings("unchecked")
