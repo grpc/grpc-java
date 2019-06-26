@@ -199,7 +199,7 @@ public final class ServiceConfigUtil {
         }
       } else {
         throw new VerifyException(
-            "Can not convert status code " + status + " to Status.Code, because it's type is "
+            "Can not convert status code " + status + " to Status.Code, because its type is "
                 + status.getClass());
       }
       codes.add(code);

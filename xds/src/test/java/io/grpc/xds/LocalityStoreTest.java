@@ -372,7 +372,7 @@ public class LocalityStoreTest {
     // Simulate receiving update for backend metrics reporting interval.
     localityStore.updateOobMetricsReportInterval(1952);
 
-    assertThat(loadBalancers).hasSize(0);
+    assertThat(loadBalancers).isEmpty();
 
     // Simulate receiving two localities.
     LocalityInfo localityInfo1 =
