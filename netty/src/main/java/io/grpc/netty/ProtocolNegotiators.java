@@ -322,17 +322,14 @@ final class ProtocolNegotiators {
     public void close() {}
   }
 
-  static final class ClientTlsHandler extends ChannelDuplexHandler {
+  static final class ClientTlsHandler extends ProtocolNegotiationHandler {
 
-    private final ChannelHandler next;
     private final SslContext sslContext;
     private final String host;
     private final int port;
 
-    private ProtocolNegotiationEvent pne;
-
     ClientTlsHandler(ChannelHandler next, SslContext sslContext, String authority) {
-      this.next = checkNotNull(next, "next");
+      super(next);
       this.sslContext = checkNotNull(sslContext, "sslContext");
       HostPort hostPort = parseAuthority(authority);
       this.host = hostPort.host;
@@ -340,30 +337,24 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "ClientTls started");
+    protected void handlerAdded0(ChannelHandlerContext ctx) {
       SSLEngine sslEngine = sslContext.newEngine(ctx.alloc(), host, port);
       SSLParameters sslParams = sslEngine.getSSLParameters();
       sslParams.setEndpointIdentificationAlgorithm("HTTPS");
       sslEngine.setSSLParameters(sslParams);
       ctx.pipeline().addBefore(ctx.name(), /* name= */ null, new SslHandler(sslEngine, false));
-      super.handlerAdded(ctx);
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
-      if (evt instanceof ProtocolNegotiationEvent) {
-        checkState(pne == null, "negotiation already started");
-        pne = (ProtocolNegotiationEvent) evt;
-      } else if (evt instanceof SslHandshakeCompletionEvent) {
+    protected void userEventTriggered0(ChannelHandlerContext ctx, Object evt) throws Exception {
+      if (evt instanceof SslHandshakeCompletionEvent) {
         SslHandshakeCompletionEvent handshakeEvent = (SslHandshakeCompletionEvent) evt;
         if (handshakeEvent.isSuccess()) {
           SslHandler handler = ctx.pipeline().get(SslHandler.class);
           if (NEXT_PROTOCOL_VERSIONS.contains(handler.applicationProtocol())) {
             // Successfully negotiated the protocol.
             logSslEngineDetails(Level.FINER, ctx, "TLS negotiation succeeded.", null);
-            ctx.pipeline().replace(ctx.name(), null, next);
-            fireProtocolNegotiationEvent(ctx, handler.engine().getSession());
+            propagateTlsComplete(ctx, handler.engine().getSession());
           } else {
             Exception ex =
                 unavailableException("Failed ALPN negotiation: Unable to find compatible protocol");
@@ -374,19 +365,19 @@ final class ProtocolNegotiators {
           ctx.fireExceptionCaught(handshakeEvent.cause());
         }
       } else {
-        super.userEventTriggered(ctx, evt);
+        super.userEventTriggered0(ctx, evt);
       }
     }
 
-    private void fireProtocolNegotiationEvent(ChannelHandlerContext ctx, SSLSession session) {
-      checkState(pne != null, "negotiation not yet complete");
-      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "ClientTls finished");
+    private void propagateTlsComplete(ChannelHandlerContext ctx, SSLSession session) {
       Security security = new Security(new Tls(session));
-      Attributes attrs = pne.getAttributes().toBuilder()
+      ProtocolNegotiationEvent existingPne = getProtocolNegotiationEvent();
+      Attributes attrs = existingPne.getAttributes().toBuilder()
           .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
           .set(Grpc.TRANSPORT_ATTR_SSL_SESSION, session)
           .build();
-      ctx.fireUserEventTriggered(pne.withAttributes(attrs).withSecurity(security));
+      replaceProtocolNegotiationEvent(existingPne.withAttributes(attrs).withSecurity(security));
+      fireProtocolNegotiationEvent(ctx);
     }
   }
 
@@ -891,6 +882,10 @@ final class ProtocolNegotiators {
     }
   }
 
+  /**
+   * ProtocolNegotiationHandler is a convenience handler that makes it easy to follow the rules for
+   * protocol negotiation.  Handlers should strongly consider extending this handler.
+   */
   static class ProtocolNegotiationHandler extends ChannelDuplexHandler {
 
     private final ChannelHandler next;
