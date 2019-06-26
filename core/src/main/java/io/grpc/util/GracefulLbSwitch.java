@@ -24,7 +24,6 @@ import io.grpc.ConnectivityState;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
-import io.grpc.Status;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
