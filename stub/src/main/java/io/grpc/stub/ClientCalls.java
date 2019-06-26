@@ -16,7 +16,6 @@
 
 package io.grpc.stub;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -263,14 +262,16 @@ public final class ClientCalls {
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
-      ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> obs,
+      ClientCall<ReqT, RespT> call, ReqT req, StreamObserver<RespT> responseObserver,
       boolean streamingResponse) {
-    CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(call);
-    boolean noOnReady = adapter.onReadyHandler == null && !(obs instanceof ClientResponseObserver);
-    StreamObserverToCallListenerAdapter<ReqT, RespT> listener = noOnReady
-        ? new StreamObserverToCallListenerAdapter<>(obs, adapter, streamingResponse)
-        : new StreamObserverToCallListenerAdapterWithReady<>(obs, adapter, streamingResponse);
-    asyncUnaryRequestCall(call, req, listener, streamingResponse);
+    asyncUnaryRequestCall(
+        call,
+        req,
+        new StreamObserverToCallListenerAdapter<>(
+            responseObserver,
+            new CallToStreamObserverAdapter<>(call),
+            streamingResponse),
+        streamingResponse);
   }
 
   private static <ReqT, RespT> void asyncUnaryRequestCall(
@@ -291,14 +292,14 @@ public final class ClientCalls {
 
   private static <ReqT, RespT> StreamObserver<ReqT> asyncStreamingRequestCall(
       ClientCall<ReqT, RespT> call,
-      StreamObserver<RespT> obs,
+      StreamObserver<RespT> responseObserver,
       boolean streamingResponse) {
     CallToStreamObserverAdapter<ReqT> adapter = new CallToStreamObserverAdapter<>(call);
-    boolean noOnReady = adapter.onReadyHandler == null && !(obs instanceof ClientResponseObserver);
-    StreamObserverToCallListenerAdapter<ReqT, RespT> listener = noOnReady
-        ? new StreamObserverToCallListenerAdapter<>(obs, adapter, streamingResponse)
-        : new StreamObserverToCallListenerAdapterWithReady<>(obs, adapter, streamingResponse);
-    startCall(call, listener, streamingResponse);
+    startCall(
+        call,
+        new StreamObserverToCallListenerAdapter<>(
+            responseObserver, adapter, streamingResponse),
+        streamingResponse);
     return adapter;
   }
 
@@ -389,10 +390,10 @@ public final class ClientCalls {
     }
   }
 
-  private static class StreamObserverToCallListenerAdapter<ReqT, RespT>
+  private static final class StreamObserverToCallListenerAdapter<ReqT, RespT>
       extends ClientCall.Listener<RespT> {
     private final StreamObserver<RespT> observer;
-    final CallToStreamObserverAdapter<ReqT> adapter;
+    private final CallToStreamObserverAdapter<ReqT> adapter;
     private final boolean streamingResponse;
     private boolean firstResponseReceived;
 
@@ -410,14 +411,15 @@ public final class ClientCalls {
             (ClientResponseObserver<ReqT, RespT>) observer;
         clientResponseObserver.beforeStart(adapter);
       }
-      if (getClass() == StreamObserverToCallListenerAdapter.class) {
-        checkArgument(adapter.onReadyHandler == null, "can't use onReady here");
-      }
       adapter.freeze();
     }
 
     @Override
-    public final void onMessage(RespT message) {
+    public void onHeaders(Metadata headers) {
+    }
+
+    @Override
+    public void onMessage(RespT message) {
       if (firstResponseReceived && !streamingResponse) {
         throw Status.INTERNAL
             .withDescription("More than one responses received for unary or client-streaming call")
@@ -433,24 +435,12 @@ public final class ClientCalls {
     }
 
     @Override
-    public final void onClose(Status status, Metadata trailers) {
+    public void onClose(Status status, Metadata trailers) {
       if (status.isOk()) {
         observer.onCompleted();
       } else {
         observer.onError(status.asRuntimeException(trailers));
       }
-    }
-  }
-
-  private static final class StreamObserverToCallListenerAdapterWithReady<ReqT, RespT>
-      extends StreamObserverToCallListenerAdapter<ReqT, RespT> {
-
-    // Non private to avoid synthetic class
-    StreamObserverToCallListenerAdapterWithReady(
-        StreamObserver<RespT> observer,
-        CallToStreamObserverAdapter<ReqT> adapter,
-        boolean streamingResponse) {
-      super(observer, adapter, streamingResponse);
     }
 
     @Override

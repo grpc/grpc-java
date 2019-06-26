@@ -51,8 +51,6 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
 import java.nio.charset.Charset;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -90,19 +88,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
-
-  private static final ThreadLocal<Map<Class<?>, Boolean>> onReadies =
-      new ThreadLocal<Map<Class<?>, Boolean>>() {
-        @Override
-        protected Map<Class<?>, Boolean> initialValue() {
-          return new LinkedHashMap<Class<?>, Boolean>() {
-            @Override
-            protected boolean removeEldestEntry(Map.Entry<Class<?>, Boolean> eldest) {
-              return size() >= 8;
-            }
-          };
-        }
-      };
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
@@ -530,27 +515,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     return MoreObjects.toStringHelper(this).add("method", method).toString();
   }
 
-  static boolean hasOnReady(Class<?> clz) {
-    Boolean hasOnReady = onReadies.get().get(clz);
-    if (hasOnReady == null) {
-      try {
-        hasOnReady = clz.getDeclaredMethod("onReady").getDeclaringClass() != Listener.class;
-      } catch (NoSuchMethodException e) {
-        return true;
-      }
-      onReadies.get().put(clz, hasOnReady);
-    }
-    return hasOnReady;
-  }
-
   private class ClientStreamListenerImpl implements ClientStreamListener {
     private final Listener<RespT> observer;
-    private final boolean hasOnReady;
     private boolean closed;
 
     public ClientStreamListenerImpl(Listener<RespT> observer) {
       this.observer = checkNotNull(observer, "observer");
-      this.hasOnReady = hasOnReady(observer.getClass());
     }
 
     @Override
@@ -760,9 +730,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
 
       try {
-        if (hasOnReady) {
-          callExecutor.execute(new StreamOnReady());
-        }
+        callExecutor.execute(new StreamOnReady());
       } finally {
         PerfMark.stopTask("ClientStreamListener.onReady", tag);
       }
