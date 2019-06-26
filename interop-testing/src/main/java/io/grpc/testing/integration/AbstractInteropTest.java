@@ -52,6 +52,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -160,6 +161,7 @@ public abstract class AbstractInteropTest {
 
   private ScheduledExecutorService testServiceExecutor;
   private Server server;
+  private boolean customCensusModulePresent;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
@@ -213,7 +215,7 @@ public abstract class AbstractInteropTest {
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
   private void startServer() {
-    AbstractServerImplBuilder<?> builder = getServerBuilder();
+    ServerBuilder<?> builder = getServerBuilder();
     if (builder == null) {
       server = null;
       return;
@@ -233,14 +235,21 @@ public abstract class AbstractInteropTest {
                 new TestServiceImpl(testServiceExecutor),
                 allInterceptors))
         .addStreamTracerFactory(serverStreamTracerFactory);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder,
-        new CensusStatsModule(
-            tagger,
-            tagContextBinarySerializer,
-            serverStatsRecorder,
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            true, true, true, false /* real-time metrics */));
+    if (builder instanceof AbstractServerImplBuilder) {
+      customCensusModulePresent = true;
+      AbstractServerImplBuilder<?> sb = (AbstractServerImplBuilder<?>) builder;
+      io.grpc.internal.TestingAccessor.setStatsImplementation(
+          sb,
+          new CensusStatsModule(
+              tagger,
+              tagContextBinarySerializer,
+              serverStatsRecorder,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true, true, true, false /* real-time metrics */));
+    }
+    if (metricsExpected()) {
+      assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
+    }
     try {
       server = builder.build().start();
     } catch (IOException ex) {
@@ -337,7 +346,7 @@ public abstract class AbstractInteropTest {
    * it shouldn't start a server in the same process.
    */
   @Nullable
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     return null;
   }
 
@@ -1472,6 +1481,7 @@ public abstract class AbstractInteropTest {
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
+    Assume.assumeTrue(customCensusModulePresent);
     Span clientParentSpan = Tracing.getTracer().spanBuilder("Test.interopTest").startSpan();
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());
