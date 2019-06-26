@@ -247,6 +247,9 @@ public abstract class AbstractInteropTest {
               GrpcUtil.STOPWATCH_SUPPLIER,
               true, true, true, false /* real-time metrics */));
     }
+    if (metricsExpected()) {
+      assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
+    }
     try {
       server = builder.build().start();
     } catch (IOException ex) {
