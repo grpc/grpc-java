@@ -19,16 +19,21 @@ package io.grpc.xds;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadReportClient} is in charge of recording client side load stats, collecting
- * backend cost metrics and sending load reports to the remote balancer. It shares the same
- * channel with {@link XdsLoadBalancer} and its lifecycle is managed by {@link XdsLoadBalancer}.
+ * An {@link LoadReportClient} is the gRPC client's load reporting agent that establishes
+ * connections to traffic director for reporting load stats from gRPC client's perspective.
+ *
+ * <p>Its operations should be self-contained and running independently along with xDS load
+ * balancer's load balancing protocol, although it shares the same channel to traffic director with
+ * xDS load balancer's load balancing protocol.
+ *
+ * <p>Its lifecycle is managed by the high-level xDS load balancer.
  */
 @NotThreadSafe
-interface XdsLoadReportClient {
+interface LoadReportClient {
 
   /**
    * Establishes load reporting communication and negotiates with the remote balancer to report load
-   * stats periodically. Calling this method on an already started {@link XdsLoadReportClient} is
+   * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
@@ -37,11 +42,11 @@ interface XdsLoadReportClient {
    * @param callback containing methods to be invoked for passing information received from load
    *                 reporting responses to xDS load balancer.
    */
-  void startLoadReporting(XdsLoadReportCallback callback);
+  void startLoadReporting(LoadReportCallback callback);
 
   /**
    * Terminates load reporting. Calling this method on an already stopped
-   * {@link XdsLoadReportClient} is no-op.
+   * {@link LoadReportClient} is no-op.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
@@ -55,7 +60,7 @@ interface XdsLoadReportClient {
    * <p>Implementations are not required to be thread-safe as callbacks will be invoked in xDS load
    * balancer's {@link io.grpc.SynchronizationContext}.
    */
-  interface XdsLoadReportCallback {
+  interface LoadReportCallback {
 
     /**
      * The load reporting interval has been received.

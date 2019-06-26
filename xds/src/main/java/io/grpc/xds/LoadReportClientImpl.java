@@ -50,12 +50,13 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of XDS load reporting service. Methods in this class are expected to be called in
- * the same synchronized context that {@link XdsLoadBalancer.Helper#getSynchronizationContext}
- * returns.
+ * Client of xDS load reporting service.
+ *
+ * <p>Methods in this class are expected to be called in the same synchronized context that {@link
+ * XdsLoadBalancer.Helper#getSynchronizationContext} returns.
  */
 @NotThreadSafe
-final class XdsLoadReportClientImpl implements XdsLoadReportClient {
+final class LoadReportClientImpl implements LoadReportClient {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
@@ -70,32 +71,31 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final StatsStore statsStore;
+  private final LoadStatsStore loadStatsStore;
   private boolean started;
 
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
-
   @Nullable
   private LrsStream lrsStream;
   @Nullable
-  private XdsLoadReportCallback callback;
+  private LoadReportCallback callback;
 
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  private LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
+      LoadStatsStore loadStatsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, loadStatsStore);
   }
 
   @VisibleForTesting
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
+      LoadStatsStore loadStatsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -104,12 +104,12 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.statsStore = checkNotNull(statsStore, "statsStore");
+    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
     started = false;
   }
 
   @Override
-  public void startLoadReporting(XdsLoadReportCallback callback) {
+  public void startLoadReporting(LoadReportCallback callback) {
     if (started) {
       return;
     }
@@ -235,7 +235,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       ClusterStats report =
-          statsStore.generateLoadReport()
+          loadStatsStore.generateLoadReport()
               .toBuilder()
               .setClusterName(clusterName)
               .setLoadReportInterval(Durations.fromNanos(interval))
@@ -346,25 +346,29 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     }
   }
 
-  abstract static class XdsLoadReportClientFactory {
+  /**
+   * Factory class for creating {@link LoadReportClient} instances.
+   */
+  abstract static class LoadReportClientFactory {
 
-    private static final XdsLoadReportClientFactory DEFAULT_INSTANCE =
-        new XdsLoadReportClientFactory() {
+    private static final LoadReportClientFactory DEFAULT_INSTANCE =
+        new LoadReportClientFactory() {
           @Override
-          XdsLoadReportClient createLoadReportClient(
+          LoadReportClient createLoadReportClient(
               ManagedChannel channel,
               Helper helper,
               Provider backoffPolicyProvider,
-              StatsStore statsStore) {
-            return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider, statsStore);
+              LoadStatsStore loadStatsStore) {
+            return new LoadReportClientImpl(channel, helper, backoffPolicyProvider,
+                loadStatsStore);
           }
         };
 
-    static XdsLoadReportClientFactory getInstance() {
+    static LoadReportClientFactory getInstance() {
       return DEFAULT_INSTANCE;
     }
 
-    abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-        BackoffPolicy.Provider backoffPolicyProvider, StatsStore statsStore);
+    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+        BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
   }
 }

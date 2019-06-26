@@ -39,7 +39,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Client side aggregator for load stats.
+ * Client side load stats recorder that provides RPC counting and metrics recording as name-value
+ * pairs.
  *
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
@@ -97,12 +98,14 @@ final class ClientLoadCounter {
   }
 
   /**
-   * Generate snapshot for recorded query counts and metrics since previous snapshot.
+   * Generates a snapshot for load stats recorded in this counter. Successive snapshots represent
+   * load stats recorded for the interval since the previous snapshot. So taking a snapshot clears
+   * the counter state except for ongoing RPC recordings.
    *
    * <p>This method is not thread-safe and must be called from {@link
    * io.grpc.LoadBalancer.Helper#getSynchronizationContext()}.
    */
-  public ClientLoadSnapshot snapshot() {
+  ClientLoadSnapshot snapshot() {
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
     for (MetricRecorder recorder : metricRecorders) {
       Map<String, MetricValue> map = recorder.takeAll();
@@ -133,8 +136,8 @@ final class ClientLoadCounter {
   }
 
   /**
-   * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter} to be sent as
-   * part of {@link io.envoyproxy.envoy.api.v2.endpoint.ClusterStats} to the balancer.
+   * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter}, which is a
+   * read-only copy of load stats recorded for some period of time.
    */
   static final class ClientLoadSnapshot {
 
@@ -259,8 +262,8 @@ final class ClientLoadCounter {
   }
 
   /**
-   * An {@link LoadRecordingStreamTracerFactory} instance records and aggregates client-side load
-   * data into an {@link ClientLoadCounter} object.
+   * An {@link LoadRecordingStreamTracerFactory} instance for creating client stream tracers that
+   * records and aggregates client-side load data into an {@link ClientLoadCounter} object.
    */
   @ThreadSafe
   @VisibleForTesting

@@ -193,7 +193,8 @@ public class LocalityStoreTest {
   @Mock
   private OrcaOobUtil orcaOobUtil;
   private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
-  private final StatsStore statsStore = mock(StatsStore.class, delegatesTo(fakeLoadStatsStore));
+  private final LoadStatsStore loadStatsStore =
+      mock(LoadStatsStore.class, delegatesTo(fakeLoadStatsStore));
 
   private LocalityStore localityStore;
 
@@ -216,7 +217,7 @@ public class LocalityStoreTest {
         });
     lbRegistry.register(lbProvider);
     localityStore =
-        new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, statsStore,
+        new LocalityStoreImpl(helper, pickerFactory, lbRegistry, random, loadStatsStore,
             orcaPerRequestUtil, orcaOobUtil);
   }
 
@@ -229,24 +230,24 @@ public class LocalityStoreTest {
     localityInfoMap
         .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2));
     localityStore.updateLocalityStore(localityInfoMap);
-    verify(statsStore).addLocality(locality1);
-    verify(statsStore).addLocality(locality2);
+    verify(loadStatsStore).addLocality(locality1);
+    verify(loadStatsStore).addLocality(locality2);
 
     localityInfoMap
         .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3));
     localityStore.updateLocalityStore(localityInfoMap);
-    verify(statsStore).addLocality(locality3);
+    verify(loadStatsStore).addLocality(locality3);
 
     localityInfoMap = ImmutableMap
         .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4));
     localityStore.updateLocalityStore(localityInfoMap);
-    verify(statsStore).removeLocality(locality1);
-    verify(statsStore).removeLocality(locality2);
-    verify(statsStore).removeLocality(locality3);
-    verify(statsStore).addLocality(locality4);
+    verify(loadStatsStore).removeLocality(locality1);
+    verify(loadStatsStore).removeLocality(locality2);
+    verify(loadStatsStore).removeLocality(locality3);
+    verify(loadStatsStore).addLocality(locality4);
 
     localityStore.updateLocalityStore(Collections.EMPTY_MAP);
-    verify(statsStore).removeLocality(locality4);
+    verify(loadStatsStore).removeLocality(locality4);
   }
 
   @Test
@@ -532,30 +533,30 @@ public class LocalityStoreTest {
     verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
 
     int times = 0;
-    InOrder inOrder = inOrder(statsStore);
+    InOrder inOrder = inOrder(loadStatsStore);
     doReturn(365, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
-    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
+    inOrder.verify(loadStatsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
     verify(random, times(times += 2)).nextInt(1000_000);
-    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
+    inOrder.verify(loadStatsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
-    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
+    inOrder.verify(loadStatsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 2)).nextInt(1000_000);
-    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
+    inOrder.verify(loadStatsStore).recordDroppedRequest(eq("lb"));
 
     // subchannel12 goes to READY
     CreateSubchannelArgs createSubchannelArgs =
@@ -577,25 +578,25 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
-    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
+    inOrder.verify(loadStatsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(366, 1235).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs)
         .getSubchannel()).isEqualTo(subchannel12);
     verify(random, times(times += 2)).nextInt(1000_000);
-    inOrder.verify(statsStore, never()).recordDroppedRequest(anyString());
+    inOrder.verify(loadStatsStore, never()).recordDroppedRequest(anyString());
 
     doReturn(364, 1234).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times += 1)).nextInt(1000_000);
-    inOrder.verify(statsStore).recordDroppedRequest(eq("throttle"));
+    inOrder.verify(loadStatsStore).recordDroppedRequest(eq("throttle"));
 
     doReturn(365, 1233).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(times + 2)).nextInt(1000_000);
-    inOrder.verify(statsStore).recordDroppedRequest(eq("lb"));
+    inOrder.verify(loadStatsStore).recordDroppedRequest(eq("lb"));
     inOrder.verifyNoMoreInteractions();
   }
 
@@ -639,11 +640,11 @@ public class LocalityStoreTest {
 
     verify(loadBalancers.get("sz1")).shutdown();
     verify(loadBalancers.get("sz2")).shutdown();
-    verify(statsStore).removeLocality(locality1);
-    verify(statsStore).removeLocality(locality2);
+    verify(loadStatsStore).removeLocality(locality1);
+    verify(loadStatsStore).removeLocality(locality2);
   }
 
-  private static final class FakeLoadStatsStore implements StatsStore {
+  private static final class FakeLoadStatsStore implements LoadStatsStore {
 
     Map<XdsLocality, ClientLoadCounter> localityCounters = new HashMap<>();
 

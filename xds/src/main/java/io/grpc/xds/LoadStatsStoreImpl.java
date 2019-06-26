@@ -33,31 +33,29 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadStatsStore} instance holds the client side load stats for a cluster.
+ * An {@link LoadStatsStoreImpl} instance holds the load stats for a cluster from an gRPC
+ * client's perspective by maintaining a set of locality counters for each locality it is tracking
+ * loads for.
  */
 @NotThreadSafe
-final class XdsLoadStatsStore implements StatsStore {
+final class LoadStatsStoreImpl implements LoadStatsStore {
 
   private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
-  // Cluster level dropped request counts for each category specified in the DropOverload policy.
+  // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  XdsLoadStatsStore() {
+  LoadStatsStoreImpl() {
     this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadStatsStore(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
+  LoadStatsStoreImpl(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
 
-  /**
-   * Generates a {@link ClusterStats} containing client side load stats and backend metrics
-   * (if any) in locality granularity.
-   */
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
@@ -96,10 +94,6 @@ final class XdsLoadStatsStore implements StatsStore {
     return statsBuilder.build();
   }
 
-  /**
-   * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadStatsStore}.
-   */
   @Override
   public void addLocality(final XdsLocality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);
@@ -112,10 +106,6 @@ final class XdsLoadStatsStore implements StatsStore {
     }
   }
 
-  /**
-   * Deactivate the {@link ClientLoadCounter} for the provided locality in by this
-   * {@link XdsLoadStatsStore}.
-   */
   @Override
   public void removeLocality(final XdsLocality locality) {
     ClientLoadCounter counter = localityLoadCounters.get(locality);

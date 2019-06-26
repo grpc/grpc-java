@@ -40,22 +40,22 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link XdsLoadStatsStore}. */
+/** Unit tests for {@link LoadStatsStore}. */
 @RunWith(JUnit4.class)
-public class XdsLoadStatsStoreTest {
+public class LoadStatsStoreImplTest {
   private static final XdsLocality LOCALITY1 =
       new XdsLocality("test_region1", "test_zone", "test_subzone");
   private static final XdsLocality LOCALITY2 =
       new XdsLocality("test_region2", "test_zone", "test_subzone");
   private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
-  private XdsLoadStatsStore loadStore;
+  private LoadStatsStore loadStatsStore;
 
   @Before
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStore = new XdsLoadStatsStore(localityLoadCounters, dropCounters);
+    loadStatsStore = new LoadStatsStoreImpl(localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(
@@ -155,25 +155,25 @@ public class XdsLoadStatsStoreTest {
 
   @Test
   public void addAndGetAndRemoveLocality() {
-    loadStore.addLocality(LOCALITY1);
+    loadStatsStore.addLocality(LOCALITY1);
     assertThat(localityLoadCounters).containsKey(LOCALITY1);
 
     // Adding the same locality counter again causes an exception.
     try {
-      loadStore.addLocality(LOCALITY1);
+      loadStatsStore.addLocality(LOCALITY1);
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
           .contains("An active counter for locality " + LOCALITY1 + " already exists");
     }
 
-    assertThat(loadStore.getLocalityCounter(LOCALITY1))
+    assertThat(loadStatsStore.getLocalityCounter(LOCALITY1))
         .isSameInstanceAs(localityLoadCounters.get(LOCALITY1));
-    assertThat(loadStore.getLocalityCounter(LOCALITY2)).isNull();
+    assertThat(loadStatsStore.getLocalityCounter(LOCALITY2)).isNull();
 
     // Removing an non-existing locality counter causes an exception.
     try {
-      loadStore.removeLocality(LOCALITY2);
+      loadStatsStore.removeLocality(LOCALITY2);
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
@@ -181,12 +181,12 @@ public class XdsLoadStatsStoreTest {
     }
 
     // Removing the locality counter only mark it as inactive, but not throw it away.
-    loadStore.removeLocality(LOCALITY1);
+    loadStatsStore.removeLocality(LOCALITY1);
     assertThat(localityLoadCounters.get(LOCALITY1).isActive()).isFalse();
 
     // Removing an inactive locality counter causes an exception.
     try {
-      loadStore.removeLocality(LOCALITY1);
+      loadStatsStore.removeLocality(LOCALITY1);
       Assert.fail();
     } catch (IllegalStateException expected) {
       assertThat(expected).hasMessageThat()
@@ -194,7 +194,7 @@ public class XdsLoadStatsStoreTest {
     }
 
     // Adding it back simply mark it as active again.
-    loadStore.addLocality(LOCALITY1);
+    loadStatsStore.addLocality(LOCALITY1);
     assertThat(localityLoadCounters.get(LOCALITY1).isActive()).isTrue();
   }
 
@@ -204,7 +204,7 @@ public class XdsLoadStatsStoreTest {
     ClientLoadCounter inactiveCounter = new ClientLoadCounter();
     inactiveCounter.setActive(false);
     localityLoadCounters.put(LOCALITY2, inactiveCounter);
-    loadStore.generateLoadReport();
+    loadStatsStore.generateLoadReport();
     assertThat(localityLoadCounters).containsKey(LOCALITY1);
     assertThat(localityLoadCounters).doesNotContainKey(LOCALITY2);
   }
@@ -241,7 +241,7 @@ public class XdsLoadStatsStoreTest {
                     buildEndpointLoadMetricStatsList(metrics2))
             ),
             null);
-    assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
+    assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
 
     expectedReport =
         buildClusterStats(
@@ -250,7 +250,7 @@ public class XdsLoadStatsStoreTest {
                 buildUpstreamLocalityStats(LOCALITY2, 0, 432, 0, 0, null)
             ),
             null);
-    assertClusterStatsEqual(expectedReport, loadStore.generateLoadReport());
+    assertClusterStatsEqual(expectedReport, loadStatsStore.generateLoadReport());
   }
 
   @Test
@@ -258,10 +258,10 @@ public class XdsLoadStatsStoreTest {
     int numLbDrop = 123;
     int numThrottleDrop = 456;
     for (int i = 0; i < numLbDrop; i++) {
-      loadStore.recordDroppedRequest("lb");
+      loadStatsStore.recordDroppedRequest("lb");
     }
     for (int i = 0; i < numThrottleDrop; i++) {
-      loadStore.recordDroppedRequest("throttle");
+      loadStatsStore.recordDroppedRequest("throttle");
     }
     assertThat(dropCounters.get("lb").get()).isEqualTo(numLbDrop);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(numThrottleDrop);
@@ -269,7 +269,7 @@ public class XdsLoadStatsStoreTest {
         buildClusterStats(null,
             Arrays.asList(buildDroppedRequests("lb", numLbDrop),
                 buildDroppedRequests("throttle", numThrottleDrop)));
-    assertClusterStatsEqual(expectedLoadReport, loadStore.generateLoadReport());
+    assertClusterStatsEqual(expectedLoadReport, loadStatsStore.generateLoadReport());
     assertThat(dropCounters.get("lb").get()).isEqualTo(0);
     assertThat(dropCounters.get("throttle").get()).isEqualTo(0);
   }

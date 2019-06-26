@@ -77,7 +77,7 @@ interface LocalityStore {
 
   void updateOobMetricsReportInterval(long reportIntervalNano);
 
-  StatsStore getStatsStore();
+  LoadStatsStore getLoadStatsStore();
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
@@ -86,7 +86,7 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
-    private final StatsStore statsStore;
+    private final LoadStatsStore loadStatsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
@@ -96,7 +96,7 @@ interface LocalityStore {
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStore(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+          new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
@@ -105,7 +105,7 @@ interface LocalityStore {
         PickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
-        StatsStore statsStore,
+        LoadStatsStore loadStatsStore,
         OrcaPerRequestUtil orcaPerRequestUtil,
         OrcaOobUtil orcaOobUtil) {
       this.helper = checkNotNull(helper, "helper");
@@ -114,7 +114,7 @@ interface LocalityStore {
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
       this.random = checkNotNull(random, "random");
-      this.statsStore = checkNotNull(statsStore, "statsStore");
+      this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
       this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
       this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
     }
@@ -129,15 +129,15 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
-      final StatsStore statsStore;
+      final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random, StatsStore statsStore) {
+          ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
-        this.statsStore = statsStore;
+        this.loadStatsStore = loadStatsStore;
       }
 
       @Override
@@ -145,7 +145,7 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.dropsPerMillion) {
-            statsStore.recordDroppedRequest(dropOverload.category);
+            loadStatsStore.recordDroppedRequest(dropOverload.category);
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
@@ -184,7 +184,7 @@ interface LocalityStore {
     public void reset() {
       for (XdsLocality locality : localityMap.keySet()) {
         localityMap.get(locality).shutdown();
-        statsStore.removeLocality(locality);
+        loadStatsStore.removeLocality(locality);
       }
       localityMap = ImmutableMap.of();
     }
@@ -221,9 +221,10 @@ interface LocalityStore {
                   oldLocalityLbInfo.childBalancer,
                   childHelper);
         } else {
-          statsStore.addLocality(newLocality);
+          loadStatsStore.addLocality(newLocality);
           childHelper =
-              new ChildHelper(newLocality, statsStore.getLocalityCounter(newLocality), orcaOobUtil);
+              new ChildHelper(newLocality, loadStatsStore.getLocalityCounter(newLocality),
+                  orcaOobUtil);
           localityLbInfo =
               new LocalityLbInfo(
                   localityInfoMap.get(newLocality).localityWeight,
@@ -260,7 +261,7 @@ interface LocalityStore {
         @Override
         public void run() {
           for (XdsLocality locality : toRemove) {
-            statsStore.removeLocality(locality);
+            loadStatsStore.removeLocality(locality);
           }
         }
       });
@@ -272,8 +273,8 @@ interface LocalityStore {
     }
 
     @Override
-    public StatsStore getStatsStore() {
-      return statsStore;
+    public LoadStatsStore getLoadStatsStore() {
+      return loadStatsStore;
     }
 
     @Override
@@ -348,7 +349,7 @@ interface LocalityStore {
       }
 
       if (!dropOverloads.isEmpty()) {
-        picker = new DroppablePicker(dropOverloads, picker, random, statsStore);
+        picker = new DroppablePicker(dropOverloads, picker, random, loadStatsStore);
         if (state == null) {
           state = IDLE;
         }
