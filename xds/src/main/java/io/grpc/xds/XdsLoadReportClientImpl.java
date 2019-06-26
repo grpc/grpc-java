@@ -71,7 +71,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final XdsLoadStatsStore loadStatsStore;
+  private final LoadStatsStore loadStatsStore;
   private boolean started;
 
   @Nullable
@@ -86,7 +86,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private XdsLoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadStatsStore loadStatsStore) {
+      LoadStatsStore loadStatsStore) {
     this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, loadStatsStore);
   }
 
@@ -95,7 +95,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadStatsStore loadStatsStore) {
+      LoadStatsStore loadStatsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -358,7 +358,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
               ManagedChannel channel,
               Helper helper,
               Provider backoffPolicyProvider,
-              XdsLoadStatsStore loadStatsStore) {
+              LoadStatsStore loadStatsStore) {
             return new XdsLoadReportClientImpl(channel, helper, backoffPolicyProvider,
                 loadStatsStore);
           }
@@ -369,6 +369,6 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     }
 
     abstract XdsLoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-        BackoffPolicy.Provider backoffPolicyProvider, XdsLoadStatsStore loadStatsStore);
+        BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
   }
 }

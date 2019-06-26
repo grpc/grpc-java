@@ -193,8 +193,8 @@ public class LocalityStoreTest {
   @Mock
   private OrcaOobUtil orcaOobUtil;
   private final FakeLoadStatsStore fakeLoadStatsStore = new FakeLoadStatsStore();
-  private final XdsLoadStatsStore loadStatsStore =
-      mock(XdsLoadStatsStore.class, delegatesTo(fakeLoadStatsStore));
+  private final LoadStatsStore loadStatsStore =
+      mock(LoadStatsStore.class, delegatesTo(fakeLoadStatsStore));
 
   private LocalityStore localityStore;
 
@@ -644,7 +644,7 @@ public class LocalityStoreTest {
     verify(loadStatsStore).removeLocality(locality2);
   }
 
-  private static final class FakeLoadStatsStore implements XdsLoadStatsStore {
+  private static final class FakeLoadStatsStore implements LoadStatsStore {
 
     Map<XdsLocality, ClientLoadCounter> localityCounters = new HashMap<>();
 

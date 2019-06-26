@@ -77,7 +77,7 @@ interface LocalityStore {
 
   void updateOobMetricsReportInterval(long reportIntervalNano);
 
-  XdsLoadStatsStore getLoadStatsStore();
+  LoadStatsStore getLoadStatsStore();
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
@@ -86,7 +86,7 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
-    private final XdsLoadStatsStore loadStatsStore;
+    private final LoadStatsStore loadStatsStore;
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
@@ -96,7 +96,7 @@ interface LocalityStore {
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new XdsLoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+          new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
@@ -105,7 +105,7 @@ interface LocalityStore {
         PickerFactory pickerFactory,
         LoadBalancerRegistry lbRegistry,
         ThreadSafeRandom random,
-        XdsLoadStatsStore loadStatsStore,
+        LoadStatsStore loadStatsStore,
         OrcaPerRequestUtil orcaPerRequestUtil,
         OrcaOobUtil orcaOobUtil) {
       this.helper = checkNotNull(helper, "helper");
@@ -129,11 +129,11 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
-      final XdsLoadStatsStore loadStatsStore;
+      final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random, XdsLoadStatsStore loadStatsStore) {
+          ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
@@ -273,7 +273,7 @@ interface LocalityStore {
     }
 
     @Override
-    public XdsLoadStatsStore getLoadStatsStore() {
+    public LoadStatsStore getLoadStatsStore() {
       return loadStatsStore;
     }
 

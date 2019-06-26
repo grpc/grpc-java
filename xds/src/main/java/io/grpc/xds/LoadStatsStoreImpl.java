@@ -33,24 +33,24 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadStatsStoreImpl} instance holds the load stats for a cluster from an gRPC
+ * An {@link LoadStatsStoreImpl} instance holds the load stats for a cluster from an gRPC
  * client's perspective by maintaining a set of locality counters for each locality it is tracking
  * loads for.
  */
 @NotThreadSafe
-final class XdsLoadStatsStoreImpl implements XdsLoadStatsStore {
+final class LoadStatsStoreImpl implements LoadStatsStore {
 
   private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  XdsLoadStatsStoreImpl() {
+  LoadStatsStoreImpl() {
     this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadStatsStoreImpl(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
+  LoadStatsStoreImpl(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");

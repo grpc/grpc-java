@@ -40,22 +40,22 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link XdsLoadStatsStore}. */
+/** Unit tests for {@link LoadStatsStore}. */
 @RunWith(JUnit4.class)
-public class XdsLoadStatsStoreTest {
+public class LoadStatsStoreImplTest {
   private static final XdsLocality LOCALITY1 =
       new XdsLocality("test_region1", "test_zone", "test_subzone");
   private static final XdsLocality LOCALITY2 =
       new XdsLocality("test_region2", "test_zone", "test_subzone");
   private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
-  private XdsLoadStatsStore loadStatsStore;
+  private LoadStatsStore loadStatsStore;
 
   @Before
   public void setUp() {
     localityLoadCounters = new ConcurrentHashMap<>();
     dropCounters = new ConcurrentHashMap<>();
-    loadStatsStore = new XdsLoadStatsStoreImpl(localityLoadCounters, dropCounters);
+    loadStatsStore = new LoadStatsStoreImpl(localityLoadCounters, dropCounters);
   }
 
   private static List<EndpointLoadMetricStats> buildEndpointLoadMetricStatsList(

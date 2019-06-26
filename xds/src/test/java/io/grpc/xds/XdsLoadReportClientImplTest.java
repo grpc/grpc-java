@@ -144,7 +144,7 @@ public class XdsLoadReportClientImplTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
-  private XdsLoadStatsStore loadStatsStore;
+  private LoadStatsStore loadStatsStore;
   @Mock
   private XdsLoadReportCallback callback;
   @Captor

@@ -101,7 +101,7 @@ public class XdsLoadBalancerWithLrsTest {
   @Mock
   private XdsLoadReportClient lrsClient;
   @Mock
-  private XdsLoadStatsStore loadStatsStore;
+  private LoadStatsStore loadStatsStore;
   @Mock
   private LoadBalancer fallbackBalancer;
   @Mock
@@ -221,7 +221,7 @@ public class XdsLoadBalancerWithLrsTest {
         .thenReturn(oobChannel1, oobChannel2, oobChannel3);
     when(localityStore.getLoadStatsStore()).thenReturn(loadStatsStore);
     when(lrsClientFactory.createLoadReportClient(any(ManagedChannel.class), any(Helper.class),
-        any(BackoffPolicy.Provider.class), any(XdsLoadStatsStore.class))).thenReturn(lrsClient);
+        any(BackoffPolicy.Provider.class), any(LoadStatsStore.class))).thenReturn(lrsClient);
 
     xdsLoadBalancer =
         new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory,

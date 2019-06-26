@@ -20,21 +20,21 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import javax.annotation.Nullable;
 
 /**
- * Interface for client side load stats store. An {@code XdsLoadStatsStore} maintains load stats for
+ * Interface for client side load stats store. An {@code LoadStatsStore} maintains load stats for
  * a service cluster (i.e., GSLB service) exposed by traffic director from a gRPC client's
  * perspective, including dropped calls instructed by traffic director. Load stats for endpoints
  * (i.e., Google backends) are aggregated in locality granularity (i.e., Google cluster) while the
  * numbers of dropped calls are aggregated in cluster granularity.
  *
- * <p>An {@code XdsLoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer} and
+ * <p>An {@code LoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer} and
  * only tracks loads for localities exposed by remote traffic director. A proper usage should be
  *
  * <ol>
- *   <li>Let {@link XdsLoadStatsStore} track the locality newly exposed by traffic director by
+ *   <li>Let {@link LoadStatsStore} track the locality newly exposed by traffic director by
  *       calling {@link #addLocality(XdsLocality)}.
  *   <li>Use the locality counter returned by {@link #getLocalityCounter(XdsLocality)} to record
  *       load stats for the corresponding locality.
- *   <li>Tell {@link XdsLoadStatsStore} to stop tracking the locality no longer exposed by traffic
+ *   <li>Tell {@link LoadStatsStore} to stop tracking the locality no longer exposed by traffic
  *       director by calling {@link #removeLocality(XdsLocality)}.
  * </ol>
  *
@@ -43,9 +43,9 @@ import javax.annotation.Nullable;
  *
  * <p>Note implementations should only be responsible for keeping track of loads and generating
  * load reports with load data, any load reporting information should be opaque to {@code
- * XdsLoadStatsStore} and be set outside.
+ * LoadStatsStore} and be set outside.
  */
-interface XdsLoadStatsStore {
+interface LoadStatsStore {
 
   /**
    * Generates a {@link ClusterStats} proto message as the load report based on recorded load stats
