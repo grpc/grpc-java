@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -30,50 +29,45 @@ import javax.annotation.concurrent.NotThreadSafe;
 /**
  * A forwarding load balancer and holder of currentLb and pendingLb. The pendingLb's helper will not
  * update balancing state until a subchannel managed by the pendingLB is READY, whence the pendingLb
- * becomes to current.
+ * becomes current.
  */
 @Internal
 @NotThreadSafe // Must be accessed in SynchronizationContext
-public final class GracefulLbSwitch extends ForwardingLoadBalancer {
+public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
-  // never null
-  private final LoadBalancer newLb;
-  // never null
+  @Nullable // never null after init()
+  private LoadBalancer delegate;
+  @Nullable // never null after init()
   private LoadBalancer currentLb;
   @Nullable // set to null once the new lb becomes current
   private LoadBalancer pendingLb;
 
-  /**
-   * Constructor. Example usage:
-   *
-   * <pre>
-   *   private GracefulLbSwitch lbSwitch;
-   *
-   *   void onLbPolicyChange() {
-   *     lbSwitch = new GracefulLbSwitch(lbSwitch, newLbProvider, helper);
-   *     lbSwitch.handleResolvedAddresses(resolvedAddresses);
-   *   }
-   * </pre>
-   */
-  public GracefulLbSwitch(
-      @Nullable GracefulLbSwitch previousSwitch, LoadBalancerProvider lbProvider,
-      final Helper helper) {
+  private GracefulSwitchLoadBalancer() {}
+
+  /** Initializes an instance. */
+  public static GracefulSwitchLoadBalancer init(LoadBalancerProvider lbProvider, Helper helper) {
+    GracefulSwitchLoadBalancer instance = new GracefulSwitchLoadBalancer();
+    instance.switchTo(lbProvider, helper);
+    return instance;
+  }
+
+  /** Gracefully switch to a new balancer. */
+  public void switchTo(LoadBalancerProvider lbProvider, final Helper helper) {
     checkNotNull(lbProvider, "lbProvider");
     checkNotNull(helper, "helper");
 
-    if (previousSwitch == null) {
-      newLb = lbProvider.newLoadBalancer(helper);
-      currentLb = newLb;
+    if (currentLb == null) {
+      delegate = lbProvider.newLoadBalancer(helper);
+      currentLb = delegate;
       return;
     }
 
-    if (previousSwitch.pendingLb != null) {
-      previousSwitch.pendingLb.shutdown();
+    if (pendingLb != null) {
+      pendingLb.shutdown();
     }
 
-    currentLb = previousSwitch.currentLb;
-
     class PendingHelper extends ForwardingLoadBalancerHelper {
+      LoadBalancer lb;
 
       @Override
       protected Helper delegate() {
@@ -83,27 +77,27 @@ public final class GracefulLbSwitch extends ForwardingLoadBalancer {
       @Override
       public void updateBalancingState(
           ConnectivityState newState, SubchannelPicker newPicker) {
-        if (newState == READY) {
-          if (pendingLb != null) {
-            currentLb.shutdown();
-            currentLb = pendingLb;
-            pendingLb = null;
-          }
+        if (newState == READY && pendingLb == lb) {
+          currentLb.shutdown();
+          currentLb = lb;
+          pendingLb = null;
         }
 
-        if (pendingLb == null) {
+        if (currentLb == lb) {
           helper.updateBalancingState(newState, newPicker);
         }
       }
     }
 
-    newLb = lbProvider.newLoadBalancer(new PendingHelper());
-    pendingLb = newLb;
+    PendingHelper pendingHelper = new PendingHelper();
+    delegate = lbProvider.newLoadBalancer(pendingHelper);
+    pendingHelper.lb = delegate;
+    pendingLb = delegate;
   }
 
   @Override
   protected LoadBalancer delegate() {
-    return newLb;
+    return delegate;
   }
 
   @Override
