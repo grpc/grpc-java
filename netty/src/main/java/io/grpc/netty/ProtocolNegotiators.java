@@ -904,7 +904,7 @@ final class ProtocolNegotiators {
 
     @Override
     public final void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-      negotiationLogger(ctx).log(ChannelLogLevel.DEBUG, negotiatorName + " started");
+      negotiationLogger(ctx).log(ChannelLogLevel.DEBUG, "{0} started", negotiatorName);
       handlerAdded0(ctx);
     }
 
@@ -945,7 +945,7 @@ final class ProtocolNegotiators {
 
     protected final void fireProtocolNegotiationEvent(ChannelHandlerContext ctx) {
       checkState(pne != null, "previous protocol negotiation event hasn't triggered");
-      negotiationLogger(ctx).log(ChannelLogLevel.INFO, negotiatorName + " completed");
+      negotiationLogger(ctx).log(ChannelLogLevel.INFO, "{0} completed", negotiatorName);
       ctx.pipeline().replace(ctx.name(), /* newName= */ null, next);
       ctx.fireUserEventTriggered(pne);
     }
