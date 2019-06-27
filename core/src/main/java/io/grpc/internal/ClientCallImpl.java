@@ -698,6 +698,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
     @Override
     public void onReady() {
+      if (method.getType().clientSendsOneMessage()) {
+        return;
+      }
+
       PerfMark.startTask("ClientStreamListener.onReady", tag);
       final Link link = PerfMark.link();
 

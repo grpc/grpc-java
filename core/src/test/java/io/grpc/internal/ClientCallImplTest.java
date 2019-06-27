@@ -255,7 +255,7 @@ public class ClientCallImplTest {
   public void exceptionInOnReadyTakesPrecedenceOverServer() {
     DelayedExecutor executor = new DelayedExecutor();
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
-        method,
+        method.toBuilder().setType(MethodType.UNKNOWN).build(),
         executor,
         baseCallOptions,
         provider,
@@ -521,7 +521,7 @@ public class ClientCallImplTest {
     Context previous = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
-        method,
+        method.toBuilder().setType(MethodType.UNKNOWN).build(),
         new SerializingExecutor(Executors.newSingleThreadExecutor()),
         baseCallOptions,
         provider,
