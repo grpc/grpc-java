@@ -8,9 +8,9 @@ latency characteristics of grpc.
 
 To build the benchmark type  
 
-```  
-$ ./gradlew :grpc-benchmarks:installDist  
-```  
+```
+$ ./gradlew :grpc-benchmarks:installDist
+```
 
 from the grpc-java directory.  
 
