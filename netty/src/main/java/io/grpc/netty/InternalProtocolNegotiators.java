@@ -19,6 +19,7 @@ package io.grpc.netty;
 import io.grpc.ChannelLogger;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
+import io.grpc.netty.ProtocolNegotiators.ProtocolNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -98,5 +99,17 @@ public final class InternalProtocolNegotiators {
   public static ChannelHandler clientTlsHandler(
       ChannelHandler next, SslContext sslContext, String authority) {
     return new ClientTlsHandler(next, sslContext, authority);
+  }
+
+  public static class ProtocolNegotiationHandler
+      extends ProtocolNegotiators.ProtocolNegotiationHandler {
+
+    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName) {
+      super(next, negotiatorName);
+    }
+
+    protected ProtocolNegotiationHandler(ChannelHandler next) {
+      super(next);
+    }
   }
 }
