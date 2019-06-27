@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.READY;
 
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -92,9 +93,22 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     return delegate;
   }
 
+  @Deprecated
+  @Override
+  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    pendingLb.handleSubchannelState(subchannel, stateInfo);
+    currentLb.handleSubchannelState(subchannel, stateInfo);
+  }
+
+  @Override
+  public void requestConnection() {
+    pendingLb.requestConnection();
+    currentLb.requestConnection();
+  }
+
   @Override
   public void shutdown() {
-    currentLb.shutdown();
     pendingLb.shutdown();
+    currentLb.shutdown();
   }
 }
