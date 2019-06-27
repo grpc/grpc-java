@@ -285,7 +285,9 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      Status actual = ((StatusException) ex.getCause()).getStatus();
+      assertSame(failureStatus.getCode(), actual.getCode());
+      assertThat(actual.getDescription()).contains(failureStatus.getDescription());
     }
   }
 
@@ -372,7 +374,9 @@ public class NettyClientTransportTest {
       rpc.waitForClose();
       fail("expected exception");
     } catch (ExecutionException ex) {
-      assertSame(failureStatus, ((StatusException) ex.getCause()).getStatus());
+      Status actual = ((StatusException) ex.getCause()).getStatus();
+      assertSame(failureStatus.getCode(), actual.getCode());
+      assertThat(actual.getDescription()).contains(failureStatus.getDescription());
     }
   }
 
