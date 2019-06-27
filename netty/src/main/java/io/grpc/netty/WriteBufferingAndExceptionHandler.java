@@ -85,7 +85,8 @@ final class WriteBufferingAndExceptionHandler extends ChannelDuplexHandler {
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
     assert cause != null;
     Throwable previousFailure = failCause;
-    Status status = Utils.statusFromThrowable(cause);
+    Status status = Utils.statusFromThrowable(cause)
+        .augmentDescription("Channel Pipeline: " + ctx.pipeline().names());
     failWrites(status.asRuntimeException());
     // Check to see if the channel is active and this is the first failure.  If a downstream
     // handler triggers an exception in close(), avoid being reentrant.  This is not obviously
