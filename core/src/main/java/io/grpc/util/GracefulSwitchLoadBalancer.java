@@ -23,7 +23,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
-import javax.annotation.Nullable;
+import io.grpc.Status;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -34,36 +34,27 @@ import javax.annotation.concurrent.NotThreadSafe;
 @Internal
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
+  private static final LoadBalancer NOOP_BALANCER = new LoadBalancer() {
+    @Override
+    public void handleNameResolutionError(Status error) {}
 
-  @Nullable // never null after init()
-  private LoadBalancer delegate;
-  @Nullable // never null after init()
-  private LoadBalancer currentLb;
-  @Nullable // set to null once the new lb becomes current
-  private LoadBalancer pendingLb;
+    @Override
+    public void shutdown() {}
+  };
 
-  private GracefulSwitchLoadBalancer() {}
-
-  /** Initializes an instance. */
-  public static GracefulSwitchLoadBalancer init(LoadBalancerProvider lbProvider, Helper helper) {
-    GracefulSwitchLoadBalancer instance = new GracefulSwitchLoadBalancer();
-    instance.switchTo(lbProvider, helper);
-    return instance;
-  }
+  private LoadBalancer delegate = NOOP_BALANCER;
+  private LoadBalancer currentLb = NOOP_BALANCER;
+  private LoadBalancer pendingLb = NOOP_BALANCER;
 
   /** Gracefully switch to a new balancer. */
   public void switchTo(LoadBalancerProvider lbProvider, final Helper helper) {
     checkNotNull(lbProvider, "lbProvider");
     checkNotNull(helper, "helper");
 
-    if (currentLb == null) {
+    if (currentLb == NOOP_BALANCER) {
       delegate = lbProvider.newLoadBalancer(helper);
       currentLb = delegate;
       return;
-    }
-
-    if (pendingLb != null) {
-      pendingLb.shutdown();
     }
 
     class PendingHelper extends ForwardingLoadBalancerHelper {
@@ -80,7 +71,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
         if (newState == READY && pendingLb == lb) {
           currentLb.shutdown();
           currentLb = lb;
-          pendingLb = null;
+          pendingLb = NOOP_BALANCER;
         }
 
         if (currentLb == lb) {
@@ -92,6 +83,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     PendingHelper pendingHelper = new PendingHelper();
     delegate = lbProvider.newLoadBalancer(pendingHelper);
     pendingHelper.lb = delegate;
+    pendingLb.shutdown();
     pendingLb = delegate;
   }
 
@@ -103,8 +95,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   @Override
   public void shutdown() {
     currentLb.shutdown();
-    if (pendingLb != null) {
-      pendingLb.shutdown();
-    }
+    pendingLb.shutdown();
   }
 }
