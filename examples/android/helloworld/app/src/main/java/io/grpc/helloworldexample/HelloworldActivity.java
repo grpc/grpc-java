@@ -29,7 +29,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.android.AndroidChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -84,7 +84,7 @@ public class HelloworldActivity extends AppCompatActivity {
       String portStr = params[2];
       int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
       try {
-        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+        channel = AndroidChannelBuilder.forAddress(host, port).usePlaintext().build();
         GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
         HelloRequest request = HelloRequest.newBuilder().setName(message).build();
         HelloReply reply = stub.sayHello(request);
