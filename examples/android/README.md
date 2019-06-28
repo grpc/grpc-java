@@ -16,7 +16,9 @@ INSTALL
 
 1. **[Install gRPC Java library SNAPSHOT locally, including code generation plugin](../../COMPILING.md) (Only need this step for non-released versions, e.g. master HEAD).**
 
-2. Install the app
+2. Install [gRPC Android library SNAPSHOT](../../android) locally (Only need this step for non-released grpc-android version, e.g. master HEAD).
+
+3. Install the app
 ```sh
 $ cd helloworld  # or "cd routeguide"
 $ ../../gradlew installDebug
