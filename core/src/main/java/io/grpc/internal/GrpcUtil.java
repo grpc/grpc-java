@@ -45,8 +45,12 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.Thread.UncaughtExceptionHandler;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -60,6 +64,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -500,14 +505,54 @@ public final class GrpcUtil {
     }
   }
 
+  private static final AtomicInteger forkJoinThreadIdAlloc = new AtomicInteger();
+
   /**
    * Shared executor for channels.
    */
   public static final Resource<Executor> SHARED_CHANNEL_EXECUTOR =
       new Resource<Executor>() {
         private static final String NAME = "grpc-default-executor";
+
         @Override
         public Executor create() {
+          try {
+            Class<?> fjpClz = Class.forName("java.util.concurrent.ForkJoinPool");
+            Class<?> fjpwtfClz =
+                Class.forName("java.util.concurrent.ForkJoinPool$ForkJoinWorkerThreadFactory");
+            final Object dfjwtf = fjpClz.getField("defaultForkJoinWorkerThreadFactory").get(null);
+
+            final class FjpInvocationHandler implements InvocationHandler {
+
+              @Override
+              public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                if (!method.getName().equals("newThread")) {
+                  throw new NoSuchMethodException(method.getName());
+                }
+                Thread thread = (Thread) method.invoke(dfjwtf, args);
+                thread.setDaemon(true);
+                thread.setName(NAME + '-' + forkJoinThreadIdAlloc.getAndIncrement());
+                return thread;
+              }
+            }
+
+            Object fjpwtf = Proxy.newProxyInstance(
+                Thread.currentThread().getContextClassLoader(),
+                new Class<?>[]{fjpwtfClz},
+                new FjpInvocationHandler());
+
+            Constructor<?> ctor = fjpClz.getConstructor(
+                int.class, fjpwtfClz, UncaughtExceptionHandler.class, boolean.class);
+            return (Executor) ctor.newInstance(
+                Runtime.getRuntime().availableProcessors(),
+                fjpwtf, Thread.currentThread().getUncaughtExceptionHandler(),
+                /* async=*/ true);
+
+          } catch (ClassNotFoundException e) {
+            log.log(Level.FINE, "Can't find ForkJoinPool, skipping", e);
+          } catch (Exception e) {
+            log.log(Level.WARNING, "Can't construct ForkJoinPool, skipping", e);
+          }
           return Executors.newCachedThreadPool(getThreadFactory(NAME + "-%d", true));
         }
 
