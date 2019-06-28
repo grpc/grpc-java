@@ -37,10 +37,10 @@ import android.widget.TextView;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.ManagedChannel;
+import io.grpc.android.AndroidChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
-import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.ref.WeakReference;
@@ -118,7 +118,7 @@ public class StrictModeHelloworldActivity extends AppCompatActivity {
       int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
       try {
         channel =
-            OkHttpChannelBuilder.forAddress(host, port)
+            AndroidChannelBuilder.forAddress(host, port)
                 .transportExecutor(new NetworkTaggingExecutor(0xFDD))
                 .usePlaintext()
                 .build();
