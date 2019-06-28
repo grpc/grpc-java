@@ -28,7 +28,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.TextView
 import io.grpc.ManagedChannel
-import io.grpc.ManagedChannelBuilder
+import io.grpc.android.AndroidChannelBuilder
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloRequest
 import java.io.PrintWriter
@@ -67,7 +67,7 @@ class HelloworldActivity : AppCompatActivity(), View.OnClickListener {
       val portStr = params[2]
       val port = if (TextUtils.isEmpty(portStr)) 0 else Integer.valueOf(portStr)
       return try {
-        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
+        channel = AndroidChannelBuilder.forAddress(host, port).usePlaintext().build()
         val stub = GreeterGrpc.newBlockingStub(channel)
         val request = HelloRequest.newBuilder().setName(message).build()
         val reply = stub.sayHello(request)

@@ -72,9 +72,12 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 
     // You need to build grpc-java to obtain these libraries below.
-    implementation 'io.grpc:grpc-okhttp:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    runtimeOnly 'io.grpc:grpc-okhttp:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-protobuf-lite:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-stub:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+
+    // You need to build SNAPSHOT version of grpc-android to obtain these library below.
+    implementation 'io.grpc:grpc-android:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 }
 
 repositories { mavenCentral() }
