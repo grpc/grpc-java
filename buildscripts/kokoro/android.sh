@@ -23,6 +23,11 @@ buildscripts/make_dependencies.sh
 
 ./gradlew publishToMavenLocal
 
+# Build grpc-android dependency
+pushd android
+../gradlew publishToMavenLocal
+popd
+
 # Build grpc-cronet
 
 pushd cronet
