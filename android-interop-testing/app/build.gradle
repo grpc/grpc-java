@@ -77,6 +77,9 @@ dependencies {
     implementation 'io.grpc:grpc-stub:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     implementation 'io.grpc:grpc-testing:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
+    // You need to build grpc-android to obtain library below.
+    implementation 'io.grpc:grpc-android:1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+
     // workaround for https://github.com/google/protobuf/issues/1889
     protobuf 'com.google.protobuf:protobuf-java:3.0.2'
 

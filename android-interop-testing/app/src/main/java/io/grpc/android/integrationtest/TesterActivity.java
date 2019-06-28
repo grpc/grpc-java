@@ -37,6 +37,7 @@ import io.grpc.ClientInterceptors.CheckedForwardingClientCall;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
+import io.grpc.android.AndroidChannelBuilder;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -127,7 +128,11 @@ public class TesterActivity extends AppCompatActivity
       testCert = null;
     }
     ManagedChannel channel =
-        TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, true, testCert);
+        AndroidChannelBuilder
+            .fromBuilder(
+                TesterOkHttpChannelBuilder
+                    .newBuilder(host, port, serverHostOverride, true, testCert))
+            .build();
 
     List<ClientInterceptor> interceptors = new ArrayList<>();
     if (getCheckBox.isChecked()) {

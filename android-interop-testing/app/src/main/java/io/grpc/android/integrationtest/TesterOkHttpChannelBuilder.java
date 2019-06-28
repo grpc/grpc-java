@@ -17,7 +17,6 @@
 package io.grpc.android.integrationtest;
 
 import android.support.annotation.Nullable;
-import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.okhttp.OkHttpChannelBuilder;
 import java.io.InputStream;
@@ -31,10 +30,10 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.security.auth.x500.X500Principal;
 
 /**
- * A helper class to create a OkHttp based channel.
+ * A helper class to create a OkHttp based channel builder.
  */
 class TesterOkHttpChannelBuilder {
-  public static ManagedChannel build(
+  public static ManagedChannelBuilder newBuilder(
       String host,
       int port,
       @Nullable String serverHostOverride,
@@ -56,7 +55,7 @@ class TesterOkHttpChannelBuilder {
     } else {
       channelBuilder.usePlaintext();
     }
-    return channelBuilder.build();
+    return channelBuilder;
   }
 
   private static SSLSocketFactory getSslSocketFactory(@Nullable InputStream testCa)

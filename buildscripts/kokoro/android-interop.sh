@@ -23,6 +23,10 @@ buildscripts/make_dependencies.sh
 
 ./gradlew publishToMavenLocal
 
+# Build grpc-android dependency
+pushd android
+../gradlew publishToMavenLocal
+popd
 
 # Build and run interop instrumentation tests on Firebase Test Lab
 cd android-interop-testing

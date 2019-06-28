@@ -32,7 +32,7 @@ popd
 # Build grpc-android
 
 pushd android
-../gradlew build
+../gradlew publishToMavenLocal
 popd
 
 # Build android-interop-testing
