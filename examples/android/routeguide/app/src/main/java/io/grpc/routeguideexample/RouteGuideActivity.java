@@ -28,8 +28,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
+import io.grpc.android.AndroidChannelBuilder;
 import io.grpc.routeguideexample.RouteGuideGrpc.RouteGuideBlockingStub;
 import io.grpc.routeguideexample.RouteGuideGrpc.RouteGuideStub;
 import io.grpc.stub.StreamObserver;
@@ -79,7 +79,7 @@ public class RouteGuideActivity extends AppCompatActivity {
     int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
     ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
         .hideSoftInputFromWindow(hostEdit.getWindowToken(), 0);
-    channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+    channel = AndroidChannelBuilder.forAddress(host, port).usePlaintext().build();
     hostEdit.setEnabled(false);
     portEdit.setEnabled(false);
     startRouteGuideButton.setEnabled(false);
