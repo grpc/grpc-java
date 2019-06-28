@@ -34,8 +34,8 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientInterceptors;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
+import io.grpc.android.AndroidChannelBuilder;
 import io.grpc.examples.helloworld.GreeterGrpc;
 import io.grpc.examples.helloworld.HelloReply;
 import io.grpc.examples.helloworld.HelloRequest;
@@ -110,7 +110,7 @@ public final class ClientCacheExampleActivity extends AppCompatActivity {
       boolean onlyIfCached = (boolean) params[5];
       int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
       try {
-        channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+        channel = AndroidChannelBuilder.forAddress(host, port).usePlaintext().build();
         Channel channelToUse =
             ClientInterceptors.intercept(
                 channel, SafeMethodCachingInterceptor.newSafeMethodCachingInterceptor(cache));
