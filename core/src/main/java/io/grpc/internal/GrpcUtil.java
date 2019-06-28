@@ -545,7 +545,8 @@ public final class GrpcUtil {
                 int.class, fjpwtfClz, UncaughtExceptionHandler.class, boolean.class);
             return (Executor) ctor.newInstance(
                 Runtime.getRuntime().availableProcessors(),
-                fjpwtf, Thread.currentThread().getUncaughtExceptionHandler(),
+                fjpwtf,
+                Thread.currentThread().getUncaughtExceptionHandler(),
                 /* async=*/ true);
 
           } catch (ClassNotFoundException e) {
