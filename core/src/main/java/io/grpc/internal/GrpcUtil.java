@@ -45,26 +45,29 @@ import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.internal.StreamListener.MessageProducer;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.Thread.UncaughtExceptionHandler;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -505,8 +508,6 @@ public final class GrpcUtil {
     }
   }
 
-  private static final AtomicInteger forkJoinThreadIdAlloc = new AtomicInteger();
-
   /**
    * Shared executor for channels.
    */
@@ -516,45 +517,8 @@ public final class GrpcUtil {
 
         @Override
         public Executor create() {
-          try {
-            Class<?> fjpClz = Class.forName("java.util.concurrent.ForkJoinPool");
-            Class<?> fjpwtfClz =
-                Class.forName("java.util.concurrent.ForkJoinPool$ForkJoinWorkerThreadFactory");
-            final Object dfjwtf = fjpClz.getField("defaultForkJoinWorkerThreadFactory").get(null);
-
-            final class FjpInvocationHandler implements InvocationHandler {
-
-              @Override
-              public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-                if (!method.getName().equals("newThread")) {
-                  throw new NoSuchMethodException(method.getName());
-                }
-                Thread thread = (Thread) method.invoke(dfjwtf, args);
-                thread.setDaemon(true);
-                thread.setName(NAME + '-' + forkJoinThreadIdAlloc.getAndIncrement());
-                return thread;
-              }
-            }
-
-            Object fjpwtf = Proxy.newProxyInstance(
-                Thread.currentThread().getContextClassLoader(),
-                new Class<?>[]{fjpwtfClz},
-                new FjpInvocationHandler());
-
-            Constructor<?> ctor = fjpClz.getConstructor(
-                int.class, fjpwtfClz, UncaughtExceptionHandler.class, boolean.class);
-            return (Executor) ctor.newInstance(
-                Runtime.getRuntime().availableProcessors(),
-                fjpwtf,
-                Thread.currentThread().getUncaughtExceptionHandler(),
-                /* async=*/ true);
-
-          } catch (ClassNotFoundException e) {
-            log.log(Level.FINE, "Can't find ForkJoinPool, skipping", e);
-          } catch (Exception e) {
-            log.log(Level.WARNING, "Can't construct ForkJoinPool, skipping", e);
-          }
-          return Executors.newCachedThreadPool(getThreadFactory(NAME + "-%d", true));
+          return new ParallelCachedExecutor(
+              Runtime.getRuntime().availableProcessors(), getThreadFactory(NAME + "-%d", true));
         }
 
         @Override
@@ -567,6 +531,103 @@ public final class GrpcUtil {
           return NAME;
         }
       };
+
+
+  private static final class ParallelCachedExecutor extends AbstractExecutorService {
+    private final List<BlockingQueue<Runnable>> queues;
+    private final List<ThreadPoolExecutor> execs;
+
+    private static final ThreadLocal<RandomIntHolder> lastIndex =
+        new ThreadLocal<RandomIntHolder>() {
+          @Override
+          protected RandomIntHolder initialValue() {
+            return new RandomIntHolder();
+          }
+        };
+
+    private static final class RandomIntHolder {
+      final Random random = new Random();
+      int value;
+    }
+
+    ParallelCachedExecutor(int parallelism, ThreadFactory tf) {
+      List<BlockingQueue<Runnable>> queues = new ArrayList<>(parallelism);
+      List<ThreadPoolExecutor> execs = new ArrayList<>(parallelism);
+      for (int i = 0; i < parallelism; i++) {
+        BlockingQueue<Runnable> queue = new SynchronousQueue<>();
+        queues.add(queue);
+        execs.add(
+            new ThreadPoolExecutor(
+                0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, queue, tf));
+      }
+      this.queues = Collections.unmodifiableList(queues);
+      this.execs = Collections.unmodifiableList(execs);
+    }
+
+    @Override
+    public void execute(Runnable command) {
+      if (command == null) {
+        throw new NullPointerException();
+      }
+      RandomIntHolder index = lastIndex.get();
+      for (int i = 0; (1 << i) < queues.size(); i++) {
+        if (queues.get(index.value).offer(command)) {
+          return;
+        }
+        index.value += index.random.nextInt(1 << i);
+        index.value %= queues.size();
+      }
+      execs.get(index.value).execute(command);
+    }
+
+    @Override
+    public void shutdown() {
+      for (ThreadPoolExecutor exec : execs) {
+        exec.shutdown();
+      }
+    }
+
+    @Override
+    public List<Runnable> shutdownNow() {
+      List<Runnable> leftovers = new ArrayList<>();
+      for (ThreadPoolExecutor exec : execs) {
+        leftovers.addAll(exec.shutdownNow());
+      }
+      return leftovers;
+    }
+
+    @Override
+    public boolean isShutdown() {
+      for (ThreadPoolExecutor exec : execs) {
+        if (!exec.isShutdown()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public boolean isTerminated() {
+      for (ThreadPoolExecutor exec : execs) {
+        if (!exec.isTerminated()) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    @Override
+    public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+      long remaining = unit.toNanos(timeout);
+      long start = System.nanoTime();
+      for (ThreadPoolExecutor exec : execs) {
+        if (!exec.awaitTermination(remaining - (System.nanoTime() - start), TimeUnit.NANOSECONDS)) {
+          return false;
+        }
+      }
+      return true;
+    }
+  }
 
   /**
    * Shared single-threaded executor for managing channel timers.
