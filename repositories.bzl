@@ -149,6 +149,7 @@ def com_google_android_annotations():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "ba734e1e84c09d615af6a09d33034b4f0442f8772dec120efb376d86a565ae15",
         licenses = ["notice"],  # Apache 2.0
+        neverlink = True,
     )
 
 def com_google_api_grpc_google_common_protos():
