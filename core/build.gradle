@@ -27,6 +27,7 @@ dependencies {
             project(':grpc-api').sourceSets.test.output,
             project(':grpc-testing'),
             project(':grpc-grpclb'),
+            libraries.android_annotations,
             libraries.guava_testlib
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
