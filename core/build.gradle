@@ -3,7 +3,6 @@ description = 'gRPC: Core'
 dependencies {
     compile project(':grpc-api'),
             libraries.gson,
-            libraries.android_annotations,
             libraries.perfmark
     compile (libraries.opencensus_api) {
         // prefer 3.0.2 from libraries instead of 3.0.1
@@ -21,6 +20,8 @@ dependencies {
         // prefer 20.0 from libraries instead of 19.0
         exclude group: 'com.google.guava', module: 'guava'
     }
+    
+    compileOnly libraries.android_annotations
 
     testCompile project(':grpc-context').sourceSets.test.output,
             project(':grpc-api').sourceSets.test.output,
