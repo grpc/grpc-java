@@ -10,6 +10,7 @@ cc_binary(
     deps = [
         "@com_google_protobuf//:protoc_lib",
     ],
+    visibility = ["//visibility:public"],
 )
 
 java_library(
