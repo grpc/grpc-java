@@ -517,8 +517,11 @@ public final class GrpcUtil {
 
         @Override
         public Executor create() {
+          // divide the parallelism by 4.   Each sub executor is already parallel, this is just to
+          // reduce contention on the queues.
           return new ParallelCachedExecutor(
-              Runtime.getRuntime().availableProcessors(), getThreadFactory(NAME + "-%d", true));
+              Math.max(Runtime.getRuntime().availableProcessors() / 4, 1),
+              getThreadFactory(NAME + "-%d", true));
         }
 
         @Override
@@ -574,9 +577,12 @@ public final class GrpcUtil {
         if (queues.get(index.value).offer(command)) {
           return;
         }
-        index.value += index.random.nextInt(1 << i);
+        index.value += 1 + index.random.nextInt(2 << i);
         index.value %= queues.size();
       }
+      // If none of the queues accepted our runnable, go through the front door.  This will cause a
+      // thread to be spawned in the case that there are none waiting on the queue at
+      // {@code index.value}.
       execs.get(index.value).execute(command);
     }
 
