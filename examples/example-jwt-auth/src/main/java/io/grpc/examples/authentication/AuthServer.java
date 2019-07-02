@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ public class AuthServer {
     public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
       // get client id added to context by interceptor
       String clientId = Constant.CLIENT_ID_CONTEXT_KEY.get();
-      System.out.println("Processing request from " + clientId);
+      logger.info("Processing request from " + clientId);
       HelloReply reply = HelloReply.newBuilder().setMessage("Hello, " + req.getName()).build();
       responseObserver.onNext(reply);
       responseObserver.onCompleted();

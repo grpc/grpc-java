@@ -159,7 +159,7 @@ $ bazel-bin/hello-world-client
 
 - [Google Authentication](example-gauth)
 
-- [JWT-based Authentication](example-jwt-auth/README.md)
+- [JWT-based Authentication](example-jwt-auth)
 
 - [Kotlin examples](example-kotlin)
 

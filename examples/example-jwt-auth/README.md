@@ -27,7 +27,7 @@ The auth-client accepts optional arguments for user-name and client-id:
 **auth-client**:
 
 ```text
-USAGE: AuthClient [user-name] [client-id]
+USAGE: AuthClient [user-name [client-id]]
 ```
 
 The `user-name` value is simply passed in the `HelloRequest` message as payload and the value of
