@@ -52,12 +52,6 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     checkNotNull(newLbProvider, "newLbProvider");
     checkNotNull(newHelper, "newHelper");
 
-    if (currentLb == NOOP_BALANCER) {
-      delegate = newLbProvider.newLoadBalancer(newHelper);
-      currentLb = delegate;
-      return;
-    }
-
     class PendingHelper extends ForwardingLoadBalancerHelper {
       LoadBalancer lb;
 
@@ -83,8 +77,12 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     PendingHelper pendingHelper = new PendingHelper();
     delegate = newLbProvider.newLoadBalancer(pendingHelper);
     pendingHelper.lb = delegate;
-    pendingLb.shutdown();
-    pendingLb = delegate;
+    if (currentLb == NOOP_BALANCER) {
+      currentLb = delegate;
+    } else {
+      pendingLb.shutdown();
+      pendingLb = delegate;
+    }
   }
 
   @Override
