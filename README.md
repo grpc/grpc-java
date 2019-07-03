@@ -77,6 +77,11 @@ https://search.maven.org/search?q=g:io.grpc%20AND%20v:1.21.0
 Development snapshots are available in [Sonatypes's snapshot
 repository](https://oss.sonatype.org/content/repositories/snapshots/).
 
+If you're running on a JDK version newer than than JDK 8, you'll also need to
+explicitly add the dependency `javax.annotation:javax.annotation-api`
+
+[javax.annotation.api]: https://mvnrepository.com/artifact/javax.annotation/javax.annotation-api
+
 Generated Code
 --------------
 
@@ -172,7 +177,7 @@ We recommend using the
 [grpc-java-api-checker](https://github.com/grpc/grpc-java-api-checker)
 (an [Error Prone](https://github.com/google/error-prone) plugin)
 to check for usages of `@ExperimentalApi` and `@Internal` in any library code
-that depends on gRPC. It may also be used to check for `@Internal` usage or 
+that depends on gRPC. It may also be used to check for `@Internal` usage or
 unintended `@ExperimentalApi` consumption in non-library code.
 
 How to Build
