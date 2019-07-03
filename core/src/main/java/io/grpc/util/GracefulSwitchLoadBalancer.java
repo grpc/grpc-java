@@ -29,8 +29,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * A forwarding load balancer and holder of currentLb and pendingLb. The pendingLb's helper will not
- * update balancing state until a subchannel managed by the pendingLB is READY, whence the pendingLb
- * becomes current.
+ * update balancing state until a subchannel managed by the pendingLB is READY, whence the currentLb
+ * shuts down and the pendingLb becomes current.
  */
 @Internal
 @NotThreadSafe // Must be accessed in SynchronizationContext
@@ -47,13 +47,13 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private LoadBalancer currentLb = NOOP_BALANCER;
   private LoadBalancer pendingLb = NOOP_BALANCER;
 
-  /** Gracefully switch to a new balancer. */
-  public void switchTo(LoadBalancerProvider lbProvider, final Helper helper) {
-    checkNotNull(lbProvider, "lbProvider");
-    checkNotNull(helper, "helper");
+  /** Gracefully switch to a new load balancing policy. */
+  public void switchTo(LoadBalancerProvider newLbProvider, final Helper newHelper) {
+    checkNotNull(newLbProvider, "newLbProvider");
+    checkNotNull(newHelper, "newHelper");
 
     if (currentLb == NOOP_BALANCER) {
-      delegate = lbProvider.newLoadBalancer(helper);
+      delegate = newLbProvider.newLoadBalancer(newHelper);
       currentLb = delegate;
       return;
     }
@@ -63,12 +63,11 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
       @Override
       protected Helper delegate() {
-        return helper;
+        return newHelper;
       }
 
       @Override
-      public void updateBalancingState(
-          ConnectivityState newState, SubchannelPicker newPicker) {
+      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
         if (newState == READY && pendingLb == lb) {
           currentLb.shutdown();
           currentLb = lb;
@@ -76,13 +75,13 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
         }
 
         if (currentLb == lb) {
-          helper.updateBalancingState(newState, newPicker);
+          newHelper.updateBalancingState(newState, newPicker);
         }
       }
     }
 
     PendingHelper pendingHelper = new PendingHelper();
-    delegate = lbProvider.newLoadBalancer(pendingHelper);
+    delegate = newLbProvider.newLoadBalancer(pendingHelper);
     pendingHelper.lb = delegate;
     pendingLb.shutdown();
     pendingLb = delegate;
