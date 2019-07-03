@@ -421,17 +421,17 @@ static void PrintMethodFields(
     if (flavor == ProtoFlavor::NORMAL) {
       p->Print(
           *vars,
-        "                .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
+        "            .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
     }
 
     p->Print(
         *vars,
-        "                .build();\n");
+        "            .build();\n");
     p->Print(*vars,
-        "        }\n"
         "      }\n"
-        "   }\n"
-        "   return $method_new_field_name$;\n"
+        "    }\n"
+        "  }\n"
+        "  return $method_new_field_name$;\n"
         "}\n"
         "\n");
   }
