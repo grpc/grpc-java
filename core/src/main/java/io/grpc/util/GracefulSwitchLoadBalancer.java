@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.READY;
 
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -28,9 +27,9 @@ import io.grpc.Status;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * A forwarding load balancer and holder of currentLb and pendingLb. The pendingLb's helper will not
- * update balancing state until a subchannel managed by the pendingLB is READY, whence the currentLb
- * shuts down and the pendingLb becomes current.
+ * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
+ * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
+ * will keep using the old policy until the new policy reports READY or the old policy exits READY.
  */
 @Internal
 @NotThreadSafe // Must be accessed in SynchronizationContext
@@ -43,64 +42,75 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     public void shutdown() {}
   };
 
-  private LoadBalancer delegate = NOOP_BALANCER;
+  private final Helper helper;
   private LoadBalancer currentLb = NOOP_BALANCER;
   private LoadBalancer pendingLb = NOOP_BALANCER;
+  private String currentPolicyName;
+  private String pendingPolicyName;
+  private boolean isReady;
+
+  public GracefulSwitchLoadBalancer(Helper helper) {
+    this.helper = checkNotNull(helper, "helper");
+  }
 
   /** Gracefully switch to a new load balancing policy. */
-  public void switchTo(LoadBalancerProvider newLbProvider, final Helper newHelper) {
+  public void switchTo(LoadBalancerProvider newLbProvider) {
     checkNotNull(newLbProvider, "newLbProvider");
-    checkNotNull(newHelper, "newHelper");
+
+    String newPolicyName = newLbProvider.getPolicyName();
+    if (newPolicyName.equals(pendingPolicyName)) {
+      return;
+    }
+    pendingLb.shutdown();
+    pendingLb = NOOP_BALANCER;
+    pendingPolicyName = null;
+    if (newPolicyName.equals(currentPolicyName)) {
+      return;
+    }
 
     class PendingHelper extends ForwardingLoadBalancerHelper {
       LoadBalancer lb;
 
       @Override
       protected Helper delegate() {
-        return newHelper;
+        return helper;
       }
 
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        if (newState == READY && pendingLb == lb) {
-          currentLb.shutdown();
-          currentLb = lb;
-          pendingLb = NOOP_BALANCER;
+        if (pendingLb == lb && newState == READY) {
+          swap();
         }
-
         if (currentLb == lb) {
-          newHelper.updateBalancingState(newState, newPicker);
+          helper.updateBalancingState(newState, newPicker);
+          isReady = newState == READY;
+          if (!isReady && pendingLb != NOOP_BALANCER) { // current policy exits READY, swap
+            swap();
+          }
         }
       }
     }
 
     PendingHelper pendingHelper = new PendingHelper();
-    delegate = newLbProvider.newLoadBalancer(pendingHelper);
-    pendingHelper.lb = delegate;
-    if (currentLb == NOOP_BALANCER) {
-      currentLb = delegate;
-    } else {
-      pendingLb.shutdown();
-      pendingLb = delegate;
+    pendingHelper.lb = newLbProvider.newLoadBalancer(pendingHelper);
+    pendingLb = pendingHelper.lb;
+    pendingPolicyName = newPolicyName;
+    if (!isReady) { // if the old policy is not READY at the moment, swap to the new one right now
+      swap();
     }
+  }
+
+  private void swap() {
+    currentLb.shutdown();
+    currentLb = pendingLb;
+    currentPolicyName = pendingPolicyName;
+    pendingLb = NOOP_BALANCER;
+    pendingPolicyName = null;
   }
 
   @Override
   protected LoadBalancer delegate() {
-    return delegate;
-  }
-
-  @Deprecated
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    pendingLb.handleSubchannelState(subchannel, stateInfo);
-    currentLb.handleSubchannelState(subchannel, stateInfo);
-  }
-
-  @Override
-  public void requestConnection() {
-    pendingLb.requestConnection();
-    currentLb.requestConnection();
+    return pendingLb == NOOP_BALANCER ? currentLb : pendingLb;
   }
 
   @Override
