@@ -24,6 +24,7 @@ import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -45,7 +46,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private final Helper helper;
   private LoadBalancer currentLb = NOOP_BALANCER;
   private LoadBalancer pendingLb = NOOP_BALANCER;
+  @Nullable
   private String currentPolicyName;
+  @Nullable
   private String pendingPolicyName;
   private boolean isReady;
 
