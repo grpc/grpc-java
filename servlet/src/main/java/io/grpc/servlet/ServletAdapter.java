@@ -156,8 +156,7 @@ public final class ServletAdapter {
         writeState,
         writeChain,
         maxInboundMessageSize,
-        Attributes.newBuilder()
-            .setAll(attributes)
+        attributes.toBuilder()
             .set(
                 Grpc.TRANSPORT_ATTR_REMOTE_ADDR,
                 new InetSocketAddress(req.getRemoteHost(), req.getRemotePort()))
