@@ -48,7 +48,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
@@ -146,13 +146,8 @@ public final class ServletAdapter {
     WritableBufferAllocator bufferAllocator =
         capacityHint -> new ByteArrayWritableBuffer(capacityHint);
 
-    /*
-     * The concurrency for pushing and polling on the writeChain is handled by the WriteState state
-     * machine, not by the thread-safety of ConcurrentLinkedDeque. Actually the thread-safety of
-     * ConcurrentLinkedDeque alone is neither sufficient nor necessary. A plain singly-linked queue
-     * would also work with WriteState, but java library only has ConcurrentLinkedDeque.
-     */
-    Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedDeque<>();
+    // SPSC queue would do
+    Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedQueue<>();
 
     ServletServerStream stream = new ServletServerStream(
         bufferAllocator,
