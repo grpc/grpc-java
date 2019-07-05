@@ -248,7 +248,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
 
   // FIXME
   @Override
-  @Ignore("Undertow flow control non implemented yet")
+  @Ignore("Undertow flow control not implemented yet")
   @Test
   public void flowControlPushBack() {}
 

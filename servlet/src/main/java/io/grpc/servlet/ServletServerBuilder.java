@@ -66,7 +66,7 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
   /**
    * Builds a gRPC server that can run as a servlet.
    *
-   * <p>The returned server will not been started or be bound a port.
+   * <p>The returned server will not be started or bound to a port.
    *
    * <p>Users should not call this method directly. Instead users should call
    * {@link #buildServletAdapter()} which internally will call {@code build()} and {@code start()}

@@ -19,7 +19,6 @@ package io.grpc.servlet;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
-import static io.grpc.servlet.ServletServerStream.toHexString;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.FINEST;
 
@@ -35,9 +34,6 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ReadableBuffers;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.StatsTraceContext;
-import io.grpc.internal.WritableBufferAllocator;
-import io.grpc.servlet.ServletServerStream.ByteArrayWritableBuffer;
-import io.grpc.servlet.ServletServerStream.WriteState;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -47,20 +43,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.LockSupport;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.AsyncContext;
 import javax.servlet.AsyncEvent;
 import javax.servlet.AsyncListener;
 import javax.servlet.ReadListener;
 import javax.servlet.ServletInputStream;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.WriteListener;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
@@ -142,19 +131,10 @@ public final class ServletAdapter {
     asyncCtx.setTimeout(TimeUnit.NANOSECONDS.toMillis(timeoutNanos));
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, method, headers);
-    AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
-    WritableBufferAllocator bufferAllocator =
-        capacityHint -> new ByteArrayWritableBuffer(capacityHint);
-
-    // SPSC queue would do
-    Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedQueue<>();
 
     ServletServerStream stream = new ServletServerStream(
-        bufferAllocator,
         asyncCtx,
         statsTraceCtx,
-        writeState,
-        writeChain,
         maxInboundMessageSize,
         attributes.toBuilder()
             .set(
@@ -167,12 +147,8 @@ public final class ServletAdapter {
         getAuthority(req),
         logId);
 
-    asyncCtx.getResponse().getOutputStream().setWriteListener(
-        new GrpcWriteListener(stream, asyncCtx, writeState, writeChain, logId));
-
     transportListener.streamCreated(stream, method, headers);
-    stream.transportState().runOnTransportThread(
-        () -> stream.transportState().onStreamAllocated());
+    stream.transportState().runOnTransportThread(stream.transportState()::onStreamAllocated);
 
     asyncCtx.getRequest().getInputStream()
         .setReadListener(new GrpcReadListener(stream, asyncCtx, logId));
@@ -238,7 +214,7 @@ public final class ServletAdapter {
         logger.log(FINE, String.format("[{%s}] Timeout: ", logId), event.getThrowable());
       }
       // If the resp is not committed, cancel() to avoid being redirected to an error page.
-      // Else, the container will send RST_STREAM at the end.
+      // Else, the container will send RST_STREAM in the end.
       if (!event.getAsyncContext().getResponse().isCommitted()) {
         stream.cancel(Status.DEADLINE_EXCEEDED);
       } else {
@@ -266,106 +242,6 @@ public final class ServletAdapter {
 
     @Override
     public void onStartAsync(AsyncEvent event) {}
-  }
-
-  private static final class GrpcWriteListener implements WriteListener {
-    final ServletServerStream stream;
-    final AsyncContext asyncCtx;
-    final HttpServletResponse resp;
-    final ServletOutputStream output;
-    final AtomicReference<WriteState> writeState;
-    final Queue<ByteArrayWritableBuffer> writeChain;
-    final InternalLogId logId;
-
-    GrpcWriteListener(
-        ServletServerStream stream,
-        AsyncContext asyncCtx,
-        AtomicReference<WriteState> writeState,
-        Queue<ByteArrayWritableBuffer> writeChain,
-        InternalLogId logId) throws IOException {
-      this.stream = stream;
-      this.asyncCtx = asyncCtx;
-      resp = (HttpServletResponse) asyncCtx.getResponse();
-      output = resp.getOutputStream();
-      this.writeState = writeState;
-      this.writeChain = writeChain;
-      this.logId = logId;
-    }
-
-    @Override
-    public void onWritePossible() throws IOException {
-      logger.log(FINEST, "[{0}] onWritePossible: ENTRY", logId);
-
-      WriteState curState = writeState.get();
-      // curState.stillWritePossible should have been set to false already or right now/
-      // It's very very unlikely stillWritePossible is true due to a race condition
-      while (curState.stillWritePossible) {
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(100L));
-        curState = writeState.get();
-      }
-
-      boolean isReady;
-      while ((isReady = output.isReady())) {
-        curState = writeState.get();
-
-        ByteArrayWritableBuffer buffer = writeChain.poll();
-        if (buffer != null) {
-          if (buffer == ByteArrayWritableBuffer.FLUSH) {
-            resp.flushBuffer();
-          } else {
-            output.write(buffer.bytes, 0, buffer.readableBytes());
-            stream.transportState().runOnTransportThread(
-                () -> stream.transportState().onSentBytes(buffer.readableBytes()));
-
-            if (logger.isLoggable(Level.FINEST)) {
-              logger.log(
-                  Level.FINEST,
-                  "[{0}] outbound data: length = {1}, bytes = {2}",
-                  new Object[] {
-                      logId,
-                      buffer.readableBytes(),
-                      toHexString(buffer.bytes, buffer.readableBytes())
-                  });
-            }
-          }
-          continue;
-        }
-
-        if (writeState.compareAndSet(curState, curState.withStillWritePossible(true))) {
-          logger.log(FINEST, "[{0}] set stillWritePossible to true", logId);
-          // state has not changed since. It's possible a new entry is just enqueued into the
-          // writeChain, but this case is handled right after the enqueuing
-          break;
-        } // else state changed by another thread, need to drain the writeChain again
-      }
-
-      if (isReady && writeState.get().trailersSent) {
-        stream.transportState().runOnTransportThread(
-            () -> {
-              stream.transportState().complete();
-              asyncCtx.complete();
-            });
-        logger.log(FINEST, "[{0}] onWritePossible: call complete", logId);
-      }
-
-      logger.log(FINEST, "[{0}] onWritePossible: EXIT", logId);
-    }
-
-    @Override
-    public void onError(Throwable t) {
-      if (logger.isLoggable(FINE)) {
-        logger.log(FINE, String.format("[{%s}] Error: ", logId), t);
-      }
-
-      // If the resp is not committed, cancel() to avoid being redirected to an error page.
-      // Else, the container will send RST_STREAM at the end.
-      if (!asyncCtx.getResponse().isCommitted()) {
-        stream.cancel(Status.fromThrowable(t));
-      } else {
-        stream.transportState().runOnTransportThread(
-            () -> stream.transportState().transportReportStatus(Status.fromThrowable(t)));
-      }
-    }
   }
 
   private static final class GrpcReadListener implements ReadListener {
@@ -400,7 +276,7 @@ public final class ServletAdapter {
             logger.log(
                 FINEST,
                 "[{0}] inbound data: length = {1}, bytes = {2}",
-                new Object[] {logId, length, toHexString(buffer, length)});
+                new Object[] {logId, length, ServletServerStream.toHexString(buffer, length)});
           }
 
           byte[] copy = Arrays.copyOf(buffer, length);
