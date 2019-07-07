@@ -151,7 +151,7 @@ class WriteQueue {
     private final Link link;
 
     public RunnableCommand(Runnable runnable) {
-      this.link = PerfMark.link();
+      this.link = PerfMark.linkOut();
       this.runnable = runnable;
     }
 
@@ -182,7 +182,7 @@ class WriteQueue {
     private final Link link;
 
     AbstractQueuedCommand() {
-      this.link = PerfMark.link();
+      this.link = PerfMark.linkOut();
     }
 
     @Override

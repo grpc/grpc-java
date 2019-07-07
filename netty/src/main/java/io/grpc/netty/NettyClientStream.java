@@ -217,13 +217,13 @@ class NettyClientStream extends AbstractClientStream {
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
         channel.eventLoop().execute(new Runnable() {
-          final Link link = PerfMark.link();
+          final Link link = PerfMark.linkOut();
           @Override
           public void run() {
             PerfMark.startTask(
                 "NettyClientStream$Sink.requestMessagesFromDeframer",
                 transportState().tag());
-            link.link();
+            PerfMark.linkIn(link);
             try {
               transportState().requestMessagesFromDeframer(numMessages);
             } finally {
