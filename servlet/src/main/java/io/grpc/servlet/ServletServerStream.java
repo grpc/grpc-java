@@ -68,8 +68,6 @@ final class ServletServerStream extends AbstractServerStream {
   private final AsyncContext asyncCtx;
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
   // SPSC queue would do
-  // Call offer() only when writeState.get().stillWritePossible is false
-  // Call poll() only when writeState.get().stillWritePossible is true
   private final Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedQueue<>();
   private final Attributes attributes;
   private final String authority;

@@ -186,37 +186,37 @@ public abstract class AbstractTransportTest {
   private final ClientStreamTracer.Factory clientStreamTracerFactory = mock(
       ClientStreamTracer.Factory.class,
       delegatesTo(new ClientStreamTracer.Factory() {
-        final ArrayDeque<TestClientStreamTracer> tracers =
-            new ArrayDeque<>(Arrays.asList(clientStreamTracer1, clientStreamTracer2));
+          final ArrayDeque<TestClientStreamTracer> tracers =
+              new ArrayDeque<>(Arrays.asList(clientStreamTracer1, clientStreamTracer2));
 
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
-          metadata.put(tracerHeaderKey, tracerKeyValue);
-          TestClientStreamTracer tracer = tracers.poll();
-          if (tracer != null) {
-            return tracer;
+          @Override
+          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata metadata) {
+            metadata.put(tracerHeaderKey, tracerKeyValue);
+            TestClientStreamTracer tracer = tracers.poll();
+            if (tracer != null) {
+              return tracer;
+            }
+            return new TestClientStreamTracer();
           }
-          return new TestClientStreamTracer();
-        }
-      }));
+        }));
 
   private final TestServerStreamTracer serverStreamTracer1 = new TestServerStreamTracer();
   private final TestServerStreamTracer serverStreamTracer2 = new TestServerStreamTracer();
   private final ServerStreamTracer.Factory serverStreamTracerFactory = mock(
       ServerStreamTracer.Factory.class,
       delegatesTo(new ServerStreamTracer.Factory() {
-        final ArrayDeque<TestServerStreamTracer> tracers =
-            new ArrayDeque<>(Arrays.asList(serverStreamTracer1, serverStreamTracer2));
+          final ArrayDeque<TestServerStreamTracer> tracers =
+              new ArrayDeque<>(Arrays.asList(serverStreamTracer1, serverStreamTracer2));
 
-        @Override
-        public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-          TestServerStreamTracer tracer = tracers.poll();
-          if (tracer != null) {
-            return tracer;
+          @Override
+          public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+            TestServerStreamTracer tracer = tracers.poll();
+            if (tracer != null) {
+              return tracer;
+            }
+            return new TestServerStreamTracer();
           }
-          return new TestServerStreamTracer();
-        }
-      }));
+        }));
 
   @Rule
   public ExpectedException thrown = ExpectedException.none();
@@ -936,14 +936,14 @@ public abstract class AbstractTransportTest {
     client = newClientTransport(server);
     startTransport(client, mockClientTransportListener);
     MockServerTransportListener serverTransportListener
-        = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            = serverListener.takeListenerOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
 
     Metadata clientHeaders = new Metadata();
     ClientStream clientStream = client.newStream(methodDescriptor, clientHeaders, callOptions);
     ClientStreamListenerBase clientStreamListener = new ClientStreamListenerBase();
     clientStream.start(clientStreamListener);
     StreamCreation serverStreamCreation
-        = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            = serverTransportListener.takeStreamOrFail(TIMEOUT_MS, TimeUnit.MILLISECONDS);
     ServerStream serverStream = serverStreamCreation.stream;
 
     assertEquals(testAuthority(server), serverStream.getAuthority());
@@ -1319,7 +1319,7 @@ public abstract class AbstractTransportTest {
     verify(clientStreamTracerFactory).newClientStreamTracer(
         any(ClientStreamTracer.StreamInfo.class), any(Metadata.class));
     assertTrue(clientStreamTracer1.getOutboundHeaders());
-    // assertNull(clientStreamTracer1.getInboundTrailers());
+    assertNull(clientStreamTracer1.getInboundTrailers());
     assertSame(clientStreamStatus, clientStreamTracer1.getStatus());
     verify(serverStreamTracerFactory).newServerStreamTracer(anyString(), any(Metadata.class));
     assertSame(status, serverStreamTracer1.getStatus());
