@@ -256,6 +256,15 @@ public class XdsCommsTest {
                     .setAddress("addr22").setPortValue(22))))
         .setLoadBalancingWeight(UInt32Value.of(22))
         .build();
+    Locality localityProto3 = Locality.newBuilder()
+        .setRegion("region3").setZone("zone3").setSubZone("subzone3").build();
+    LbEndpoint endpoint3 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr31").setPortValue(31))))
+        .setLoadBalancingWeight(UInt32Value.of(31))
+        .build();
     DiscoveryResponse edsResponse = DiscoveryResponse.newBuilder()
         .addResources(Any.pack(ClusterLoadAssignment.newBuilder()
             .addEndpoints(LocalityLbEndpoints.newBuilder()
@@ -268,6 +277,10 @@ public class XdsCommsTest {
                 .addLbEndpoints(endpoint21)
                 .addLbEndpoints(endpoint22)
                 .setLoadBalancingWeight(UInt32Value.of(2)))
+            .addEndpoints(LocalityLbEndpoints.newBuilder()
+                .setLocality(localityProto3)
+                .addLbEndpoints(endpoint3)
+                .setLoadBalancingWeight(UInt32Value.of(0)))
             .build()))
         .setTypeUrl(EDS_TYPE_URL)
         .build();
