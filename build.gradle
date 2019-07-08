@@ -48,7 +48,7 @@ subprojects {
     }
 
     group = "io.grpc"
-    version = "1.22.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+    version = "1.23.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 
     sourceCompatibility = 1.7
     targetCompatibility = 1.7
@@ -106,7 +106,7 @@ subprojects {
         protocPluginBaseName = 'protoc-gen-grpc-java'
         javaPluginPath = "$rootDir/compiler/build/exe/java_plugin/$protocPluginBaseName$exeSuffix"
 
-        nettyVersion = '4.1.35.Final'
+        nettyVersion = '4.1.37.Final'
         googleauthVersion = '0.13.0'
         guavaVersion = '26.0-android'
         protobufVersion = '3.7.1'
@@ -201,6 +201,7 @@ subprojects {
             opencensus_impl: "io.opencensus:opencensus-impl:${opencensusVersion}",
             opencensus_impl_lite: "io.opencensus:opencensus-impl-lite:${opencensusVersion}",
             instrumentation_api: 'com.google.instrumentation:instrumentation-api:0.4.3',
+            perfmark: 'io.perfmark:perfmark-api:0.16.0',
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
             protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
             protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",

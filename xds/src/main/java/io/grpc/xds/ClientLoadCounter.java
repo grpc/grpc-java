@@ -23,12 +23,14 @@ import com.google.common.base.MoreObjects;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ClientStreamTracer.StreamInfo;
+import io.grpc.LoadBalancer.PickResult;
+import io.grpc.LoadBalancer.PickSubchannelArgs;
+import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.util.ForwardingClientStreamTracer;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
 import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
-import io.grpc.xds.XdsLoadStatsStore.StatsCounter;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,12 +39,13 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Client side aggregator for load stats.
+ * Client side load stats recorder that provides RPC counting and metrics recording as name-value
+ * pairs.
  *
  * <p>All methods except {@link #snapshot()} in this class are thread-safe.
  */
 @NotThreadSafe
-final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
+final class ClientLoadCounter {
 
   private static final int THREAD_BALANCING_FACTOR = 64;
   private final AtomicLong callsInProgress = new AtomicLong();
@@ -51,10 +54,15 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   private final AtomicLong callsIssued = new AtomicLong();
   private final MetricRecorder[] metricRecorders = new MetricRecorder[THREAD_BALANCING_FACTOR];
 
+  // True if this counter continues to record stats after next snapshot. Otherwise, it will be
+  // discarded.
+  private boolean active;
+
   ClientLoadCounter() {
     for (int i = 0; i < THREAD_BALANCING_FACTOR; i++) {
       metricRecorders[i] = new MetricRecorder();
     }
+    active = true;
   }
 
   /**
@@ -69,13 +77,11 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
     this.callsIssued.set(callsIssued);
   }
 
-  @Override
   void recordCallStarted() {
     callsIssued.getAndIncrement();
     callsInProgress.getAndIncrement();
   }
 
-  @Override
   void recordCallFinished(Status status) {
     callsInProgress.getAndDecrement();
     if (status.isOk()) {
@@ -85,7 +91,6 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
     }
   }
 
-  @Override
   void recordMetric(String name, double value) {
     MetricRecorder recorder =
         metricRecorders[(int) (Thread.currentThread().getId() % THREAD_BALANCING_FACTOR)];
@@ -93,13 +98,14 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   }
 
   /**
-   * Generate snapshot for recorded query counts and metrics since previous snapshot.
+   * Generates a snapshot for load stats recorded in this counter. Successive snapshots represent
+   * load stats recorded for the interval since the previous snapshot. So taking a snapshot clears
+   * the counter state except for ongoing RPC recordings.
    *
    * <p>This method is not thread-safe and must be called from {@link
    * io.grpc.LoadBalancer.Helper#getSynchronizationContext()}.
    */
-  @Override
-  public ClientLoadSnapshot snapshot() {
+  ClientLoadSnapshot snapshot() {
     Map<String, MetricValue> aggregatedValues = new HashMap<>();
     for (MetricRecorder recorder : metricRecorders) {
       Map<String, MetricValue> map = recorder.takeAll();
@@ -121,9 +127,17 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
         aggregatedValues);
   }
 
+  void setActive(boolean value) {
+    active = value;
+  }
+
+  boolean isActive() {
+    return active;
+  }
+
   /**
-   * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter} to be sent as
-   * part of {@link io.envoyproxy.envoy.api.v2.endpoint.ClusterStats} to the balancer.
+   * A {@link ClientLoadSnapshot} represents a snapshot of {@link ClientLoadCounter}, which is a
+   * read-only copy of load stats recorded for some period of time.
    */
   static final class ClientLoadSnapshot {
 
@@ -248,16 +262,18 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
   }
 
   /**
-   * An {@link XdsClientLoadRecorder} instance records and aggregates client-side load data into an
-   * {@link ClientLoadCounter} object.
+   * An {@link LoadRecordingStreamTracerFactory} instance for creating client stream tracers that
+   * records and aggregates client-side load data into an {@link ClientLoadCounter} object.
    */
   @ThreadSafe
-  static final class XdsClientLoadRecorder extends ClientStreamTracer.Factory {
+  @VisibleForTesting
+  static final class LoadRecordingStreamTracerFactory extends ClientStreamTracer.Factory {
 
     private final ClientStreamTracer.Factory delegate;
-    private final StatsCounter counter;
+    private final ClientLoadCounter counter;
 
-    XdsClientLoadRecorder(StatsCounter counter, ClientStreamTracer.Factory delegate) {
+    LoadRecordingStreamTracerFactory(ClientLoadCounter counter,
+        ClientStreamTracer.Factory delegate) {
       this.counter = checkNotNull(counter, "counter");
       this.delegate = checkNotNull(delegate, "delegate");
     }
@@ -279,18 +295,29 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
         }
       };
     }
+
+    @VisibleForTesting
+    ClientLoadCounter getCounter() {
+      return counter;
+    }
+
+    @VisibleForTesting
+    ClientStreamTracer.Factory delegate() {
+      return delegate;
+    }
   }
 
   /**
-   * Listener implementation to receive backend metrics with locality-level aggregation.
+   * Listener implementation to receive backend metrics and record metric values in the provided
+   * {@link ClientLoadCounter}.
    */
   @ThreadSafe
-  static final class LocalityMetricsListener implements OrcaPerRequestReportListener,
-      OrcaOobReportListener {
+  static final class MetricsRecordingListener
+      implements OrcaPerRequestReportListener, OrcaOobReportListener {
 
     private final ClientLoadCounter counter;
 
-    LocalityMetricsListener(ClientLoadCounter counter) {
+    MetricsRecordingListener(ClientLoadCounter counter) {
       this.counter = checkNotNull(counter, "counter");
     }
 
@@ -301,6 +328,119 @@ final class ClientLoadCounter extends XdsLoadStatsStore.StatsCounter {
       for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
         counter.recordMetric(entry.getKey(), entry.getValue());
       }
+    }
+
+    @VisibleForTesting
+    ClientLoadCounter getCounter() {
+      return counter;
+    }
+  }
+
+  /**
+   * Base class for {@link SubchannelPicker} wrapper classes that intercept "RPC-capable"
+   * {@link PickResult}s with applying a custom {@link ClientStreamTracer.Factory} for stream
+   * instrumenting purposes.
+   */
+  @VisibleForTesting
+  abstract static class TracerWrappingSubchannelPicker extends SubchannelPicker {
+
+    private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
+        new ClientStreamTracer() {
+        };
+    private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
+        new ClientStreamTracer.Factory() {
+          @Override
+          public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+            return NOOP_CLIENT_STREAM_TRACER;
+          }
+        };
+
+    protected abstract SubchannelPicker delegate();
+
+    protected abstract ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory);
+
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      PickResult result = delegate().pickSubchannel(args);
+      if (!result.getStatus().isOk()) {
+        return result;
+      }
+      if (result.getSubchannel() == null) {
+        return result;
+      }
+      ClientStreamTracer.Factory originFactory = result.getStreamTracerFactory();
+      if (originFactory == null) {
+        originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
+      }
+      return PickResult.withSubchannel(result.getSubchannel(), wrapTracerFactory(originFactory));
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
+    }
+  }
+
+  /**
+   * A wrapper class that wraps a {@link SubchannelPicker} instance and associate it with a {@link
+   * ClientLoadCounter}. All "RPC-capable" {@link PickResult}s picked will be intercepted with
+   * client side load recording logic such that RPC activities occurring in the {@link PickResult}'s
+   * {@link io.grpc.LoadBalancer.Subchannel} will be recorded in the associated {@link
+   * ClientLoadCounter}.
+   */
+  @ThreadSafe
+  static final class LoadRecordingSubchannelPicker extends TracerWrappingSubchannelPicker {
+
+    private final ClientLoadCounter counter;
+    private final SubchannelPicker delegate;
+
+    LoadRecordingSubchannelPicker(ClientLoadCounter counter, SubchannelPicker delegate) {
+      this.counter = checkNotNull(counter, "counter");
+      this.delegate = checkNotNull(delegate, "delegate");
+    }
+
+    @Override
+    protected SubchannelPicker delegate() {
+      return delegate;
+    }
+
+    @Override
+    protected ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory) {
+      return new LoadRecordingStreamTracerFactory(counter, originFactory);
+    }
+  }
+
+  /**
+   * A wrapper class that wraps {@link SubchannelPicker} instance and associate it with an {@link
+   * OrcaPerRequestReportListener}. All "RPC-capable" {@link PickResult}s picked will be intercepted
+   * with the logic of registering the listener for observing backend metrics.
+   */
+  @ThreadSafe
+  static final class MetricsObservingSubchannelPicker extends TracerWrappingSubchannelPicker {
+
+    private final OrcaPerRequestReportListener listener;
+    private final SubchannelPicker delegate;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
+
+    MetricsObservingSubchannelPicker(OrcaPerRequestReportListener listener,
+        SubchannelPicker delegate,
+        OrcaPerRequestUtil orcaPerRequestUtil) {
+      this.listener = checkNotNull(listener, "listener");
+      this.delegate = checkNotNull(delegate, "delegate");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
+    }
+
+    @Override
+    protected SubchannelPicker delegate() {
+      return delegate;
+    }
+
+    @Override
+    protected ClientStreamTracer.Factory wrapTracerFactory(
+        ClientStreamTracer.Factory originFactory) {
+      return orcaPerRequestUtil.newOrcaClientStreamTracerFactory(originFactory, listener);
     }
   }
 }

@@ -22,6 +22,7 @@ import static io.undertow.servlet.Servlets.servlet;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.ServerBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.AbstractServerImplBuilder;
 import io.grpc.testing.integration.AbstractInteropTest;
@@ -73,7 +74,7 @@ public class UndertowInteropTest extends AbstractInteropTest {
   }
 
   @Override
-  protected void startServer(AbstractServerImplBuilder<?> builer) {
+  protected void startServer(ServerBuilder<?> builer) {
     GrpcServlet grpcServlet =
         new GrpcServlet(((ServletServerBuilder) builer).buildServletAdapter());
     InstanceFactory<? extends Servlet> instanceFactory =

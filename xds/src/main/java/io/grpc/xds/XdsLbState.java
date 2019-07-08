@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.util.logging.Level.FINEST;
 
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
@@ -25,12 +24,12 @@ import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.List;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /**
@@ -56,7 +55,9 @@ class XdsLbState {
 
   private final LocalityStore localityStore;
   private final Helper helper;
+  private final ManagedChannel channel;
   private final AdsStreamCallback adsStreamCallback;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   @Nullable
   private XdsComms xdsComms;
@@ -64,16 +65,18 @@ class XdsLbState {
   XdsLbState(
       String balancerName,
       @Nullable LbConfig childPolicy,
-      @Nullable XdsComms xdsComms,
       Helper helper,
       LocalityStore localityStore,
-      AdsStreamCallback adsStreamCallback) {
+      ManagedChannel channel,
+      AdsStreamCallback adsStreamCallback,
+      BackoffPolicy.Provider backoffPolicyProvider) {
     this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
-    this.xdsComms = xdsComms;
     this.helper = checkNotNull(helper, "helper");
     this.localityStore = checkNotNull(localityStore, "localityStore");
+    this.channel = checkNotNull(channel, "channel");
     this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
   final void handleResolvedAddressGroups(
@@ -83,26 +86,10 @@ class XdsLbState {
     if (xdsComms != null) {
       xdsComms.refreshAdsStream();
     } else {
-      ManagedChannel oobChannel;
-      try {
-        oobChannel = helper.createResolvingOobChannel(balancerName);
-      } catch (UnsupportedOperationException uoe) {
-        // Temporary solution until createResolvingOobChannel is implemented
-        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
-        Logger logger = Logger.getLogger(XdsLbState.class.getName());
-        if (logger.isLoggable(FINEST)) {
-          logger.log(
-              FINEST,
-              "createResolvingOobChannel() not supported by the helper: " + helper,
-              uoe);
-          logger.log(
-              FINEST,
-              "creating oob channel for target {0} using default ManagedChannelBuilder",
-              balancerName);
-        }
-        oobChannel = ManagedChannelBuilder.forTarget(balancerName).build();
-      }
-      xdsComms = new XdsComms(oobChannel, helper, adsStreamCallback, localityStore);
+      // TODO(zdapeng): pass a helper that has the right ChannelLogger for the oobChannel
+      xdsComms = new XdsComms(
+          channel, helper, adsStreamCallback, localityStore, backoffPolicyProvider,
+          GrpcUtil.STOPWATCH_SUPPLIER);
     }
 
     // TODO: maybe update picker
@@ -117,20 +104,12 @@ class XdsLbState {
     localityStore.handleSubchannelState(subchannel, newState);
   }
 
-  /**
-   * Shuts down subchannels and child loadbalancers, and cancels retry timer.
-   */
-  void shutdown() {
-    // TODO: cancel retry timer
+  ManagedChannel shutdownAndReleaseChannel(String message) {
     localityStore.reset();
+    if (xdsComms != null) {
+      xdsComms.shutdownLbRpc(message);
+      xdsComms = null;
+    }
+    return channel;
   }
-
-  @Nullable
-  final XdsComms shutdownAndReleaseXdsComms() {
-    shutdown();
-    XdsComms xdsComms = this.xdsComms;
-    this.xdsComms = null;
-    return xdsComms;
-  }
-
 }

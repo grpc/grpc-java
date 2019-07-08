@@ -674,6 +674,15 @@ final class DnsNameResolver extends NameResolver {
     } catch (ClassNotFoundException e) {
       logger.log(Level.FINE, "Unable to find JndiResourceResolverFactory, skipping.", e);
       return null;
+    } catch (ClassCastException e) {
+      // This can happen if JndiResourceResolverFactory was removed by something like Proguard
+      // combined with a broken ClassLoader that prefers classes from the child over the parent
+      // while also not properly filtering dependencies in the parent that should be hidden. If the
+      // class loader prefers loading from the parent then ResourceresolverFactory would have also
+      // been loaded from the parent. If the class loader filtered deps, then
+      // JndiResourceResolverFactory wouldn't have been found.
+      logger.log(Level.FINE, "Unable to cast JndiResourceResolverFactory, skipping.", e);
+      return null;
     }
     Constructor<? extends ResourceResolverFactory> jndiCtor;
     try {

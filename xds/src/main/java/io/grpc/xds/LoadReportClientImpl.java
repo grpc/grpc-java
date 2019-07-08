@@ -39,6 +39,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.BackoffPolicy.Provider;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
@@ -49,12 +50,13 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of XDS load reporting service. Methods in this class are expected to be called in
- * the same synchronized context that {@link XdsLoadBalancer.Helper#getSynchronizationContext}
- * returns.
+ * Client of xDS load reporting service.
+ *
+ * <p>Methods in this class are expected to be called in the same synchronized context that {@link
+ * XdsLoadBalancer.Helper#getSynchronizationContext} returns.
  */
 @NotThreadSafe
-final class XdsLoadReportClientImpl implements XdsLoadReportClient {
+final class LoadReportClientImpl implements LoadReportClient {
 
   @VisibleForTesting
   static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
@@ -69,30 +71,31 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
   private final Stopwatch retryStopwatch;
   private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final StatsStore statsStore;
+  private final LoadStatsStore loadStatsStore;
   private boolean started;
 
   @Nullable
   private BackoffPolicy lrsRpcRetryPolicy;
   @Nullable
   private ScheduledHandle lrsRpcRetryTimer;
-
   @Nullable
   private LrsStream lrsStream;
+  @Nullable
+  private LoadReportCallback callback;
 
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  private LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, statsStore);
+      LoadStatsStore loadStatsStore) {
+    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, loadStatsStore);
   }
 
   @VisibleForTesting
-  XdsLoadReportClientImpl(ManagedChannel channel,
+  LoadReportClientImpl(ManagedChannel channel,
       Helper helper,
       Supplier<Stopwatch> stopwatchSupplier,
       BackoffPolicy.Provider backoffPolicyProvider,
-      StatsStore statsStore) {
+      LoadStatsStore loadStatsStore) {
     this.channel = checkNotNull(channel, "channel");
     this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -101,25 +104,32 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
     this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.statsStore = checkNotNull(statsStore, "statsStore");
+    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
     started = false;
   }
 
   @Override
-  public void startLoadReporting() {
-    checkState(!started, "load reporting has already started");
+  public void startLoadReporting(LoadReportCallback callback) {
+    if (started) {
+      return;
+    }
+    this.callback = callback;
     started = true;
     startLrsRpc();
   }
 
   @Override
   public void stopLoadReporting() {
+    if (!started) {
+      return;
+    }
     if (lrsRpcRetryTimer != null) {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
       lrsStream.close(null);
     }
+    started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
   }
 
@@ -225,7 +235,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
       ClusterStats report =
-          statsStore.generateLoadReport()
+          loadStatsStore.generateLoadReport()
               .toBuilder()
               .setClusterName(clusterName)
               .setLoadReportInterval(Durations.fromNanos(interval))
@@ -266,6 +276,7 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
+      callback.onReportResponse(loadReportIntervalNano);
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
       // For gRPC use case, LRS response will only contain one cluster, which is the same as in
       // the EDS response.
@@ -333,5 +344,31 @@ final class XdsLoadReportClientImpl implements XdsLoadReportClient {
         lrsStream = null;
       }
     }
+  }
+
+  /**
+   * Factory class for creating {@link LoadReportClient} instances.
+   */
+  abstract static class LoadReportClientFactory {
+
+    private static final LoadReportClientFactory DEFAULT_INSTANCE =
+        new LoadReportClientFactory() {
+          @Override
+          LoadReportClient createLoadReportClient(
+              ManagedChannel channel,
+              Helper helper,
+              Provider backoffPolicyProvider,
+              LoadStatsStore loadStatsStore) {
+            return new LoadReportClientImpl(channel, helper, backoffPolicyProvider,
+                loadStatsStore);
+          }
+        };
+
+    static LoadReportClientFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
+        BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
   }
 }

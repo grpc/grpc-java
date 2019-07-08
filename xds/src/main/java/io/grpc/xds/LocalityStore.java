@@ -26,7 +26,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.ImmutableList;
-import io.grpc.ChannelLogger.ChannelLogLevel;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
@@ -41,17 +41,23 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
+import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
+import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
@@ -69,6 +75,10 @@ interface LocalityStore {
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
+  void updateOobMetricsReportInterval(long reportIntervalNano);
+
+  LoadStatsStore getLoadStatsStore();
+
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
 
@@ -76,24 +86,37 @@ interface LocalityStore {
     private final PickerFactory pickerFactory;
     private final LoadBalancerProvider loadBalancerProvider;
     private final ThreadSafeRandom random;
+    private final LoadStatsStore loadStatsStore;
+    private final OrcaPerRequestUtil orcaPerRequestUtil;
+    private final OrcaOobUtil orcaOobUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
+    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
+    private long metricsReportIntervalNano = -1;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
-      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance);
+      this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+          new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
     LocalityStoreImpl(
-        Helper helper, PickerFactory pickerFactory, LoadBalancerRegistry lbRegistry,
-        ThreadSafeRandom random) {
-      this.helper = helper;
-      this.pickerFactory = pickerFactory;
+        Helper helper,
+        PickerFactory pickerFactory,
+        LoadBalancerRegistry lbRegistry,
+        ThreadSafeRandom random,
+        LoadStatsStore loadStatsStore,
+        OrcaPerRequestUtil orcaPerRequestUtil,
+        OrcaOobUtil orcaOobUtil) {
+      this.helper = checkNotNull(helper, "helper");
+      this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
       loadBalancerProvider = checkNotNull(
           lbRegistry.getProvider(ROUND_ROBIN),
           "Unable to find '%s' LoadBalancer", ROUND_ROBIN);
-      this.random = random;
+      this.random = checkNotNull(random, "random");
+      this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
+      this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
+      this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
     }
 
     @VisibleForTesting // Introduced for testing only.
@@ -106,13 +129,15 @@ interface LocalityStore {
       final ImmutableList<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
+      final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
           ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
-          ThreadSafeRandom random) {
+          ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
         this.random = random;
+        this.loadStatsStore = loadStatsStore;
       }
 
       @Override
@@ -120,11 +145,20 @@ interface LocalityStore {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
           if (rand < dropOverload.dropsPerMillion) {
+            loadStatsStore.recordDroppedRequest(dropOverload.category);
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
         }
         return delegate.pickSubchannel(args);
+      }
+
+      @Override
+      public String toString() {
+        return MoreObjects.toStringHelper(this)
+            .add("dropOverloads", dropOverloads)
+            .add("delegate", delegate)
+            .toString();
       }
     }
 
@@ -148,10 +182,11 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        localityLbInfo.shutdown();
+      for (XdsLocality locality : localityMap.keySet()) {
+        localityMap.get(locality).shutdown();
+        loadStatsStore.removeLocality(locality);
       }
-      localityMap = new HashMap<>();
+      localityMap = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
@@ -159,18 +194,14 @@ interface LocalityStore {
     public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
+      Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
 
-      Iterator<XdsLocality> iterator = oldLocalities.iterator();
-      while (iterator.hasNext()) {
-        XdsLocality oldLocality = iterator.next();
+      final Set<XdsLocality> toRemove = new HashSet<>();
+      for (XdsLocality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
+          toRemove.add(oldLocality);
           // No graceful transition until a high-level lb graceful transition design is available.
           localityMap.get(oldLocality).shutdown();
-          iterator.remove();
-          if (localityMap.isEmpty()) {
-            // down-size the map
-            localityMap = new HashMap<>();
-          }
         }
       }
 
@@ -183,22 +214,27 @@ interface LocalityStore {
         LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          LocalityLbInfo oldLocalityLbInfo
-              = localityMap.get(newLocality);
+          LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
           childHelper = oldLocalityLbInfo.childHelper;
-          localityLbInfo = new LocalityLbInfo(
-              localityInfoMap.get(newLocality).localityWeight,
-              oldLocalityLbInfo.childBalancer,
-              childHelper);
+          localityLbInfo =
+              new LocalityLbInfo(oldLocalityLbInfo.localityWeight,
+                  oldLocalityLbInfo.childBalancer,
+                  childHelper);
         } else {
-          childHelper = new ChildHelper(newLocality);
+          loadStatsStore.addLocality(newLocality);
+          childHelper =
+              new ChildHelper(newLocality, loadStatsStore.getLocalityCounter(newLocality),
+                  orcaOobUtil);
           localityLbInfo =
               new LocalityLbInfo(
                   localityInfoMap.get(newLocality).localityWeight,
                   loadBalancerProvider.newLoadBalancer(childHelper),
                   childHelper);
-          localityMap.put(newLocality, localityLbInfo);
+          if (metricsReportIntervalNano > 0) {
+            localityLbInfo.childHelper.updateMetricsReportInterval(metricsReportIntervalNano);
+          }
         }
+        updatedLocalityMap.put(newLocality, localityLbInfo);
         // TODO: put endPointWeights into attributes for WRR.
         localityLbInfo.childBalancer
             .handleResolvedAddresses(
@@ -212,14 +248,41 @@ interface LocalityStore {
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
+      localityMap = Collections.unmodifiableMap(updatedLocalityMap);
 
       updatePicker(newState, childPickers);
 
+      // There is a race between picking a subchannel and updating localities, which leads to
+      // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
+      // loads will not be recorded. We consider this to be natural. By removing locality counters
+      // after updating subchannel pickers, we eliminate the race and conservatively record loads
+      // happening in that period.
+      helper.getSynchronizationContext().execute(new Runnable() {
+        @Override
+        public void run() {
+          for (XdsLocality locality : toRemove) {
+            loadStatsStore.removeLocality(locality);
+          }
+        }
+      });
     }
 
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
+    }
+
+    @Override
+    public LoadStatsStore getLoadStatsStore() {
+      return loadStatsStore;
+    }
+
+    @Override
+    public void updateOobMetricsReportInterval(long reportIntervalNano) {
+      metricsReportIntervalNano = reportIntervalNano;
+      for (LocalityLbInfo lbInfo : localityMap.values()) {
+        lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
+      }
     }
 
     @Nullable
@@ -286,15 +349,13 @@ interface LocalityStore {
       }
 
       if (!dropOverloads.isEmpty()) {
-        picker = new DroppablePicker(dropOverloads, picker, random);
+        picker = new DroppablePicker(dropOverloads, picker, random, loadStatsStore);
         if (state == null) {
           state = IDLE;
         }
       }
 
       if (state != null) {
-        helper.getChannelLogger().log(
-            ChannelLogLevel.INFO, "Picker updated - state: {0}, picker: {1}", state, picker);
         helper.updateBalancingState(state, picker);
       }
     }
@@ -323,42 +384,63 @@ interface LocalityStore {
 
     class ChildHelper extends ForwardingLoadBalancerHelper {
 
-      private final XdsLocality locality;
+      private final OrcaReportingHelperWrapper orcaReportingHelperWrapper;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = null;
 
-      ChildHelper(XdsLocality locality) {
-        this.locality = checkNotNull(locality, "locality");
+      ChildHelper(final XdsLocality locality, final ClientLoadCounter counter,
+          OrcaOobUtil orcaOobUtil) {
+        checkNotNull(locality, "locality");
+        checkNotNull(counter, "counter");
+        checkNotNull(orcaOobUtil, "orcaOobUtil");
+        Helper delegate = new ForwardingLoadBalancerHelper() {
+          @Override
+          protected Helper delegate() {
+            return helper;
+          }
+
+          @Override
+          public void updateBalancingState(ConnectivityState newState,
+              final SubchannelPicker newPicker) {
+            checkNotNull(newState, "newState");
+            checkNotNull(newPicker, "newPicker");
+
+            currentChildState = newState;
+            currentChildPicker =
+                new LoadRecordingSubchannelPicker(counter,
+                    new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
+                        newPicker, orcaPerRequestUtil));
+
+            // delegate to parent helper
+            updateChildState(locality, newState, currentChildPicker);
+          }
+
+          @Override
+          public String toString() {
+            return MoreObjects.toStringHelper(this).add("locality", locality).toString();
+          }
+
+          @Override
+          public String getAuthority() {
+            //FIXME: This should be a new proposed field of Locality, locality_name
+            return locality.getSubzone();
+          }
+        };
+        orcaReportingHelperWrapper =
+            checkNotNull(orcaOobUtil, "orcaOobUtil")
+                .newOrcaReportingHelperWrapper(delegate, new MetricsRecordingListener(counter));
+      }
+
+      void updateMetricsReportInterval(long intervalNanos) {
+        orcaReportingHelperWrapper
+            .setReportingConfig(OrcaReportingConfig.newBuilder()
+                .setReportInterval(intervalNanos, TimeUnit.NANOSECONDS).build());
       }
 
       @Override
       protected Helper delegate() {
-        return helper;
-      }
-
-      // This is triggered by child balancer
-      @Override
-      public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        checkNotNull(newState, "newState");
-        checkNotNull(newPicker, "newPicker");
-
-        currentChildState = newState;
-        currentChildPicker = newPicker;
-
-        // delegate to parent helper
-        updateChildState(locality, newState, newPicker);
-      }
-
-      @Override
-      public String toString() {
-        return MoreObjects.toStringHelper(this).add("locality", locality).toString();
-      }
-
-      @Override
-      public String getAuthority() {
-        //FIXME: This should be a new proposed field of Locality, locality_name
-        return locality.getSubzone();
+        return orcaReportingHelperWrapper.asHelper();
       }
     }
   }

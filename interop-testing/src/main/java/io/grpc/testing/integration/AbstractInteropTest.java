@@ -52,6 +52,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Server;
+import io.grpc.ServerBuilder;
 import io.grpc.ServerCall;
 import io.grpc.ServerCallHandler;
 import io.grpc.ServerInterceptor;
@@ -118,6 +119,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.SSLSession;
@@ -159,6 +161,7 @@ public abstract class AbstractInteropTest {
 
   private ScheduledExecutorService testServiceExecutor;
   private Server server;
+  private boolean customCensusModulePresent;
 
   private final LinkedBlockingQueue<ServerStreamTracerInfo> serverStreamTracers =
       new LinkedBlockingQueue<>();
@@ -211,7 +214,7 @@ public abstract class AbstractInteropTest {
 
   protected static final Empty EMPTY = Empty.getDefaultInstance();
 
-  private void configBuilder(@Nullable AbstractServerImplBuilder<?> builder) {
+  private void configBuilder(@Nullable ServerBuilder<?> builder) {
     if (builder == null) {
       return;
     }
@@ -230,17 +233,24 @@ public abstract class AbstractInteropTest {
                 new TestServiceImpl(testServiceExecutor),
                 allInterceptors))
         .addStreamTracerFactory(serverStreamTracerFactory);
-    io.grpc.internal.TestingAccessor.setStatsImplementation(
-        builder,
-        new CensusStatsModule(
-            tagger,
-            tagContextBinarySerializer,
-            serverStatsRecorder,
-            GrpcUtil.STOPWATCH_SUPPLIER,
-            true, true, true, false /* real-time metrics */));
+    if (builder instanceof AbstractServerImplBuilder) {
+      customCensusModulePresent = true;
+      AbstractServerImplBuilder<?> sb = (AbstractServerImplBuilder<?>) builder;
+      io.grpc.internal.TestingAccessor.setStatsImplementation(
+          sb,
+          new CensusStatsModule(
+              tagger,
+              tagContextBinarySerializer,
+              serverStatsRecorder,
+              GrpcUtil.STOPWATCH_SUPPLIER,
+              true, true, true, false /* real-time metrics */));
+    }
+    if (metricsExpected()) {
+      assertThat(builder).isInstanceOf(AbstractServerImplBuilder.class);
+    }
   }
 
-  protected void startServer(@Nullable AbstractServerImplBuilder<?> builder) {
+  protected void startServer(@Nullable ServerBuilder<?> builder) {
     if (builder == null) {
       server = null;
       return;
@@ -297,7 +307,7 @@ public abstract class AbstractInteropTest {
    */
   @Before
   public void setUp() {
-    AbstractServerImplBuilder<?> builder = getServerBuilder();
+    ServerBuilder<?> builder = getServerBuilder();
     configBuilder(builder);
     startServer(builder);
     channel = createChannel();
@@ -343,7 +353,7 @@ public abstract class AbstractInteropTest {
    * it shouldn't start a server in the same process.
    */
   @Nullable
-  protected AbstractServerImplBuilder<?> getServerBuilder() {
+  protected ServerBuilder<?> getServerBuilder() {
     return null;
   }
 
@@ -1088,7 +1098,7 @@ public abstract class AbstractInteropTest {
     // warm up the channel and JVM
     blockingStub.emptyCall(Empty.getDefaultInstance());
     TestServiceGrpc.TestServiceBlockingStub stub =
-        blockingStub.withDeadlineAfter(10, TimeUnit.MILLISECONDS);
+        blockingStub.withDeadlineAfter(100, TimeUnit.MILLISECONDS);
     StreamingOutputCallRequest request = StreamingOutputCallRequest.newBuilder()
         .addResponseParameters(ResponseParameters.newBuilder()
             .setIntervalUs((int) TimeUnit.SECONDS.toMicros(20)))
@@ -1098,6 +1108,14 @@ public abstract class AbstractInteropTest {
       fail("Expected deadline to be exceeded");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.DEADLINE_EXCEEDED.getCode(), ex.getStatus().getCode());
+      String desc = ex.getStatus().getDescription();
+      assertTrue(desc,
+          // There is a race between client and server-side deadline expiration.
+          // If client expires first, it'd generate this message
+          Pattern.matches("deadline exceeded after .*ns. \\[.*\\]", desc)
+          // If server expires first, it'd reset the stream and client would generate a different
+          // message
+          || desc.startsWith("ClientCall was cancelled at or after deadline."));
     }
 
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
@@ -1162,6 +1180,8 @@ public abstract class AbstractInteropTest {
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertThat(ex.getStatus().getDescription())
+        .startsWith("ClientCall started after deadline exceeded");
     }
 
     // CensusStreamTracerModule record final status in the interceptor, thus is guaranteed to be
@@ -1185,6 +1205,8 @@ public abstract class AbstractInteropTest {
       fail("Should have thrown");
     } catch (StatusRuntimeException ex) {
       assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+      assertThat(ex.getStatus().getDescription())
+        .startsWith("ClientCall started after deadline exceeded");
     }
     assertStatsTrace("grpc.testing.TestService/EmptyCall", Status.Code.OK);
     if (metricsExpected()) {
@@ -1466,6 +1488,7 @@ public abstract class AbstractInteropTest {
   @Test(timeout = 10000)
   public void censusContextsPropagated() {
     Assume.assumeTrue("Skip the test because server is not in the same process.", server != null);
+    Assume.assumeTrue(customCensusModulePresent);
     Span clientParentSpan = Tracing.getTracer().spanBuilder("Test.interopTest").startSpan();
     // A valid ID is guaranteed to be unique, so we can verify it is actually propagated.
     assertTrue(clientParentSpan.getContext().getTraceId().isValid());

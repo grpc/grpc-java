@@ -42,6 +42,7 @@ $ VERSION_FILES=(
   examples/android/clientcache/app/build.gradle
   examples/android/helloworld/app/build.gradle
   examples/android/routeguide/app/build.gradle
+  examples/android/strictmode/app/build.gradle
   examples/example-alts/build.gradle
   examples/example-gauth/build.gradle
   examples/example-gauth/pom.xml

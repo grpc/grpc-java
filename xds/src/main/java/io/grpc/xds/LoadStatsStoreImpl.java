@@ -24,14 +24,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
-import io.grpc.ClientStreamTracer;
-import io.grpc.ClientStreamTracer.StreamInfo;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.Metadata;
-import io.grpc.Status;
 import io.grpc.xds.ClientLoadCounter.ClientLoadSnapshot;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.ClientLoadCounter.XdsClientLoadRecorder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -39,46 +33,33 @@ import java.util.concurrent.atomic.AtomicLong;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link XdsLoadStatsStore} instance holds the client side load stats for a cluster.
+ * An {@link LoadStatsStoreImpl} instance holds the load stats for a cluster from an gRPC
+ * client's perspective by maintaining a set of locality counters for each locality it is tracking
+ * loads for.
  */
 @NotThreadSafe
-final class XdsLoadStatsStore implements StatsStore {
+final class LoadStatsStoreImpl implements LoadStatsStore {
 
-  private static final ClientStreamTracer NOOP_CLIENT_STREAM_TRACER =
-      new ClientStreamTracer() {
-      };
-  private static final ClientStreamTracer.Factory NOOP_CLIENT_STREAM_TRACER_FACTORY =
-      new ClientStreamTracer.Factory() {
-        @Override
-        public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
-          return NOOP_CLIENT_STREAM_TRACER;
-        }
-      };
-
-  private final ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters;
-  // Cluster level dropped request counts for each category specified in the DropOverload policy.
+  private final ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
+  // Cluster level dropped request counts for each category decision made by xDS load balancer.
   private final ConcurrentMap<String, AtomicLong> dropCounters;
 
-  XdsLoadStatsStore() {
-    this(new ConcurrentHashMap<XdsLocality, StatsCounter>(),
+  LoadStatsStoreImpl() {
+    this(new ConcurrentHashMap<XdsLocality, ClientLoadCounter>(),
         new ConcurrentHashMap<String, AtomicLong>());
   }
 
   @VisibleForTesting
-  XdsLoadStatsStore(ConcurrentMap<XdsLocality, StatsCounter> localityLoadCounters,
+  LoadStatsStoreImpl(ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters,
       ConcurrentMap<String, AtomicLong> dropCounters) {
     this.localityLoadCounters = checkNotNull(localityLoadCounters, "localityLoadCounters");
     this.dropCounters = checkNotNull(dropCounters, "dropCounters");
   }
 
-  /**
-   * Generates a {@link ClusterStats} containing client side load stats and backend metrics
-   * (if any) in locality granularity.
-   */
   @Override
   public ClusterStats generateLoadReport() {
     ClusterStats.Builder statsBuilder = ClusterStats.newBuilder();
-    for (Map.Entry<XdsLocality, StatsCounter> entry : localityLoadCounters.entrySet()) {
+    for (Map.Entry<XdsLocality, ClientLoadCounter> entry : localityLoadCounters.entrySet()) {
       ClientLoadSnapshot snapshot = entry.getValue().snapshot();
       UpstreamLocalityStats.Builder localityStatsBuilder =
           UpstreamLocalityStats.newBuilder().setLocality(entry.getKey().toLocalityProto());
@@ -113,13 +94,9 @@ final class XdsLoadStatsStore implements StatsStore {
     return statsBuilder.build();
   }
 
-  /**
-   * Create a {@link ClientLoadCounter} for the provided locality or make it active if already in
-   * this {@link XdsLoadStatsStore}.
-   */
   @Override
   public void addLocality(final XdsLocality locality) {
-    StatsCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter == null || !counter.isActive(),
         "An active counter for locality %s already exists", locality);
     if (counter == null) {
@@ -129,20 +106,16 @@ final class XdsLoadStatsStore implements StatsStore {
     }
   }
 
-  /**
-   * Deactivate the {@link StatsCounter} for the provided locality in by this
-   * {@link XdsLoadStatsStore}.
-   */
   @Override
   public void removeLocality(final XdsLocality locality) {
-    StatsCounter counter = localityLoadCounters.get(locality);
+    ClientLoadCounter counter = localityLoadCounters.get(locality);
     checkState(counter != null && counter.isActive(),
         "No active counter for locality %s exists", locality);
     counter.setActive(false);
   }
 
   @Override
-  public StatsCounter getLocalityCounter(final XdsLocality locality) {
+  public ClientLoadCounter getLocalityCounter(final XdsLocality locality) {
     return localityLoadCounters.get(locality);
   }
 
@@ -156,48 +129,5 @@ final class XdsLoadStatsStore implements StatsStore {
       }
     }
     counter.getAndIncrement();
-  }
-
-  @Override
-  public PickResult interceptPickResult(PickResult pickResult, XdsLocality locality) {
-    if (!pickResult.getStatus().isOk()) {
-      return pickResult;
-    }
-    StatsCounter counter = localityLoadCounters.get(locality);
-    if (counter == null) {
-      return pickResult;
-    }
-    ClientStreamTracer.Factory originFactory = pickResult.getStreamTracerFactory();
-    if (originFactory == null) {
-      originFactory = NOOP_CLIENT_STREAM_TRACER_FACTORY;
-    }
-    XdsClientLoadRecorder recorder = new XdsClientLoadRecorder(counter, originFactory);
-    return PickResult.withSubchannel(pickResult.getSubchannel(), recorder);
-  }
-
-
-  /**
-   * Blueprint for counters that can can record number of calls in-progress, succeeded, failed,
-   * issued and backend metrics.
-   */
-  abstract static class StatsCounter {
-
-    private boolean active = true;
-
-    abstract void recordCallStarted();
-
-    abstract void recordCallFinished(Status status);
-
-    abstract void recordMetric(String name, double value);
-
-    abstract ClientLoadSnapshot snapshot();
-
-    boolean isActive() {
-      return active;
-    }
-
-    void setActive(boolean value) {
-      active = value;
-    }
   }
 }

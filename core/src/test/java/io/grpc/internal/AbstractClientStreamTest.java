@@ -39,6 +39,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Deadline;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -50,6 +51,7 @@ import io.grpc.internal.testing.TestClientStreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -77,6 +79,13 @@ public class AbstractClientStreamTest {
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   private final TransportTracer transportTracer = new TransportTracer();
+  private static final SocketAddress SERVER_ADDR = new SocketAddress() {
+      @Override
+      public String toString() {
+        return "fake_server_addr";
+      }
+    };
+
   @Mock private ClientStreamListener mockListener;
 
   @Before
@@ -464,6 +473,15 @@ public class AbstractClientStreamTest {
         .isGreaterThan(TimeUnit.MILLISECONDS.toNanos(600));
   }
 
+  @Test
+  public void appendTimeoutInsight() {
+    InsightBuilder insight = new InsightBuilder();
+    AbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[remote_addr=fake_server_addr]");
+  }
+
   /**
    * No-op base class for testing.
    */
@@ -525,7 +543,7 @@ public class AbstractClientStreamTest {
 
     @Override
     public Attributes getAttributes() {
-      return Attributes.EMPTY;
+      return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, SERVER_ADDR).build();
     }
   }
 

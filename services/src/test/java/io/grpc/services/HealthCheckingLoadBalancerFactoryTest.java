@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -95,6 +96,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.hamcrest.MockitoHamcrest;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /** Tests for {@link HealthCheckingLoadBalancerFactory}. */
 @RunWith(JUnit4.class)
@@ -1015,8 +1018,11 @@ public class HealthCheckingLoadBalancerFactoryTest {
     verifyNoMoreInteractions(origLb);
     ServerSideCall[] serverCalls = new ServerSideCall[NUM_SUBCHANNELS];
 
+    final Subchannel[] wrappedSubchannels = new Subchannel[NUM_SUBCHANNELS];
+
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       Subchannel subchannel = createSubchannel(i, Attributes.EMPTY);
+      wrappedSubchannels[i] = subchannel;
       SubchannelStateListener mockListener = mockStateListeners[i];
       assertThat(unwrap(subchannel)).isSameInstanceAs(subchannels[i]);
 
@@ -1032,6 +1038,16 @@ public class HealthCheckingLoadBalancerFactoryTest {
           eq(ConnectivityStateInfo.forNonError(CONNECTING)));
     }
 
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) {
+          for (int i = 0; i < NUM_SUBCHANNELS; i++) {
+            wrappedSubchannels[i].shutdown();
+          }
+          return null;
+        }
+      }).when(origLb).shutdown();
+
     // Shut down the balancer
     hcLbEventDelivery.shutdown();
     verify(origLb).shutdown();
@@ -1039,8 +1055,8 @@ public class HealthCheckingLoadBalancerFactoryTest {
     // Health check stream should be cancelled
     for (int i = 0; i < NUM_SUBCHANNELS; i++) {
       assertThat(serverCalls[i].cancelled).isTrue();
-      // LoadBalancer API requires no more callbacks on LoadBalancer after shutdown() is called.
-      verifyNoMoreInteractions(origLb, mockStateListeners[i]);
+      verifyNoMoreInteractions(origLb);
+      verify(mockStateListeners[i]).onSubchannelState(ConnectivityStateInfo.forNonError(SHUTDOWN));
       // No more health check call is made or scheduled
       assertThat(healthImpls[i].calls).isEmpty();
     }

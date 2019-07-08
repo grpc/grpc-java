@@ -550,7 +550,13 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
 
   private class TransportStateImpl extends NettyClientStream.TransportState {
     public TransportStateImpl(NettyClientHandler handler, int maxMessageSize) {
-      super(handler, channel.eventLoop(), maxMessageSize, StatsTraceContext.NOOP, transportTracer);
+      super(
+          handler,
+          channel.eventLoop(),
+          maxMessageSize,
+          StatsTraceContext.NOOP,
+          transportTracer,
+          "methodName");
     }
 
     @Override

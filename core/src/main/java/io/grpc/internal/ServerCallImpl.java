@@ -37,8 +37,8 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
 import io.grpc.Status;
-import io.grpc.perfmark.PerfMark;
-import io.grpc.perfmark.PerfTag;
+import io.perfmark.PerfMark;
+import io.perfmark.Tag;
 import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -54,7 +54,7 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   private final ServerStream stream;
   private final MethodDescriptor<ReqT, RespT> method;
-  private final PerfTag tag;
+  private final Tag tag;
   private final Context.CancellableContext context;
   private final byte[] messageAcceptEncoding;
   private final DecompressorRegistry decompressorRegistry;
@@ -71,31 +71,35 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
   ServerCallImpl(ServerStream stream, MethodDescriptor<ReqT, RespT> method,
       Metadata inboundHeaders, Context.CancellableContext context,
       DecompressorRegistry decompressorRegistry, CompressorRegistry compressorRegistry,
-      CallTracer serverCallTracer) {
+      CallTracer serverCallTracer, Tag tag) {
     this.stream = stream;
     this.method = method;
-    // TODO(carl-mastrangelo): consider moving this to the ServerImpl to record startCall.
-    this.tag = PerfMark.createTag(method.getFullMethodName());
     this.context = context;
     this.messageAcceptEncoding = inboundHeaders.get(MESSAGE_ACCEPT_ENCODING_KEY);
     this.decompressorRegistry = decompressorRegistry;
     this.compressorRegistry = compressorRegistry;
     this.serverCallTracer = serverCallTracer;
     this.serverCallTracer.reportCallStarted();
+    this.tag = tag;
   }
 
   @Override
   public void request(int numMessages) {
-    stream.request(numMessages);
+    PerfMark.startTask("ServerCall.request", tag);
+    try {
+      stream.request(numMessages);
+    } finally {
+      PerfMark.stopTask("ServerCall.request", tag);
+    }
   }
 
   @Override
   public void sendHeaders(Metadata headers) {
-    PerfMark.taskStart(tag, "ServerCall.sendHeaders");
+    PerfMark.startTask("ServerCall.sendHeaders", tag);
     try {
       sendHeadersInternal(headers);
     } finally {
-      PerfMark.taskEnd(tag, "ServerCall.sendHeaders");
+      PerfMark.stopTask("ServerCall.sendHeaders", tag);
     }
   }
 
@@ -140,11 +144,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void sendMessage(RespT message) {
-    PerfMark.taskStart(tag, "ServerCall.sendMessage");
+    PerfMark.startTask("ServerCall.sendMessage", tag);
     try {
       sendMessageInternal(message);
     } finally {
-      PerfMark.taskEnd(tag, "ServerCall.sendMessage");
+      PerfMark.stopTask("ServerCall.sendMessage", tag);
     }
   }
 
@@ -193,11 +197,11 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
 
   @Override
   public void close(Status status, Metadata trailers) {
-    PerfMark.taskStart(tag, "ServerCall.close");
+    PerfMark.startTask("ServerCall.close", tag);
     try {
       closeInternal(status, trailers);
     } finally {
-      PerfMark.taskEnd(tag, "ServerCall.close");
+      PerfMark.stopTask("ServerCall.close", tag);
     }
   }
 
@@ -281,15 +285,23 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
           MoreExecutors.directExecutor());
     }
 
-    @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
     @Override
-    public void messagesAvailable(final MessageProducer producer) {
+    public void messagesAvailable(MessageProducer producer) {
+      PerfMark.startTask("ServerStreamListener.messagesAvailable", call.tag);
+      try {
+        messagesAvailableInternal(producer);
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.messagesAvailable", call.tag);
+      }
+    }
+
+    @SuppressWarnings("Finally") // The code avoids suppressing the exception thrown from try
+    private void messagesAvailableInternal(final MessageProducer producer) {
       if (call.cancelled) {
         GrpcUtil.closeQuietly(producer);
         return;
       }
 
-      PerfMark.taskStart(call.tag, "ServerCall.messagesAvailable");
       InputStream message;
       try {
         while ((message = producer.next()) != null) {
@@ -305,58 +317,58 @@ final class ServerCallImpl<ReqT, RespT> extends ServerCall<ReqT, RespT> {
         GrpcUtil.closeQuietly(producer);
         Throwables.throwIfUnchecked(t);
         throw new RuntimeException(t);
-      } finally {
-        PerfMark.taskEnd(call.tag, "ServerCall.messagesAvailable");
       }
     }
 
     @Override
     public void halfClosed() {
-      if (call.cancelled) {
-        return;
-      }
-
-      PerfMark.taskStart(call.tag, "ServerCall.halfClosed");
-
+      PerfMark.startTask("ServerStreamListener.halfClosed", call.tag);
       try {
+        if (call.cancelled) {
+          return;
+        }
+
         listener.onHalfClose();
       } finally {
-        PerfMark.taskEnd(call.tag, "ServerCall.halfClosed");
+        PerfMark.stopTask("ServerStreamListener.halfClosed", call.tag);
       }
     }
 
     @Override
     public void closed(Status status) {
-      PerfMark.taskStart(call.tag, "ServerCall.closed");
+      PerfMark.startTask("ServerStreamListener.closed", call.tag);
       try {
-        try {
-          if (status.isOk()) {
-            listener.onComplete();
-          } else {
-            call.cancelled = true;
-            listener.onCancel();
-          }
-        } finally {
-          // Cancel context after delivering RPC closure notification to allow the application to
-          // clean up and update any state based on whether onComplete or onCancel was called.
-          context.cancel(null);
+        closedInternal(status);
+      } finally {
+        PerfMark.stopTask("ServerStreamListener.closed", call.tag);
+      }
+    }
 
+    private void closedInternal(Status status) {
+      try {
+        if (status.isOk()) {
+          listener.onComplete();
+        } else {
+          call.cancelled = true;
+          listener.onCancel();
         }
       } finally {
-        PerfMark.taskEnd(call.tag, "ServerCall.closed");
+        // Cancel context after delivering RPC closure notification to allow the application to
+        // clean up and update any state based on whether onComplete or onCancel was called.
+        context.cancel(null);
       }
     }
 
     @Override
     public void onReady() {
-      if (call.cancelled) {
-        return;
-      }
-      PerfMark.taskStart(call.tag, "ServerCall.closed");
+      PerfMark.startTask("ServerStreamListener.onReady", call.tag);
       try {
+        if (call.cancelled) {
+          return;
+        }
         listener.onReady();
       } finally {
-        PerfMark.taskEnd(call.tag, "ServerCall.closed");
+        PerfMark.stopTask("ServerCall.closed", call.tag);
       }
     }
   }

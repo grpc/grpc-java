@@ -33,6 +33,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -58,8 +59,10 @@ public class XdsLbStateTest {
   private Helper helper;
   @Mock
   private AdsStreamCallback adsStreamCallback;
-
+  @Mock
   private LocalityStore localityStore;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
 
   private final FakeClock fakeClock = new FakeClock();
 
@@ -73,6 +76,7 @@ public class XdsLbStateTest {
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
   private ManagedChannel channel;
+  private XdsLbState xdsLbState;
 
 
   @Before
@@ -120,29 +124,33 @@ public class XdsLbStateTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
+
+    xdsLbState = new XdsLbState(
+        BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
+        backoffPolicyProvider);
   }
 
   @Test
-  public void shutdownAndReleaseXdsCommsDoesShutdown() {
-    XdsLbState xdsLbState = mock(XdsLbState.class);
-    xdsLbState.shutdownAndReleaseXdsComms();
-    verify(xdsLbState).shutdown();
+  public void shutdownResetsLocalityStore() {
+    xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    verify(localityStore).reset();
   }
 
   @Test
-  public void handleResolvedAddressGroupsThenShutdown() throws Exception {
-    localityStore = mock(LocalityStore.class);
-    XdsLbState xdsLbState =
-        new XdsLbState(BALANCER_NAME, null, null, helper, localityStore, adsStreamCallback);
+  public void shutdownDoesNotTearDownChannel() {
+    ManagedChannel lbChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    assertThat(lbChannel).isSameInstanceAs(channel);
+    assertThat(channel.isShutdown()).isFalse();
+  }
+
+  @Test
+  public void handleResolvedAddressGroupsTriggerEds() throws Exception {
     xdsLbState.handleResolvedAddressGroups(
         ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
 
     assertThat(streamRecorder.firstValue().get().getTypeUrl())
         .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
 
-    xdsLbState.shutdown();
-    verify(localityStore).reset();
-
-    channel.shutdownNow();
+    xdsLbState.shutdownAndReleaseChannel("End test");
   }
 }

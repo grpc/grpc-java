@@ -56,7 +56,7 @@ publishing {
                     dependencyNode.appendNode('artifactId', dep.name)
                     def version = (dep.name == 'grpc-core') ? '[' + dep.version + ']' : dep.version
                     dependencyNode.appendNode('version', version)
-                    dependencyNode.appendNode('scope', 'runtime')
+                    dependencyNode.appendNode('scope', 'compile')
                 }
             }
         }

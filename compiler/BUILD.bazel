@@ -1,5 +1,6 @@
 load("//:java_grpc_library.bzl", "java_rpc_toolchain")
 
+# This should not generally be referenced. Users should use java_grpc_library
 cc_binary(
     name = "grpc_java_plugin",
     srcs = [
@@ -10,6 +11,7 @@ cc_binary(
     deps = [
         "@com_google_protobuf//:protoc_lib",
     ],
+    visibility = ["//visibility:public"],
 )
 
 java_library(

@@ -71,6 +71,7 @@ java_library(
         ":route_guide_java_proto",
         "@com_google_api_grpc_proto_google_common_protos//jar",
         "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_code_gson_gson//:com_google_code_gson_gson",
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",

@@ -77,6 +77,7 @@ import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
+import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -482,10 +483,12 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
     assertEquals("Can't find decompressor for " + decompressorName, status.getDescription());
+
     verifyNoMoreInteractions(stream);
   }
 
@@ -785,6 +788,7 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).streamId();
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
@@ -1140,7 +1144,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1165,7 +1170,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1190,7 +1196,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1213,7 +1220,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1236,7 +1244,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1259,7 +1268,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 

@@ -83,4 +83,9 @@ public class NoopClientStream implements ClientStream {
 
   @Override
   public void setDeadline(@Nonnull Deadline deadline) {}
+
+  @Override
+  public void appendTimeoutInsight(InsightBuilder insight) {
+    insight.append("noop");
+  }
 }
