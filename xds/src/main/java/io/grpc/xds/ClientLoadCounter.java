@@ -325,7 +325,10 @@ final class ClientLoadCounter {
     public void onLoadReport(OrcaLoadReport report) {
       counter.recordMetric("cpu_utilization", report.getCpuUtilization());
       counter.recordMetric("mem_utilization", report.getMemUtilization());
-      for (Map.Entry<String, Double> entry : report.getRequestCostOrUtilizationMap().entrySet()) {
+      for (Map.Entry<String, Double> entry : report.getRequestCostMap().entrySet()) {
+        counter.recordMetric(entry.getKey(), entry.getValue());
+      }
+      for (Map.Entry<String, Double> entry : report.getUtilizationMap().entrySet()) {
         counter.recordMetric(entry.getKey(), entry.getValue());
       }
     }

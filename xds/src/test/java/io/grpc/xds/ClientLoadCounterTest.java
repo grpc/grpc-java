@@ -161,8 +161,8 @@ public class ClientLoadCounterTest {
         OrcaLoadReport.newBuilder()
             .setCpuUtilization(0.5345)
             .setMemUtilization(0.647)
-            .putRequestCostOrUtilization("named-cost-or-utilization-1", 3453.3525)
-            .putRequestCostOrUtilization("named-cost-or-utilization-2", 532543.14234)
+            .putRequestCost("named-cost-1", 3453.3525)
+            .putRequestCost("named-cost-2", 532543.14234)
             .build();
     listener1.onLoadReport(report);
 
@@ -178,11 +178,11 @@ public class ClientLoadCounterTest {
     assertThat(memMetric.getNumReports()).isEqualTo(2);
     assertThat(memMetric.getTotalValue()).isEqualTo(0.647);
 
-    MetricValue namedMetric1 = snapshot.getMetricValues().get("named-cost-or-utilization-1");
+    MetricValue namedMetric1 = snapshot.getMetricValues().get("named-cost-1");
     assertThat(namedMetric1.getNumReports()).isEqualTo(1);
     assertThat(namedMetric1.getTotalValue()).isEqualTo(3453.3525);
 
-    MetricValue namedMetric2 = snapshot.getMetricValues().get("named-cost-or-utilization-2");
+    MetricValue namedMetric2 = snapshot.getMetricValues().get("named-cost-2");
     assertThat(namedMetric2.getNumReports()).isEqualTo(1);
     assertThat(namedMetric2.getTotalValue()).isEqualTo(532543.14234);
 
@@ -194,7 +194,7 @@ public class ClientLoadCounterTest {
         OrcaLoadReport.newBuilder()
             .setCpuUtilization(0.3423)
             .setMemUtilization(0.654)
-            .putRequestCostOrUtilization("named-cost-or-utilization", 3534.0)
+            .putUtilization("named-utilization", 0.7563)
             .build();
     // Two listeners with the same counter aggregate metrics together.
     listener1.onLoadReport(report);
@@ -209,9 +209,9 @@ public class ClientLoadCounterTest {
     assertThat(memMetric.getNumReports()).isEqualTo(2);
     assertThat(memMetric.getTotalValue()).isEqualTo(0.654 + 0.654);
 
-    MetricValue namedMetric = snapshot.getMetricValues().get("named-cost-or-utilization");
+    MetricValue namedMetric = snapshot.getMetricValues().get("named-utilization");
     assertThat(namedMetric.getNumReports()).isEqualTo(2);
-    assertThat(namedMetric.getTotalValue()).isEqualTo(3534.0 + 3534.0);
+    assertThat(namedMetric.getTotalValue()).isEqualTo(0.7563 + 0.7563);
   }
 
   @Test
