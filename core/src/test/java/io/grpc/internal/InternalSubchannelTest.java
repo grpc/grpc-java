@@ -1145,9 +1145,9 @@ public class InternalSubchannelTest {
     internalSubchannel.obtainActiveTransport();
 
     MockClientTransportInfo t0 = transports.poll();
+    t0.listener.transportReady();
     assertTrue(channelz.containsClientSocket(t0.transport.getLogId()));
     t0.listener.transportShutdown(Status.RESOURCE_EXHAUSTED);
-    fakeClock.forwardNanos(10);
     t0.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(t0.transport.getLogId()));
   }
