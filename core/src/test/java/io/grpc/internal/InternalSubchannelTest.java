@@ -839,6 +839,7 @@ public class InternalSubchannelTest {
     internalSubchannel.shutdown(SHUTDOWN_REASON);
     verify(transportInfo.transport).shutdown(same(SHUTDOWN_REASON));
     assertExactCallbackInvokes("onStateChange:SHUTDOWN");
+    transportInfo.listener.transportShutdown(SHUTDOWN_REASON);
 
     transportInfo.listener.transportTerminated();
     assertExactCallbackInvokes("onTerminated");
@@ -1144,7 +1145,9 @@ public class InternalSubchannelTest {
     internalSubchannel.obtainActiveTransport();
 
     MockClientTransportInfo t0 = transports.poll();
+    t0.listener.transportReady();
     assertTrue(channelz.containsClientSocket(t0.transport.getLogId()));
+    t0.listener.transportShutdown(Status.RESOURCE_EXHAUSTED);
     t0.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(t0.transport.getLogId()));
   }
