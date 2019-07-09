@@ -60,11 +60,8 @@ java_rpc_toolchain = rule(
 
 # "repository" here is for Bazel builds that span multiple WORKSPACES.
 def _path_ignoring_repository(f):
-    if len(f.owner.workspace_root) == 0:
-        return f.short_path
-
     # Bazel creates a _virtual_imports directory in case the .proto source files
-    # need to a accessed at a path that's different from their source path:
+    # need to be accessed at a path that's different from their source path:
     # https://github.com/bazelbuild/bazel/blob/0.27.1/src/main/java/com/google/devtools/build/lib/rules/proto/ProtoCommon.java#L289
     #
     # In that case, the import path of the .proto file is the path relative to
@@ -72,6 +69,9 @@ def _path_ignoring_repository(f):
     virtual_imports = "/_virtual_imports/"
     if virtual_imports in f.path:
         return f.path.split(virtual_imports)[1].split("/", 1)[1]
+    elif len(f.owner.workspace_root) == 0:
+        # |f| is in the main repository
+        return f.short_path
     else:
         # If |f| is a generated file, it will have "bazel-out/*/genfiles" prefix
         # before "external/workspace", so we need to add the starting index of "external/workspace"
