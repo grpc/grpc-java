@@ -24,7 +24,7 @@ import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.InterLocalityPicker.IntraLocalityPicker;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -42,6 +42,15 @@ import org.mockito.junit.MockitoRule;
  */
 @RunWith(JUnit4.class)
 public class InterLocalityPickerTest {
+  private static final XdsLocality LOCALITY0
+      = new XdsLocality("test_region0", "test_zone0", "test_subzone0");
+  private static final XdsLocality LOCALITY1
+      = new XdsLocality("test_region1", "test_zone1", "test_subzone1");
+  private static final XdsLocality LOCALITY2
+      = new XdsLocality("test_region2", "test_zone2", "test_subzone2");
+  private static final XdsLocality LOCALITY3
+      = new XdsLocality("test_region3", "test_zone3", "test_subzone3");
+
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
@@ -102,7 +111,7 @@ public class InterLocalityPickerTest {
 
   @Test
   public void emptyList() {
-    List<WeightedChildPicker> emptyList = new ArrayList<>();
+    List<IntraLocalityPicker> emptyList = new ArrayList<>();
 
     thrown.expect(IllegalArgumentException.class);
     new InterLocalityPicker(emptyList);
@@ -111,23 +120,20 @@ public class InterLocalityPickerTest {
   @Test
   public void negativeWeight() {
     thrown.expect(IllegalArgumentException.class);
-    new WeightedChildPicker(-1, childPicker0);
+    new IntraLocalityPicker(LOCALITY0, -1, childPicker0);
   }
 
   @Test
   public void pickWithFakeRandom() {
-    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
-    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(15, childPicker1);
-    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
-    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(10, childPicker3);
+    IntraLocalityPicker localityPicker0 = new IntraLocalityPicker(LOCALITY0, 0, childPicker0);
+    IntraLocalityPicker localityPicker1 = new IntraLocalityPicker(LOCALITY1, 15, childPicker1);
+    IntraLocalityPicker localityPicker2 = new IntraLocalityPicker(LOCALITY2, 0, childPicker2);
+    IntraLocalityPicker localityPicker3 = new IntraLocalityPicker(LOCALITY3, 10, childPicker3);
 
-    InterLocalityPicker xdsPicker = new InterLocalityPicker(
-        Arrays.asList(
-            weightedChildPicker0,
-            weightedChildPicker1,
-            weightedChildPicker2,
-            weightedChildPicker3),
-        fakeRandom);
+    InterLocalityPicker xdsPicker
+        = new InterLocalityPicker(
+            Arrays.asList(localityPicker0, localityPicker1, localityPicker2,
+                localityPicker3), fakeRandom);
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult1);
@@ -152,18 +158,15 @@ public class InterLocalityPickerTest {
 
   @Test
   public void allZeroWeights() {
-    WeightedChildPicker weightedChildPicker0 = new WeightedChildPicker(0, childPicker0);
-    WeightedChildPicker weightedChildPicker1 = new WeightedChildPicker(0, childPicker1);
-    WeightedChildPicker weightedChildPicker2 = new WeightedChildPicker(0, childPicker2);
-    WeightedChildPicker weightedChildPicker3 = new WeightedChildPicker(0, childPicker3);
+    IntraLocalityPicker localityPicker0 = new IntraLocalityPicker(LOCALITY0, 0, childPicker0);
+    IntraLocalityPicker localityPicker1 = new IntraLocalityPicker(LOCALITY1, 0, childPicker1);
+    IntraLocalityPicker localityPicker2 = new IntraLocalityPicker(LOCALITY2, 0, childPicker2);
+    IntraLocalityPicker localityPicker3 = new IntraLocalityPicker(LOCALITY3, 0, childPicker3);
 
-    InterLocalityPicker xdsPicker = new InterLocalityPicker(
-        Arrays.asList(
-            weightedChildPicker0,
-            weightedChildPicker1,
-            weightedChildPicker2,
-            weightedChildPicker3),
-        fakeRandom);
+    InterLocalityPicker xdsPicker
+        = new InterLocalityPicker(
+        Arrays.asList(localityPicker0, localityPicker1, localityPicker2,
+            localityPicker3), fakeRandom);
 
     fakeRandom.nextInt = 0;
     assertThat(xdsPicker.pickSubchannel(pickSubchannelArgs)).isSameInstanceAs(pickResult0);

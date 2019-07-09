@@ -55,7 +55,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.InterLocalityPicker.IntraLocalityPicker;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl.PickerFactory;
 import io.grpc.xds.OrcaOobUtil.OrcaOobReportListener;
@@ -98,13 +98,13 @@ public class LocalityStoreTest {
     int nextIndex;
 
     @Override
-    public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
-      totalReadyLocalities = childPickers.size();
+    public SubchannelPicker picker(final List<IntraLocalityPicker> intraLocalityPickers) {
+      totalReadyLocalities = intraLocalityPickers.size();
 
       return new SubchannelPicker() {
         @Override
         public PickResult pickSubchannel(PickSubchannelArgs args) {
-          return childPickers.get(nextIndex).getPicker().pickSubchannel(args);
+          return intraLocalityPickers.get(nextIndex).pickSubchannel(args);
         }
       };
     }

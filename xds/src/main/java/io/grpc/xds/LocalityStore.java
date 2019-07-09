@@ -44,7 +44,7 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
+import io.grpc.xds.InterLocalityPicker.IntraLocalityPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
 import io.grpc.xds.XdsComms.DropOverload;
@@ -121,7 +121,7 @@ interface LocalityStore {
 
     @VisibleForTesting // Introduced for testing only.
     interface PickerFactory {
-      SubchannelPicker picker(List<WeightedChildPicker> childPickers);
+      SubchannelPicker picker(List<IntraLocalityPicker> intraLocalityPickers);
     }
 
     private static final class DroppablePicker extends SubchannelPicker {
@@ -165,8 +165,8 @@ interface LocalityStore {
     private static final PickerFactory pickerFactoryImpl =
         new PickerFactory() {
           @Override
-          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-            return new InterLocalityPicker(childPickers);
+          public SubchannelPicker picker(List<IntraLocalityPicker> intraLocalityPickers) {
+            return new InterLocalityPicker(intraLocalityPickers);
           }
         };
 
@@ -206,7 +206,7 @@ interface LocalityStore {
       }
 
       ConnectivityState newState = null;
-      List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
+      List<IntraLocalityPicker> intraLocalityPickers = new ArrayList<>(newLocalities.size());
       for (XdsLocality newLocality : newLocalities) {
 
         // Assuming standard mode only (EDS response with a list of endpoints) for now
@@ -241,16 +241,15 @@ interface LocalityStore {
                 ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
         if (localityLbInfo.childHelper.currentChildState == READY) {
-          childPickers.add(
-              new WeightedChildPicker(
-                  localityInfoMap.get(newLocality).localityWeight,
+          intraLocalityPickers.add(
+              new IntraLocalityPicker(newLocality, localityInfoMap.get(newLocality).localityWeight,
                   localityLbInfo.childHelper.currentChildPicker));
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
       localityMap = Collections.unmodifiableMap(updatedLocalityMap);
 
-      updatePicker(newState, childPickers);
+      updatePicker(newState, intraLocalityPickers);
 
       // There is a race between picking a subchannel and updating localities, which leads to
       // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
@@ -309,7 +308,7 @@ interface LocalityStore {
         return;
       }
 
-      List<WeightedChildPicker> childPickers = new ArrayList<>();
+      List<IntraLocalityPicker> intraLocalityPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
       for (XdsLocality l : localityMap.keySet()) {
@@ -326,26 +325,26 @@ interface LocalityStore {
         overallState = aggregateState(overallState, childState);
 
         if (READY == childState) {
-          childPickers.add(
-              new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
+          intraLocalityPickers.add(
+              new IntraLocalityPicker(l, localityLbInfo.localityWeight, childPicker));
         }
       }
 
-      updatePicker(overallState, childPickers);
+      updatePicker(overallState, intraLocalityPickers);
     }
 
     private void updatePicker(
-        @Nullable ConnectivityState state,  List<WeightedChildPicker> childPickers) {
-      childPickers = Collections.unmodifiableList(childPickers);
+        @Nullable ConnectivityState state,  List<IntraLocalityPicker> intraLocalityPickers) {
+      intraLocalityPickers = Collections.unmodifiableList(intraLocalityPickers);
       SubchannelPicker picker;
-      if (childPickers.isEmpty()) {
+      if (intraLocalityPickers.isEmpty()) {
         if (state == TRANSIENT_FAILURE) {
           picker = new ErrorPicker(Status.UNAVAILABLE); // TODO: more details in status
         } else {
           picker = XdsSubchannelPickers.BUFFER_PICKER;
         }
       } else {
-        picker = pickerFactory.picker(childPickers);
+        picker = pickerFactory.picker(intraLocalityPickers);
       }
 
       if (!dropOverloads.isEmpty()) {
