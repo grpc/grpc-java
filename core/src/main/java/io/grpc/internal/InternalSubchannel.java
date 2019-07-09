@@ -563,9 +563,8 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     @Override
     public void transportTerminated() {
-      Preconditions.checkState(shutdownInitiated,
-          "activeTransport still points to this transport. "
-          + "Seems transportShutdown() was not called.");
+      Preconditions.checkState(
+          shutdownInitiated, "transportShutdown() must be called before transportTerminated().");
 
       channelLogger.log(ChannelLogLevel.INFO, "{0} Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
