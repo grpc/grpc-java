@@ -336,9 +336,9 @@ def io_netty_codec_socks():
 def io_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
-        artifact = "io.netty:netty-common:4.1.35.Final",
+        artifact = "io.netty:netty-common:4.1.37.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "a5bbdec45faaa4cf34cd21861e35193d8f132e54bdccad2378dbd9644f2862c9",
+        artifact_sha256 = "4b1a4d670b5b8be99779588aa6677b9e78ffbd774fbb2a1311e0b3fa037773e6",
         licenses = ["notice"],  # Apache 2.0
     )
 
