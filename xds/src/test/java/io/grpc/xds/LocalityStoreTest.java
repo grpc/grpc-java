@@ -43,7 +43,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -201,7 +200,6 @@ public class LocalityStoreTest {
   @Before
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doReturn(syncContext).when(helper).getSynchronizationContext();
     when(orcaOobUtil.newOrcaReportingHelperWrapper(any(Helper.class),
         any(OrcaOobReportListener.class)))
@@ -424,11 +422,7 @@ public class LocalityStoreTest {
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
     // subchannel12 goes to CONNECTING
-    CreateSubchannelArgs createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag12)).build();
-    final Subchannel subchannel12 =
-        childHelpers.get("sz1").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel12 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -444,11 +438,7 @@ public class LocalityStoreTest {
         .isEqualTo(PickResult.withNoResult());
 
     // subchannel31 goes to READY
-    createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag31)).build();
-    final Subchannel subchannel31 =
-        childHelpers.get("sz3").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel31 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker31 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -559,10 +549,7 @@ public class LocalityStoreTest {
     inOrder.verify(loadStatsStore).recordDroppedRequest(eq("lb"));
 
     // subchannel12 goes to READY
-    CreateSubchannelArgs createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag12)).build();
-    final Subchannel subchannel12 = childHelpers.get("sz1").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel12 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
