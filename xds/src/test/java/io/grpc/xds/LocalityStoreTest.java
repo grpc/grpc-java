@@ -97,10 +97,12 @@ public class LocalityStoreTest {
   private static final class FakePickerFactory implements PickerFactory {
     int totalReadyLocalities;
     int nextIndex;
+    List<WeightedChildPicker> perLocalitiesPickers;
 
     @Override
     public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
       totalReadyLocalities = childPickers.size();
+      perLocalitiesPickers = Collections.unmodifiableList(childPickers);
 
       return new SubchannelPicker() {
         @Override
@@ -182,6 +184,9 @@ public class LocalityStoreTest {
   private final LbEndpoint lbEndpoint32 = new LbEndpoint(eag32, 32);
   private final LbEndpoint lbEndpoint41 = new LbEndpoint(eag41, 41);
   private final LbEndpoint lbEndpoint42 = new LbEndpoint(eag42, 42);
+
+  private final Map<String, XdsLocality> namedLocalities
+      = ImmutableMap.of("sz1", locality1, "sz2", locality2, "sz3", locality3, "sz4", locality4);
 
   @Mock
   private Helper helper;
@@ -622,6 +627,55 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(2)).nextInt(1000_000);
+  }
+
+  @Test
+  public void updateLocalityStore_OnlyUpdatingWeightsStillUpdatesPicker() {
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    LocalityInfo localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(loadBalancers).hasSize(3);
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    // Update locality weights before any subchannel becomes READY.
+    localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4);
+    localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5);
+    localityInfo3 = new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6);
+    localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    final Map<Subchannel, XdsLocality> localitiesBySubchannel = new HashMap<>();
+    for (final Helper h : childHelpers.values()) {
+      h.updateBalancingState(READY, new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          Subchannel subchannel = mock(Subchannel.class);
+          localitiesBySubchannel.put(subchannel, namedLocalities.get(h.getAuthority()));
+          return PickResult.withSubchannel(subchannel);
+        }
+      });
+    }
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(3);
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      WeightedChildPicker weightedChildPicker
+          = pickerFactory.perLocalitiesPickers.get(i);
+      Subchannel subchannel
+          = weightedChildPicker.getPicker().pickSubchannel(pickSubchannelArgs).getSubchannel();
+      assertThat(weightedChildPicker.getWeight())
+          .isEqualTo(localityInfoMap.get(localitiesBySubchannel.get(subchannel)).localityWeight);
+    }
   }
 
   @Test
