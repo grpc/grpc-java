@@ -11,10 +11,10 @@ import "envoy/api/v2/core/base.proto";
 
 import "google/protobuf/any.proto";
 import "google/rpc/status.proto";
+import "gogoproto/gogo.proto";
 
-
-
-
+option (gogoproto.equal_all) = true;
+option (gogoproto.stable_marshaler_all) = true;
 
 // [#protodoc-title: Common discovery API components]
 
@@ -65,7 +65,7 @@ message DiscoveryResponse {
   string version_info = 1;
 
   // The response resources. These resources are typed and depend on the API being called.
-  repeated google.protobuf.Any resources = 2;
+  repeated google.protobuf.Any resources = 2 [(gogoproto.nullable) = false];
 
   // [#not-implemented-hide:]
   // Canary is used to support two Envoy command line flags:
@@ -196,7 +196,7 @@ message DeltaDiscoveryResponse {
 
   // The response resources. These are typed resources, whose types must match
   // the type_url field.
-  repeated Resource resources = 2;
+  repeated Resource resources = 2 [(gogoproto.nullable) = false];
 
   // field id 3 IS available!
 

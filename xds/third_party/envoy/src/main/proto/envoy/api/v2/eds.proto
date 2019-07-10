@@ -15,12 +15,12 @@ import "envoy/type/percent.proto";
 import "google/api/annotations.proto";
 
 import "validate/validate.proto";
-
+import "gogoproto/gogo.proto";
 import "google/protobuf/wrappers.proto";
 import "google/protobuf/duration.proto";
 
-
-
+option (gogoproto.equal_all) = true;
+option (gogoproto.stable_marshaler_all) = true;
 
 // [#protodoc-title: EDS]
 // Endpoint discovery :ref:`architecture overview <arch_overview_service_discovery_types_eds>`
@@ -59,7 +59,7 @@ message ClusterLoadAssignment {
   string cluster_name = 1 [(validate.rules).string.min_bytes = 1];
 
   // List of endpoints to load balance to.
-  repeated endpoint.LocalityLbEndpoints endpoints = 2;
+  repeated endpoint.LocalityLbEndpoints endpoints = 2 [(gogoproto.nullable) = false];
 
   // Map of named endpoints that can be referenced in LocalityLbEndpoints.
   map<string, endpoint.Endpoint> named_endpoints = 5;

@@ -14,9 +14,9 @@ import "envoy/api/v2/core/health_check.proto";
 import "google/protobuf/wrappers.proto";
 
 import "validate/validate.proto";
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
 
 // [#protodoc-title: Endpoints]
 
@@ -101,7 +101,7 @@ message LocalityLbEndpoints {
   core.Locality locality = 1;
 
   // The group of endpoints belonging to the locality specified.
-  repeated LbEndpoint lb_endpoints = 2;
+  repeated LbEndpoint lb_endpoints = 2 [(gogoproto.nullable) = false];
 
   // Optional: Per priority/region/zone/sub_zone weight - range 1-128. The load
   // balancing weight for a locality is divided by the sum of the weights of all

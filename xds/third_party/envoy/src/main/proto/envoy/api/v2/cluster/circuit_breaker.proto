@@ -13,9 +13,9 @@ import "envoy/api/v2/core/base.proto";
 
 import "google/protobuf/wrappers.proto";
 
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
 
 // [#protodoc-title: Circuit breakers]
 
