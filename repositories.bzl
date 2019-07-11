@@ -408,9 +408,9 @@ def io_opencensus_grpc_metrics():
 def io_perfmark():
     jvm_maven_import_external(
         name = "io_perfmark_perfmark_api",
-        artifact = "io.perfmark:perfmark-api:0.16.0",
+        artifact = "io.perfmark:perfmark-api:0.17.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "a93667875ea9d10315177768739a18d6c667df041c982d2841645ae8558d0af0",
+        artifact_sha256 = "816c11409b8a0c6c9ce1cda14bed526e7b4da0e772da67c5b7b88eefd41520f9",
         licenses = ["notice"],  # Apache 2.0
     )
 
