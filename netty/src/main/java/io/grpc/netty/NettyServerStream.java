@@ -100,14 +100,14 @@ class NettyServerStream extends AbstractServerStream {
         // Processing data read in the event loop so can call into the deframer immediately
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
-        final Link link = PerfMark.link();
+        final Link link = PerfMark.linkOut();
         channel.eventLoop().execute(new Runnable() {
           @Override
           public void run() {
             PerfMark.startTask(
                 "NettyServerStream$Sink.requestMessagesFromDeframer",
                 transportState().tag());
-            link.link();
+            PerfMark.linkIn(link);
             try {
               transportState().requestMessagesFromDeframer(numMessages);
             } finally {

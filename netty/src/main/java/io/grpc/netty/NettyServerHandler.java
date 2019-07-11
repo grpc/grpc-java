@@ -649,7 +649,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) throws Http2Exception {
     PerfMark.startTask("NettyServerHandler.sendGrpcFrame", cmd.stream().tag());
-    cmd.getLink().link();
+    PerfMark.linkIn(cmd.getLink());
     try {
       if (cmd.endStream()) {
         closeStreamWhenDone(promise, cmd.stream().id());
@@ -667,7 +667,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void sendResponseHeaders(ChannelHandlerContext ctx, SendResponseHeadersCommand cmd,
       ChannelPromise promise) throws Http2Exception {
     PerfMark.startTask("NettyServerHandler.sendResponseHeaders", cmd.stream().tag());
-    cmd.getLink().link();
+    PerfMark.linkIn(cmd.getLink());
     try {
       // TODO(carl-mastrangelo): remove this check once https://github.com/netty/netty/issues/6296
       // is fixed.
@@ -689,7 +689,7 @@ class NettyServerHandler extends AbstractNettyHandler {
   private void cancelStream(ChannelHandlerContext ctx, CancelServerStreamCommand cmd,
       ChannelPromise promise) {
     PerfMark.startTask("NettyServerHandler.cancelStream", cmd.stream().tag());
-    cmd.getLink().link();
+    PerfMark.linkIn(cmd.getLink());
     try {
       // Notify the listener if we haven't already.
       cmd.stream().transportReportStatus(cmd.reason());
@@ -709,7 +709,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         NettyServerStream.TransportState serverStream = serverStream(stream);
         if (serverStream != null) {
           PerfMark.startTask("NettyServerHandler.forcefulClose", serverStream.tag());
-          msg.getLink().link();
+          PerfMark.linkIn(msg.getLink());
           try {
             serverStream.transportReportStatus(msg.getStatus());
             resetStream(ctx, stream.id(), Http2Error.CANCEL.code(), ctx.newPromise());

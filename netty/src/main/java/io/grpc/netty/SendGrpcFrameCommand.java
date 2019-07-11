@@ -38,7 +38,7 @@ final class SendGrpcFrameCommand extends DefaultByteBufHolder implements WriteQu
     super(content);
     this.stream = stream;
     this.endStream = endStream;
-    this.link = PerfMark.link();
+    this.link = PerfMark.linkOut();
   }
 
   @Override
