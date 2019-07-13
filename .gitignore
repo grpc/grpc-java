@@ -19,6 +19,8 @@ bazel-testlogs
 # IntelliJ IDEA
 .idea
 *.iml
+*.ipr
+*.iws
 
 # Eclipse
 .classpath

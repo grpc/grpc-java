@@ -336,9 +336,9 @@ def io_netty_codec_socks():
 def io_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
-        artifact = "io.netty:netty-common:4.1.35.Final",
+        artifact = "io.netty:netty-common:4.1.37.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "a5bbdec45faaa4cf34cd21861e35193d8f132e54bdccad2378dbd9644f2862c9",
+        artifact_sha256 = "4b1a4d670b5b8be99779588aa6677b9e78ffbd774fbb2a1311e0b3fa037773e6",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -408,9 +408,9 @@ def io_opencensus_grpc_metrics():
 def io_perfmark():
     jvm_maven_import_external(
         name = "io_perfmark_perfmark_api",
-        artifact = "io.perfmark:perfmark-api:0.16.0",
+        artifact = "io.perfmark:perfmark-api:0.17.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "a93667875ea9d10315177768739a18d6c667df041c982d2841645ae8558d0af0",
+        artifact_sha256 = "816c11409b8a0c6c9ce1cda14bed526e7b4da0e772da67c5b7b88eefd41520f9",
         licenses = ["notice"],  # Apache 2.0
     )
 

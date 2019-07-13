@@ -251,8 +251,10 @@ final class XdsComms {
                     }
                     int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
 
-                    localityEndpointsMapping.put(
-                        locality, new LocalityInfo(lbEndPoints, localityWeight));
+                    if (localityWeight != 0) {
+                      localityEndpointsMapping.put(
+                          locality, new LocalityInfo(lbEndPoints, localityWeight));
+                    }
                   }
 
                   localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
