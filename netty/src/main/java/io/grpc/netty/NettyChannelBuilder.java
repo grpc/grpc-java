@@ -441,7 +441,7 @@ public final class NettyChannelBuilder
         negotiator, resolvedChannelFactory, channelOptions,
         resolvedEventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory.create(), localSocketPicker);
+        transportTracerFactory, localSocketPicker);
   }
 
   @VisibleForTesting
@@ -557,7 +557,7 @@ public final class NettyChannelBuilder
     private final AtomicBackoff keepAliveTimeNanos;
     private final long keepAliveTimeoutNanos;
     private final boolean keepAliveWithoutCalls;
-    private final TransportTracer transportTracer;
+    private final TransportTracer.Factory transportTracerFactory;
     private final LocalSocketPicker localSocketPicker;
 
     private boolean closed;
@@ -567,7 +567,7 @@ public final class NettyChannelBuilder
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer transportTracer, LocalSocketPicker localSocketPicker) {
+        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker) {
       this.protocolNegotiator = protocolNegotiator;
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -579,7 +579,7 @@ public final class NettyChannelBuilder
       this.keepAliveTimeNanos = new AtomicBackoff("keepalive time nanos", keepAliveTimeNanos);
       this.keepAliveTimeoutNanos = keepAliveTimeoutNanos;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
-      this.transportTracer = transportTracer;
+      this.transportTracerFactory = transportTracerFactory;
       this.localSocketPicker =
           localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
     }
@@ -614,7 +614,7 @@ public final class NettyChannelBuilder
           localNegotiator, flowControlWindow,
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
-          tooManyPingsRunnable, transportTracer, options.getEagAttributes(),
+          tooManyPingsRunnable, transportTracerFactory.create(), options.getEagAttributes(),
           localSocketPicker, channelLogger);
       return transport;
     }
