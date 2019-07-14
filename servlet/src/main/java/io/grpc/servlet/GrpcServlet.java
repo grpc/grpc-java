@@ -18,6 +18,7 @@ package io.grpc.servlet;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.BindableService;
+import io.grpc.ExperimentalApi;
 import java.io.IOException;
 import java.util.List;
 import javax.servlet.http.HttpServlet;
@@ -29,11 +30,11 @@ import javax.servlet.http.HttpServletResponse;
  * /contextRoot/urlPattern} must match the gRPC services' path, which is
  * "/full-service-name/short-method-name".
  *
- * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
- * welcome to provide feedback by commenting on
+ * <p>The API is experimental. The authors would like to know more about the real usecases. Users
+ * are welcome to provide feedback by commenting on
  * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
-@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public class GrpcServlet extends HttpServlet {
   private static final long serialVersionUID = 1L;
 

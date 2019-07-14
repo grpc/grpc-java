@@ -24,6 +24,7 @@ import static java.util.logging.Level.FINEST;
 
 import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
+import io.grpc.ExperimentalApi;
 import io.grpc.Grpc;
 import io.grpc.InternalLogId;
 import io.grpc.InternalMetadata;
@@ -63,11 +64,11 @@ import javax.servlet.http.HttpServletResponse;
  * backed by the gRPC server associated with the adapter. The servlet must support Asynchronous
  * Processing and must be deployed to a container that supports servlet 4.0 and enables HTTP/2.
  *
- * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
- * welcome to provide feedback by commenting on
+ * <p>The API is experimental. The authors would like to know more about the real usecases. Users
+ * are welcome to provide feedback by commenting on
  * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
-@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public final class ServletAdapter {
 
   static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
@@ -190,7 +191,7 @@ public final class ServletAdapter {
   }
 
   /**
-   * Call this method when the adapter is no longer needed.
+   * Call this method when the adapter is no longer needed. The gRPC server will be terminated.
    */
   public void destroy() {
     transportListener.transportTerminated();

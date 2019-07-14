@@ -149,15 +149,19 @@ final class ServletServerStream extends AbstractServerStream {
 
   private static final class ByteArrayWritableBuffer implements WritableBuffer {
 
-    static final ByteArrayWritableBuffer FLUSH = new ByteArrayWritableBuffer(0);
+    static final ByteArrayWritableBuffer FLUSH = new ByteArrayWritableBuffer(new byte[0]);
 
     private final int capacity;
     final byte[] bytes;
     private int index;
 
     ByteArrayWritableBuffer(int capacityHint) {
-      capacity = min(1024 * 1024,  max(4096, capacityHint));
-      bytes = new byte[capacity];
+      this(new byte[min(1024 * 1024,  max(4096, capacityHint))]);
+    }
+
+    ByteArrayWritableBuffer(byte[] bytes) {
+      this.bytes =  bytes;
+      this.capacity = bytes.length;
     }
 
     @Override

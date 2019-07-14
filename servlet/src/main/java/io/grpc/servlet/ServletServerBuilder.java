@@ -24,6 +24,7 @@ import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.ExperimentalApi;
 import io.grpc.InternalChannelz.SocketStats;
 import io.grpc.InternalInstrumented;
 import io.grpc.InternalLogId;
@@ -46,13 +47,14 @@ import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Builder to build a gRPC server that can run as a servlet.
+ * Builder to build a gRPC server that can run as a servlet. This is for advanced custom settings.
+ * Normally, users should consider extending the out-of-box {@link GrpcServlet} directly instead.
  *
- * <p>The API is unstable. The authors would like to know more about the real usecases. Users are
- * welcome to provide feedback by commenting on
+ * <p>The API is experimental. The authors would like to know more about the real usecases. Users
+ * are welcome to provide feedback by commenting on
  * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
-@io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 @NotThreadSafe
 public final class ServletServerBuilder extends AbstractServerImplBuilder<ServletServerBuilder> {
   List<? extends ServerStreamTracer.Factory> streamTracerFactories;

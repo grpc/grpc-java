@@ -18,8 +18,8 @@
  * API that implements gRPC server as a servlet. The API requires that the application container
  * supports Servlet 4.0 and enables HTTP/2.
  *
- * <p>The API is unstable. The authors would like to more about the real usecases. Users are welcome
- * to provide feedback by commenting on
+ * <p>The API is experimental. The authors would like to know more about the real usecases. Users
+ * are welcome to provide feedback by commenting on
  * <a href=https://github.com/grpc/grpc-java/issues/5066>the tracking issue</a>.
  */
 @io.grpc.ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
