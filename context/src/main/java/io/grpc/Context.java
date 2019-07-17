@@ -296,11 +296,21 @@ public class Context {
    *   }
    * </pre>
    */
-  public CancellableContext withDeadline(Deadline deadline,
-      ScheduledExecutorService scheduler) {
-    checkNotNull(deadline, "deadline");
+  public CancellableContext withDeadline(Deadline newDeadline, ScheduledExecutorService scheduler) {
+    checkNotNull(newDeadline, "deadline");
     checkNotNull(scheduler, "scheduler");
-    return new CancellableContext(this, deadline, scheduler);
+    Deadline existingDeadline = getDeadline();
+    boolean scheduleDeadlineCancellation = true;
+    if (existingDeadline != null && existingDeadline.compareTo(newDeadline) <= 0) {
+      // The new deadline won't have an effect, so ignore it
+      newDeadline = existingDeadline;
+      scheduleDeadlineCancellation = false;
+    }
+    CancellableContext newCtx = new CancellableContext(this, newDeadline);
+    if (scheduleDeadlineCancellation) {
+      newCtx.setUpDeadlineCancellation(newDeadline, scheduler);
+    }
+    return newCtx;
   }
 
   /**
@@ -713,37 +723,33 @@ public class Context {
     /**
      * Create a cancellable context that has a deadline.
      */
-    private CancellableContext(Context parent, Deadline deadline,
-        ScheduledExecutorService scheduler) {
+    private CancellableContext(Context parent, Deadline deadline) {
       super(parent, parent.keyValueEntries);
-      Deadline parentDeadline = parent.getDeadline();
-      if (parentDeadline != null && parentDeadline.compareTo(deadline) <= 0) {
-        // The new deadline won't have an effect, so ignore it
-        deadline = parentDeadline;
-      } else {
-        // The new deadline has an effect
-        if (!deadline.isExpired()) {
-          // The parent deadline was after the new deadline so we need to install a listener
-          // on the new earlier deadline to trigger expiration for this context.
-          pendingDeadline = deadline.runOnExpiration(new Runnable() {
-            @Override
-            public void run() {
-              try {
-                cancel(new TimeoutException("context timed out"));
-              } catch (Throwable t) {
-                log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
-              }
-            }
-          }, scheduler);
-        } else {
-          // Cancel immediately if the deadline is already expired.
-          cancel(new TimeoutException("context timed out"));
-        }
-      }
       this.deadline = deadline;
-      uncancellableSurrogate = new Context(this, keyValueEntries);
+      this.uncancellableSurrogate = new Context(this, keyValueEntries);
     }
 
+    private void setUpDeadlineCancellation(Deadline deadline, ScheduledExecutorService scheduler) {
+      if (!deadline.isExpired()) {
+        final class CancelOnExpiration implements Runnable {
+          @Override
+          public void run() {
+            try {
+              cancel(new TimeoutException("context timed out"));
+            } catch (Throwable t) {
+              log.log(Level.SEVERE, "Cancel threw an exception, which should not happen", t);
+            }
+          }
+        }
+
+        synchronized (this) {
+          pendingDeadline = deadline.runOnExpiration(new CancelOnExpiration(), scheduler);
+        }
+      } else {
+        // Cancel immediately if the deadline is already expired.
+        cancel(new TimeoutException("context timed out"));
+      }
+    }
 
     @Override
     public Context attach() {
