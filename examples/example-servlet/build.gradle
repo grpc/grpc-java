@@ -22,7 +22,6 @@ dependencies {
     implementation "io.grpc:grpc-protobuf:${grpcVersion}",
             "io.grpc:grpc-servlet:${grpcVersion}",
             "io.grpc:grpc-stub:${grpcVersion}"
-    
 
     providedCompile "javax.annotation:javax.annotation-api:1.2",
             "javax.servlet:javax.servlet-api:4.0.1"

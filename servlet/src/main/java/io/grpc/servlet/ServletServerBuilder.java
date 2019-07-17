@@ -121,6 +121,10 @@ public final class ServletServerBuilder extends AbstractServerImplBuilder<Servle
     return ImmutableList.of(internalServer);
   }
 
+  /**
+   * Throws {@code UnsupportedOperationException}. TLS should be configured by the servlet
+   * container.
+   */
   @Override
   public ServletServerBuilder useTransportSecurity(File certChain, File privateKey) {
     throw new UnsupportedOperationException("TLS should be configured by the servlet container");

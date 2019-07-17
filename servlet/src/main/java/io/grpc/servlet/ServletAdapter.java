@@ -71,7 +71,7 @@ import javax.servlet.http.HttpServletResponse;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5066")
 public final class ServletAdapter {
 
-  static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
+  static final Logger logger = Logger.getLogger(ServletAdapter.class.getName());
 
   private final ServerTransportListener transportListener;
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
@@ -91,6 +91,8 @@ public final class ServletAdapter {
   /**
    * Call this method inside {@link javax.servlet.http.HttpServlet#doGet(HttpServletRequest,
    * HttpServletResponse)} to serve gRPC GET request.
+   *
+   * <p>This method is currently not impelemented.
    *
    * <p>Note that in rare case gRPC client sends GET requests.
    *

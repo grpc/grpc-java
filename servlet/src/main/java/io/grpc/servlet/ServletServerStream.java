@@ -240,17 +240,15 @@ final class ServletServerStream extends AbstractServerStream {
     public void onWritePossible() throws IOException {
       logger.log(FINEST, "[{0}] onWritePossible: ENTRY", logId);
 
-      WriteState curState = writeState.get();
-      // curState.stillWritePossible should have been set to false already or right now/
+      // stillWritePossible should have been set to false already or right now
       // It's very very unlikely stillWritePossible is true due to a race condition
-      while (curState.stillWritePossible) {
+      while (writeState.get().stillWritePossible) {
         LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(100L));
-        curState = writeState.get();
       }
 
       boolean isReady;
       while ((isReady = output.isReady())) {
-        curState = writeState.get();
+        WriteState curState = writeState.get();
 
         ByteArrayWritableBuffer buffer = writeChain.poll();
         if (buffer != null) {
@@ -284,12 +282,13 @@ final class ServletServerStream extends AbstractServerStream {
       }
 
       if (isReady && writeState.get().trailersSent) {
+        logger.log(FINE, "[{0}] call is completing", logId);
         transportState().runOnTransportThread(
             () -> {
               transportState().complete();
               asyncCtx.complete();
+              logger.log(FINE, "[{0}] call is completing", logId);
             });
-        logger.log(FINEST, "[{0}] onWritePossible: call complete", logId);
       }
 
       logger.log(FINEST, "[{0}] onWritePossible: EXIT", logId);
@@ -394,11 +393,11 @@ final class ServletServerStream extends AbstractServerStream {
           if (!outputStream.isReady()) {
             while (true) {
               if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
+                logger.log(FINEST, "[{0}] set stillWritePossible to false", logId);
                 return;
               }
               curState = writeState.get();
             }
-
           }
         } catch (IOException ioe) {
           logger.log(WARNING, String.format("[{%s}] Exception writing message", logId), ioe);
@@ -447,10 +446,8 @@ final class ServletServerStream extends AbstractServerStream {
         for (int i = 0; i < serializedHeaders.length; i += 2) {
           String key = new String(serializedHeaders[i], StandardCharsets.US_ASCII);
           String newValue = new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII);
-          String value = trailerSupplier.get().putIfAbsent(key, newValue);
-          if (value != null) {
-            trailerSupplier.get().put(key, value + "," + newValue);
-          }
+          trailerSupplier.get().computeIfPresent(key, (k, v) -> v + "," + newValue);
+          trailerSupplier.get().putIfAbsent(key, newValue);
         }
       }
 
@@ -458,16 +455,17 @@ final class ServletServerStream extends AbstractServerStream {
         WriteState curState = writeState.get();
         if (curState.stillWritePossible) {
           // in non-error case, this condition means all messages are sent out
-
+          logger.log(FINE, "[{0}] call is completing", logId);
           transportState().runOnTransportThread(
               () -> {
                 transportState().complete();
                 asyncCtx.complete();
+                logger.log(FINE, "[{0}] call completed", logId);
               });
-          logger.log(FINE, "[{0}] writeTrailers: call complete", logId);
           break;
         } // else, some messages are still in write queue
         if (writeState.compareAndSet(curState, curState.withTrailersSent(true))) {
+          logger.log(FINEST, "[{0}] set withTrailersSent to true", logId);
           break;
         }
       }

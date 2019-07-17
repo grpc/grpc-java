@@ -31,7 +31,7 @@ import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
-import io.grpc.netty.InternalNettyTestAccessor;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.servlet.ServletServerBuilder.ServerTransportImpl;
@@ -170,10 +170,10 @@ public class UndertowTransportTest extends AbstractTransportTest {
         .forAddress("localhost", 0)
         .flowControlWindow(65 * 1024)
         .negotiationType(NegotiationType.PLAINTEXT);
-    InternalNettyTestAccessor
+    InternalNettyChannelBuilder
         .setTransportTracerFactory(nettyChannelBuilder, fakeClockTransportTracer);
     ClientTransportFactory clientFactory =
-        InternalNettyTestAccessor.buildTransportFactory(nettyChannelBuilder);
+        InternalNettyChannelBuilder.buildTransportFactory(nettyChannelBuilder);
     return clientFactory.newClientTransport(
         new InetSocketAddress("localhost", port),
         new ClientTransportFactory.ClientTransportOptions()
@@ -268,7 +268,7 @@ public class UndertowTransportTest extends AbstractTransportTest {
   public void serverCancel() {}
 
   @Override
-  @Ignore("THis doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
+  @Ignore("This doesn't apply: Ensure that for a closed ServerStream, interactions are noops")
   @Test
   public void interactionsAfterServerStreamCloseAreNoops() {}
 
