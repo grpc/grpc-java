@@ -26,11 +26,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.ResolvedAddresses;
+import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
@@ -40,7 +42,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -49,6 +53,8 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class GracefulSwitchLoadBalancerTest {
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
   // maps policy name to lb provide
@@ -375,6 +381,16 @@ public class GracefulSwitchLoadBalancerTest {
     assertThat(balancers.get(lbPolicies[0])).isSameInstanceAs(lb0);
 
     verifyNoMoreInteractions(lb0, lb1);
+  }
+
+  @Deprecated
+  @Test
+  public void handleSubchannelState() {
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
+    Subchannel subchannel = mock(Subchannel.class);
+    ConnectivityStateInfo connectivityStateInfo = ConnectivityStateInfo.forNonError(READY);
+    thrown.expect(UnsupportedOperationException.class);
+    gracefulSwitchLb.handleSubchannelState(subchannel, connectivityStateInfo);
   }
 
   private final class FakeLoadBalancerProvider extends LoadBalancerProvider {

@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.READY;
 
 import io.grpc.ConnectivityState;
+import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -114,6 +115,14 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   @Override
   protected LoadBalancer delegate() {
     return pendingLb == NOOP_BALANCER ? currentLb : pendingLb;
+  }
+
+  @Override
+  @Deprecated
+  public void handleSubchannelState(
+      Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    throw new UnsupportedOperationException(
+        "handleSubchannelState() is not supported by " + this.getClass().getName());
   }
 
   @Override
