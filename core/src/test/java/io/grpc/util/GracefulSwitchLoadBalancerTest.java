@@ -18,8 +18,11 @@ package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
+import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -47,6 +50,7 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.InOrder;
 
 /**
  * Tests for {@link GracefulSwitchLoadBalancer}.
@@ -265,25 +269,28 @@ public class GracefulSwitchLoadBalancerTest {
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
 
     // lb2 reports READY
-    picker = mock(SubchannelPicker.class);
-    helper2.updateBalancingState(READY, picker);
+    SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    helper2.updateBalancingState(READY, picker2);
     verify(lb0).shutdown();
-    verify(mockHelper).updateBalancingState(READY, picker);
+    verify(mockHelper).updateBalancingState(READY, picker2);
 
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[3]));
     LoadBalancer lb3 = balancers.get(lbPolicies[3]);
     Helper helper3 = helpers.get(lb3);
-    picker = mock(SubchannelPicker.class);
-    helper3.updateBalancingState(CONNECTING, picker);
-    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
-    picker = mock(SubchannelPicker.class);
-    helper2.updateBalancingState(CONNECTING, picker);
-    verify(mockHelper).updateBalancingState(CONNECTING, picker);
+    SubchannelPicker picker3 = mock(SubchannelPicker.class);
+    helper3.updateBalancingState(CONNECTING, picker3);
+    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker3);
+
+    // lb2 out of READY
+    picker2 = mock(SubchannelPicker.class);
+    helper2.updateBalancingState(CONNECTING, picker2);
+    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker2);
+    verify(mockHelper).updateBalancingState(CONNECTING, picker3);
     verify(lb2).shutdown();
 
-    picker = mock(SubchannelPicker.class);
-    helper3.updateBalancingState(CONNECTING, picker);
-    verify(mockHelper).updateBalancingState(CONNECTING, picker);
+    picker3 = mock(SubchannelPicker.class);
+    helper3.updateBalancingState(CONNECTING, picker3);
+    verify(mockHelper).updateBalancingState(CONNECTING, picker3);
 
     verifyNoMoreInteractions(lb0, lb1, lb2, lb3);
   }
@@ -317,7 +324,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
-  public void switchWhileOldPolicyIsReadyThenOldPolicyGoesToNotReady() {
+  public void switchWhileOldPolicyGoesFromReadyToNotReady() {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
     Helper helper0 = helpers.get(lb0);
@@ -329,19 +336,51 @@ public class GracefulSwitchLoadBalancerTest {
 
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
     Helper helper1 = helpers.get(lb1);
-    picker = mock(SubchannelPicker.class);
-    helper1.updateBalancingState(CONNECTING, picker);
-    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    helper1.updateBalancingState(CONNECTING, picker1);
+    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker1);
 
     picker = mock(SubchannelPicker.class);
     helper0.updateBalancingState(CONNECTING, picker);
     verify(lb0).shutdown();
+    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
+    verify(mockHelper).updateBalancingState(CONNECTING, picker1);
+
+    picker1 = mock(SubchannelPicker.class);
+    helper1.updateBalancingState(READY, picker1);
+    verify(mockHelper).updateBalancingState(READY, picker1);
+
+    verifyNoMoreInteractions(lb0, lb1);
+  }
+
+  @Test
+  public void switchWhileOldPolicyGoesFromReadyToNotReadyWhileNewPolicyStillIdle() {
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
+    LoadBalancer lb0 = balancers.get(lbPolicies[0]);
+    InOrder inOrder = inOrder(lb0, mockHelper);
+    Helper helper0 = helpers.get(lb0);
+    SubchannelPicker picker = mock(SubchannelPicker.class);
+    helper0.updateBalancingState(READY, picker);
+
+    gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
+    inOrder.verify(lb0, never()).shutdown();
+
+    LoadBalancer lb1 = balancers.get(lbPolicies[1]);
+    Helper helper1 = helpers.get(lb1);
+
+    picker = mock(SubchannelPicker.class);
+    helper0.updateBalancingState(CONNECTING, picker);
+
+    inOrder.verify(lb0).shutdown();
+    inOrder.verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
+    inOrder.verify(mockHelper).updateBalancingState(IDLE, BUFFER_PICKER);
 
     picker = mock(SubchannelPicker.class);
     helper1.updateBalancingState(CONNECTING, picker);
-    verify(mockHelper).updateBalancingState(CONNECTING, picker);
+    inOrder.verify(mockHelper).updateBalancingState(CONNECTING, picker);
 
-    verifyNoMoreInteractions(lb0, lb1);
+    inOrder.verifyNoMoreInteractions();
+    verifyNoMoreInteractions(lb1);
   }
 
   @Test

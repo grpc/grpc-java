@@ -17,8 +17,10 @@
 package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static io.grpc.ConnectivityState.READY;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Internal;
@@ -44,6 +46,19 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     public void shutdown() {}
   };
 
+  @VisibleForTesting
+  static final SubchannelPicker BUFFER_PICKER = new SubchannelPicker() {
+    @Override
+    public PickResult pickSubchannel(PickSubchannelArgs args) {
+      return PickResult.withNoResult();
+    }
+
+    @Override
+    public String toString() {
+      return "BUFFER_PICKER";
+    }
+  };
+
   private final Helper helper;
   private LoadBalancer currentLb = NOOP_BALANCER;
   private LoadBalancer pendingLb = NOOP_BALANCER;
@@ -52,6 +67,8 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   @Nullable
   private String pendingPolicyName;
   private boolean isReady;
+  private ConnectivityState pendingState;
+  private SubchannelPicker pendingPicker;
 
   public GracefulSwitchLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -68,6 +85,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb.shutdown();
     pendingLb = NOOP_BALANCER;
     pendingPolicyName = null;
+    pendingState = ConnectivityState.IDLE;
+    pendingPicker = BUFFER_PICKER;
+
     if (newPolicyName.equals(currentPolicyName)) {
       return;
     }
@@ -82,14 +102,19 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-        if (pendingLb == lb && newState == READY) {
-          swap();
-        }
-        if (currentLb == lb) {
-          helper.updateBalancingState(newState, newPicker);
+        if (lb == pendingLb) {
+          checkState(isReady, "there is pending lb while current lb has been out of ready");
+          pendingState = newState;
+          pendingPicker = newPicker;
+          if (newState == READY) {
+            swap();
+          }
+        } else if (lb == currentLb) {
           isReady = newState == READY;
           if (!isReady && pendingLb != NOOP_BALANCER) { // current policy exits READY, swap
             swap();
+          } else {
+            helper.updateBalancingState(newState, newPicker);
           }
         }
       }
@@ -110,6 +135,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     currentPolicyName = pendingPolicyName;
     pendingLb = NOOP_BALANCER;
     pendingPolicyName = null;
+    helper.updateBalancingState(pendingState, pendingPicker);
   }
 
   @Override
