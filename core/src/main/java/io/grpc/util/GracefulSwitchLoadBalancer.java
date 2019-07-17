@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static io.grpc.ConnectivityState.READY;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
@@ -103,14 +102,14 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
         if (lb == pendingLb) {
-          checkState(isReady, "there is pending lb while current lb has been out of ready");
+          checkState(isReady, "there is pending lb while current lb has been out of READY");
           pendingState = newState;
           pendingPicker = newPicker;
-          if (newState == READY) {
+          if (newState == ConnectivityState.READY) {
             swap();
           }
         } else if (lb == currentLb) {
-          isReady = newState == READY;
+          isReady = newState == ConnectivityState.READY;
           if (!isReady && pendingLb != NOOP_BALANCER) { // current policy exits READY, swap
             swap();
           } else {
