@@ -27,6 +27,7 @@ dependencies {
     compileOnly libraries.javax_annotation
     runtime libraries.opencensus_impl,
             libraries.netty_tcnative,
+            libraries.netty_epoll,
             project(':grpc-grpclb')
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
@@ -107,6 +108,17 @@ task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
     ]
 }
 
+task grpclb_fallback_test_client (type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.GrpclbFallbackTestClient"
+    applicationName = "grpclb-fallback-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
@@ -114,5 +126,6 @@ applicationDistribution.into("bin") {
     from(stresstest_client)
     from(http2_client)
     from(grpclb_long_lived_affinity_test_client)
+    from(grpclb_fallback_test_client)
     fileMode = 0755
 }
