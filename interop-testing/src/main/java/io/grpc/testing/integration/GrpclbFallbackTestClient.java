@@ -16,17 +16,12 @@
 
 package io.grpc.testing.integration;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
-import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.alts.ComputeEngineChannelBuilder;
 import io.grpc.testing.integration.Messages.GrpclbRouteType;
-import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
 import java.io.BufferedReader;
@@ -34,7 +29,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -148,9 +142,9 @@ public final class GrpclbFallbackTestClient {
 
   private ManagedChannel createChannel() {
     if (!customCredentialsType.equals("compute_engine_channel_creds")) {
-       throw new AssertionError(
-           "This test currently only supports "
-           + "--custom_credentials_type=compute_engine_channel_creds.");
+      throw new AssertionError(
+          "This test currently only supports "
+          + "--custom_credentials_type=compute_engine_channel_creds.");
     }
     ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverUri);
     builder.keepAliveTime(3600, TimeUnit.SECONDS);
@@ -224,15 +218,18 @@ public final class GrpclbFallbackTestClient {
     } catch (StatusRuntimeException ex) {
       logger.warning("doRpcAndGetPath failed. Status: " + ex);
     }
-    assert(result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
-        || result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
+    if (result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
+        || result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
+      throw new AssertionError("Received invalid LB route type. This suggests "
+          + "that the server hasn't implemented this test correctly.");
+    }
     logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
     return result;
   }
 
   private void doFallbackBeforeStartupTest(
-      String breakLBAndBackendConnsCmd, int deadlineSeconds) throws Exception {
-    runShellCmd(breakLBAndBackendConnsCmd);
+      String breakLbAndBackendConnsCmd, int deadlineSeconds) throws Exception {
+    runShellCmd(breakLbAndBackendConnsCmd);
     for (int i = 0; i < 30; i++) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
           blockingStub, deadlineSeconds, RpcMode.FailFast);
@@ -250,16 +247,18 @@ public final class GrpclbFallbackTestClient {
   }
 
   private void doFallbackAfterStartupTest(
-      String breakLBAndBackendConnsCmd) throws Exception {
+      String breakLbAndBackendConnsCmd) throws Exception {
     assertEquals(
         doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast),
         GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
-    runShellCmd(breakLBAndBackendConnsCmd);
+    runShellCmd(breakLbAndBackendConnsCmd);
     for (int i = 0; i < 40; i++) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
           blockingStub, 1, RpcMode.WaitForReady);
-      // Backends are supposed to be unreachable, the test is broken if not.
-      assert(grpclbRouteType != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
+      if (grpclbRouteType != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
+        throw new AssertionError("Got grpclb route type backend. Backends are "
+            + "supposed to be unreachable, so this test is broken");
+      }
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
         logger.info("Made one successful RPC to a fallback. Now expect the "
             + "same for the rest.");
