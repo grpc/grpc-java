@@ -16,6 +16,7 @@
 
 package io.grpc.testing.integration;
 
+import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 
 import io.grpc.ManagedChannel;
@@ -168,7 +169,7 @@ public final class GrpclbFallbackTestClient {
 
   private String streamToString(InputStream inputStream) throws Exception {
     BufferedReader br = new BufferedReader(
-        new InputStreamReader(inputStream, StandardCharsets.UTF_8));
+        new InputStreamReader(inputStream, UTF_8));
     String out = "";
     String line;
     while ((line = br.readLine()) != null) {
