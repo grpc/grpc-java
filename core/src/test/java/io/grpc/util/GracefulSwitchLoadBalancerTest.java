@@ -363,7 +363,7 @@ public class GracefulSwitchLoadBalancerTest {
     helper0.updateBalancingState(READY, picker);
 
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
-    inOrder.verify(lb0, never()).shutdown();
+    verify(lb0, never()).shutdown();
 
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
     Helper helper1 = helpers.get(lb1);
@@ -384,7 +384,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
-  public void newPolicyNameTheSameAsPendingPolicy() {
+  public void newPolicyNameTheSameAsPendingPolicy_shouldHaveNoEffect() {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
     Helper helper0 = helpers.get(lb0);
@@ -401,7 +401,7 @@ public class GracefulSwitchLoadBalancerTest {
   }
 
   @Test
-  public void newPolicyNameTheSameAsCurrentPolicy() {
+  public void newPolicyNameTheSameAsCurrentPolicy_shouldShutdownPendingLb() {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
 
@@ -424,7 +424,7 @@ public class GracefulSwitchLoadBalancerTest {
 
   @Deprecated
   @Test
-  public void handleSubchannelState() {
+  public void handleSubchannelState_shouldThrow() {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     Subchannel subchannel = mock(Subchannel.class);
     ConnectivityStateInfo connectivityStateInfo = ConnectivityStateInfo.forNonError(READY);
