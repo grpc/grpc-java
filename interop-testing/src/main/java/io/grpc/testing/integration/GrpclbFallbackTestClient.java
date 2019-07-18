@@ -23,7 +23,6 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.alts.ComputeEngineChannelBuilder;
 import io.grpc.testing.integration.Messages.GrpclbRouteType;
@@ -153,7 +152,7 @@ public final class GrpclbFallbackTestClient {
            "This test currently only supports "
            + "--custom_credentials_type=compute_engine_channel_creds.");
     }
-    ManagedChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverURI);
+    ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverURI);
     builder.keepAliveTime(3600, TimeUnit.SECONDS);
     builder.keepAliveTimeout(20, TimeUnit.SECONDS);
     return builder.build();
