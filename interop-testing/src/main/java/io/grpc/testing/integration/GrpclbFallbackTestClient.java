@@ -72,9 +72,9 @@ public final class GrpclbFallbackTestClient {
     System.exit(0);
   }
 
-  private String unrouteLBAndBackendAddrsCmd = "exit 1";
-  private String blackholeLBAndBackendAddrsCmd = "exit 1";
-  private String serverURI;
+  private String unrouteLbAndBackendAddrsCmd = "exit 1";
+  private String blackholeLbAndBackendAddrsCmd = "exit 1";
+  private String serverUri;
   private String customCredentialsType;
   private String testCase;
 
@@ -102,13 +102,13 @@ public final class GrpclbFallbackTestClient {
       }
       String value = parts[1];
       if ("server_uri".equals(key)) {
-        serverURI = value;
+        serverUri = value;
       } else if ("test_case".equals(key)) {
         testCase = value;
       } else if ("unroute_lb_and_backend_addrs_cmd".equals(key)) {
-        unrouteLBAndBackendAddrsCmd = value;
+        unrouteLbAndBackendAddrsCmd = value;
       } else if ("blackhole_lb_and_backend_addrs_cmd".equals(key)) {
-        blackholeLBAndBackendAddrsCmd = value;
+        blackholeLbAndBackendAddrsCmd = value;
       } else if ("custom_credentials_type".equals(key)) {
         customCredentialsType = value;
       } else {
@@ -123,15 +123,15 @@ public final class GrpclbFallbackTestClient {
           "Usage: [ARGS...]"
           + "\n"
           + "\n  --server_uri                          Server target. Default: "
-          + c.serverURI
+          + c.serverUri
           + "\n  --custom_credentials_type             Name of Credentials to use. "
           + "Default: " + c.customCredentialsType
           + "\n  --unroute_lb_and_backend_addrs_cmd    Shell command used to make "
           + "LB and backend addresses unroutable. Default: "
-          + c.unrouteLBAndBackendAddrsCmd
+          + c.unrouteLbAndBackendAddrsCmd
           + "\n  --blackhole_lb_and_backend_addrs_cmd  Shell command used to make "
           + "LB and backend addresses black holed. Default: "
-          + c.blackholeLBAndBackendAddrsCmd
+          + c.blackholeLbAndBackendAddrsCmd
           + "\n  --test_case=TEST_CASE        Test case to run. Valid options are:"
           + "\n      fast_fallback_before_startup : fallback before LB connection"
           + "\n      fast_fallback_after_startup : fallback after startup due to "
@@ -152,7 +152,7 @@ public final class GrpclbFallbackTestClient {
            "This test currently only supports "
            + "--custom_credentials_type=compute_engine_channel_creds.");
     }
-    ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverURI);
+    ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverUri);
     builder.keepAliveTime(3600, TimeUnit.SECONDS);
     builder.keepAliveTimeout(20, TimeUnit.SECONDS);
     return builder.build();
@@ -193,16 +193,16 @@ public final class GrpclbFallbackTestClient {
     assertEquals(0, exitCode);
   }
 
-  private enum RPCMode {
+  private enum RpcMode {
     FailFast,
     WaitForReady,
   }
 
-  private GrpclbRouteType doRPCAndGetPath(
+  private GrpclbRouteType doRpcAndGetPath(
       TestServiceGrpc.TestServiceBlockingStub blockingStub,
       int deadlineSeconds,
-      RPCMode rpcMode) {
-    logger.info("doRPCAndGetPath deadlineSeconds: " + deadlineSeconds + " rpcMode: "
+      RpcMode rpcMode) {
+    logger.info("doRpcAndGetPath deadlineSeconds: " + deadlineSeconds + " rpcMode: "
         + rpcMode);
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillGrpclbRouteType(true)
@@ -210,7 +210,7 @@ public final class GrpclbFallbackTestClient {
     GrpclbRouteType result = GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
     try {
       SimpleResponse response = null;
-      if (rpcMode == RPCMode.WaitForReady) {
+      if (rpcMode == RpcMode.WaitForReady) {
         response = blockingStub
           .withDeadlineAfter(deadlineSeconds, TimeUnit.SECONDS)
           .withWaitForReady()
@@ -222,11 +222,11 @@ public final class GrpclbFallbackTestClient {
       }
       result = response.getGrpclbRouteType();
     } catch (StatusRuntimeException ex) {
-      logger.warning("doRPCAndGetPath failed. Status: " + ex);
+      logger.warning("doRpcAndGetPath failed. Status: " + ex);
     }
-    assert(result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK ||
-           result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
-    logger.info("doRPCAndGetPath. GrpclbRouteType result: " + result);
+    assert(result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
+        || result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
+    logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
     return result;
   }
 
@@ -234,30 +234,30 @@ public final class GrpclbFallbackTestClient {
       String breakLBAndBackendConnsCmd, int deadlineSeconds) throws Exception {
     runShellCmd(breakLBAndBackendConnsCmd);
     for (int i = 0; i < 30; i++) {
-      GrpclbRouteType grpclbRouteType = doRPCAndGetPath(
-          blockingStub, deadlineSeconds, RPCMode.FailFast);
+      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
+          blockingStub, deadlineSeconds, RpcMode.FailFast);
       assertEquals(grpclbRouteType, GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK);
       Thread.sleep(1000);
     }
   }
 
   private void runFastFallbackBeforeStartup() throws Exception {
-    doFallbackBeforeStartupTest(unrouteLBAndBackendAddrsCmd, 9);
+    doFallbackBeforeStartupTest(unrouteLbAndBackendAddrsCmd, 9);
   }
 
   private void runSlowFallbackBeforeStartup() throws Exception {
-    doFallbackBeforeStartupTest(blackholeLBAndBackendAddrsCmd, 20);
+    doFallbackBeforeStartupTest(blackholeLbAndBackendAddrsCmd, 20);
   }
 
   private void doFallbackAfterStartupTest(
       String breakLBAndBackendConnsCmd) throws Exception {
     assertEquals(
-        doRPCAndGetPath(blockingStub, 20, RPCMode.FailFast),
+        doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast),
         GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
     runShellCmd(breakLBAndBackendConnsCmd);
     for (int i = 0; i < 40; i++) {
-      GrpclbRouteType grpclbRouteType = doRPCAndGetPath(
-          blockingStub, 1, RPCMode.WaitForReady);
+      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
+          blockingStub, 1, RpcMode.WaitForReady);
       // Backends are supposed to be unreachable, the test is broken if not.
       assert(grpclbRouteType != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
@@ -272,17 +272,17 @@ public final class GrpclbFallbackTestClient {
     for (int i = 0; i < 30; i++) {
       assertEquals(
           GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK,
-          doRPCAndGetPath(blockingStub, 20, RPCMode.FailFast));
+          doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast));
       Thread.sleep(1000);
     }
   }
 
   private void runFastFallbackAfterStartup() throws Exception {
-    doFallbackAfterStartupTest(unrouteLBAndBackendAddrsCmd);
+    doFallbackAfterStartupTest(unrouteLbAndBackendAddrsCmd);
   }
 
   private void runSlowFallbackAfterStartup() throws Exception {
-    doFallbackAfterStartupTest(blackholeLBAndBackendAddrsCmd);
+    doFallbackAfterStartupTest(blackholeLbAndBackendAddrsCmd);
   }
 
   private void run() throws Exception {
