@@ -19,6 +19,7 @@ package io.grpc.testing.integration;
 import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 
+import com.google.common.io.CharStreams;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.alts.ComputeEngineChannelBuilder;
@@ -144,7 +145,8 @@ public final class GrpclbFallbackTestClient {
     if (!customCredentialsType.equals("compute_engine_channel_creds")) {
       throw new AssertionError(
           "This test currently only supports "
-          + "--custom_credentials_type=compute_engine_channel_creds.");
+          + "--custom_credentials_type=compute_engine_channel_creds. "
+          + "TODO: add support for other types.");
     }
     ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget(serverUri);
     builder.keepAliveTime(3600, TimeUnit.SECONDS);
@@ -166,23 +168,15 @@ public final class GrpclbFallbackTestClient {
     }
   }
 
-  private String streamToString(InputStream inputStream) throws Exception {
-    BufferedReader br = new BufferedReader(
-        new InputStreamReader(inputStream, UTF_8));
-    String out = "";
-    String line;
-    while ((line = br.readLine()) != null) {
-      out += line;
-    }
-    return out;
-  }
-
   private void runShellCmd(String cmd) throws Exception {
     logger.info("Run shell command: " + cmd);
-    Process process = Runtime.getRuntime().exec(new String[]{"bash", "-c", cmd});
+    ProcessBuilder pb = new ProcessBuilder("bash", "-c", cmd);
+    pb.redirectErrorStream(true);
+    Process process = pb.start();
+    logger.info("Shell command merged stdout and stderr: "
+        + CharStreams.toString(
+            new InputStreamReader(process.getInputStream(), UTF_8)));
     int exitCode = process.waitFor();
-    logger.info("Shell command stdout: " + streamToString(process.getInputStream()));
-    logger.info("Shell command stderr: " + streamToString(process.getErrorStream()));
     logger.info("Shell rommand exit code: " + exitCode);
     assertEquals(0, exitCode);
   }
@@ -218,12 +212,12 @@ public final class GrpclbFallbackTestClient {
     } catch (StatusRuntimeException ex) {
       logger.warning("doRpcAndGetPath failed. Status: " + ex);
     }
-    if (result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
-        || result == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
+    logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
+    if (result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
+        && result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
       throw new AssertionError("Received invalid LB route type. This suggests "
           + "that the server hasn't implemented this test correctly.");
     }
-    logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
     return result;
   }
 

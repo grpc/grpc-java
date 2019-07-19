@@ -102,7 +102,7 @@ message SimpleResponse {
   string oauth_scope = 3;
   // Server ID. This must be unique among different server instances,
   // but the same across all RPC's made to a particular server instance.
- string server_id = 4;
+  string server_id = 4;
   // gRPCLB Path.
   GrpclbRouteType grpclb_route_type = 5;
 }
