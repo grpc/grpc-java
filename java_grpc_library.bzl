@@ -149,7 +149,7 @@ _java_lite_grpc_library = rule(
         "srcs": attr.label_list(
             mandatory = True,
             allow_empty = False,
-            providers = ["ProtoInfo"],
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,
