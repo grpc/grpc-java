@@ -177,7 +177,7 @@ public final class GrpclbFallbackTestClient {
         + CharStreams.toString(
             new InputStreamReader(process.getInputStream(), UTF_8)));
     int exitCode = process.waitFor();
-    logger.info("Shell rommand exit code: " + exitCode);
+    logger.info("Shell command exit code: " + exitCode);
     assertEquals(0, exitCode);
   }
 
