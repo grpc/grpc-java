@@ -211,6 +211,7 @@ public final class GrpclbFallbackTestClient {
       result = response.getGrpclbRouteType();
     } catch (StatusRuntimeException ex) {
       logger.warning("doRpcAndGetPath failed. Status: " + ex);
+      return GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
     }
     logger.info("doRpcAndGetPath. GrpclbRouteType result: " + result);
     if (result != GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK
@@ -227,7 +228,7 @@ public final class GrpclbFallbackTestClient {
     for (int i = 0; i < 30; i++) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
           blockingStub, deadlineSeconds, RpcMode.FailFast);
-      assertEquals(grpclbRouteType, GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK);
+      assertEquals(GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK, grpclbRouteType);
       Thread.sleep(1000);
     }
   }
@@ -243,13 +244,13 @@ public final class GrpclbFallbackTestClient {
   private void doFallbackAfterStartupTest(
       String breakLbAndBackendConnsCmd) throws Exception {
     assertEquals(
-        doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast),
-        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND);
+        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
+        doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast));
     runShellCmd(breakLbAndBackendConnsCmd);
     for (int i = 0; i < 40; i++) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
           blockingStub, 1, RpcMode.WaitForReady);
-      if (grpclbRouteType != GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
+      if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
         throw new AssertionError("Got grpclb route type backend. Backends are "
             + "supposed to be unreachable, so this test is broken");
       }
