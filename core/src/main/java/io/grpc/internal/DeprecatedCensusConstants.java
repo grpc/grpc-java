@@ -26,10 +26,6 @@ import io.opencensus.tags.TagKey;
 @SuppressWarnings("deprecation")
 @VisibleForTesting
 public final class DeprecatedCensusConstants {
-
-  public static final TagKey RPC_STATUS = RpcMeasureConstants.RPC_STATUS;
-  public static final TagKey RPC_METHOD = RpcMeasureConstants.RPC_METHOD;
-
   public static final MeasureLong RPC_CLIENT_ERROR_COUNT =
       RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT;
   public static final MeasureDouble RPC_CLIENT_REQUEST_BYTES =
