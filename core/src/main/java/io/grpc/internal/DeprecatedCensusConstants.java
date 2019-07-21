@@ -20,7 +20,6 @@ import com.google.common.annotations.VisibleForTesting;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.Measure.MeasureLong;
-import io.opencensus.tags.TagKey;
 
 /** Holder class for the deprecated OpenCensus constants. */
 @SuppressWarnings("deprecation")
