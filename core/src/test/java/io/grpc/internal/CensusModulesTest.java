@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
@@ -61,8 +63,19 @@ import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
 import io.grpc.testing.GrpcServerRule;
+import io.opencensus.common.Function;
+import io.opencensus.common.Functions;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
+import io.opencensus.contrib.grpc.metrics.RpcViewConstants;
+import io.opencensus.impl.stats.StatsComponentImpl;
+import io.opencensus.stats.AggregationData;
+import io.opencensus.stats.AggregationData.CountData;
+import io.opencensus.stats.AggregationData.LastValueDataDouble;
+import io.opencensus.stats.AggregationData.LastValueDataLong;
+import io.opencensus.stats.AggregationData.SumDataDouble;
 import io.opencensus.stats.Measure;
+import io.opencensus.stats.StatsComponent;
+import io.opencensus.stats.View;
 import io.opencensus.tags.TagContext;
 import io.opencensus.tags.TagValue;
 import io.opencensus.trace.BlankSpan;
@@ -1152,5 +1165,93 @@ public class CensusModulesTest {
     assertNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_SERVER_ELAPSED_TIME));
     assertNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_REQUEST_BYTES));
     assertNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
+  }
+
+  @SuppressWarnings("deprecation")
+  @Test
+  public void newTagsPopulateOldViews() throws InterruptedException {
+    StatsComponent localStats = new StatsComponentImpl();
+
+    // Test views that contain both of the remap tags: method & status.
+    localStats.getViewManager().registerView(RpcViewConstants.RPC_CLIENT_ERROR_COUNT_VIEW);
+    localStats.getViewManager().registerView(RpcViewConstants.GRPC_CLIENT_COMPLETED_RPC_VIEW);
+
+    CensusStatsModule localCensusStats = new CensusStatsModule(
+        tagger, tagCtxSerializer, localStats.getStatsRecorder(), fakeClock.getStopwatchSupplier(),
+        false, false, true, false /* real-time */);
+
+    CensusStatsModule.ClientCallTracer callTracer =
+        localCensusStats.newClientCallTracer(
+            tagger.empty(), method.getFullMethodName());
+
+    callTracer.newClientStreamTracer(STREAM_INFO, new Metadata());
+    fakeClock.forwardTime(30, MILLISECONDS);
+    callTracer.callEnded(Status.PERMISSION_DENIED.withDescription("No you don't"));
+
+    // Give OpenCensus a chance to update the views asynchronously.
+    Thread.sleep(100);
+
+    assertWithMessage("Legacy error count view had unexpected count")
+        .that(
+          getAggregationValueAsLong(
+              localStats,
+              RpcViewConstants.RPC_CLIENT_ERROR_COUNT_VIEW,
+              ImmutableList.of(
+                  TagValue.create("PERMISSION_DENIED"),
+                  TagValue.create(method.getFullMethodName()))))
+        .isEqualTo(1);
+
+    assertWithMessage("New error count view had unexpected count")
+        .that(
+          getAggregationValueAsLong(
+              localStats,
+              RpcViewConstants.GRPC_CLIENT_COMPLETED_RPC_VIEW,
+              ImmutableList.of(
+                  TagValue.create(method.getFullMethodName()),
+                  TagValue.create("PERMISSION_DENIED"))))
+        .isEqualTo(1);
+  }
+
+  @SuppressWarnings("deprecation")
+  private long getAggregationValueAsLong(StatsComponent localStats, View view,
+      List<TagValue> dimension) {
+    AggregationData aggregationData = localStats.getViewManager()
+        .getView(view.getName())
+        .getAggregationMap()
+        .get(dimension);
+
+    return aggregationData.match(
+        new Function<SumDataDouble, Long>() {
+          @Override
+          public Long apply(SumDataDouble arg) {
+            return (long) arg.getSum();
+          }
+        },
+        Functions.<Long>throwAssertionError(),
+        new Function<CountData, Long>() {
+          @Override
+          public Long apply(CountData arg) {
+            return arg.getCount();
+          }
+        },
+        Functions.<Long>throwAssertionError(),
+        new Function<LastValueDataDouble, Long>() {
+          @Override
+          public Long apply(LastValueDataDouble arg) {
+            return (long) arg.getLastValue();
+          }
+        },
+        new Function<LastValueDataLong, Long>() {
+          @Override
+          public Long apply(LastValueDataLong arg) {
+            return arg.getLastValue();
+          }
+        },
+        new Function<AggregationData, Long>() {
+          @Override
+          public Long apply(AggregationData arg) {
+            return ((io.opencensus.stats.AggregationData.MeanData) arg).getCount();
+          }
+        });
   }
 }
