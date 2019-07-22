@@ -371,9 +371,9 @@ public class GracefulSwitchLoadBalancerTest {
     picker = mock(SubchannelPicker.class);
     helper0.updateBalancingState(CONNECTING, picker);
 
-    inOrder.verify(lb0).shutdown();
-    inOrder.verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
+    verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
     inOrder.verify(mockHelper).updateBalancingState(IDLE, BUFFER_PICKER);
+    inOrder.verify(lb0).shutdown(); // shutdown after update
 
     picker = mock(SubchannelPicker.class);
     helper1.updateBalancingState(CONNECTING, picker);

@@ -133,12 +133,12 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   }
 
   private void swap() {
+    helper.updateBalancingState(pendingState, pendingPicker);
     currentLb.shutdown();
     currentLb = pendingLb;
     currentPolicyName = pendingPolicyName;
     pendingLb = NOOP_BALANCER;
     pendingPolicyName = null;
-    helper.updateBalancingState(pendingState, pendingPicker);
   }
 
   @Override
