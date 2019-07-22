@@ -22,7 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.Internal;
+import io.grpc.ExperimentalApi;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.Status;
@@ -34,7 +34,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
  * will keep using the old policy until the new policy reports READY or the old policy exits READY.
  */
-@Internal
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
 public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   private static final LoadBalancer NOOP_BALANCER = new LoadBalancer() {
@@ -59,15 +59,19 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   };
 
   private final Helper helper;
+
+  // While the new policy is not fully switched on, the pendingLb is handling new updates from name
+  // resolver, and the currentLb is updating channel state and picker for the given helper.
+  // The current fields are guaranteed to be set after the initial swapTo().
+  // The pending fields are cleared when it becomes current.
+  @Nullable private String currentPolicyName;
   private LoadBalancer currentLb = NOOP_BALANCER;
+  @Nullable private String pendingPolicyName;
   private LoadBalancer pendingLb = NOOP_BALANCER;
-  @Nullable
-  private String currentPolicyName;
-  @Nullable
-  private String pendingPolicyName;
-  private boolean isReady;
   private ConnectivityState pendingState;
   private SubchannelPicker pendingPicker;
+
+  private boolean currentLbIsReady;
 
   public GracefulSwitchLoadBalancer(Helper helper) {
     this.helper = checkNotNull(helper, "helper");
@@ -102,16 +106,16 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
       @Override
       public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
         if (lb == pendingLb) {
-          checkState(isReady, "there is pending lb while current lb has been out of READY");
+          checkState(currentLbIsReady, "there's pending lb while current lb has been out of READY");
           pendingState = newState;
           pendingPicker = newPicker;
           if (newState == ConnectivityState.READY) {
             swap();
           }
         } else if (lb == currentLb) {
-          isReady = newState == ConnectivityState.READY;
-          if (!isReady && pendingLb != NOOP_BALANCER) { // current policy exits READY, swap
-            swap();
+          currentLbIsReady = newState == ConnectivityState.READY;
+          if (!currentLbIsReady && pendingLb != NOOP_BALANCER) {
+            swap(); // current policy exits READY, so swap
           } else {
             helper.updateBalancingState(newState, newPicker);
           }
@@ -123,8 +127,8 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingHelper.lb = newLbProvider.newLoadBalancer(pendingHelper);
     pendingLb = pendingHelper.lb;
     pendingPolicyName = newPolicyName;
-    if (!isReady) { // if the old policy is not READY at the moment, swap to the new one right now
-      swap();
+    if (!currentLbIsReady) {
+      swap(); // the old policy is not READY at the moment, so swap to the new one right now
     }
   }
 
