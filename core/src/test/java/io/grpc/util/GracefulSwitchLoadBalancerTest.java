@@ -18,7 +18,6 @@ package io.grpc.util;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.util.GracefulSwitchLoadBalancer.BUFFER_PICKER;
 import static org.mockito.Mockito.doReturn;
@@ -372,7 +371,7 @@ public class GracefulSwitchLoadBalancerTest {
     helper0.updateBalancingState(CONNECTING, picker);
 
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker);
-    inOrder.verify(mockHelper).updateBalancingState(IDLE, BUFFER_PICKER);
+    inOrder.verify(mockHelper).updateBalancingState(CONNECTING, BUFFER_PICKER);
     inOrder.verify(lb0).shutdown(); // shutdown after update
 
     picker = mock(SubchannelPicker.class);

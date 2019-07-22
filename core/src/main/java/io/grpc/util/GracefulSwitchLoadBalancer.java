@@ -88,7 +88,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb.shutdown();
     pendingLb = NOOP_BALANCER;
     pendingPolicyName = null;
-    pendingState = ConnectivityState.IDLE;
+    pendingState = ConnectivityState.CONNECTING;
     pendingPicker = BUFFER_PICKER;
 
     if (newPolicyName.equals(currentPolicyName)) {
