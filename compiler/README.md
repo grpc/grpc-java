@@ -46,11 +46,11 @@ $ protoc --plugin=protoc-gen-grpc-java=build/exe/java_plugin/protoc-gen-grpc-jav
 ## Installing the codegen to Maven local repository
 This will compile a codegen and put it under your ``~/.m2/repository``. This
 will make it available to any build tool that pulls codegens from Maven
-repostiories.
+repositories.
 ```
 $ ../gradlew publishToMavenLocal
 ```
 
-## Creating a release of GRPC Java
+## Creating a release of gRPC Java
 Please follow the instructions in ``RELEASING.md`` under the root directory for
 details on how to create a new release.
