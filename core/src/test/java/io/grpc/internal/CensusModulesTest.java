@@ -1167,7 +1167,7 @@ public class CensusModulesTest {
     assertNull(record.getMetric(DeprecatedCensusConstants.RPC_CLIENT_UNCOMPRESSED_RESPONSE_BYTES));
   }
 
-  @SuppressWarnings("deprecation")
+  @Deprecated
   @Test
   public void newTagsPopulateOldViews() throws InterruptedException {
     StatsComponent localStats = new StatsComponentImpl();
@@ -1212,7 +1212,7 @@ public class CensusModulesTest {
         .isEqualTo(1);
   }
 
-  @SuppressWarnings("deprecation")
+  @Deprecated
   private long getAggregationValueAsLong(StatsComponent localStats, View view,
       List<TagValue> dimension) {
     AggregationData aggregationData = localStats.getViewManager()
