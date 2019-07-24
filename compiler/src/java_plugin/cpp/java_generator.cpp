@@ -407,11 +407,10 @@ static void PrintMethodFields(
         "  if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
         "    synchronized ($service_class_name$.class) {\n"
         "      if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-        "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ = \n"
+        "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ =\n"
         "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
         "            .setType($MethodType$.$method_type$)\n"
-        "            .setFullMethodName(generateFullMethodName(\n"
-        "                \"$Package$$service_name$\", \"$method_name$\"))\n"
+        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n"
         "            .setSampledToLocalTracing(true)\n"
         "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
         "                $input_type$.getDefaultInstance()))\n"
@@ -422,17 +421,17 @@ static void PrintMethodFields(
     if (flavor == ProtoFlavor::NORMAL) {
       p->Print(
           *vars,
-        "                .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
+        "            .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
     }
 
     p->Print(
         *vars,
-        "                .build();\n");
+        "            .build();\n");
     p->Print(*vars,
-        "        }\n"
         "      }\n"
-        "   }\n"
-        "   return $method_new_field_name$;\n"
+        "    }\n"
+        "  }\n"
+        "  return $method_new_field_name$;\n"
         "}\n"
         "\n");
   }

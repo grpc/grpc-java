@@ -45,22 +45,21 @@ public final class ChannelzGrpc {
     if ((getGetTopChannelsMethod = ChannelzGrpc.getGetTopChannelsMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetTopChannelsMethod = ChannelzGrpc.getGetTopChannelsMethod) == null) {
-          ChannelzGrpc.getGetTopChannelsMethod = getGetTopChannelsMethod = 
+          ChannelzGrpc.getGetTopChannelsMethod = getGetTopChannelsMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetTopChannelsRequest, io.grpc.channelz.v1.GetTopChannelsResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetTopChannels"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetTopChannels"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetTopChannelsRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetTopChannelsResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetTopChannels"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetTopChannels"))
+              .build();
         }
-     }
-     return getGetTopChannelsMethod;
+      }
+    }
+    return getGetTopChannelsMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetServersRequest,
@@ -77,22 +76,21 @@ public final class ChannelzGrpc {
     if ((getGetServersMethod = ChannelzGrpc.getGetServersMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetServersMethod = ChannelzGrpc.getGetServersMethod) == null) {
-          ChannelzGrpc.getGetServersMethod = getGetServersMethod = 
+          ChannelzGrpc.getGetServersMethod = getGetServersMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetServersRequest, io.grpc.channelz.v1.GetServersResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetServers"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetServers"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServersRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServersResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServers"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServers"))
+              .build();
         }
-     }
-     return getGetServersMethod;
+      }
+    }
+    return getGetServersMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetServerRequest,
@@ -109,22 +107,21 @@ public final class ChannelzGrpc {
     if ((getGetServerMethod = ChannelzGrpc.getGetServerMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetServerMethod = ChannelzGrpc.getGetServerMethod) == null) {
-          ChannelzGrpc.getGetServerMethod = getGetServerMethod = 
+          ChannelzGrpc.getGetServerMethod = getGetServerMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetServerRequest, io.grpc.channelz.v1.GetServerResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetServer"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetServer"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServerRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServerResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServer"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServer"))
+              .build();
         }
-     }
-     return getGetServerMethod;
+      }
+    }
+    return getGetServerMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetServerSocketsRequest,
@@ -141,22 +138,21 @@ public final class ChannelzGrpc {
     if ((getGetServerSocketsMethod = ChannelzGrpc.getGetServerSocketsMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetServerSocketsMethod = ChannelzGrpc.getGetServerSocketsMethod) == null) {
-          ChannelzGrpc.getGetServerSocketsMethod = getGetServerSocketsMethod = 
+          ChannelzGrpc.getGetServerSocketsMethod = getGetServerSocketsMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetServerSocketsRequest, io.grpc.channelz.v1.GetServerSocketsResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetServerSockets"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetServerSockets"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServerSocketsRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetServerSocketsResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServerSockets"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetServerSockets"))
+              .build();
         }
-     }
-     return getGetServerSocketsMethod;
+      }
+    }
+    return getGetServerSocketsMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetChannelRequest,
@@ -173,22 +169,21 @@ public final class ChannelzGrpc {
     if ((getGetChannelMethod = ChannelzGrpc.getGetChannelMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetChannelMethod = ChannelzGrpc.getGetChannelMethod) == null) {
-          ChannelzGrpc.getGetChannelMethod = getGetChannelMethod = 
+          ChannelzGrpc.getGetChannelMethod = getGetChannelMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetChannelRequest, io.grpc.channelz.v1.GetChannelResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetChannel"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetChannel"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetChannelRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetChannelResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetChannel"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetChannel"))
+              .build();
         }
-     }
-     return getGetChannelMethod;
+      }
+    }
+    return getGetChannelMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetSubchannelRequest,
@@ -205,22 +200,21 @@ public final class ChannelzGrpc {
     if ((getGetSubchannelMethod = ChannelzGrpc.getGetSubchannelMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetSubchannelMethod = ChannelzGrpc.getGetSubchannelMethod) == null) {
-          ChannelzGrpc.getGetSubchannelMethod = getGetSubchannelMethod = 
+          ChannelzGrpc.getGetSubchannelMethod = getGetSubchannelMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetSubchannelRequest, io.grpc.channelz.v1.GetSubchannelResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetSubchannel"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetSubchannel"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetSubchannelRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetSubchannelResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetSubchannel"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetSubchannel"))
+              .build();
         }
-     }
-     return getGetSubchannelMethod;
+      }
+    }
+    return getGetSubchannelMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.channelz.v1.GetSocketRequest,
@@ -237,22 +231,21 @@ public final class ChannelzGrpc {
     if ((getGetSocketMethod = ChannelzGrpc.getGetSocketMethod) == null) {
       synchronized (ChannelzGrpc.class) {
         if ((getGetSocketMethod = ChannelzGrpc.getGetSocketMethod) == null) {
-          ChannelzGrpc.getGetSocketMethod = getGetSocketMethod = 
+          ChannelzGrpc.getGetSocketMethod = getGetSocketMethod =
               io.grpc.MethodDescriptor.<io.grpc.channelz.v1.GetSocketRequest, io.grpc.channelz.v1.GetSocketResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.channelz.v1.Channelz", "GetSocket"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetSocket"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetSocketRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.channelz.v1.GetSocketResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetSocket"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ChannelzMethodDescriptorSupplier("GetSocket"))
+              .build();
         }
-     }
-     return getGetSocketMethod;
+      }
+    }
+    return getGetSocketMethod;
   }
 
   /**

@@ -49,22 +49,21 @@ public final class AggregatedDiscoveryServiceGrpc {
     if ((getStreamAggregatedResourcesMethod = AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod) == null) {
       synchronized (AggregatedDiscoveryServiceGrpc.class) {
         if ((getStreamAggregatedResourcesMethod = AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod) == null) {
-          AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod = getStreamAggregatedResourcesMethod = 
+          AggregatedDiscoveryServiceGrpc.getStreamAggregatedResourcesMethod = getStreamAggregatedResourcesMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.service.discovery.v2.AggregatedDiscoveryService", "StreamAggregatedResources"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamAggregatedResources"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new AggregatedDiscoveryServiceMethodDescriptorSupplier("StreamAggregatedResources"))
-                  .build();
-          }
+              .setSchemaDescriptor(new AggregatedDiscoveryServiceMethodDescriptorSupplier("StreamAggregatedResources"))
+              .build();
         }
-     }
-     return getStreamAggregatedResourcesMethod;
+      }
+    }
+    return getStreamAggregatedResourcesMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -81,22 +80,21 @@ public final class AggregatedDiscoveryServiceGrpc {
     if ((getDeltaAggregatedResourcesMethod = AggregatedDiscoveryServiceGrpc.getDeltaAggregatedResourcesMethod) == null) {
       synchronized (AggregatedDiscoveryServiceGrpc.class) {
         if ((getDeltaAggregatedResourcesMethod = AggregatedDiscoveryServiceGrpc.getDeltaAggregatedResourcesMethod) == null) {
-          AggregatedDiscoveryServiceGrpc.getDeltaAggregatedResourcesMethod = getDeltaAggregatedResourcesMethod = 
+          AggregatedDiscoveryServiceGrpc.getDeltaAggregatedResourcesMethod = getDeltaAggregatedResourcesMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.service.discovery.v2.AggregatedDiscoveryService", "DeltaAggregatedResources"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DeltaAggregatedResources"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new AggregatedDiscoveryServiceMethodDescriptorSupplier("DeltaAggregatedResources"))
-                  .build();
-          }
+              .setSchemaDescriptor(new AggregatedDiscoveryServiceMethodDescriptorSupplier("DeltaAggregatedResources"))
+              .build();
         }
-     }
-     return getDeltaAggregatedResourcesMethod;
+      }
+    }
+    return getDeltaAggregatedResourcesMethod;
   }
 
   /**

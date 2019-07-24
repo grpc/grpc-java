@@ -41,22 +41,21 @@ public final class ReflectableServiceGrpc {
     if ((getMethodMethod = ReflectableServiceGrpc.getMethodMethod) == null) {
       synchronized (ReflectableServiceGrpc.class) {
         if ((getMethodMethod = ReflectableServiceGrpc.getMethodMethod) == null) {
-          ReflectableServiceGrpc.getMethodMethod = getMethodMethod = 
+          ReflectableServiceGrpc.getMethodMethod = getMethodMethod =
               io.grpc.MethodDescriptor.<io.grpc.reflection.testing.Request, io.grpc.reflection.testing.Reply>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.reflection.testing.ReflectableService", "Method"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Method"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.Request.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.Reply.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReflectableServiceMethodDescriptorSupplier("Method"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReflectableServiceMethodDescriptorSupplier("Method"))
+              .build();
         }
-     }
-     return getMethodMethod;
+      }
+    }
+    return getMethodMethod;
   }
 
   /**

@@ -51,22 +51,21 @@ public final class OpenRcaServiceGrpc {
     if ((getStreamCoreMetricsMethod = OpenRcaServiceGrpc.getStreamCoreMetricsMethod) == null) {
       synchronized (OpenRcaServiceGrpc.class) {
         if ((getStreamCoreMetricsMethod = OpenRcaServiceGrpc.getStreamCoreMetricsMethod) == null) {
-          OpenRcaServiceGrpc.getStreamCoreMetricsMethod = getStreamCoreMetricsMethod = 
+          OpenRcaServiceGrpc.getStreamCoreMetricsMethod = getStreamCoreMetricsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest, io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "udpa.service.orca.v1.OpenRcaService", "StreamCoreMetrics"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamCoreMetrics"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport.getDefaultInstance()))
-                  .setSchemaDescriptor(new OpenRcaServiceMethodDescriptorSupplier("StreamCoreMetrics"))
-                  .build();
-          }
+              .setSchemaDescriptor(new OpenRcaServiceMethodDescriptorSupplier("StreamCoreMetrics"))
+              .build();
         }
-     }
-     return getStreamCoreMetricsMethod;
+      }
+    }
+    return getStreamCoreMetricsMethod;
   }
 
   /**

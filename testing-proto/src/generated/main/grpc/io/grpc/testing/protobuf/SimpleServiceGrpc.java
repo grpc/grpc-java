@@ -44,22 +44,21 @@ public final class SimpleServiceGrpc {
     if ((getUnaryRpcMethod = SimpleServiceGrpc.getUnaryRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getUnaryRpcMethod = SimpleServiceGrpc.getUnaryRpcMethod) == null) {
-          SimpleServiceGrpc.getUnaryRpcMethod = getUnaryRpcMethod = 
+          SimpleServiceGrpc.getUnaryRpcMethod = getUnaryRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "UnaryRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnaryRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("UnaryRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("UnaryRpc"))
+              .build();
         }
-     }
-     return getUnaryRpcMethod;
+      }
+    }
+    return getUnaryRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -76,22 +75,21 @@ public final class SimpleServiceGrpc {
     if ((getClientStreamingRpcMethod = SimpleServiceGrpc.getClientStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getClientStreamingRpcMethod = SimpleServiceGrpc.getClientStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getClientStreamingRpcMethod = getClientStreamingRpcMethod = 
+          SimpleServiceGrpc.getClientStreamingRpcMethod = getClientStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "ClientStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ClientStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ClientStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ClientStreamingRpc"))
+              .build();
         }
-     }
-     return getClientStreamingRpcMethod;
+      }
+    }
+    return getClientStreamingRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -108,22 +106,21 @@ public final class SimpleServiceGrpc {
     if ((getServerStreamingRpcMethod = SimpleServiceGrpc.getServerStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getServerStreamingRpcMethod = SimpleServiceGrpc.getServerStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getServerStreamingRpcMethod = getServerStreamingRpcMethod = 
+          SimpleServiceGrpc.getServerStreamingRpcMethod = getServerStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "ServerStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ServerStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ServerStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("ServerStreamingRpc"))
+              .build();
         }
-     }
-     return getServerStreamingRpcMethod;
+      }
+    }
+    return getServerStreamingRpcMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.protobuf.SimpleRequest,
@@ -140,22 +137,21 @@ public final class SimpleServiceGrpc {
     if ((getBidiStreamingRpcMethod = SimpleServiceGrpc.getBidiStreamingRpcMethod) == null) {
       synchronized (SimpleServiceGrpc.class) {
         if ((getBidiStreamingRpcMethod = SimpleServiceGrpc.getBidiStreamingRpcMethod) == null) {
-          SimpleServiceGrpc.getBidiStreamingRpcMethod = getBidiStreamingRpcMethod = 
+          SimpleServiceGrpc.getBidiStreamingRpcMethod = getBidiStreamingRpcMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.protobuf.SimpleRequest, io.grpc.testing.protobuf.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.SimpleService", "BidiStreamingRpc"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "BidiStreamingRpc"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.protobuf.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("BidiStreamingRpc"))
-                  .build();
-          }
+              .setSchemaDescriptor(new SimpleServiceMethodDescriptorSupplier("BidiStreamingRpc"))
+              .build();
         }
-     }
-     return getBidiStreamingRpcMethod;
+      }
+    }
+    return getBidiStreamingRpcMethod;
   }
 
   /**

@@ -41,22 +41,21 @@ public final class ReportQpsScenarioServiceGrpc {
     if ((getReportScenarioMethod = ReportQpsScenarioServiceGrpc.getReportScenarioMethod) == null) {
       synchronized (ReportQpsScenarioServiceGrpc.class) {
         if ((getReportScenarioMethod = ReportQpsScenarioServiceGrpc.getReportScenarioMethod) == null) {
-          ReportQpsScenarioServiceGrpc.getReportScenarioMethod = getReportScenarioMethod = 
+          ReportQpsScenarioServiceGrpc.getReportScenarioMethod = getReportScenarioMethod =
               io.grpc.MethodDescriptor.<io.grpc.benchmarks.proto.Control.ScenarioResult, io.grpc.benchmarks.proto.Control.Void>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.ReportQpsScenarioService", "ReportScenario"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "ReportScenario"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.ScenarioResult.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.benchmarks.proto.Control.Void.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReportQpsScenarioServiceMethodDescriptorSupplier("ReportScenario"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReportQpsScenarioServiceMethodDescriptorSupplier("ReportScenario"))
+              .build();
         }
-     }
-     return getReportScenarioMethod;
+      }
+    }
+    return getReportScenarioMethod;
   }
 
   /**

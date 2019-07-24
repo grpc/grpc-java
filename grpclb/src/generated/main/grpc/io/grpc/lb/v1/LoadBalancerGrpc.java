@@ -41,22 +41,21 @@ public final class LoadBalancerGrpc {
     if ((getBalanceLoadMethod = LoadBalancerGrpc.getBalanceLoadMethod) == null) {
       synchronized (LoadBalancerGrpc.class) {
         if ((getBalanceLoadMethod = LoadBalancerGrpc.getBalanceLoadMethod) == null) {
-          LoadBalancerGrpc.getBalanceLoadMethod = getBalanceLoadMethod = 
+          LoadBalancerGrpc.getBalanceLoadMethod = getBalanceLoadMethod =
               io.grpc.MethodDescriptor.<io.grpc.lb.v1.LoadBalanceRequest, io.grpc.lb.v1.LoadBalanceResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.lb.v1.LoadBalancer", "BalanceLoad"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "BalanceLoad"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.lb.v1.LoadBalanceRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.lb.v1.LoadBalanceResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new LoadBalancerMethodDescriptorSupplier("BalanceLoad"))
-                  .build();
-          }
+              .setSchemaDescriptor(new LoadBalancerMethodDescriptorSupplier("BalanceLoad"))
+              .build();
         }
-     }
-     return getBalanceLoadMethod;
+      }
+    }
+    return getBalanceLoadMethod;
   }
 
   /**
