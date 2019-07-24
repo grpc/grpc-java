@@ -41,8 +41,8 @@ public final class CallMetricRecorder {
   }
 
   /**
-   * Returns the call metric recorder attached to the current context.  If there is none, returns
-   * a no-op recorder.
+   * Returns the call metric recorder attached to the current {@link Context}.  If there is none,
+   * returns a no-op recorder.
    *
    * <p><strong>IMPORTANT:</strong>It returns the recorder specifically for the current RPC call.
    * <b>DO NOT</b> save the returned object or share it between different RPC calls.
