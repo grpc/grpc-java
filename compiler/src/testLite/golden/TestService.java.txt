@@ -113,7 +113,7 @@ public final class TestServiceGrpc {
                   io.grpc.testing.compiler.Test.StreamingInputCallRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
                   io.grpc.testing.compiler.Test.StreamingInputCallResponse.getDefaultInstance()))
-                  .build();
+              .build();
         }
       }
     }
