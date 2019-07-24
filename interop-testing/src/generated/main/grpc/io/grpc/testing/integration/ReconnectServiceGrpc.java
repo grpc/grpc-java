@@ -44,22 +44,21 @@ public final class ReconnectServiceGrpc {
     if ((getStartMethod = ReconnectServiceGrpc.getStartMethod) == null) {
       synchronized (ReconnectServiceGrpc.class) {
         if ((getStartMethod = ReconnectServiceGrpc.getStartMethod) == null) {
-          ReconnectServiceGrpc.getStartMethod = getStartMethod = 
+          ReconnectServiceGrpc.getStartMethod = getStartMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.EmptyProtos.Empty>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.ReconnectService", "Start"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Start"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReconnectServiceMethodDescriptorSupplier("Start"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReconnectServiceMethodDescriptorSupplier("Start"))
+              .build();
         }
-     }
-     return getStartMethod;
+      }
+    }
+    return getStartMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
@@ -76,22 +75,21 @@ public final class ReconnectServiceGrpc {
     if ((getStopMethod = ReconnectServiceGrpc.getStopMethod) == null) {
       synchronized (ReconnectServiceGrpc.class) {
         if ((getStopMethod = ReconnectServiceGrpc.getStopMethod) == null) {
-          ReconnectServiceGrpc.getStopMethod = getStopMethod = 
+          ReconnectServiceGrpc.getStopMethod = getStopMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.Messages.ReconnectInfo>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.ReconnectService", "Stop"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Stop"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.ReconnectInfo.getDefaultInstance()))
-                  .setSchemaDescriptor(new ReconnectServiceMethodDescriptorSupplier("Stop"))
-                  .build();
-          }
+              .setSchemaDescriptor(new ReconnectServiceMethodDescriptorSupplier("Stop"))
+              .build();
         }
-     }
-     return getStopMethod;
+      }
+    }
+    return getStopMethod;
   }
 
   /**

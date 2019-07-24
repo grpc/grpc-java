@@ -45,21 +45,20 @@ public final class TestDeprecatedServiceGrpc {
     if ((getDeprecatedMethodMethod = TestDeprecatedServiceGrpc.getDeprecatedMethodMethod) == null) {
       synchronized (TestDeprecatedServiceGrpc.class) {
         if ((getDeprecatedMethodMethod = TestDeprecatedServiceGrpc.getDeprecatedMethodMethod) == null) {
-          TestDeprecatedServiceGrpc.getDeprecatedMethodMethod = getDeprecatedMethodMethod = 
+          TestDeprecatedServiceGrpc.getDeprecatedMethodMethod = getDeprecatedMethodMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.compiler.Test.SimpleRequest, io.grpc.testing.compiler.Test.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.compiler.TestDeprecatedService", "DeprecatedMethod"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DeprecatedMethod"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
                   io.grpc.testing.compiler.Test.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
                   io.grpc.testing.compiler.Test.SimpleResponse.getDefaultInstance()))
-                  .build();
-          }
+              .build();
         }
-     }
-     return getDeprecatedMethodMethod;
+      }
+    }
+    return getDeprecatedMethodMethod;
   }
 
   /**

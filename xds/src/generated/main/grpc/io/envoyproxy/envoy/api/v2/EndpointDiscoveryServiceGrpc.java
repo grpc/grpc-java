@@ -41,22 +41,21 @@ public final class EndpointDiscoveryServiceGrpc {
     if ((getStreamEndpointsMethod = EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod) == null) {
       synchronized (EndpointDiscoveryServiceGrpc.class) {
         if ((getStreamEndpointsMethod = EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod) == null) {
-          EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod = getStreamEndpointsMethod = 
+          EndpointDiscoveryServiceGrpc.getStreamEndpointsMethod = getStreamEndpointsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.EndpointDiscoveryService", "StreamEndpoints"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamEndpoints"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("StreamEndpoints"))
-                  .build();
-          }
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("StreamEndpoints"))
+              .build();
         }
-     }
-     return getStreamEndpointsMethod;
+      }
+    }
+    return getStreamEndpointsMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest,
@@ -73,22 +72,21 @@ public final class EndpointDiscoveryServiceGrpc {
     if ((getDeltaEndpointsMethod = EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod) == null) {
       synchronized (EndpointDiscoveryServiceGrpc.class) {
         if ((getDeltaEndpointsMethod = EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod) == null) {
-          EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod = getDeltaEndpointsMethod = 
+          EndpointDiscoveryServiceGrpc.getDeltaEndpointsMethod = getDeltaEndpointsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest, io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.EndpointDiscoveryService", "DeltaEndpoints"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DeltaEndpoints"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DeltaDiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("DeltaEndpoints"))
-                  .build();
-          }
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("DeltaEndpoints"))
+              .build();
         }
-     }
-     return getDeltaEndpointsMethod;
+      }
+    }
+    return getDeltaEndpointsMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.envoyproxy.envoy.api.v2.DiscoveryRequest,
@@ -105,22 +103,21 @@ public final class EndpointDiscoveryServiceGrpc {
     if ((getFetchEndpointsMethod = EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod) == null) {
       synchronized (EndpointDiscoveryServiceGrpc.class) {
         if ((getFetchEndpointsMethod = EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod) == null) {
-          EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod = getFetchEndpointsMethod = 
+          EndpointDiscoveryServiceGrpc.getFetchEndpointsMethod = getFetchEndpointsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.api.v2.DiscoveryRequest, io.envoyproxy.envoy.api.v2.DiscoveryResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.api.v2.EndpointDiscoveryService", "FetchEndpoints"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "FetchEndpoints"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.api.v2.DiscoveryResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("FetchEndpoints"))
-                  .build();
-          }
+              .setSchemaDescriptor(new EndpointDiscoveryServiceMethodDescriptorSupplier("FetchEndpoints"))
+              .build();
         }
-     }
-     return getFetchEndpointsMethod;
+      }
+    }
+    return getFetchEndpointsMethod;
   }
 
   /**
