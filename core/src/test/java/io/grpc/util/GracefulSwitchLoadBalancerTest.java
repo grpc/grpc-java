@@ -72,8 +72,7 @@ public class GracefulSwitchLoadBalancerTest {
 
   @Before
   public void setUp() {
-    for (int i = 0; i < lbPolicies.length; i++) {
-      String lbPolicy = lbPolicies[i];
+    for (String lbPolicy : lbPolicies) {
       LoadBalancerProvider lbProvider = new FakeLoadBalancerProvider(lbPolicy);
       lbProviders.put(lbPolicy, lbProvider);
       lbRegistry.register(lbProvider);
