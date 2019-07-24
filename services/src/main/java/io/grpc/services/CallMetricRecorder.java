@@ -16,7 +16,6 @@
 
 package io.grpc.services;
 
-import com.google.common.collect.ImmutableMap;
 import io.grpc.Context;
 import java.util.Collections;
 import java.util.Map;
@@ -83,13 +82,13 @@ public final class CallMetricRecorder {
    *
    * @return a map containing all saved metric name-value pairs.
    */
-  public Map<String, Double> snapshot() {
+  Map<String, Double> finalizeAndDump() {
     disabled = true;
     Map<String, Double> savedMetrics = metrics.get();
     if (savedMetrics == null) {
       return Collections.emptyMap();
     }
-    return ImmutableMap.copyOf(savedMetrics);
+    return Collections.unmodifiableMap(savedMetrics);
   }
 
   /**

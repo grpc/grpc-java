@@ -30,25 +30,25 @@ public class CallMetricRecorderTest {
   private final CallMetricRecorder recorder = new CallMetricRecorder();
 
   @Test
-  public void snapshotGivesEmptyResultWhenNoSavedMetricValues() {
-    assertThat(recorder.snapshot()).isEmpty();
+  public void dumpGivesEmptyResultWhenNoSavedMetricValues() {
+    assertThat(recorder.finalizeAndDump()).isEmpty();
   }
 
   @Test
-  public void snapshotDumpsAllSavedMetricValues() {
+  public void dumpDumpsAllSavedMetricValues() {
     recorder.recordCallMetric("ssd", 154353.423);
     recorder.recordCallMetric("cpu", 0.1367);
     recorder.recordCallMetric("mem", 1437.34);
 
-    Map<String, Double> snapshot = recorder.snapshot();
-    assertThat(snapshot)
+    Map<String, Double> dump = recorder.finalizeAndDump();
+    assertThat(dump)
         .containsExactly("ssd", 154353.423, "cpu", 0.1367, "mem", 1437.34);
   }
 
   @Test
   public void noMetricsRecordedAfterSnapshot() {
-    Map<String, Double> initSnapshot = recorder.snapshot();
+    Map<String, Double> initDump = recorder.finalizeAndDump();
     recorder.recordCallMetric("cpu", 154353.423);
-    assertThat(recorder.snapshot()).isEqualTo(initSnapshot);
+    assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
   }
 }
