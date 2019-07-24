@@ -291,81 +291,81 @@ def io_grpc_grpc_proto():
 def io_netty_buffer():
     jvm_maven_import_external(
         name = "io_netty_netty_buffer",
-        artifact = "io.netty:netty-buffer:4.1.37.Final",
+        artifact = "io.netty:netty-buffer:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "83805671c27e388976de74fe477a246bea5b8a71f228fcfefee32fc2593725cf",
+        artifact_sha256 = "a3dcb49108f83b195e66cdad70b2d4a127c17f1be7f5b228a88ce18908c30b3e",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_codec():
     jvm_maven_import_external(
         name = "io_netty_netty_codec",
-        artifact = "io.netty:netty-codec:4.1.37.Final",
+        artifact = "io.netty:netty-codec:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "7ed9b1a4dcd2abebd6fb80971a87262bb32799bf3a0cfe73287439e8be0bb456",
+        artifact_sha256 = "8a4cb96e2131eeb8a824014f0ee338b11c6041405446acf73181199ed05744ac",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_codec_http():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http",
-        artifact = "io.netty:netty-codec-http:4.1.37.Final",
+        artifact = "io.netty:netty-codec-http:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "334bf6b2929d1ea6b951a3ae44ffc6fcea5d7f7c5a1ff1dc023a7e57e4c8ad48",
+        artifact_sha256 = "b35c4ac78ed3aaefeb782965ce9f22901e5302bf5e75b75fbed79434ce007e8c",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_codec_http2():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_http2",
-        artifact = "io.netty:netty-codec-http2:4.1.37.Final",
+        artifact = "io.netty:netty-codec-http2:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "42b42d0d08a3ab4e1bec058c1d4a442324cc105a40800798006ba67cd46b9c0f",
+        artifact_sha256 = "7e2d792407d2da34d3338a3e8f8ed421570fdbf845941b8ee0aa952fe0e07026",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_codec_socks():
     jvm_maven_import_external(
         name = "io_netty_netty_codec_socks",
-        artifact = "io.netty:netty-codec-socks:4.1.37.Final",
+        artifact = "io.netty:netty-codec-socks:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "b2955422bb167caad2eb4008fcb49410928227f31f924a92f450eccb8b1e7fd5",
+        artifact_sha256 = "16d932d76d06992923ce640609d297fe35d9f7b219ea5f0514a4259f1f1f2146",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_common():
     jvm_maven_import_external(
         name = "io_netty_netty_common",
-        artifact = "io.netty:netty-common:4.1.37.Final",
+        artifact = "io.netty:netty-common:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "4b1a4d670b5b8be99779588aa6677b9e78ffbd774fbb2a1311e0b3fa037773e6",
+        artifact_sha256 = "710df7c27fe5ba4b15689ae10668cd10ab3b618a1291f3a47b2cc292a0fa67da",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_handler():
     jvm_maven_import_external(
         name = "io_netty_netty_handler",
-        artifact = "io.netty:netty-handler:4.1.37.Final",
+        artifact = "io.netty:netty-handler:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "0e51521918e84cfb11a381fec7b598649e6cd4669b2284e168c5155f247e3a4c",
+        artifact_sha256 = "b49b57dbdc88a2c77e3ea9b9d00d3136f28771e059b74a7be7458d7a86bfccd1",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_handler_proxy():
     jvm_maven_import_external(
         name = "io_netty_netty_handler_proxy",
-        artifact = "io.netty:netty-handler-proxy:4.1.37.Final",
+        artifact = "io.netty:netty-handler-proxy:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "30c206f82d5d9eca38aab94a99be909d2b9ca290dc5588a19b350d0983ce0350",
+        artifact_sha256 = "9dab309a0422dd9858f431d503b58b854b37d2545c50ad7b4771f34d2288e5c0",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_netty_resolver():
     jvm_maven_import_external(
         name = "io_netty_netty_resolver",
-        artifact = "io.netty:netty-resolver:4.1.37.Final",
+        artifact = "io.netty:netty-resolver:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "ebaf963b7194f70039b11d74657d09161b0729e97ea4460bf1ba312c7d84ca7e",
+        artifact_sha256 = "3692c12a0035e566d5cd1dc1529d4f61725304c5e88817ae78b5c2f7f6d86cad",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -381,9 +381,9 @@ def io_netty_tcnative_boringssl_static():
 def io_netty_transport():
     jvm_maven_import_external(
         name = "io_netty_netty_transport",
-        artifact = "io.netty:netty-transport:4.1.37.Final",
+        artifact = "io.netty:netty-transport:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "962279abbdc58a261fbb39b55838225efb62771dc6ea938490567142135bd1fc",
+        artifact_sha256 = "5f826976585a49aae9b495290125a60a59dc6887fbe4c70da3182a83fb8bfa88",
         licenses = ["notice"],  # Apache 2.0
     )
 
