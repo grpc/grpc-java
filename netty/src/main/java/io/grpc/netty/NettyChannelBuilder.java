@@ -53,8 +53,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
@@ -66,7 +64,6 @@ import javax.net.ssl.SSLException;
 @CanIgnoreReturnValue
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
-  private static final Logger logger = Logger.getLogger(NettyChannelBuilder.class.getName());
 
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
 
@@ -397,6 +394,8 @@ public final class NettyChannelBuilder
   @CheckReturnValue
   @Internal
   protected ClientTransportFactory buildTransportFactory() {
+    assertEventLoopAndChannelType();
+
     ProtocolNegotiator negotiator;
     if (protocolNegotiatorFactory != null) {
       negotiator = protocolNegotiatorFactory.buildProtocolNegotiator();
@@ -412,44 +411,22 @@ public final class NettyChannelBuilder
       negotiator = createProtocolNegotiatorByType(negotiationType, localSslContext);
     }
 
-    // TODO(jihuncho) throw exception if not groupOrChannelProvided after 1.22.0
-    ObjectPool<? extends EventLoopGroup> resolvedEventLoopGroupPool = eventLoopGroupPool;
-    ChannelFactory<? extends Channel> resolvedChannelFactory = channelFactory;
-    if (shouldFallBackToNio()) {
-      logger.log(
-          Level.WARNING,
-          "Both EventLoopGroup and ChannelType should be provided or neither should be, "
-              + "otherwise client may not start. Not provided values will use Nio "
-              + "(NioSocketChannel, NioEventLoopGroup) for compatibility. This will cause an "
-              + "Exception in the future.");
-
-      if (eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL) {
-        resolvedEventLoopGroupPool =
-            SharedResourcePool.forResource(Utils.NIO_WORKER_EVENT_LOOP_GROUP);
-        logger.log(Level.FINE, "Channel type or ChannelFactory is provided, but EventLoopGroup is "
-            + "missing. Fall back to NioEventLoopGroup.");
-      }
-      if (channelFactory == DEFAULT_CHANNEL_FACTORY) {
-        resolvedChannelFactory = new ReflectiveChannelFactory<>(NioSocketChannel.class);
-        logger.log(
-            Level.FINE, "EventLoopGroup is provided, but Channel type or ChannelFactory is missing."
-                + " Fall back to NioSocketChannel.");
-      }
-    }
-
     return new NettyTransportFactory(
-        negotiator, resolvedChannelFactory, channelOptions,
-        resolvedEventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
+        negotiator, channelFactory, channelOptions,
+        eventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
         transportTracerFactory, localSocketPicker);
   }
 
   @VisibleForTesting
-  boolean shouldFallBackToNio() {
-    return (channelFactory != DEFAULT_CHANNEL_FACTORY
-        && eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL)
-        || (channelFactory == DEFAULT_CHANNEL_FACTORY
-        && eventLoopGroupPool != DEFAULT_EVENT_LOOP_GROUP_POOL);
+  void assertEventLoopAndChannelType() {
+    boolean bothProvided = channelFactory != DEFAULT_CHANNEL_FACTORY
+        && eventLoopGroupPool != DEFAULT_EVENT_LOOP_GROUP_POOL;
+    boolean nonProvided = channelFactory == DEFAULT_CHANNEL_FACTORY
+        && eventLoopGroupPool == DEFAULT_EVENT_LOOP_GROUP_POOL;
+    checkState(
+        bothProvided || nonProvided,
+        "Both EventLoopGroup and ChannelType should be provided or neither should be");
   }
 
   @Override
