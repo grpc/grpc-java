@@ -52,6 +52,8 @@ public final class CallMetricRecorder {
    * <p><strong>IMPORTANT:</strong>It must be called under the {@link Context} under which the RPC
    * handler was called.  If it is called from a different thread, the Context must be propagated to
    * the same thread, e.g., with {@link Context#wrap(Runnable)}.
+   *
+   * @since 1.23.0
    */
   public static CallMetricRecorder getCurrent() {
     CallMetricRecorder recorder = CONTEXT_KEY.get();
@@ -64,6 +66,7 @@ public final class CallMetricRecorder {
    * <p>A latter record will overwrite its former name-sakes.
    *
    * @return this recorder object
+   * @since 1.23.0
    */
   public CallMetricRecorder recordCallMetric(String name, double value) {
     if (disabled) {
