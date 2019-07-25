@@ -17,6 +17,7 @@
 package io.grpc.services;
 
 import io.grpc.Context;
+import io.grpc.ExperimentalApi;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,7 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Utility to record call metrics for load-balancing. One instance per call.
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6012")
 @ThreadSafe
 public final class CallMetricRecorder {
   private static final CallMetricRecorder NOOP = new CallMetricRecorder().disable();
