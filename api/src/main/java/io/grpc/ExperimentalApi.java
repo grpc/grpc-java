@@ -24,7 +24,10 @@ import java.lang.annotation.Target;
 
 /**
  * Indicates a public API that can change at any time, and has no guarantee of API stability and
- * backward-compatibility.
+ * backward-compatibility. If users want stabilization or signature change of a specific API that
+ * is currently annotated {@code @ExperimentalApi}, please comment on its tracking issue on github
+ * with rationale, usecase, and so forth, so that the gRPC team may prioritize the process toward
+ * stabilization of the API.
  *
  * <p>Usage guidelines:
  * <ol>
