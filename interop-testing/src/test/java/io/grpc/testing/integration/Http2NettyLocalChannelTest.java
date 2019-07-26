@@ -64,6 +64,7 @@ public class Http2NettyLocalChannelTest extends AbstractInteropTest {
 
   @Override
   @After
+  @SuppressWarnings("FutureReturnValueIgnored")
   public void tearDown() {
     super.tearDown();
     eventLoopGroup.shutdownGracefully();
