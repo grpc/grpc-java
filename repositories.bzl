@@ -126,10 +126,6 @@ def grpc_java_repositories(
         actual = "@com_google_code_gson_gson//jar",
     )
     native.bind(
-        name = "zlib",
-        actual = "@net_zlib//:zlib",
-    )
-    native.bind(
         name = "error_prone_annotations",
         actual = "@com_google_errorprone_error_prone_annotations//jar",
     )
