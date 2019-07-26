@@ -43,6 +43,7 @@ import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -77,6 +78,11 @@ public class GracefulSwitchLoadBalancerTest {
       lbProviders.put(lbPolicy, lbProvider);
       lbRegistry.register(lbProvider);
     }
+  }
+
+  @Nullable
+  public static String getCurrentPolicyForTest(GracefulSwitchLoadBalancer gracefulSwitchLb) {
+    return gracefulSwitchLb.getCurrentPolicyForTest();
   }
 
   @Test

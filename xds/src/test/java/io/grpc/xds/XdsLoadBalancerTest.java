@@ -22,6 +22,7 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
+import static io.grpc.xds.XdsLoadBalancer.getXdsLbStatePolicyName;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -32,6 +33,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -77,6 +79,7 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.util.GracefulSwitchLoadBalancerTest;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Collections;
 import java.util.Map;
@@ -89,6 +92,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -316,8 +320,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    XdsLbState xdsLbState1 = lb.getXdsLbStateForTest();
-    assertThat(xdsLbState1.childPolicy).isNull();
+    String childPolicy1 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy1).isEqualTo(
+        getXdsLbStatePolicyName("dns:///balancer.example.com:8080", null));
     verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -338,9 +344,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    XdsLbState xdsLbState2 = lb.getXdsLbStateForTest();
-    assertThat(xdsLbState2.childPolicy).isNull();
-    assertThat(xdsLbState2).isSameInstanceAs(xdsLbState1);
+    String childPolicy2 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy2).isEqualTo(
+        getXdsLbStatePolicyName("dns:///balancer.example.com:8080", null));
 
     // verify oobChannel is unchanged
     verify(helper).createResolvingOobChannel(anyString());
@@ -386,7 +393,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
+    String childPolicy = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy)
+        .isEqualTo(getXdsLbStatePolicyName("dns:///balancer.example.com:8080", "supported_2"));
 
     // verify oobChannel is unchanged
     verify(helper).createResolvingOobChannel(anyString());
@@ -417,7 +427,10 @@ public class XdsLoadBalancerTest {
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
             ArgumentMatchers.<CallOptions>any());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
+    String childPolicy1 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy1)
+        .isEqualTo(getXdsLbStatePolicyName("dns:///balancer.example.com:8080", "supported_2"));
 
     lbConfigRaw = "{"
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
@@ -434,7 +447,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNull();
+    String childPolicy2 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy2).isEqualTo(
+        getXdsLbStatePolicyName("dns:///balancer.example.com:8080", null));
 
     // verify oobChannel is unchanged
     verify(helper).createResolvingOobChannel(anyString());
@@ -460,7 +476,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
+    String childPolicy1 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy1)
+        .isEqualTo(getXdsLbStatePolicyName("dns:///balancer.example.com:8080", "supported_2"));
     verify(helper).createResolvingOobChannel(anyString());
     verify(oobChannel1)
         .newCall(ArgumentMatchers.<MethodDescriptor<?, ?>>any(),
@@ -481,7 +500,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
+    String childPolicy2 = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy2)
+        .isEqualTo(getXdsLbStatePolicyName("dns:///balancer.example.com:8080", "fallback_1"));
     // verify oobChannel is unchanged
     verify(helper).createResolvingOobChannel(anyString());
     // verify ADS stream is reset
@@ -526,7 +548,10 @@ public class XdsLoadBalancerTest {
             .setAttributes(attrs)
             .build());
 
-    assertThat(lb.getXdsLbStateForTest().childPolicy).isNotNull();
+    String childPolicy = GracefulSwitchLoadBalancerTest
+        .getCurrentPolicyForTest(lb.getGracefulSwitchXdsLbStateForTest());
+    assertThat(childPolicy)
+        .isEqualTo(getXdsLbStatePolicyName("dns:///balancer.example.com:8443", "fallback_1"));
 
     // verify oobChannel is unchanged
     verify(helper, times(2)).createResolvingOobChannel(anyString());
@@ -699,6 +724,8 @@ public class XdsLoadBalancerTest {
 
   @Test
   public void fallback_EdsResponseReceivedThenErrorBeforeBackendReady() throws Exception {
+    InOrder inOrder = inOrder(helper);
+
     lb.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
@@ -716,9 +743,9 @@ public class XdsLoadBalancerTest {
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     childHelper.updateBalancingState(CONNECTING, picker1);
-    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
     childHelper.updateBalancingState(TRANSIENT_FAILURE, picker1);
-    verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
+    inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
 
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
     // verify fallback balancer is working
@@ -731,17 +758,17 @@ public class XdsLoadBalancerTest {
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     childHelper.updateBalancingState(CONNECTING, picker2);
     // verify childHelper no more delegates updateBalancingState to parent helper
-    verify(helper, times(2)).updateBalancingState(
+    inOrder.verify(helper, never()).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
     SubchannelPicker picker3 = mock(SubchannelPicker.class);
     fallbackHelper1.updateBalancingState(CONNECTING, picker3);
-    verify(helper).updateBalancingState(CONNECTING, picker3);
+    inOrder.verify(helper).updateBalancingState(CONNECTING, picker3);
 
     SubchannelPicker picker4 = mock(SubchannelPicker.class);
     childHelper.updateBalancingState(READY, picker4);
     verify(fallbackBalancer1).shutdown();
-    verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
+    inOrder.verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
   }
 
   @Test

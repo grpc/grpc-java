@@ -159,4 +159,10 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb.shutdown();
     currentLb.shutdown();
   }
+
+  @VisibleForTesting
+  @Nullable
+  String getCurrentPolicyForTest() {
+    return currentPolicyName;
+  }
 }

@@ -202,15 +202,15 @@ public class XdsCommsTest {
 
   @Test
   public void shutdownLbRpc_verifyChannelNotShutdown() throws Exception {
-    xdsComms.shutdownLbRpc("shutdown msg1");
+    xdsComms.shutdownXdsComms();
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
     assertFalse(channel.isShutdown());
   }
 
   @Test
-  public void cancel() throws Exception {
-    xdsComms.shutdownLbRpc("cause1");
+  public void shutdownXdsCommsWillCancelAdsStream() throws Exception {
+    xdsComms.shutdownXdsComms();
     assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
     assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
   }
@@ -332,7 +332,7 @@ public class XdsCommsTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
-    xdsComms.shutdownLbRpc("End test");
+    xdsComms.shutdownXdsComms();
   }
 
   @Test
@@ -468,7 +468,7 @@ public class XdsCommsTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
 
-    xdsComms.shutdownLbRpc("End test");
+    xdsComms.shutdownXdsComms();
   }
 
   @Test
@@ -650,7 +650,7 @@ public class XdsCommsTest {
     assertEquals(1, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
     // Shutdown cancels retry
-    xdsComms.shutdownLbRpc("shutdown");
+    xdsComms.shutdownXdsComms();
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
   }
 
@@ -663,6 +663,6 @@ public class XdsCommsTest {
     xdsComms.refreshAdsStream();
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
 
-    xdsComms.shutdownLbRpc("End test");
+    xdsComms.shutdownXdsComms();
   }
 }

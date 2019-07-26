@@ -421,10 +421,9 @@ final class XdsComms {
   }
 
   // run in SynchronizationContext
-  // TODO: Change method name to shutdown or shutdownXdsComms if that gives better semantics (
-  //  cancel LB RPC and clean up retry timer).
-  void shutdownLbRpc(String message) {
-    adsStream.cancelRpc(message, null);
+  /** Cancels LB RPC and cleans up retry timer.*/
+  void shutdownXdsComms() {
+    adsStream.cancelRpc("shutdown", null);
     cancelRetryTimer();
   }
 

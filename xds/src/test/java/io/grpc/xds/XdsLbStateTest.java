@@ -126,23 +126,22 @@ public class XdsLbStateTest {
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
 
     xdsLbState = new XdsLbState(
-        BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
-        backoffPolicyProvider);
+        helper, localityStore, channel, adsStreamCallback, backoffPolicyProvider);
   }
 
   @Test
   public void shutdownResetsLocalityStore() {
-    xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    xdsLbState.shutdown();
     verify(localityStore).reset();
   }
 
   @Test
   public void shutdownDoesNotTearDownChannel() {
-    ManagedChannel lbChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
-    assertThat(lbChannel).isSameInstanceAs(channel);
+    xdsLbState.shutdown();
     assertThat(channel.isShutdown()).isFalse();
   }
 
+  @Deprecated
   @Test
   public void handleResolvedAddressGroupsTriggerEds() throws Exception {
     xdsLbState.handleResolvedAddressGroups(
@@ -151,6 +150,6 @@ public class XdsLbStateTest {
     assertThat(streamRecorder.firstValue().get().getTypeUrl())
         .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
 
-    xdsLbState.shutdownAndReleaseChannel("End test");
+    xdsLbState.shutdown();
   }
 }

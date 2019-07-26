@@ -18,18 +18,13 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
-import io.grpc.EquivalentAddressGroup;
-import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancer.Subchannel;
+import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -46,12 +41,7 @@ import javax.annotation.Nullable;
  *       do not request for endpoints.</li>
  * </ul>
  */
-class XdsLbState {
-
-  final String balancerName;
-
-  @Nullable
-  final LbConfig childPolicy;
+final class XdsLbState extends LoadBalancer {
 
   private final LocalityStore localityStore;
   private final Helper helper;
@@ -63,15 +53,11 @@ class XdsLbState {
   private XdsComms xdsComms;
 
   XdsLbState(
-      String balancerName,
-      @Nullable LbConfig childPolicy,
       Helper helper,
       LocalityStore localityStore,
       ManagedChannel channel,
       AdsStreamCallback adsStreamCallback,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    this.balancerName = checkNotNull(balancerName, "balancerName");
-    this.childPolicy = childPolicy;
     this.helper = checkNotNull(helper, "helper");
     this.localityStore = checkNotNull(localityStore, "localityStore");
     this.channel = checkNotNull(channel, "channel");
@@ -79,8 +65,8 @@ class XdsLbState {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
-  final void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
+  @Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
 
     // start XdsComms if not already alive
     if (xdsComms != null) {
@@ -95,21 +81,24 @@ class XdsLbState {
     // TODO: maybe update picker
   }
 
-  final void handleNameResolutionError(Status error) {
+  @Override
+  public void handleNameResolutionError(Status error) {
     // NO-OP?
   }
 
-  final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+  @Deprecated
+  @Override
+  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
     // TODO: maybe update picker
     localityStore.handleSubchannelState(subchannel, newState);
   }
 
-  ManagedChannel shutdownAndReleaseChannel(String message) {
+  @Override
+  public void shutdown() {
     localityStore.reset();
     if (xdsComms != null) {
-      xdsComms.shutdownLbRpc(message);
+      xdsComms.shutdownXdsComms();
       xdsComms = null;
     }
-    return channel;
   }
 }
