@@ -250,7 +250,9 @@ public class GracefulSwitchLoadBalancerTest {
 
   @Test
   public void updateBalancingStateIsGraceful() {
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isNull();
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[0]);
     LoadBalancer lb0 = balancers.get(lbPolicies[0]);
     Helper helper0 = helpers.get(lb0);
     SubchannelPicker picker = mock(SubchannelPicker.class);
@@ -258,6 +260,7 @@ public class GracefulSwitchLoadBalancerTest {
     verify(mockHelper).updateBalancingState(READY, picker);
 
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[1]));
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[0]);
     LoadBalancer lb1 = balancers.get(lbPolicies[1]);
     Helper helper1 = helpers.get(lb1);
     picker = mock(SubchannelPicker.class);
@@ -274,9 +277,11 @@ public class GracefulSwitchLoadBalancerTest {
 
     // lb2 reports READY
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[0]);
     helper2.updateBalancingState(READY, picker2);
     verify(lb0).shutdown();
     verify(mockHelper).updateBalancingState(READY, picker2);
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[2]);
 
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[3]));
     LoadBalancer lb3 = balancers.get(lbPolicies[3]);
@@ -284,12 +289,14 @@ public class GracefulSwitchLoadBalancerTest {
     SubchannelPicker picker3 = mock(SubchannelPicker.class);
     helper3.updateBalancingState(CONNECTING, picker3);
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker3);
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[2]);
 
     // lb2 out of READY
     picker2 = mock(SubchannelPicker.class);
     helper2.updateBalancingState(CONNECTING, picker2);
     verify(mockHelper, never()).updateBalancingState(CONNECTING, picker2);
     verify(mockHelper).updateBalancingState(CONNECTING, picker3);
+    assertThat(gracefulSwitchLb.getCurrentPolicyForTest()).isEqualTo(lbPolicies[3]);
     verify(lb2).shutdown();
 
     picker3 = mock(SubchannelPicker.class);
