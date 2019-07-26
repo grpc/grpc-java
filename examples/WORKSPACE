@@ -13,6 +13,8 @@ local_repository(
 
 load("@io_grpc_grpc_java//:repositories.bzl", "grpc_java_repositories")
 
+
+
 maven_jar(
         name = "com_google_api_grpc_cloud_pubsub_v1",
         artifact = "com.google.api.grpc:grpc-google-cloud-pubsub-v1:0.1.24",
@@ -28,3 +30,6 @@ maven_jar(
 
 
 grpc_java_repositories()
+
+load("@com_google_protobuf//:protobuf_deps.bzl", "protobuf_deps")
+protobuf_deps()

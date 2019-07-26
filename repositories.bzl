@@ -126,10 +126,6 @@ def grpc_java_repositories(
         actual = "@com_google_code_gson_gson//jar",
     )
     native.bind(
-        name = "zlib",
-        actual = "@net_zlib//:zlib",
-    )
-    native.bind(
         name = "error_prone_annotations",
         actual = "@com_google_errorprone_error_prone_annotations//jar",
     )
@@ -239,9 +235,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "f976a4cd3f1699b6d20c1e944ca1de6754777918320c719742e1674fcf247b7e",
-        strip_prefix = "protobuf-3.7.1",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.7.1.zip"],
+        sha256 = "8eb5ca331ab8ca0da2baea7fc0607d86c46c80845deca57109a5d637ccb93bb4",
+        strip_prefix = "protobuf-3.9.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.9.0.zip"],
     )
 
 def com_google_protobuf_javalite():
