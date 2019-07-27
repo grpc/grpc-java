@@ -36,19 +36,31 @@ public class CallMetricRecorderTest {
 
   @Test
   public void dumpDumpsAllSavedMetricValues() {
-    recorder.recordCallMetric("ssd", 154353.423);
-    recorder.recordCallMetric("cpu", 0.1367);
-    recorder.recordCallMetric("mem", 1437.34);
+    recorder.recordCallMetric("cost1", 154353.423);
+    recorder.recordCallMetric("cost2", 0.1367);
+    recorder.recordCallMetric("cost3", 1437.34);
 
     Map<String, Double> dump = recorder.finalizeAndDump();
     assertThat(dump)
-        .containsExactly("ssd", 154353.423, "cpu", 0.1367, "mem", 1437.34);
+        .containsExactly("cost1", 154353.423, "cost2", 0.1367, "cost3", 1437.34);
   }
 
   @Test
   public void noMetricsRecordedAfterSnapshot() {
     Map<String, Double> initDump = recorder.finalizeAndDump();
-    recorder.recordCallMetric("cpu", 154353.423);
+    recorder.recordCallMetric("cost", 154353.423);
     assertThat(recorder.finalizeAndDump()).isEqualTo(initDump);
+  }
+
+  @Test
+  public void lastValueWinForMetricsWithSameName() {
+    recorder.recordCallMetric("cost1", 3412.5435);
+    recorder.recordCallMetric("cost2", 6441.341);
+    recorder.recordCallMetric("cost1", 6441.341);
+    recorder.recordCallMetric("cost1", 4654.67);
+    recorder.recordCallMetric("cost2", 75.83);
+    Map<String, Double> dump = recorder.finalizeAndDump();
+    assertThat(dump)
+        .containsExactly("cost1", 4654.67, "cost2", 75.83);
   }
 }
