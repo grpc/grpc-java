@@ -38,13 +38,24 @@ import java.util.Map;
  * applications and sends to client side along with the response in the format of Open Request
  * Cost Aggregation (ORCA).
  */
-final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
+
+  private static final OrcaMetricReportingServerInterceptor INSTANCE =
+      new OrcaMetricReportingServerInterceptor();
 
   @VisibleForTesting
   static final Metadata.Key<OrcaLoadReport> ORCA_ENDPOINT_LOAD_METRICS_KEY =
       Metadata.Key.of(
           "x-endpoint-load-metrics-bin",
           ProtoUtils.metadataMarshaller(OrcaLoadReport.getDefaultInstance()));
+
+  @VisibleForTesting
+  OrcaMetricReportingServerInterceptor() {
+  }
+
+  public static OrcaMetricReportingServerInterceptor getInstance() {
+    return INSTANCE;
+  }
 
   @Override
   public <ReqT, RespT> Listener<ReqT> interceptCall(
