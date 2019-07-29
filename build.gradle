@@ -516,11 +516,23 @@ repositories {
 def googleJavaFormatVer = '1.7'
 def googleJavaFormatDir = "${rootDir}/buildscripts/google-java-format"
 def googleJavaFormatJar
+def hasPython27
 
 configurations {
     googleJavaFormat {}
+    doLast {
+        new ByteArrayOutputStream().withStream { os ->
+            exec {
+                executable = 'python'
+                args '--version'
+                standardOutput = os
+                errorOutput = os
+            }
+            hasPython27 = os.toString().contains('2.7')
+        }
+    }
 }
-
+ 
 dependencies {
     googleJavaFormat "com.google.googlejavaformat:google-java-format:${googleJavaFormatVer}"
 }
@@ -536,7 +548,8 @@ task googleJavaFormatFatJar(type: Jar) {
 }
 
 /**
- * Reformat the diff of the pull request.
+ * Reformat the diff of the pull request. Requires python 2.7 in PATH.
+ *
  * Usage: ./gradlew formatPullRequest -PpullRequestNum=<PR number>
  */
 task formatPullRequest(type:Exec) {
@@ -565,8 +578,8 @@ subprojects {
                         " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
                         " -regex='^((?!generated).)*\\.java\$'"
     }
-
-    build.finalizedBy("fixGoogleJavaFormat")
+    if (hasPython27) {
+        build.finalizedBy("fixGoogleJavaFormat")
+    }
 }
-
 
