@@ -25,7 +25,8 @@ description = "gRPC: XDS plugin"
 dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
-            project(':grpc-core')
+            project(':grpc-core'),
+            project(':grpc-services')
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'
@@ -36,6 +37,7 @@ dependencies {
     compileOnly libraries.javax_annotation
     
     testCompile project(':grpc-testing'), 
+            project(':grpc-testing-proto'),
             libraries.guava_testlib
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
