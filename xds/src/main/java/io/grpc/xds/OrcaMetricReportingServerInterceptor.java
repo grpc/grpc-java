@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.Context;
 import io.grpc.Contexts;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
 import io.grpc.Metadata;
 import io.grpc.ServerCall;
@@ -37,7 +38,10 @@ import java.util.Map;
  * handling under a {@link Context} that records custom per-request metrics provided by server
  * applications and sends to client side along with the response in the format of Open Request
  * Cost Aggregation (ORCA).
+ *
+ * @since 1.23.0
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6021")
 public final class OrcaMetricReportingServerInterceptor implements ServerInterceptor {
 
   private static final OrcaMetricReportingServerInterceptor INSTANCE =
