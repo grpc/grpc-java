@@ -44,7 +44,6 @@ import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -70,7 +69,6 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   private final AtomicReference<Metadata> trailersCapture = new AtomicReference<>();
 
-  private ManagedChannel baseChannel;
   private Channel channelToUse;
 
   @Before
@@ -100,15 +98,11 @@ public class OrcaMetricReportingServerInterceptorTest {
                 ServerInterceptors.intercept(simpleServiceImpl, metricReportingServerInterceptor))
             .build().start());
 
-    baseChannel = InProcessChannelBuilder.forName(serverName).build();
+    ManagedChannel baseChannel =
+        grpcCleanupRule.register(InProcessChannelBuilder.forName(serverName).build());
     channelToUse =
         ClientInterceptors.intercept(
             baseChannel, new TrailersCapturingClientInterceptor(trailersCapture));
-  }
-
-  @After
-  public void tearDown() {
-    baseChannel.shutdown();
   }
 
   @Test
