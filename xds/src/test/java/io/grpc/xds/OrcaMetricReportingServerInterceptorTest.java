@@ -32,10 +32,12 @@ import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
 import io.grpc.Status;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.services.CallMetricRecorder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
-import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
@@ -55,7 +57,8 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class OrcaMetricReportingServerInterceptorTest {
 
-  @Rule public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
+  @Rule
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   private final MethodDescriptor<SimpleRequest, SimpleResponse> simpleMethod =
       SimpleServiceGrpc.getUnaryRpcMethod();
@@ -71,7 +74,7 @@ public class OrcaMetricReportingServerInterceptorTest {
   private Channel channelToUse;
 
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
         new SimpleServiceGrpc.SimpleServiceImplBase() {
           @Override
@@ -88,12 +91,16 @@ public class OrcaMetricReportingServerInterceptorTest {
         };
 
     ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
-    grpcServerRule
-        .getServiceRegistry()
-        .addService(
-            ServerInterceptors.intercept(simpleServiceImpl, metricReportingServerInterceptor));
+    String serverName = InProcessServerBuilder.generateName();
+    grpcCleanupRule.register(
+        InProcessServerBuilder
+            .forName(serverName)
+            .directExecutor()
+            .addService(
+                ServerInterceptors.intercept(simpleServiceImpl, metricReportingServerInterceptor))
+            .build().start());
 
-    baseChannel = grpcServerRule.getChannel();
+    baseChannel = InProcessChannelBuilder.forName(serverName).build();
     channelToUse =
         ClientInterceptors.intercept(
             baseChannel, new TrailersCapturingClientInterceptor(trailersCapture));
