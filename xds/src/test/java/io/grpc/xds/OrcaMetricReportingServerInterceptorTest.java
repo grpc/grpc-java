@@ -60,10 +60,10 @@ public class OrcaMetricReportingServerInterceptorTest {
   @Rule
   public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
-  private final MethodDescriptor<SimpleRequest, SimpleResponse> simpleMethod =
+  private static final MethodDescriptor<SimpleRequest, SimpleResponse> SIMPLE_METHOD =
       SimpleServiceGrpc.getUnaryRpcMethod();
 
-  private final SimpleRequest request =
+  private static final SimpleRequest REQUEST =
       SimpleRequest.newBuilder().setRequestMessage("Simple request").build();
 
   private final Map<String, Double> applicationMetrics = new HashMap<>();
@@ -113,7 +113,7 @@ public class OrcaMetricReportingServerInterceptorTest {
 
   @Test
   public void noTrailerReportIfNoRecordedMetrics() {
-    ClientCalls.blockingUnaryCall(channelToUse, simpleMethod, CallOptions.DEFAULT, request);
+    ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     assertThat(
         receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY))
@@ -125,7 +125,7 @@ public class OrcaMetricReportingServerInterceptorTest {
     applicationMetrics.put("cost1", 1231.4543);
     applicationMetrics.put("cost2", 0.1367);
     applicationMetrics.put("cost3", 7614.145);
-    ClientCalls.blockingUnaryCall(channelToUse, simpleMethod, CallOptions.DEFAULT, request);
+    ClientCalls.blockingUnaryCall(channelToUse, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
     Metadata receivedTrailers = trailersCapture.get();
     OrcaLoadReport report =
         receivedTrailers.get(OrcaMetricReportingServerInterceptor.ORCA_ENDPOINT_LOAD_METRICS_KEY);
