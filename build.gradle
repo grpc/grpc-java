@@ -536,7 +536,8 @@ task googleJavaFormatFatJar(type: Jar) {
 }
 
 /**
- * Reformat the diff of the pull request.
+ * Reformat the diff of the pull request. Requires python 2.7 in PATH.
+ *
  * Usage: ./gradlew formatPullRequest -PpullRequestNum=<PR number>
  */
 task formatPullRequest(type:Exec) {
@@ -548,6 +549,17 @@ task formatPullRequest(type:Exec) {
                     " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
                     " -regex='^((?!generated).)*\\.java\$'" +
                     " < <(curl -L https://github.com/grpc/grpc-java/pull/${rootProject.findProperty('pullRequestNum')}.diff)"
+}
+
+def hasPython = false
+try {
+    exec {
+        executable = '/usr/bin/env'
+        args 'python2.7'
+    }
+    hasPython = true
+} catch (Exception e) {
+    print 'python2.7 not found. Will not run google-java-format'
 }
 
 subprojects {
@@ -565,8 +577,8 @@ subprojects {
                         " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
                         " -regex='^((?!generated).)*\\.java\$'"
     }
-
-    build.finalizedBy("fixGoogleJavaFormat")
+    if (hasPython) {
+        build.finalizedBy("fixGoogleJavaFormat")
+    }
 }
-
 
