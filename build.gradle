@@ -507,3 +507,66 @@ publicApiSubprojects.each { name ->
         }
     }
 }
+
+repositories {
+    maven { // The google mirror is less flaky than mavenCentral()
+        url 'https://maven-central.storage-download.googleapis.com/repos/central/data/' }
+}
+
+def googleJavaFormatVer = '1.7'
+def googleJavaFormatDir = "${rootDir}/buildscripts/google-java-format"
+def googleJavaFormatJar
+
+configurations {
+    googleJavaFormat {}
+}
+
+dependencies {
+    googleJavaFormat "com.google.googlejavaformat:google-java-format:${googleJavaFormatVer}"
+}
+
+task googleJavaFormatFatJar(type: Jar) {
+    manifest {
+        attributes 'Main-Class': 'com.google.googlejavaformat.java.Main'
+    }
+    destinationDirectory = file("${rootDir}/build/libs")
+    archiveFileName = "google-java-format-${googleJavaFormatVer}-all-deps.jar"
+    from { configurations.googleJavaFormat.collect { it.isDirectory() ? it : zipTree(it) } }
+    googleJavaFormatJar = "${destinationDirectory.get()}/${archiveFileName.get()}"
+}
+
+/**
+ * Reformat the diff of the pull request.
+ * Usage: ./gradlew formatPullRequest -PpullRequestNum=<PR number>
+ */
+task formatPullRequest(type:Exec) {
+    dependsOn ':googleJavaFormatFatJar'
+    workingDir "${rootDir}"
+    commandLine 'bash', '-c',
+            "export googleJavaFormatJar=${googleJavaFormatJar} ;" +
+                    " ${googleJavaFormatDir}/google-java-format-diff.py" +
+                    " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
+                    " -regex='^((?!generated).)*\\.java\$'" +
+                    " < <(curl -L https://github.com/grpc/grpc-java/pull/${rootProject.findProperty('pullRequestNum')}.diff)"
+}
+
+subprojects {
+    /**
+     * Reformat the diff over the last few commits
+     */
+    task fixGoogleJavaFormat(type: Exec) {
+        dependsOn ':googleJavaFormatFatJar'
+        workingDir "${rootDir}"
+        commandLine 'bash', '-c',
+                "export googleJavaFormatJar=${googleJavaFormatJar} ;" +
+                        // TODO(zdapeng): git diff -U0 HEAD~5
+                        " git diff -U0 HEAD~1 -- ${projectDir} |" +
+                        " ${googleJavaFormatDir}/google-java-format-diff.py" +
+                        " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
+                        " -regex='^((?!generated).)*\\.java\$'"
+    }
+
+    build.finalizedBy("fixGoogleJavaFormat")
+}
+
+
