@@ -141,6 +141,7 @@ final class Hpack {
       this(headerTableSizeSetting, headerTableSizeSetting, source);
     }
 
+    // Visible for testing.
     Reader(int headerTableSizeSetting, int maxDynamicTableByteCount, Source source) {
       this.headerTableSizeSetting = headerTableSizeSetting;
       this.maxDynamicTableByteCount = maxDynamicTableByteCount;
@@ -411,6 +412,7 @@ final class Hpack {
       this(SETTINGS_HEADER_TABLE_SIZE, true, out);
     }
 
+    // Visible for testing.
     Writer(int headerTableSizeSetting, boolean useCompression, Buffer out) {
       this.headerTableSizeSetting = headerTableSizeSetting;
       this.maxDynamicTableByteCount = headerTableSizeSetting;
