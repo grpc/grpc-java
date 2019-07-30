@@ -5,9 +5,14 @@ This generates the Java interfaces out of the service definition from a
 `.proto` file. It works with the Protobuf Compiler (``protoc``).
 
 Normally you don't need to compile the codegen by yourself, since pre-compiled
-binaries for common platforms are available on Maven Central. However, if the
-pre-compiled binaries are not compatible with your system, you may want to
-build your own codegen.
+binaries for common platforms are available on Maven Central:
+
+1. Navigate to https://mvnrepository.com/artifact/io.grpc/protoc-gen-grpc-java
+2. Click into a version
+3. Click "Files"
+
+However, if the pre-compiled binaries are not compatible with your system,
+you may want to build your own codegen.
 
 ## System requirement
 
