@@ -36,7 +36,6 @@ $ VERSION_FILES=(
   android-interop-testing/app/build.gradle
   core/src/main/java/io/grpc/internal/GrpcUtil.java
   cronet/build.gradle
-  documentation/android-channel-builder.md
   examples/build.gradle
   examples/pom.xml
   examples/android/clientcache/app/build.gradle
@@ -119,7 +118,8 @@ Tagging the Release
    $ git checkout -b release
    # Bump documented versions. Don't forget protobuf version
    $ ${EDITOR:-nano -w} README.md
-   $ git commit -a -m "Update README to reference $MAJOR.$MINOR.$PATCH"
+   $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
+   $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 3. Change root build files to remove "-SNAPSHOT" for the next release version
    (e.g. `0.7.0`). Commit the result and make a tag:
