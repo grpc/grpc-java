@@ -39,7 +39,20 @@ public final class Deadline implements Comparable<Deadline> {
   private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 
   /**
-   * Create a deadline that will expire at the specified offset from the current system clock.
+   * Returns the ticker that's based on system clock.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   */
+  public static Ticker getSystemTicker() {
+    return SYSTEM_TICKER;
+  }
+
+  /**
+   * Create a deadline that will expire at the specified offset based on the {@link #getSystemTicker
+   * system ticker}.
+   *
    * @param duration A non-negative duration.
    * @param units The time unit for the duration.
    * @return A new deadline.
@@ -48,8 +61,19 @@ public final class Deadline implements Comparable<Deadline> {
     return after(duration, units, SYSTEM_TICKER);
   }
 
-  // For testing
-  static Deadline after(long duration, TimeUnit units, Ticker ticker) {
+  /**
+   * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   *
+   * @param duration A non-negative duration.
+   * @param units The time unit for the duration.
+   * @param ticker Where this deadline refer the current time
+   * @return A new deadline.
+   */
+  public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
@@ -59,7 +83,7 @@ public final class Deadline implements Comparable<Deadline> {
   private volatile boolean expired;
 
   private Deadline(Ticker ticker, long offset, boolean baseInstantAlreadyExpired) {
-    this(ticker, ticker.read(), offset, baseInstantAlreadyExpired);
+    this(ticker, ticker.nanoTime(), offset, baseInstantAlreadyExpired);
   }
 
   private Deadline(Ticker ticker, long baseInstant, long offset,
@@ -77,7 +101,7 @@ public final class Deadline implements Comparable<Deadline> {
    */
   public boolean isExpired() {
     if (!expired) {
-      if (deadlineNanos - ticker.read() <= 0) {
+      if (deadlineNanos - ticker.nanoTime() <= 0) {
         expired = true;
       } else {
         return false;
@@ -124,7 +148,7 @@ public final class Deadline implements Comparable<Deadline> {
    * long ago the deadline expired.
    */
   public long timeRemaining(TimeUnit unit) {
-    final long nowNanos = ticker.read();
+    final long nowNanos = ticker.nanoTime();
     if (!expired && deadlineNanos - nowNanos <= 0) {
       expired = true;
     }
@@ -140,7 +164,7 @@ public final class Deadline implements Comparable<Deadline> {
   public ScheduledFuture<?> runOnExpiration(Runnable task, ScheduledExecutorService scheduler) {
     checkNotNull(task, "task");
     checkNotNull(scheduler, "scheduler");
-    return scheduler.schedule(task, deadlineNanos - ticker.read(), TimeUnit.NANOSECONDS);
+    return scheduler.schedule(task, deadlineNanos - ticker.nanoTime(), TimeUnit.NANOSECONDS);
   }
 
   @Override
@@ -173,15 +197,24 @@ public final class Deadline implements Comparable<Deadline> {
     return 0;
   }
 
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
+  /**
+   * Time source representing nanoseconds since fixed but arbitrary point in time.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   *
+   * <p>In general implementations should be thread-safe, unless it's implemented and used in a
+   * localized environment (like unit tests) where you are sure the usages are synchronized.
+   */
+  public abstract static class Ticker {
     /** Returns the number of nanoseconds since this source's epoch. */
-    public abstract long read();
+    public abstract long nanoTime();
   }
 
   private static class SystemTicker extends Ticker {
     @Override
-    public long read() {
+    public long nanoTime() {
       return System.nanoTime();
     }
   }
