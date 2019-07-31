@@ -25,7 +25,7 @@ repositories {
 
 // Feel free to delete the comment at the next line. It is just for safely
 // updating the version in our release process.
-def grpcVersion = '1.23.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+def grpcVersion = '1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
 dependencies {
     def kotlinVersion = plugins.findPlugin("org.jetbrains.kotlin.jvm").kotlinPluginVersion
