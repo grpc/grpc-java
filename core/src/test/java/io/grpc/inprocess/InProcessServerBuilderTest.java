@@ -89,4 +89,15 @@ public class InProcessServerBuilderTest {
 
     scheduledExecutorServicePool.returnObject(scheduledExecutorService);
   }
+
+  @Test
+  public void customDeadlineTicker() {
+    MethodDescriptor<String, Integer> method = MethodDescriptor.<String, Integer>newBuilder()
+        .setType(MethodDescriptor.MethodType.UNKNOWN)
+        .setFullMethodName("Waiter/serve")
+        .setRequestMarshaller(IntegerMarshaller.INSTANCE)
+        .setResponseMarshaller(StringMarshaller.INSTANCE)
+        .build();
+    InProcessServerBuilder builder = InProcessServerBuilder.forName("foo");
+  }
 }

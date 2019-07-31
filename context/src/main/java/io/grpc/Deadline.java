@@ -44,6 +44,8 @@ public final class Deadline implements Comparable<Deadline> {
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please
    * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   *
+   * @since 1.24.0
    */
   public static Ticker getSystemTicker() {
     return SYSTEM_TICKER;
@@ -64,6 +66,11 @@ public final class Deadline implements Comparable<Deadline> {
   /**
    * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
    *
+   * <p><strong>CAUTION</strong>: Only deadlines created with the same {@link Ticker} instance can
+   * be compared by methods like {@link #minimum}, {@link #isBefore} and {@link #compareTo}.  Custom
+   * Tickers should only be used in tests where you fake out the clock.  Always use the {@link
+   * #getSystemTicker system ticker} in production, or serious errors may occur.
+   *
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please
    * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
@@ -72,6 +79,8 @@ public final class Deadline implements Comparable<Deadline> {
    * @param units The time unit for the duration.
    * @param ticker Where this deadline refer the current time
    * @return A new deadline.
+   *
+   * @since 1.24.0
    */
   public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
@@ -111,19 +120,22 @@ public final class Deadline implements Comparable<Deadline> {
   }
 
   /**
-   * Is {@code this} deadline before another.
+   * Is {@code this} deadline before another.  Two deadlines must be created using the same {@link
+   * Ticker}.
    */
   public boolean isBefore(Deadline other) {
-    assert this.ticker == other.ticker : "Tickers don't match";
+    checkTicker(other);
     return this.deadlineNanos - other.deadlineNanos < 0;
   }
 
   /**
-   * Return the minimum deadline of {@code this} or an other deadline.
+   * Return the minimum deadline of {@code this} or an other deadline.  They must be created using
+   * the same {@link Ticker}.
+   *
    * @param other deadline to compare with {@code this}.
    */
   public Deadline minimum(Deadline other) {
-    assert this.ticker == other.ticker : "Tickers don't match";
+    checkTicker(other);
     return isBefore(other) ? this : other;
   }
 
@@ -182,12 +194,20 @@ public final class Deadline implements Comparable<Deadline> {
       buf.append(String.format(".%09d", nanos));
     }
     buf.append("s from now");
+    if (ticker != SYSTEM_TICKER) {
+      buf.append("(ticker=" + ticker + ")");
+    }
     return buf.toString();
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Both deadlines must be created with the same {@link Ticker}.
+   */
   @Override
   public int compareTo(Deadline that) {
-    assert this.ticker == that.ticker : "Tickers don't match";
+    checkTicker(that);
     long diff = this.deadlineNanos - that.deadlineNanos;
     if (diff < 0) {
       return -1;
@@ -206,6 +226,8 @@ public final class Deadline implements Comparable<Deadline> {
    *
    * <p>In general implementations should be thread-safe, unless it's implemented and used in a
    * localized environment (like unit tests) where you are sure the usages are synchronized.
+   *
+   * @since 1.24.0
    */
   public abstract static class Ticker {
     /** Returns the number of nanoseconds since this source's epoch. */
@@ -224,5 +246,13 @@ public final class Deadline implements Comparable<Deadline> {
       throw new NullPointerException(String.valueOf(errorMessage));
     }
     return reference;
+  }
+
+  private void checkTicker(Deadline other) {
+    if (ticker != other.ticker) {
+      throw new AssertionError(
+          "Tickers (" + ticker + " and " + other.ticker + ") don't match."
+          + " Custom Ticker should only be used in  tests!");
+    }
   }
 }
