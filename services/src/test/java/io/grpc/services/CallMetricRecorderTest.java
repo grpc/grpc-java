@@ -18,6 +18,7 @@ package io.grpc.services;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.grpc.Context;
 import java.util.Map;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -62,5 +63,29 @@ public class CallMetricRecorderTest {
     Map<String, Double> dump = recorder.finalizeAndDump();
     assertThat(dump)
         .containsExactly("cost1", 4654.67, "cost2", 75.83);
+  }
+
+  @Test
+  public void getCurrent_sameEnabledInstance() {
+    CallMetricRecorder recorder = new CallMetricRecorder();
+    Context ctx = Context.ROOT.withValue(CallMetricRecorder.CONTEXT_KEY, recorder);
+    Context origCtx = ctx.attach();
+    try {
+      assertThat(CallMetricRecorder.getCurrent()).isSameInstanceAs(recorder);
+      assertThat(recorder.isDisabled()).isFalse();
+    } finally {
+      ctx.detach(origCtx);
+    }
+  }
+
+  @Test
+  public void getCurrent_blankContext() {
+    Context blankCtx = Context.ROOT;
+    Context origCtx = blankCtx.attach();
+    try {
+      assertThat(CallMetricRecorder.getCurrent().isDisabled()).isTrue();
+    } finally {
+      blankCtx.detach(origCtx);
+    }
   }
 }
