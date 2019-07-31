@@ -265,7 +265,7 @@ public class DeadlineTest {
     private long time;
 
     @Override
-    public long read() {
+    public long nanoTime() {
       return time;
     }
 
