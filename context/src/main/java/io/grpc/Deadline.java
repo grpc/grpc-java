@@ -39,7 +39,20 @@ public final class Deadline implements Comparable<Deadline> {
   private static final long NANOS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
 
   /**
-   * Create a deadline that will expire at the specified offset from the current system clock.
+   * Returns the ticker that's based on system clock.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   */
+  public static Ticker getSystemTicker() {
+    return SYSTEM_TICKER;
+  }
+
+  /**
+   * Create a deadline that will expire at the specified offset based on the {@link #getSystemTicker
+   * system ticker}.
+   *
    * @param duration A non-negative duration.
    * @param units The time unit for the duration.
    * @return A new deadline.
@@ -48,8 +61,19 @@ public final class Deadline implements Comparable<Deadline> {
     return after(duration, units, SYSTEM_TICKER);
   }
 
-  // For testing
-  static Deadline after(long duration, TimeUnit units, Ticker ticker) {
+  /**
+   * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   *
+   * @param duration A non-negative duration.
+   * @param units The time unit for the duration.
+   * @param ticker Where this deadline refer the current time
+   * @return A new deadline.
+   */
+  public static Deadline after(long duration, TimeUnit units, Ticker ticker) {
     checkNotNull(units, "units");
     return new Deadline(ticker, units.toNanos(duration), true);
   }
@@ -173,8 +197,14 @@ public final class Deadline implements Comparable<Deadline> {
     return 0;
   }
 
-  /** Time source representing nanoseconds since fixed but arbitrary point in time. */
-  abstract static class Ticker {
+  /**
+   * Time source representing nanoseconds since fixed but arbitrary point in time.
+   *
+   * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
+   * stabilized or have any feedback, please
+   * <href a="https://github.com/grpc/grpc-java/issues/6030">let us know</a>.
+   */
+  public abstract static class Ticker {
     /** Returns the number of nanoseconds since this source's epoch. */
     public abstract long read();
   }
