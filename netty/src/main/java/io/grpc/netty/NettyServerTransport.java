@@ -137,12 +137,14 @@ class NettyServerTransport implements ServerTransport {
       }
     }
 
+    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
+    ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
+
     ChannelFutureListener terminationNotifier = new TerminationNotifier();
     channelUnused.addListener(terminationNotifier);
     channel.closeFuture().addListener(terminationNotifier);
 
-    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
-    channel.pipeline().addLast(negotiationHandler);
+    channel.pipeline().addLast(bufferingHandler);
   }
 
   @Override
