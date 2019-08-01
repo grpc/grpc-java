@@ -169,6 +169,11 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Schedule a task to be run when the deadline expires.
+   *
+   * <p>Note if this deadline was created with a custom {@link Ticker}, the {@code scheduler}'s
+   * underlying clock should be synchronized with that Ticker.  Otherwise the task won't be run at
+   * the expected point of time.
+   *
    * @param task to run on expiration
    * @param scheduler used to execute the task
    * @return {@link ScheduledFuture} which can be used to cancel execution of the task
@@ -195,7 +200,7 @@ public final class Deadline implements Comparable<Deadline> {
     }
     buf.append("s from now");
     if (ticker != SYSTEM_TICKER) {
-      buf.append("(ticker=" + ticker + ")");
+      buf.append(" (ticker=" + ticker + ")");
     }
     return buf.toString();
   }
@@ -219,6 +224,10 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Time source representing nanoseconds since fixed but arbitrary point in time.
+   *
+   * <p>DO NOT use custom {@link Ticker} implementations in production, because deadlines created
+   * with custom tickers are incompatible with those created with the system ticker.  Always use
+   * the {@link #getSystemTicker system ticker} whenever you need to provide one in production code.
    *
    * <p>This is <strong>EXPERIMENTAL</strong> API and may subject to change.  If you'd like it to be
    * stabilized or have any feedback, please

@@ -130,12 +130,12 @@ public final class InProcessServerBuilder
    * Provides a custom deadline ticker that this server will use to create incoming {@link
    * Deadline}s.
    *
-   * <p>This intended for unit tests that fake out the clock.  You should also have a fake {@link
+   * <p>This is intended for unit tests that fake out the clock.  You should also have a fake {@link
    * ScheduledExecutorService} whose clock is synchronized with this ticker and set it to {@link
    * #scheduledExecutorService}. DO NOT use this in production.
    *
    * @return this
-   * @see Deadline#create(long, TimeUnit, Deadline.Ticker)
+   * @see Deadline#after(long, TimeUnit, Deadline.Ticker)
    *
    * @since 1.24.0
    */
