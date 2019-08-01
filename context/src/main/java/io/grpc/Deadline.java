@@ -261,7 +261,7 @@ public final class Deadline implements Comparable<Deadline> {
     if (ticker != other.ticker) {
       throw new AssertionError(
           "Tickers (" + ticker + " and " + other.ticker + ") don't match."
-          + " Custom Ticker should only be used in  tests!");
+          + " Custom Ticker should only be used in tests!");
     }
   }
 }
