@@ -16,6 +16,7 @@
 
 package io.grpc.services;
 
+import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Context;
 import io.grpc.ExperimentalApi;
 import java.util.Collections;
@@ -94,6 +95,11 @@ public final class CallMetricRecorder {
       return Collections.emptyMap();
     }
     return Collections.unmodifiableMap(savedMetrics);
+  }
+
+  @VisibleForTesting
+  boolean isDisabled() {
+    return disabled;
   }
 
   /**
