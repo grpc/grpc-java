@@ -17,6 +17,7 @@
 package io.grpc;
 
 import static com.google.common.truth.Truth.assertAbout;
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.testing.DeadlineSubject.deadline;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -66,6 +67,18 @@ public class DeadlineTest {
     Deadline reference = Deadline.after(0, TimeUnit.SECONDS, ticker);
     // Allow inaccuracy to account for system time advancing during test.
     assertAbout(deadline()).that(d).isWithin(1, TimeUnit.SECONDS).of(reference);
+  }
+
+  @Test
+  public void minimum() {
+    Deadline d1 = Deadline.after(1, TimeUnit.MINUTES, ticker);
+    Deadline d2 = Deadline.after(2, TimeUnit.MINUTES, ticker);
+    Deadline d3 = Deadline.after(3, TimeUnit.MINUTES, ticker);
+
+    assertThat(d1.minimum(d2)).isSameInstanceAs(d1);
+    assertThat(d2.minimum(d1)).isSameInstanceAs(d1);
+    assertThat(d3.minimum(d2)).isSameInstanceAs(d2);
+    assertThat(d2.minimum(d3)).isSameInstanceAs(d2);
   }
 
   @Test
@@ -209,9 +222,15 @@ public class DeadlineTest {
   }
 
   @Test
+  public void toString_systemTickerNotShown() {
+    Deadline d = Deadline.after(0, TimeUnit.MILLISECONDS);
+    assertThat(d.toString()).endsWith("s from now");
+  }
+
+  @Test
   public void toString_exact() {
     Deadline d = Deadline.after(0, TimeUnit.MILLISECONDS, ticker);
-    assertEquals("0s from now", d.toString());
+    assertEquals("0s from now (ticker=FAKE_TICKER)", d.toString());
   }
 
   @Test
@@ -219,17 +238,17 @@ public class DeadlineTest {
     Deadline d;
 
     d = Deadline.after(-1, TimeUnit.MINUTES, ticker);
-    assertEquals("-60s from now", d.toString());
+    assertEquals("-60s from now (ticker=FAKE_TICKER)", d.toString());
     d = Deadline.after(-1, TimeUnit.MILLISECONDS, ticker);
-    assertEquals("-0.001000000s from now", d.toString());
+    assertEquals("-0.001000000s from now (ticker=FAKE_TICKER)", d.toString());
     d = Deadline.after(-500, TimeUnit.MILLISECONDS, ticker);
-    assertEquals("-0.500000000s from now", d.toString());
+    assertEquals("-0.500000000s from now (ticker=FAKE_TICKER)", d.toString());
     d = Deadline.after(-1000, TimeUnit.MILLISECONDS, ticker);
-    assertEquals("-1s from now", d.toString());
+    assertEquals("-1s from now (ticker=FAKE_TICKER)", d.toString());
     d = Deadline.after(-1500, TimeUnit.MILLISECONDS, ticker);
-    assertEquals("-1.500000000s from now", d.toString());
+    assertEquals("-1.500000000s from now (ticker=FAKE_TICKER)", d.toString());
     d = Deadline.after(-1023456789, TimeUnit.NANOSECONDS, ticker);
-    assertEquals("-1.023456789s from now", d.toString());
+    assertEquals("-1.023456789s from now (ticker=FAKE_TICKER)", d.toString());
   }
 
   @Test
@@ -256,9 +275,39 @@ public class DeadlineTest {
   }
 
   @Test
+  public void tickersDontMatch() {
+    Deadline d1 = Deadline.after(10, TimeUnit.SECONDS);
+    Deadline d2 = Deadline.after(10, TimeUnit.SECONDS, ticker);
+    boolean success = false;
+    try {
+      d1.compareTo(d2);
+      success = true;
+    } catch (AssertionError e) {
+      // Expected
+    }
+    assertFalse(success);
+
+    try {
+      d1.minimum(d2);
+      success = true;
+    } catch (AssertionError e) {
+      // Expected
+    }
+    assertFalse(success);
+
+    try {
+      d1.isBefore(d2);
+      success = true;
+    } catch (AssertionError e) {
+      // Expected
+    }
+    assertFalse(success);
+  }
+
+  @Test
   public void toString_before() {
     Deadline d = Deadline.after(12, TimeUnit.MICROSECONDS, ticker);
-    assertEquals("0.000012000s from now", d.toString());
+    assertEquals("0.000012000s from now (ticker=FAKE_TICKER)", d.toString());
   }
 
   private static class FakeTicker extends Deadline.Ticker {
@@ -278,6 +327,11 @@ public class DeadlineTest {
         throw new IllegalArgumentException();
       }
       this.time += unit.toNanos(period);
+    }
+
+    @Override
+    public String toString() {
+      return "FAKE_TICKER";
     }
   }
 }
