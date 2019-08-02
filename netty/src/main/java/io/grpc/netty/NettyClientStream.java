@@ -174,7 +174,8 @@ class NettyClientStream extends AbstractClientStream {
     private void writeFrameInternal(
         WritableBuffer frame, boolean endOfStream, boolean flush, final int numMessages) {
       Preconditions.checkArgument(numMessages >= 0);
-      ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
+      ByteBuf bytebuf =
+          frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf().touch();
       final int numBytes = bytebuf.readableBytes();
       if (numBytes > 0) {
         // Add the bytes to outbound flow control.
