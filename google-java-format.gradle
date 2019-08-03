@@ -1,0 +1,71 @@
+/**
+ * Reformat the diff from a given commit, formatBase. By default formatBase=HEAD.
+ * Requires that bash can run executable python 2.7 files directly.
+ *
+ * Usage:
+ * ./gradlew googleJavaFormat [-PformatBase=<format base>]
+ * 
+ * To enable this task when build, explicitly specify property "formatBase"
+ * For example: 
+ * ./gradlew build -PformatBase="HEAD~1"
+ * 
+ * Be aware that your IDE may lose editing history if the task modifies the code.
+ */
+task googleJavaFormat {
+    try {
+        exec {
+            executable = '/usr/bin/env'
+            args 'python2.7'
+        }
+    } catch (Exception e) {
+        print "python2.7 not found, will skip ${name}"
+        enabled = false
+    }
+}
+
+if (googleJavaFormat.enabled) {
+    def googleJavaFormatVer = '1.7'
+    def googleJavaFormatDir = "${rootDir}/buildscripts/google-java-format"
+    def googleJavaFormatJar
+
+    repositories {
+        maven { // The google mirror is less flaky than mavenCentral()
+            url 'https://maven-central.storage-download.googleapis.com/repos/central/data/'
+        }
+    }
+
+    configurations {
+        googleJavaFormat {}
+    }
+
+    dependencies {
+        googleJavaFormat "com.google.googlejavaformat:google-java-format:${googleJavaFormatVer}"
+    }
+
+    task googleJavaFormatFatJar(type: Jar) {
+        manifest {
+            attributes 'Main-Class': 'com.google.googlejavaformat.java.Main'
+        }
+        destinationDirectory = file("${rootDir}/build/libs")
+        archiveFileName = "google-java-format-${googleJavaFormatVer}-all-deps.jar"
+        from { configurations.googleJavaFormat.collect { it.isDirectory() ? it : zipTree(it) } }
+        googleJavaFormatJar = "${destinationDirectory.get()}/${archiveFileName.get()}"
+    }
+
+    subprojects {
+        task googleJavaFormat(type: Exec) {
+            dependsOn googleJavaFormatFatJar
+            workingDir "${rootDir}"
+            environment 'googleJavaFormatJar', "${googleJavaFormatJar}"
+            def formatBase = rootProject.properties.get('formatBase', 'HEAD')
+            commandLine 'bash', '-c',
+                    " git diff -U0 ${formatBase} -- ${projectDir} |" +
+                            " ${googleJavaFormatDir}/google-java-format-diff.py" +
+                            " -p1 -i -b ${googleJavaFormatDir}/google-java-format" +
+                            " -regex='^((?!generated).)*\\.java\$'"
+        }
+        if (rootProject.hasProperty('formatBase')) {
+            build.finalizedBy(googleJavaFormat)
+        }
+    }
+}
