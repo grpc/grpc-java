@@ -21,6 +21,8 @@ import static com.google.common.base.Preconditions.checkState;
 
 import io.grpc.internal.SerializingExecutor;
 import io.grpc.okhttp.ExceptionHandlingFrameWriter.TransportExceptionHandler;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.io.IOException;
 import java.net.Socket;
 import javax.annotation.Nullable;
@@ -157,8 +159,17 @@ final class AsyncSink implements Sink {
   }
 
   private abstract class WriteRunnable implements Runnable {
+
+    private final Link link;
+
+    WriteRunnable() {
+      this.link = PerfMark.linkOut();
+    }
+
     @Override
     public final void run() {
+      PerfMark.startTask("WriteRunnable.run");
+      PerfMark.linkIn(link);
       try {
         if (sink == null) {
           throw new IOException("Unable to perform write due to unavailable sink.");
@@ -166,6 +177,8 @@ final class AsyncSink implements Sink {
         doRun();
       } catch (Exception e) {
         transportExceptionHandler.onException(e);
+      } finally {
+        PerfMark.stopTask("WriteRunnable.run");
       }
     }
 
