@@ -2,7 +2,6 @@ java_library(
     name = "netty",
     srcs = glob([
         "src/main/java/**/*.java",
-        "third_party/netty/java/**/*.java",
     ]),
     resources = glob([
         "src/main/resources/**",
