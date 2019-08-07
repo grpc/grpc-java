@@ -55,7 +55,6 @@ import java.util.logging.Logger;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 import javax.servlet.AsyncContext;
-import javax.servlet.ServletOutputStream;
 import javax.servlet.WriteListener;
 import javax.servlet.http.HttpServletResponse;
 
@@ -64,7 +63,7 @@ final class ServletServerStream extends AbstractServerStream {
   private static final Logger logger = Logger.getLogger(ServletServerStream.class.getName());
 
   private final ServletTransportState transportState;
-  private final Sink sink;
+  private final Sink sink = new Sink();
   private final AsyncContext asyncCtx;
   private final HttpServletResponse resp;
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
@@ -84,14 +83,12 @@ final class ServletServerStream extends AbstractServerStream {
     super(ByteArrayWritableBuffer::new, statsTraceCtx);
     transportState =
         new ServletTransportState(maxInboundMessageSize, statsTraceCtx, new TransportTracer());
-    this.asyncCtx = asyncCtx;
-    this.resp = (HttpServletResponse) asyncCtx.getResponse();
     this.attributes = attributes;
     this.authority = authority;
     this.logId = logId;
-    sink = new Sink();
-    asyncCtx.getResponse().getOutputStream()
-        .setWriteListener(new GrpcWriteListener());
+    this.asyncCtx = asyncCtx;
+    this.resp = (HttpServletResponse) asyncCtx.getResponse();
+    resp.getOutputStream().setWriteListener(new GrpcWriteListener());
   }
 
   @Override
@@ -162,7 +159,7 @@ final class ServletServerStream extends AbstractServerStream {
     logger.log(FINE, "[{0}] call is completing", logId);
     transportState.runOnTransportThread(
         () -> {
-          transportState().complete();
+          transportState.complete();
           asyncCtx.complete();
           logger.log(FINE, "[{0}] call completed", logId);
         });
@@ -279,11 +276,6 @@ final class ServletServerStream extends AbstractServerStream {
   }
 
   private final class GrpcWriteListener implements WriteListener {
-    final ServletOutputStream output;
-
-    GrpcWriteListener() throws IOException {
-      output = resp.getOutputStream();
-    }
 
     @Override
     public void onError(Throwable t) {
@@ -293,11 +285,11 @@ final class ServletServerStream extends AbstractServerStream {
 
       // If the resp is not committed, cancel() to avoid being redirected to an error page.
       // Else, the container will send RST_STREAM at the end.
-      if (!asyncCtx.getResponse().isCommitted()) {
+      if (!resp.isCommitted()) {
         cancel(Status.fromThrowable(t));
       } else {
-        transportState().runOnTransportThread(
-            () -> transportState().transportReportStatus(Status.fromThrowable(t)));
+        transportState.runOnTransportThread(
+            () -> transportState.transportReportStatus(Status.fromThrowable(t)));
       }
     }
 
@@ -312,7 +304,7 @@ final class ServletServerStream extends AbstractServerStream {
       }
 
       boolean isReady;
-      while ((isReady = output.isReady())) {
+      while ((isReady = resp.getOutputStream().isReady())) {
         WriteState curState = writeState.get();
 
         ByteArrayWritableBuffer buffer = writeChain.poll();
@@ -443,8 +435,8 @@ final class ServletServerStream extends AbstractServerStream {
 
     @Override
     public void request(int numMessages) {
-      transportState().runOnTransportThread(
-          () -> transportState().requestMessagesFromDeframer(numMessages));
+      transportState.runOnTransportThread(
+          () -> transportState.requestMessagesFromDeframer(numMessages));
     }
 
     @Override
@@ -452,12 +444,11 @@ final class ServletServerStream extends AbstractServerStream {
       if (resp.isCommitted() && Code.DEADLINE_EXCEEDED == status.getCode()) {
         return; // let the servlet timeout, the container will sent RST_STREAM automatically
       }
-      transportState().runOnTransportThread(
-          () -> transportState().transportReportStatus(status));
+      transportState.runOnTransportThread(() -> transportState.transportReportStatus(status));
       // There is no way to RST_STREAM with CANCEL code, so write trailers instead
       close(Status.CANCELLED.withCause(status.asRuntimeException()), new Metadata());
       CountDownLatch countDownLatch = new CountDownLatch(1);
-      transportState().runOnTransportThread(() -> {
+      transportState.runOnTransportThread(() -> {
         asyncCtx.complete();
         countDownLatch.countDown();
       });
