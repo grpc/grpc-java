@@ -79,9 +79,14 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
             super.close(status, trailers);
           }
         };
-    final CallMetricRecorder recorder = InternalCallMetricRecorder.newCallMetricRecorder();
+    Context ctx = Context.current();
+    if (InternalCallMetricRecorder.CONTEXT_KEY.get(ctx) == null) {
+      ctx =
+          ctx.withValue(InternalCallMetricRecorder.CONTEXT_KEY,
+              InternalCallMetricRecorder.newCallMetricRecorder());
+    }
     return Contexts.interceptCall(
-        Context.current().withValue(InternalCallMetricRecorder.CONTEXT_KEY, recorder),
+        ctx,
         trailerAttachingCall,
         headers,
         next);
