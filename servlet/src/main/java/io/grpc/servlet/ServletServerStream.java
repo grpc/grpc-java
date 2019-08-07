@@ -66,6 +66,7 @@ final class ServletServerStream extends AbstractServerStream {
   private final ServletTransportState transportState;
   private final Sink sink;
   private final AsyncContext asyncCtx;
+  private final HttpServletResponse resp;
   private final AtomicReference<WriteState> writeState = new AtomicReference<>(WriteState.DEFAULT);
   // SPSC queue would do
   private final Queue<ByteArrayWritableBuffer> writeChain = new ConcurrentLinkedQueue<>();
@@ -84,6 +85,7 @@ final class ServletServerStream extends AbstractServerStream {
     transportState =
         new ServletTransportState(maxInboundMessageSize, statsTraceCtx, new TransportTracer());
     this.asyncCtx = asyncCtx;
+    this.resp = (HttpServletResponse) asyncCtx.getResponse();
     this.attributes = attributes;
     this.authority = authority;
     this.logId = logId;
@@ -115,6 +117,55 @@ final class ServletServerStream extends AbstractServerStream {
   @Override
   protected Sink abstractServerStreamSink() {
     return sink;
+  }
+
+  private void writeHeadersToServletResponse(Metadata metadata) {
+    // Discard any application supplied duplicates of the reserved headers
+    metadata.discardAll(CONTENT_TYPE_KEY);
+    metadata.discardAll(GrpcUtil.TE_HEADER);
+    metadata.discardAll(GrpcUtil.USER_AGENT_KEY);
+
+    if (logger.isLoggable(FINE)) {
+      logger.log(FINE, "[{0}] writeHeaders {1}", new Object[] {logId, metadata});
+    }
+
+    resp.setStatus(HttpServletResponse.SC_OK);
+    resp.setContentType(CONTENT_TYPE_GRPC);
+
+    byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(metadata);
+    for (int i = 0; i < serializedHeaders.length; i += 2) {
+      resp.addHeader(
+          new String(serializedHeaders[i], StandardCharsets.US_ASCII),
+          new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
+    }
+  }
+
+  private void writeBufToServletResponse(ByteArrayWritableBuffer buffer)
+      throws IOException {
+    int numBytes = buffer.readableBytes();
+    if (buffer == ByteArrayWritableBuffer.FLUSH) {
+      resp.flushBuffer();
+    } else {
+      resp.getOutputStream().write(buffer.bytes, 0, numBytes);
+      transportState.runOnTransportThread(() -> transportState.onSentBytes(numBytes));
+
+      if (logger.isLoggable(Level.FINEST)) {
+        logger.log(
+            Level.FINEST,
+            "[{0}] outbound data: length = {1}, bytes = {2}",
+            new Object[] {logId, numBytes, toHexString(buffer.bytes, numBytes)});
+      }
+    }
+  }
+
+  private void callComplete() {
+    logger.log(FINE, "[{0}] call is completing", logId);
+    transportState.runOnTransportThread(
+        () -> {
+          transportState().complete();
+          asyncCtx.complete();
+          logger.log(FINE, "[{0}] call completed", logId);
+        });
   }
 
   final class ServletTransportState extends TransportState {
@@ -228,12 +279,26 @@ final class ServletServerStream extends AbstractServerStream {
   }
 
   private final class GrpcWriteListener implements WriteListener {
-    final HttpServletResponse resp;
     final ServletOutputStream output;
 
     GrpcWriteListener() throws IOException {
-      resp = (HttpServletResponse) asyncCtx.getResponse();
       output = resp.getOutputStream();
+    }
+
+    @Override
+    public void onError(Throwable t) {
+      if (logger.isLoggable(FINE)) {
+        logger.log(FINE, String.format("[{%s}] Error: ", logId), t);
+      }
+
+      // If the resp is not committed, cancel() to avoid being redirected to an error page.
+      // Else, the container will send RST_STREAM at the end.
+      if (!asyncCtx.getResponse().isCommitted()) {
+        cancel(Status.fromThrowable(t));
+      } else {
+        transportState().runOnTransportThread(
+            () -> transportState().transportReportStatus(Status.fromThrowable(t)));
+      }
     }
 
     @Override
@@ -252,24 +317,7 @@ final class ServletServerStream extends AbstractServerStream {
 
         ByteArrayWritableBuffer buffer = writeChain.poll();
         if (buffer != null) {
-          if (buffer == ByteArrayWritableBuffer.FLUSH) {
-            resp.flushBuffer();
-          } else {
-            output.write(buffer.bytes, 0, buffer.readableBytes());
-            transportState().runOnTransportThread(
-                () -> transportState().onSentBytes(buffer.readableBytes()));
-
-            if (logger.isLoggable(Level.FINEST)) {
-              logger.log(
-                  Level.FINEST,
-                  "[{0}] outbound data: length = {1}, bytes = {2}",
-                  new Object[] {
-                      logId,
-                      buffer.readableBytes(),
-                      toHexString(buffer.bytes, buffer.readableBytes())
-                  });
-            }
-          }
+          writeBufToServletResponse(buffer);
           continue;
         }
 
@@ -282,67 +330,55 @@ final class ServletServerStream extends AbstractServerStream {
       }
 
       if (isReady && writeState.get().trailersSent) {
-        logger.log(FINE, "[{0}] call is completing", logId);
-        transportState().runOnTransportThread(
-            () -> {
-              transportState().complete();
-              asyncCtx.complete();
-              logger.log(FINE, "[{0}] call is completing", logId);
-            });
+        callComplete();
       }
 
       logger.log(FINEST, "[{0}] onWritePossible: EXIT", logId);
     }
+  }
 
-    @Override
-    public void onError(Throwable t) {
-      if (logger.isLoggable(FINE)) {
-        logger.log(FINE, String.format("[{%s}] Error: ", logId), t);
+  private void writeBuf(ByteArrayWritableBuffer byteBuffer) {
+    WriteState curState = writeState.get();
+    if (curState.stillWritePossible) { // write to the outputStream directly
+      try {
+        writeBufToServletResponse(byteBuffer);
+        if (!resp.getOutputStream().isReady()) {
+          while (true) {
+            if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
+              logger.log(FINEST, "[{0}] set stillWritePossible to false", logId);
+              return;
+            }
+            curState = writeState.get();
+            assert curState.stillWritePossible;
+          }
+        }
+      } catch (IOException ioe) {
+        logger.log(WARNING, String.format("[{%s}] Exception writing message", logId), ioe);
+        cancel(Status.fromThrowable(ioe));
       }
-
-      // If the resp is not committed, cancel() to avoid being redirected to an error page.
-      // Else, the container will send RST_STREAM at the end.
-      if (!asyncCtx.getResponse().isCommitted()) {
-        cancel(Status.fromThrowable(t));
-      } else {
-        transportState().runOnTransportThread(
-            () -> transportState().transportReportStatus(Status.fromThrowable(t)));
+    } else { // buffer to the writeChain
+      writeChain.offer(byteBuffer);
+      if (!writeState.compareAndSet(curState, curState.newState())) {
+        // state changed by another thread, need to check if stillWritePossible again
+        if (writeState.get().stillWritePossible) {
+          ByteArrayWritableBuffer bf = writeChain.poll();
+          if (bf != null) {
+            assert bf == byteBuffer;
+            writeBuf(bf);
+          }
+        }
       }
     }
   }
 
   private final class Sink implements AbstractServerStream.Sink {
-
-    final HttpServletResponse resp;
-
-    Sink() {
-      resp = (HttpServletResponse) asyncCtx.getResponse();
-    }
-
     final TrailerSupplier trailerSupplier = new TrailerSupplier();
 
     @Override
     public void writeHeaders(Metadata headers) {
-      // Discard any application supplied duplicates of the reserved headers
-      headers.discardAll(CONTENT_TYPE_KEY);
-      headers.discardAll(GrpcUtil.TE_HEADER);
-      headers.discardAll(GrpcUtil.USER_AGENT_KEY);
-
-      if (logger.isLoggable(FINE)) {
-        logger.log(FINE, "[{0}] writeHeaders {1}", new Object[] {logId, headers});
-      }
-
-      resp.setStatus(HttpServletResponse.SC_OK);
-      resp.setContentType(CONTENT_TYPE_GRPC);
-
-      byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(headers);
-      for (int i = 0; i < serializedHeaders.length; i += 2) {
-        resp.addHeader(
-            new String(serializedHeaders[i], StandardCharsets.US_ASCII),
-            new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
-      }
+      writeHeadersToServletResponse(headers);
       resp.setTrailerFields(trailerSupplier);
-      writeFrame(ByteArrayWritableBuffer.FLUSH);
+      writeBuf(ByteArrayWritableBuffer.FLUSH);
     }
 
     @Override
@@ -363,58 +399,11 @@ final class ServletServerStream extends AbstractServerStream {
         if (numBytes > 0) {
           onSendingBytes(numBytes);
         }
-        writeFrame((ByteArrayWritableBuffer) frame);
+        writeBuf((ByteArrayWritableBuffer) frame);
       }
 
       if (flush) {
-        writeFrame(ByteArrayWritableBuffer.FLUSH);
-      }
-    }
-
-    private void writeFrame(ByteArrayWritableBuffer byteBuffer) {
-      int numBytes = byteBuffer.readableBytes();
-      WriteState curState = writeState.get();
-      if (curState.stillWritePossible) { // write to the outputStream directly
-        try {
-          ServletOutputStream outputStream = resp.getOutputStream();
-          if (byteBuffer == ByteArrayWritableBuffer.FLUSH) {
-            resp.flushBuffer();
-          } else {
-            outputStream.write(byteBuffer.bytes, 0, byteBuffer.readableBytes());
-            transportState().runOnTransportThread(() -> transportState().onSentBytes(numBytes));
-            if (logger.isLoggable(FINEST)) {
-              logger.log(
-                  FINEST,
-                  "[{0}] outbound data: length = {1}, bytes = {2}",
-                  new Object[]{
-                      logId, numBytes, toHexString(byteBuffer.bytes, byteBuffer.readableBytes())});
-            }
-          }
-          if (!outputStream.isReady()) {
-            while (true) {
-              if (writeState.compareAndSet(curState, curState.withStillWritePossible(false))) {
-                logger.log(FINEST, "[{0}] set stillWritePossible to false", logId);
-                return;
-              }
-              curState = writeState.get();
-            }
-          }
-        } catch (IOException ioe) {
-          logger.log(WARNING, String.format("[{%s}] Exception writing message", logId), ioe);
-          cancel(Status.fromThrowable(ioe));
-        }
-      } else { // buffer to the writeChain
-        writeChain.offer(byteBuffer);
-        if (!writeState.compareAndSet(curState, curState.newState())) {
-          // state changed by another thread, need to check if stillWritePossible again
-          if (writeState.get().stillWritePossible) {
-            ByteArrayWritableBuffer bf = writeChain.poll();
-            if (bf != null) {
-              assert bf == byteBuffer;
-              writeFrame(bf);
-            }
-          }
-        }
+        writeBuf(ByteArrayWritableBuffer.FLUSH);
       }
     }
 
@@ -427,20 +416,7 @@ final class ServletServerStream extends AbstractServerStream {
             new Object[] {logId, trailers, headersSent, status});
       }
       if (!headersSent) {
-        // Discard any application supplied duplicates of the reserved headers
-        trailers.discardAll(CONTENT_TYPE_KEY);
-        trailers.discardAll(GrpcUtil.TE_HEADER);
-        trailers.discardAll(GrpcUtil.USER_AGENT_KEY);
-
-        resp.setStatus(HttpServletResponse.SC_OK);
-        resp.setContentType(CONTENT_TYPE_GRPC);
-
-        byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
-        for (int i = 0; i < serializedHeaders.length; i += 2) {
-          resp.addHeader(
-              new String(serializedHeaders[i], StandardCharsets.US_ASCII),
-              new String(serializedHeaders[i + 1], StandardCharsets.US_ASCII));
-        }
+        writeHeadersToServletResponse(trailers);
       } else {
         byte[][] serializedHeaders = TransportFrameUtil.toHttp2Headers(trailers);
         for (int i = 0; i < serializedHeaders.length; i += 2) {
@@ -455,13 +431,7 @@ final class ServletServerStream extends AbstractServerStream {
         WriteState curState = writeState.get();
         if (curState.stillWritePossible) {
           // in non-error case, this condition means all messages are sent out
-          logger.log(FINE, "[{0}] call is completing", logId);
-          transportState().runOnTransportThread(
-              () -> {
-                transportState().complete();
-                asyncCtx.complete();
-                logger.log(FINE, "[{0}] call completed", logId);
-              });
+          callComplete();
           break;
         } // else, some messages are still in write queue
         if (writeState.compareAndSet(curState, curState.withTrailersSent(true))) {
