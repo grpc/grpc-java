@@ -173,6 +173,34 @@ public class SharedResourceHolderTest {
     }
   }
 
+  @Test public void handleInstanceCloseError() {
+    class ExceptionOnCloseResource implements Resource<ResourceInstance> {
+      @Override
+      public ResourceInstance create() {
+        return new ResourceInstance();
+      }
+
+      @Override
+      public void close(ResourceInstance instance) {
+        throw new RuntimeException();
+      }
+    }
+
+    Resource<ResourceInstance> resource = new ExceptionOnCloseResource();
+    ResourceInstance instance = holder.getInternal(resource);
+    holder.releaseInternal(resource, instance);
+    MockScheduledFuture<?> scheduledDestroyTask = scheduledDestroyTasks.poll();
+    try {
+      scheduledDestroyTask.runTask();
+      fail("Should throw RuntimeException");
+    } catch (RuntimeException e) {
+      // expected
+    }
+
+    // Future resource fetches should not get the partially-closed one.
+    assertNotSame(instance, holder.getInternal(resource));
+  }
+
   private class MockExecutorFactory implements
       SharedResourceHolder.ScheduledExecutorFactory {
     @Override
