@@ -128,8 +128,14 @@ public final class SharedResourceHolder {
         // AppEngine must immediately release shared resources, particularly executors
         // which could retain request-scoped threads which become zombies after the request
         // completes.
-        resource.close(instance);
-        instances.remove(resource);
+        // We do not encourage exceptions to be thrown during close, but we would like it to
+        // be able to recover eventually and do not want future resource fetches reuse the broken
+        // one.
+        try {
+          resource.close(instance);
+        } finally {
+          instances.remove(resource);
+        }
       } else {
         Preconditions.checkState(cached.destroyTask == null, "Destroy task already scheduled");
         // Schedule a delayed task to destroy the resource.
@@ -142,11 +148,14 @@ public final class SharedResourceHolder {
             synchronized (SharedResourceHolder.this) {
               // Refcount may have gone up since the task was scheduled. Re-check it.
               if (cached.refcount == 0) {
-                resource.close(instance);
-                instances.remove(resource);
-                if (instances.isEmpty()) {
-                  destroyer.shutdown();
-                  destroyer = null;
+                try {
+                  resource.close(instance);
+                } finally {
+                  instances.remove(resource);
+                  if (instances.isEmpty()) {
+                    destroyer.shutdown();
+                    destroyer = null;
+                  }
                 }
               }
             }
