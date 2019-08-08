@@ -24,6 +24,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
+import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.ManagedChannel;
@@ -31,16 +32,19 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
+import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.services.CallMetricRecorder;
+import io.grpc.services.InternalCallMetricRecorder;
 import io.grpc.stub.ClientCalls;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
 import io.grpc.testing.protobuf.SimpleServiceGrpc;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -103,6 +107,55 @@ public class OrcaMetricReportingServerInterceptorTest {
     channelToUse =
         ClientInterceptors.intercept(
             baseChannel, new TrailersCapturingClientInterceptor(trailersCapture));
+  }
+
+  @Test
+  public void shareCallMetricRecorderInContext() throws IOException {
+    final CallMetricRecorder callMetricRecorder =
+        InternalCallMetricRecorder.newCallMetricRecorder();
+    ServerStreamTracer.Factory callMetricRecorderSharingStreamTracerFactory =
+        new ServerStreamTracer.Factory() {
+      @Override
+      public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
+        return new ServerStreamTracer() {
+          @Override
+          public Context filterContext(Context context) {
+            return context.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+          }
+        };
+      }
+    };
+
+    final AtomicReference<CallMetricRecorder> callMetricRecorderCapture = new AtomicReference<>();
+    SimpleServiceGrpc.SimpleServiceImplBase simpleServiceImpl =
+        new SimpleServiceGrpc.SimpleServiceImplBase() {
+          @Override
+          public void unaryRpc(
+              SimpleRequest request, StreamObserver<SimpleResponse> responseObserver) {
+            callMetricRecorderCapture.set(CallMetricRecorder.getCurrent());
+            SimpleResponse response =
+                SimpleResponse.newBuilder().setResponseMessage("Simple response").build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+          }
+        };
+
+    ServerInterceptor metricReportingServerInterceptor = new OrcaMetricReportingServerInterceptor();
+    String serverName = InProcessServerBuilder.generateName();
+    grpcCleanupRule.register(
+        InProcessServerBuilder
+            .forName(serverName)
+            .directExecutor()
+            .addStreamTracerFactory(callMetricRecorderSharingStreamTracerFactory)
+            .addService(
+                ServerInterceptors.intercept(simpleServiceImpl, metricReportingServerInterceptor))
+            .build().start());
+
+    ManagedChannel channel =
+        grpcCleanupRule.register(InProcessChannelBuilder.forName(serverName).build());
+    ClientCalls.blockingUnaryCall(channel, SIMPLE_METHOD, CallOptions.DEFAULT, REQUEST);
+
+    assertThat(callMetricRecorderCapture.get()).isSameInstanceAs(callMetricRecorder);
   }
 
   @Test
