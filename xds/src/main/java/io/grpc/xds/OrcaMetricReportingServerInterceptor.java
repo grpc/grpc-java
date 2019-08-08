@@ -64,12 +64,19 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
   @Override
   public <ReqT, RespT> Listener<ReqT> interceptCall(
       ServerCall<ReqT, RespT> call, Metadata headers, ServerCallHandler<ReqT, RespT> next) {
+    Context ctx = Context.current();
+    CallMetricRecorder callMetricRecorder = InternalCallMetricRecorder.CONTEXT_KEY.get(ctx);
+    if (callMetricRecorder == null) {
+      callMetricRecorder = InternalCallMetricRecorder.newCallMetricRecorder();
+      ctx = ctx.withValue(InternalCallMetricRecorder.CONTEXT_KEY, callMetricRecorder);
+    }
+    final CallMetricRecorder finalCallMetricRecorder = callMetricRecorder;
     ServerCall<ReqT, RespT> trailerAttachingCall =
         new SimpleForwardingServerCall<ReqT, RespT>(call) {
           @Override
           public void close(Status status, Metadata trailers) {
             Map<String, Double> metricValues =
-                InternalCallMetricRecorder.finalizeAndDump(CallMetricRecorder.getCurrent());
+                InternalCallMetricRecorder.finalizeAndDump(finalCallMetricRecorder);
             // Only attach a metric report if there are some metric values to be reported.
             if (!metricValues.isEmpty()) {
               OrcaLoadReport report =
@@ -79,9 +86,8 @@ public final class OrcaMetricReportingServerInterceptor implements ServerInterce
             super.close(status, trailers);
           }
         };
-    final CallMetricRecorder recorder = InternalCallMetricRecorder.newCallMetricRecorder();
     return Contexts.interceptCall(
-        Context.current().withValue(InternalCallMetricRecorder.CONTEXT_KEY, recorder),
+        ctx,
         trailerAttachingCall,
         headers,
         next);
