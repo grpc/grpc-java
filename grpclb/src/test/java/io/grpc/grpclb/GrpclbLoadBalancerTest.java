@@ -185,6 +185,8 @@ public class GrpclbLoadBalancerTest {
   private io.grpc.Server fakeLbServer;
   @Captor
   private ArgumentCaptor<SubchannelPicker> pickerCaptor;
+  @Captor
+  private ArgumentCaptor<List<EquivalentAddressGroup>> eagsCaptor;
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
@@ -1720,10 +1722,11 @@ public class GrpclbLoadBalancerTest {
     // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
     // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
+        eagsCaptor.capture(),
         any(Attributes.class));
+    assertThat(eagsCaptor.getValue()).containsExactly(
+        new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+        new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
     // Initially IDLE
     inOrder.verify(helper).updateBalancingState(eq(IDLE), pickerCaptor.capture());
@@ -1776,11 +1779,10 @@ public class GrpclbLoadBalancerTest {
     // createSubchannel() has ever been called only once
     verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
     assertThat(mockSubchannels).isEmpty();
-    verify(subchannel).updateAddresses(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends2.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends2.get(2).addr,
-                    eagAttrsWithToken("token0004")))));
+    verify(subchannel).updateAddresses(eagsCaptor.capture());
+    assertThat(eagsCaptor.getValue()).containsExactly(
+        new EquivalentAddressGroup(backends2.get(0).addr, eagAttrsWithToken("token0001")),
+        new EquivalentAddressGroup(backends2.get(2).addr, eagAttrsWithToken("token0004")));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker4 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker4.dropList).containsExactly(
@@ -1811,6 +1813,132 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
+  @SuppressWarnings("deprecation")
+  @Test
+  public void grpclbWorking_pickFirstMode_expectBackendsShuffled() throws Exception {
+    InOrder inOrder = inOrder(helper);
+    String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    StreamObserver<LoadBalanceResponse> lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // Simulate receiving LB response
+    List<ServerEntry> backends0 = generateFakeServerEntries(100);
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends0));
+
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
+    inOrder.verify(helper).createSubchannel(
+        eagsCaptor.capture(),
+        any(Attributes.class));
+    List<EquivalentAddressGroup> eags = eagsCaptor.getValue();
+    int offset = eags.indexOf(eagOfFakeServerEntry(backends0.get(0)));
+    assertEagsAreShifted(eags, backends0, offset);
+
+    // Only one subchannel is created
+    assertThat(mockSubchannels).hasSize(1);
+    Subchannel subchannel = mockSubchannels.poll();
+
+    List<ServerEntry> backends1 = generateFakeServerEntries(1);
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+    verify(subchannel).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends1, offset);
+
+    List<ServerEntry> backends2 = generateFakeServerEntries(2);
+    lbResponseObserver.onNext(buildLbResponse(backends2));
+    verify(subchannel, times(2)).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends2, offset);
+
+    List<ServerEntry> backends3 = generateFakeServerEntries(3);
+    lbResponseObserver.onNext(buildLbResponse(backends3));
+    verify(subchannel, times(3)).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends3, offset);
+
+    List<ServerEntry> allDrop = Collections.singletonList(new ServerEntry("token0004"));
+    lbResponseObserver.onNext(buildLbResponse(allDrop));
+    verify(subchannel, times(4)).updateAddresses(eagsCaptor.capture());
+    assertThat(eagsCaptor.getValue()).isEmpty();
+
+    balancer.shutdown();
+
+    // new balancer
+    balancer = new GrpclbLoadBalancer(helper, subchannelPool, fakeClock.getTimeProvider(),
+        fakeClock.getStopwatchSupplier().get(),
+        backoffPolicyProvider);
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    verify(mockLbService, times(2)).balanceLoad(lbResponseObserverCaptor.capture());
+    lbResponseObserver = lbResponseObserverCaptor.getValue();
+
+    // Simulate receiving LB response
+    lbResponseObserver.onNext(buildInitialResponse());
+    lbResponseObserver.onNext(buildLbResponse(backends0));
+
+    // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
+    // the new createSubchannel().
+    inOrder.verify(helper).createSubchannel(
+        eagsCaptor.capture(),
+        any(Attributes.class));
+    eags = eagsCaptor.getValue();
+    int newOffset = eags.indexOf(eagOfFakeServerEntry(backends0.get(0)));
+
+    assertThat(newOffset).isEqualTo(offset + 1);
+
+    assertEagsAreShifted(eags, backends0, newOffset);
+
+    // Only one subchannel is created
+    assertThat(mockSubchannels).hasSize(1);
+    subchannel = mockSubchannels.poll();
+
+    lbResponseObserver.onNext(buildLbResponse(backends1));
+    verify(subchannel).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends1, newOffset);
+
+    lbResponseObserver.onNext(buildLbResponse(backends2));
+    verify(subchannel, times(2)).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends2, newOffset);
+
+    lbResponseObserver.onNext(buildLbResponse(backends3));
+    verify(subchannel, times(3)).updateAddresses(eagsCaptor.capture());
+    eags = eagsCaptor.getValue();
+    assertEagsAreShifted(eags, backends3, newOffset);
+
+    lbResponseObserver.onNext(buildLbResponse(allDrop));
+    verify(subchannel, times(4)).updateAddresses(eagsCaptor.capture());
+    assertThat(eagsCaptor.getValue()).isEmpty();
+  }
+
+  private static List<ServerEntry> generateFakeServerEntries(int num) {
+    List<ServerEntry> list = new ArrayList<>(num);
+    for (int i = 0; i < num; i++) {
+      list.add(new ServerEntry("127.0.0.1",  1000 + i, "token000" + i));
+    }
+    return list;
+  }
+
+  private static EquivalentAddressGroup eagOfFakeServerEntry(ServerEntry serverEntry) {
+    return new EquivalentAddressGroup(serverEntry.addr, eagAttrsWithToken(serverEntry.token));
+  }
+
+  private static void assertEagsAreShifted(
+      List<EquivalentAddressGroup> eags, List<ServerEntry> serverEntries, int offset) {
+    int len = serverEntries.size();
+    assertThat(eags).hasSize(len);
+    for (ServerEntry serverEntry : serverEntries) {
+      assertEquals(
+          eags + " is not a shift of " + serverEntries,
+          eagOfFakeServerEntry(serverEntry), eags.get(offset++ % len));
+    }
+  }
+
   @SuppressWarnings({"unchecked", "deprecation"})
   @Test
   public void pickFirstMode_fallback() throws Exception {
@@ -1837,9 +1965,9 @@ public class GrpclbLoadBalancerTest {
     // Entering fallback mode
     // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
     // the new createSubchannel().
-    inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(grpclbResolutionList.get(0), grpclbResolutionList.get(2))),
-        any(Attributes.class));
+    inOrder.verify(helper).createSubchannel(eagsCaptor.capture(), any(Attributes.class));
+    assertThat(eagsCaptor.getValue()).containsExactly(
+        grpclbResolutionList.get(0), grpclbResolutionList.get(2));
 
     assertThat(mockSubchannels).hasSize(1);
     Subchannel subchannel = mockSubchannels.poll();
@@ -1873,11 +2001,10 @@ public class GrpclbLoadBalancerTest {
     // createSubchannel() has ever been called only once
     verify(helper, times(1)).createSubchannel(any(List.class), any(Attributes.class));
     assertThat(mockSubchannels).isEmpty();
-    verify(subchannel).updateAddresses(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr,
-                    eagAttrsWithToken("token0002")))));
+    verify(subchannel).updateAddresses(eagsCaptor.capture());
+    assertThat(eagsCaptor.getValue()).containsExactly(
+        new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+        new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
     inOrder.verify(helper).updateBalancingState(eq(READY), pickerCaptor.capture());
     RoundRobinPicker picker2 = (RoundRobinPicker) pickerCaptor.getValue();
     assertThat(picker2.dropList).containsExactly(null, null);
@@ -1972,10 +2099,11 @@ public class GrpclbLoadBalancerTest {
     // TODO(zhangkun83): remove the deprecation suppression on this method once migrated to
     // the new createSubchannel().
     inOrder.verify(helper).createSubchannel(
-        eq(Arrays.asList(
-                new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
-                new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")))),
+        eagsCaptor.capture(),
         any(Attributes.class));
+    assertThat(eagsCaptor.getValue()).containsExactly(
+        new EquivalentAddressGroup(backends1.get(0).addr, eagAttrsWithToken("token0001")),
+        new EquivalentAddressGroup(backends1.get(1).addr, eagAttrsWithToken("token0002")));
 
     inOrder.verify(helper).updateBalancingState(eq(IDLE), any(SubchannelPicker.class));
   }
