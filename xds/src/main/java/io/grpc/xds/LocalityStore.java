@@ -217,7 +217,8 @@ interface LocalityStore {
           LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
           childHelper = oldLocalityLbInfo.childHelper;
           localityLbInfo =
-              new LocalityLbInfo(oldLocalityLbInfo.localityWeight,
+              new LocalityLbInfo(
+                  localityInfoMap.get(newLocality).localityWeight,
                   oldLocalityLbInfo.childBalancer,
                   childHelper);
         } else {

@@ -41,22 +41,21 @@ public final class LoadReportingServiceGrpc {
     if ((getStreamLoadStatsMethod = LoadReportingServiceGrpc.getStreamLoadStatsMethod) == null) {
       synchronized (LoadReportingServiceGrpc.class) {
         if ((getStreamLoadStatsMethod = LoadReportingServiceGrpc.getStreamLoadStatsMethod) == null) {
-          LoadReportingServiceGrpc.getStreamLoadStatsMethod = getStreamLoadStatsMethod = 
+          LoadReportingServiceGrpc.getStreamLoadStatsMethod = getStreamLoadStatsMethod =
               io.grpc.MethodDescriptor.<io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest, io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "envoy.service.load_stats.v2.LoadReportingService", "StreamLoadStats"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamLoadStats"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new LoadReportingServiceMethodDescriptorSupplier("StreamLoadStats"))
-                  .build();
-          }
+              .setSchemaDescriptor(new LoadReportingServiceMethodDescriptorSupplier("StreamLoadStats"))
+              .build();
         }
-     }
-     return getStreamLoadStatsMethod;
+      }
+    }
+    return getStreamLoadStatsMethod;
   }
 
   /**

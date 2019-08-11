@@ -113,7 +113,7 @@ public class ProtocolNegotiatorsTest {
     @Override public void run() {}
   };
 
-  private static final int TIMEOUT_SECONDS = 5;
+  private static final int TIMEOUT_SECONDS = 60;
   @Rule public final TestRule globalTimeout = new DisableOnDebug(Timeout.seconds(TIMEOUT_SECONDS));
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
@@ -645,9 +645,9 @@ public class ProtocolNegotiatorsTest {
     ChannelFuture write = c.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
     c.connect(addr);
 
-    boolean completed = gh.negotiated.await(5, TimeUnit.SECONDS);
+    boolean completed = gh.negotiated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     if (!completed) {
-      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
+      assertTrue("failed to negotiated", write.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
       // sync should fail if we are in this block.
       write.sync();
       throw new AssertionError("neither wrote nor negotiated");
@@ -708,9 +708,9 @@ public class ProtocolNegotiatorsTest {
     ChannelFuture write = channel.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
     channel.connect(serverChannel.localAddress());
 
-    boolean completed = gh.negotiated.await(5, TimeUnit.SECONDS);
+    boolean completed = gh.negotiated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     if (!completed) {
-      assertTrue("failed to negotiated", write.await(1, TimeUnit.SECONDS));
+      assertTrue("failed to negotiated", write.await(TIMEOUT_SECONDS, TimeUnit.SECONDS));
       // sync should fail if we are in this block.
       write.sync();
       throw new AssertionError("neither wrote nor negotiated");

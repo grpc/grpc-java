@@ -20,16 +20,11 @@ import com.google.common.annotations.VisibleForTesting;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
 import io.opencensus.stats.Measure.MeasureDouble;
 import io.opencensus.stats.Measure.MeasureLong;
-import io.opencensus.tags.TagKey;
 
 /** Holder class for the deprecated OpenCensus constants. */
 @SuppressWarnings("deprecation")
 @VisibleForTesting
 public final class DeprecatedCensusConstants {
-
-  public static final TagKey RPC_STATUS = RpcMeasureConstants.RPC_STATUS;
-  public static final TagKey RPC_METHOD = RpcMeasureConstants.RPC_METHOD;
-
   public static final MeasureLong RPC_CLIENT_ERROR_COUNT =
       RpcMeasureConstants.RPC_CLIENT_ERROR_COUNT;
   public static final MeasureDouble RPC_CLIENT_REQUEST_BYTES =

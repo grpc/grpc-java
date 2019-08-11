@@ -43,7 +43,6 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.CreateSubchannelArgs;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
@@ -68,8 +67,10 @@ import io.grpc.xds.XdsComms.LocalityInfo;
 import java.net.InetSocketAddress;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
@@ -96,10 +97,12 @@ public class LocalityStoreTest {
   private static final class FakePickerFactory implements PickerFactory {
     int totalReadyLocalities;
     int nextIndex;
+    List<WeightedChildPicker> perLocalitiesPickers;
 
     @Override
     public SubchannelPicker picker(final List<WeightedChildPicker> childPickers) {
       totalReadyLocalities = childPickers.size();
+      perLocalitiesPickers = Collections.unmodifiableList(childPickers);
 
       return new SubchannelPicker() {
         @Override
@@ -182,6 +185,9 @@ public class LocalityStoreTest {
   private final LbEndpoint lbEndpoint41 = new LbEndpoint(eag41, 41);
   private final LbEndpoint lbEndpoint42 = new LbEndpoint(eag42, 42);
 
+  private final Map<String, XdsLocality> namedLocalities
+      = ImmutableMap.of("sz1", locality1, "sz2", locality2, "sz3", locality3, "sz4", locality4);
+
   @Mock
   private Helper helper;
   @Mock
@@ -201,7 +207,6 @@ public class LocalityStoreTest {
   @Before
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(mock(Subchannel.class)).when(helper).createSubchannel(any(CreateSubchannelArgs.class));
     doReturn(syncContext).when(helper).getSynchronizationContext();
     when(orcaOobUtil.newOrcaReportingHelperWrapper(any(Helper.class),
         any(OrcaOobReportListener.class)))
@@ -270,9 +275,11 @@ public class LocalityStoreTest {
         any(OrcaPerRequestReportListener.class)))
         .thenReturn(metricsTracingFactory1, metricsTracingFactory2);
 
-    final PickResult result1 = PickResult.withSubchannel(mock(Subchannel.class));
+    Subchannel subchannel1 = mock(Subchannel.class);
+    Subchannel subchannel2 = mock(Subchannel.class);
+    final PickResult result1 = PickResult.withSubchannel(subchannel1);
     final PickResult result2 =
-        PickResult.withSubchannel(mock(Subchannel.class), mock(ClientStreamTracer.Factory.class));
+        PickResult.withSubchannel(subchannel2, mock(ClientStreamTracer.Factory.class));
     SubchannelPicker subchannelPicker1 = mock(SubchannelPicker.class);
     SubchannelPicker subchannelPicker2 = mock(SubchannelPicker.class);
     when(subchannelPicker1.pickSubchannel(any(PickSubchannelArgs.class)))
@@ -291,12 +298,15 @@ public class LocalityStoreTest {
 
     // Verify each PickResult picked is intercepted with client stream tracer factory for
     // recording load and backend metrics.
-    List<XdsLocality> localities = ImmutableList.of(locality1, locality2);
-    List<ClientStreamTracer.Factory> metricsTracingFactories =
-        ImmutableList.of(metricsTracingFactory1, metricsTracingFactory2);
+    Map<Subchannel, XdsLocality> localitiesBySubchannel
+        = ImmutableMap.of(subchannel1, locality1, subchannel2, locality2);
+    Map<Subchannel, ClientStreamTracer.Factory> metricsTracingFactoriesBySubchannel
+        = ImmutableMap.of(subchannel1, metricsTracingFactory1, subchannel2, metricsTracingFactory2);
     for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
       pickerFactory.nextIndex = i;
       PickResult pickResult = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      Subchannel expectedSubchannel = pickResult.getSubchannel();
+      XdsLocality expectedLocality = localitiesBySubchannel.get(expectedSubchannel);
       ArgumentCaptor<OrcaPerRequestReportListener> listenerCaptor = ArgumentCaptor.forClass(null);
       verify(orcaPerRequestUtil, times(i + 1))
           .newOrcaClientStreamTracerFactory(any(ClientStreamTracer.Factory.class),
@@ -304,14 +314,15 @@ public class LocalityStoreTest {
       assertThat(listenerCaptor.getValue()).isInstanceOf(MetricsRecordingListener.class);
       MetricsRecordingListener listener = (MetricsRecordingListener) listenerCaptor.getValue();
       assertThat(listener.getCounter())
-          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(expectedLocality));
       assertThat(pickResult.getStreamTracerFactory())
           .isInstanceOf(LoadRecordingStreamTracerFactory.class);
       LoadRecordingStreamTracerFactory loadRecordingFactory =
           (LoadRecordingStreamTracerFactory) pickResult.getStreamTracerFactory();
       assertThat(loadRecordingFactory.getCounter())
-          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(localities.get(i)));
-      assertThat(loadRecordingFactory.delegate()).isSameInstanceAs(metricsTracingFactories.get(i));
+          .isSameInstanceAs(fakeLoadStatsStore.localityCounters.get(expectedLocality));
+      assertThat(loadRecordingFactory.delegate())
+          .isSameInstanceAs(metricsTracingFactoriesBySubchannel.get(expectedSubchannel));
     }
   }
 
@@ -424,11 +435,7 @@ public class LocalityStoreTest {
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
     // subchannel12 goes to CONNECTING
-    CreateSubchannelArgs createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag12)).build();
-    final Subchannel subchannel12 =
-        childHelpers.get("sz1").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel12 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -444,11 +451,7 @@ public class LocalityStoreTest {
         .isEqualTo(PickResult.withNoResult());
 
     // subchannel31 goes to READY
-    createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag31)).build();
-    final Subchannel subchannel31 =
-        childHelpers.get("sz3").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel31 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker31 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -456,22 +459,27 @@ public class LocalityStoreTest {
       }
     };
     childHelpers.get("sz3").updateBalancingState(READY, subchannelPicker31);
-    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor31 =
-        ArgumentCaptor.forClass(SubchannelPicker.class);
-    verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor31.capture());
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
+        ArgumentCaptor.forClass(null);
+    verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
-    assertThat(
-            subchannelPickerCaptor31.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+    pickerFactory.nextIndex = 0;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel31);
 
     // subchannel12 goes to READY
     childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker12);
-    verify(helper, times(2)).updateBalancingState(same(READY), subchannelPickerCaptor12.capture());
+    verify(helper, times(2)).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
-    pickerFactory.nextIndex = 0;
-    assertThat(
-            subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
-        .isEqualTo(subchannel12);
+
+    SubchannelPicker interLocalityPicker = subchannelPickerCaptor.getValue();
+    Set<Subchannel> pickedReadySubchannels = new HashSet<>();
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      pickerFactory.nextIndex = i;
+      PickResult result = interLocalityPicker.pickSubchannel(pickSubchannelArgs);
+      pickedReadySubchannels.add(result.getSubchannel());
+    }
+    assertThat(pickedReadySubchannels).containsExactly(subchannel31, subchannel12);
 
     // update with new addressed
     localityInfo1 =
@@ -559,10 +567,7 @@ public class LocalityStoreTest {
     inOrder.verify(loadStatsStore).recordDroppedRequest(eq("lb"));
 
     // subchannel12 goes to READY
-    CreateSubchannelArgs createSubchannelArgs =
-        CreateSubchannelArgs.newBuilder().setAddresses(ImmutableList.of(eag12)).build();
-    final Subchannel subchannel12 = childHelpers.get("sz1").createSubchannel(createSubchannelArgs);
-    verify(helper).createSubchannel(createSubchannelArgs);
+    final Subchannel subchannel12 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker12 = new SubchannelPicker() {
       @Override
       public PickResult pickSubchannel(PickSubchannelArgs args) {
@@ -622,6 +627,55 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
     verify(random, times(2)).nextInt(1000_000);
+  }
+
+  @Test
+  public void updateLocalityStore_OnlyUpdatingWeightsStillUpdatesPicker() {
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    LocalityInfo localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(loadBalancers).hasSize(3);
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    // Update locality weights before any subchannel becomes READY.
+    localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4);
+    localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5);
+    localityInfo3 = new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6);
+    localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
+
+    final Map<Subchannel, XdsLocality> localitiesBySubchannel = new HashMap<>();
+    for (final Helper h : childHelpers.values()) {
+      h.updateBalancingState(READY, new SubchannelPicker() {
+        @Override
+        public PickResult pickSubchannel(PickSubchannelArgs args) {
+          Subchannel subchannel = mock(Subchannel.class);
+          localitiesBySubchannel.put(subchannel, namedLocalities.get(h.getAuthority()));
+          return PickResult.withSubchannel(subchannel);
+        }
+      });
+    }
+
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(3);
+    for (int i = 0; i < pickerFactory.totalReadyLocalities; i++) {
+      WeightedChildPicker weightedChildPicker
+          = pickerFactory.perLocalitiesPickers.get(i);
+      Subchannel subchannel
+          = weightedChildPicker.getPicker().pickSubchannel(pickSubchannelArgs).getSubchannel();
+      assertThat(weightedChildPicker.getWeight())
+          .isEqualTo(localityInfoMap.get(localitiesBySubchannel.get(subchannel)).localityWeight);
+    }
   }
 
   @Test

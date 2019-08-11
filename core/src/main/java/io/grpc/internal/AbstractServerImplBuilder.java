@@ -25,6 +25,7 @@ import io.grpc.BinaryLog;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
 import io.grpc.InternalChannelz;
@@ -78,6 +79,7 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
   DecompressorRegistry decompressorRegistry = DEFAULT_DECOMPRESSOR_REGISTRY;
   CompressorRegistry compressorRegistry = DEFAULT_COMPRESSOR_REGISTRY;
   long handshakeTimeoutMillis = DEFAULT_HANDSHAKE_TIMEOUT_MILLIS;
+  Deadline.Ticker ticker = Deadline.getSystemTicker();
   @Nullable private CensusStatsModule censusStatsOverride;
   private boolean statsEnabled = true;
   private boolean recordStartedRpcs = true;
@@ -214,6 +216,13 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
    */
   protected void setTracingEnabled(boolean value) {
     tracingEnabled = value;
+  }
+
+  /**
+   * Sets a custom deadline ticker.  This should only be called from InProcessServerBuilder.
+   */
+  protected void setDeadlineTicker(Deadline.Ticker ticker) {
+    this.ticker = checkNotNull(ticker, "ticker");
   }
 
   @Override

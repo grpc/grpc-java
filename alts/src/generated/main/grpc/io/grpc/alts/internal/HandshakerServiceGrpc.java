@@ -41,22 +41,21 @@ public final class HandshakerServiceGrpc {
     if ((getDoHandshakeMethod = HandshakerServiceGrpc.getDoHandshakeMethod) == null) {
       synchronized (HandshakerServiceGrpc.class) {
         if ((getDoHandshakeMethod = HandshakerServiceGrpc.getDoHandshakeMethod) == null) {
-          HandshakerServiceGrpc.getDoHandshakeMethod = getDoHandshakeMethod = 
+          HandshakerServiceGrpc.getDoHandshakeMethod = getDoHandshakeMethod =
               io.grpc.MethodDescriptor.<io.grpc.alts.internal.HandshakerReq, io.grpc.alts.internal.HandshakerResp>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.gcp.HandshakerService", "DoHandshake"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "DoHandshake"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.alts.internal.HandshakerReq.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.alts.internal.HandshakerResp.getDefaultInstance()))
-                  .setSchemaDescriptor(new HandshakerServiceMethodDescriptorSupplier("DoHandshake"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HandshakerServiceMethodDescriptorSupplier("DoHandshake"))
+              .build();
         }
-     }
-     return getDoHandshakeMethod;
+      }
+    }
+    return getDoHandshakeMethod;
   }
 
   /**

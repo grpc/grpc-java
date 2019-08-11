@@ -16,6 +16,7 @@
 
 package io.grpc.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 import static io.grpc.Contexts.statusFromCancelled;
@@ -33,6 +34,7 @@ import io.grpc.Attributes;
 import io.grpc.BinaryLog;
 import io.grpc.CompressorRegistry;
 import io.grpc.Context;
+import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
 import io.grpc.HandlerRegistry;
@@ -123,6 +125,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
 
   private final InternalChannelz channelz;
   private final CallTracer serverCallTracer;
+  private final Deadline.Ticker ticker;
 
   /**
    * Construct a server.
@@ -157,6 +160,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     this.binlog = builder.binlog;
     this.channelz = builder.channelz;
     this.serverCallTracer = builder.callTracerFactory.create();
+    this.ticker = checkNotNull(builder.ticker, "ticker");
 
     channelz.addServer(this);
   }
@@ -504,7 +508,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         wrappedExecutor = new SerializingExecutor(executor);
       }
 
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final JumpToApplicationThreadServerStreamListener jumpListener
           = new JumpToApplicationThreadServerStreamListener(
@@ -522,7 +526,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         @Override
         public void runInContext() {
           PerfMark.startTask("ServerTransportListener$StreamCreated.startCall", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
@@ -578,8 +582,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         return baseContext.withCancellation();
       }
 
-      Context.CancellableContext context = baseContext.withDeadlineAfter(
-          timeoutNanos, NANOSECONDS, transport.getScheduledExecutorService());
+      Context.CancellableContext context =
+          baseContext.withDeadline(
+              Deadline.after(timeoutNanos, NANOSECONDS, ticker),
+              transport.getScheduledExecutorService());
       final class ServerStreamCancellationListener implements Context.CancellationListener {
         @Override
         public void cancelled(Context context) {
@@ -757,7 +763,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     @Override
     public void messagesAvailable(final MessageProducer producer) {
       PerfMark.startTask("ServerStreamListener.messagesAvailable", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class MessagesAvailable extends ContextRunnable {
 
@@ -768,7 +774,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         @Override
         public void runInContext() {
           PerfMark.startTask("ServerCallListener(app).messagesAvailable", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             getListener().messagesAvailable(producer);
           } catch (RuntimeException e) {
@@ -793,7 +799,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     @Override
     public void halfClosed() {
       PerfMark.startTask("ServerStreamListener.halfClosed", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class HalfClosed extends ContextRunnable {
         HalfClosed() {
@@ -803,7 +809,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         @Override
         public void runInContext() {
           PerfMark.startTask("ServerCallListener(app).halfClosed", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             getListener().halfClosed();
           } catch (RuntimeException e) {
@@ -843,7 +849,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         // is not serializing.
         cancelExecutor.execute(new ContextCloser(context, status.getCause()));
       }
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class Closed extends ContextRunnable {
         Closed() {
@@ -853,7 +859,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         @Override
         public void runInContext() {
           PerfMark.startTask("ServerCallListener(app).closed", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             getListener().closed(status);
           } finally {
@@ -868,7 +874,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     @Override
     public void onReady() {
       PerfMark.startTask("ServerStreamListener.onReady", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
       final class OnReady extends ContextRunnable {
         OnReady() {
           super(context);
@@ -877,7 +883,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         @Override
         public void runInContext() {
           PerfMark.startTask("ServerCallListener(app).onReady", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             getListener().onReady();
           } catch (RuntimeException e) {

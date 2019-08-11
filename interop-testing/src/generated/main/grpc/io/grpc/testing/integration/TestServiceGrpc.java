@@ -45,22 +45,21 @@ public final class TestServiceGrpc {
     if ((getEmptyCallMethod = TestServiceGrpc.getEmptyCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getEmptyCallMethod = TestServiceGrpc.getEmptyCallMethod) == null) {
-          TestServiceGrpc.getEmptyCallMethod = getEmptyCallMethod = 
+          TestServiceGrpc.getEmptyCallMethod = getEmptyCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.EmptyProtos.Empty>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "EmptyCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "EmptyCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("EmptyCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("EmptyCall"))
+              .build();
         }
-     }
-     return getEmptyCallMethod;
+      }
+    }
+    return getEmptyCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.SimpleRequest,
@@ -77,22 +76,21 @@ public final class TestServiceGrpc {
     if ((getUnaryCallMethod = TestServiceGrpc.getUnaryCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getUnaryCallMethod = TestServiceGrpc.getUnaryCallMethod) == null) {
-          TestServiceGrpc.getUnaryCallMethod = getUnaryCallMethod = 
+          TestServiceGrpc.getUnaryCallMethod = getUnaryCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.SimpleRequest, io.grpc.testing.integration.Messages.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "UnaryCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnaryCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("UnaryCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("UnaryCall"))
+              .build();
         }
-     }
-     return getUnaryCallMethod;
+      }
+    }
+    return getUnaryCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.SimpleRequest,
@@ -109,22 +107,21 @@ public final class TestServiceGrpc {
     if ((getCacheableUnaryCallMethod = TestServiceGrpc.getCacheableUnaryCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getCacheableUnaryCallMethod = TestServiceGrpc.getCacheableUnaryCallMethod) == null) {
-          TestServiceGrpc.getCacheableUnaryCallMethod = getCacheableUnaryCallMethod = 
+          TestServiceGrpc.getCacheableUnaryCallMethod = getCacheableUnaryCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.SimpleRequest, io.grpc.testing.integration.Messages.SimpleResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "CacheableUnaryCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "CacheableUnaryCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.SimpleRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.SimpleResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("CacheableUnaryCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("CacheableUnaryCall"))
+              .build();
         }
-     }
-     return getCacheableUnaryCallMethod;
+      }
+    }
+    return getCacheableUnaryCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
@@ -141,22 +138,21 @@ public final class TestServiceGrpc {
     if ((getStreamingOutputCallMethod = TestServiceGrpc.getStreamingOutputCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getStreamingOutputCallMethod = TestServiceGrpc.getStreamingOutputCallMethod) == null) {
-          TestServiceGrpc.getStreamingOutputCallMethod = getStreamingOutputCallMethod = 
+          TestServiceGrpc.getStreamingOutputCallMethod = getStreamingOutputCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "StreamingOutputCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamingOutputCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("StreamingOutputCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("StreamingOutputCall"))
+              .build();
         }
-     }
-     return getStreamingOutputCallMethod;
+      }
+    }
+    return getStreamingOutputCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingInputCallRequest,
@@ -173,22 +169,21 @@ public final class TestServiceGrpc {
     if ((getStreamingInputCallMethod = TestServiceGrpc.getStreamingInputCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getStreamingInputCallMethod = TestServiceGrpc.getStreamingInputCallMethod) == null) {
-          TestServiceGrpc.getStreamingInputCallMethod = getStreamingInputCallMethod = 
+          TestServiceGrpc.getStreamingInputCallMethod = getStreamingInputCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.StreamingInputCallRequest, io.grpc.testing.integration.Messages.StreamingInputCallResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.CLIENT_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "StreamingInputCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamingInputCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingInputCallRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingInputCallResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("StreamingInputCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("StreamingInputCall"))
+              .build();
         }
-     }
-     return getStreamingInputCallMethod;
+      }
+    }
+    return getStreamingInputCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
@@ -205,22 +200,21 @@ public final class TestServiceGrpc {
     if ((getFullDuplexCallMethod = TestServiceGrpc.getFullDuplexCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getFullDuplexCallMethod = TestServiceGrpc.getFullDuplexCallMethod) == null) {
-          TestServiceGrpc.getFullDuplexCallMethod = getFullDuplexCallMethod = 
+          TestServiceGrpc.getFullDuplexCallMethod = getFullDuplexCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "FullDuplexCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "FullDuplexCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("FullDuplexCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("FullDuplexCall"))
+              .build();
         }
-     }
-     return getFullDuplexCallMethod;
+      }
+    }
+    return getFullDuplexCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Messages.StreamingOutputCallRequest,
@@ -237,22 +231,21 @@ public final class TestServiceGrpc {
     if ((getHalfDuplexCallMethod = TestServiceGrpc.getHalfDuplexCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getHalfDuplexCallMethod = TestServiceGrpc.getHalfDuplexCallMethod) == null) {
-          TestServiceGrpc.getHalfDuplexCallMethod = getHalfDuplexCallMethod = 
+          TestServiceGrpc.getHalfDuplexCallMethod = getHalfDuplexCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Messages.StreamingOutputCallRequest, io.grpc.testing.integration.Messages.StreamingOutputCallResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.BIDI_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "HalfDuplexCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "HalfDuplexCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Messages.StreamingOutputCallResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("HalfDuplexCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("HalfDuplexCall"))
+              .build();
         }
-     }
-     return getHalfDuplexCallMethod;
+      }
+    }
+    return getHalfDuplexCallMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.EmptyProtos.Empty,
@@ -269,22 +262,21 @@ public final class TestServiceGrpc {
     if ((getUnimplementedCallMethod = TestServiceGrpc.getUnimplementedCallMethod) == null) {
       synchronized (TestServiceGrpc.class) {
         if ((getUnimplementedCallMethod = TestServiceGrpc.getUnimplementedCallMethod) == null) {
-          TestServiceGrpc.getUnimplementedCallMethod = getUnimplementedCallMethod = 
+          TestServiceGrpc.getUnimplementedCallMethod = getUnimplementedCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.EmptyProtos.Empty>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.TestService", "UnimplementedCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnimplementedCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
-                  .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("UnimplementedCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new TestServiceMethodDescriptorSupplier("UnimplementedCall"))
+              .build();
         }
-     }
-     return getUnimplementedCallMethod;
+      }
+    }
+    return getUnimplementedCallMethod;
   }
 
   /**

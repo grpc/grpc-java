@@ -494,6 +494,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
   private class TransportListener implements ManagedClientTransport.Listener {
     final ConnectionClientTransport transport;
     final SocketAddress address;
+    boolean shutdownInitiated = false;
 
     TransportListener(ConnectionClientTransport transport, SocketAddress address) {
       this.transport = transport;
@@ -530,6 +531,7 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
     public void transportShutdown(final Status s) {
       channelLogger.log(
           ChannelLogLevel.INFO, "{0} SHUTDOWN with {1}", transport.getLogId(), printShortStatus(s));
+      shutdownInitiated = true;
       syncContext.execute(new Runnable() {
         @Override
         public void run() {
@@ -561,6 +563,9 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
 
     @Override
     public void transportTerminated() {
+      Preconditions.checkState(
+          shutdownInitiated, "transportShutdown() must be called before transportTerminated().");
+
       channelLogger.log(ChannelLogLevel.INFO, "{0} Terminated", transport.getLogId());
       channelz.removeClientSocket(transport);
       handleTransportInUseState(transport, false);
@@ -573,9 +578,6 @@ final class InternalSubchannel implements InternalInstrumented<ChannelStats>, Tr
           }
         }
       });
-      Preconditions.checkState(activeTransport != transport,
-          "activeTransport still points to this transport. "
-          + "Seems transportShutdown() was not called.");
     }
   }
 

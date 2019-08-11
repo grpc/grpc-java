@@ -44,22 +44,21 @@ public final class DynamicServiceGrpc {
     if ((getMethodMethod = DynamicServiceGrpc.getMethodMethod) == null) {
       synchronized (DynamicServiceGrpc.class) {
         if ((getMethodMethod = DynamicServiceGrpc.getMethodMethod) == null) {
-          DynamicServiceGrpc.getMethodMethod = getMethodMethod = 
+          DynamicServiceGrpc.getMethodMethod = getMethodMethod =
               io.grpc.MethodDescriptor.<io.grpc.reflection.testing.DynamicRequest, io.grpc.reflection.testing.DynamicReply>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.reflection.testing.DynamicService", "Method"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Method"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.DynamicRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.reflection.testing.DynamicReply.getDefaultInstance()))
-                  .setSchemaDescriptor(new DynamicServiceMethodDescriptorSupplier("Method"))
-                  .build();
-          }
+              .setSchemaDescriptor(new DynamicServiceMethodDescriptorSupplier("Method"))
+              .build();
         }
-     }
-     return getMethodMethod;
+      }
+    }
+    return getMethodMethod;
   }
 
   /**

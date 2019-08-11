@@ -157,7 +157,7 @@ public final class TransportTracer {
   }
 
   public static final class Factory {
-    private TimeProvider timeProvider;
+    private final TimeProvider timeProvider;
 
     @VisibleForTesting
     public Factory(TimeProvider timeProvider) {

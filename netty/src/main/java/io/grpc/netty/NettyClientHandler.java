@@ -549,7 +549,7 @@ class NettyClientHandler extends AbstractNettyHandler {
     stream.setId(streamId);
 
     PerfMark.startTask("NettyClientHandler.createStream", stream.tag());
-    command.getLink().link();
+    PerfMark.linkIn(command.getLink());
     try {
       createStreamTraced(
           streamId, stream, headers, command.isGet(), command.shouldBeCountedForInUse(), promise);
@@ -618,7 +618,7 @@ class NettyClientHandler extends AbstractNettyHandler {
       ChannelPromise promise) {
     NettyClientStream.TransportState stream = cmd.stream();
     PerfMark.startTask("NettyClientHandler.cancelStream", stream.tag());
-    cmd.getLink().link();
+    PerfMark.linkIn(cmd.getLink());
     try {
       Status reason = cmd.reason();
       if (reason != null) {
@@ -640,7 +640,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void sendGrpcFrame(ChannelHandlerContext ctx, SendGrpcFrameCommand cmd,
       ChannelPromise promise) {
     PerfMark.startTask("NettyClientHandler.sendGrpcFrame", cmd.stream().tag());
-    cmd.getLink().link();
+    PerfMark.linkIn(cmd.getLink());
     try {
       // Call the base class to write the HTTP/2 DATA frame.
       // Note: no need to flush since this is handled by the outbound flow controller.
@@ -653,7 +653,7 @@ class NettyClientHandler extends AbstractNettyHandler {
   private void sendPingFrame(ChannelHandlerContext ctx, SendPingCommand msg,
       ChannelPromise promise) {
     PerfMark.startTask("NettyClientHandler.sendPingFrame");
-    msg.getLink().link();
+    PerfMark.linkIn(msg.getLink());
     try {
       sendPingFrameTraced(ctx, msg, promise);
     } finally {
@@ -737,7 +737,7 @@ class NettyClientHandler extends AbstractNettyHandler {
         NettyClientStream.TransportState clientStream = clientStream(stream);
         Tag tag = clientStream != null ? clientStream.tag() : PerfMark.createTag();
         PerfMark.startTask("NettyClientHandler.forcefulClose", tag);
-        msg.getLink().link();
+        PerfMark.linkIn(msg.getLink());
         try {
           if (clientStream != null) {
             clientStream.transportReportStatus(msg.getStatus(), true, new Metadata());

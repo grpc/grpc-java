@@ -526,7 +526,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void headersRead(final Metadata headers) {
       PerfMark.startTask("ClientStreamListener.headersRead", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class HeadersRead extends ContextRunnable {
         HeadersRead() {
@@ -536,7 +536,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         @Override
         public void runInContext() {
           PerfMark.startTask("ClientCall$Listener.headersRead", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
@@ -569,7 +569,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     @Override
     public void messagesAvailable(final MessageProducer producer) {
       PerfMark.startTask("ClientStreamListener.messagesAvailable", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class MessagesAvailable extends ContextRunnable {
         MessagesAvailable() {
@@ -579,7 +579,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         @Override
         public void runInContext() {
           PerfMark.startTask("ClientCall$Listener.messagesAvailable", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
@@ -667,7 +667,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
       final Status savedStatus = status;
       final Metadata savedTrailers = trailers;
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
       final class StreamClosed extends ContextRunnable {
         StreamClosed() {
           super(context);
@@ -676,7 +676,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         @Override
         public void runInContext() {
           PerfMark.startTask("ClientCall$Listener.onClose", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
@@ -703,7 +703,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       }
 
       PerfMark.startTask("ClientStreamListener.onReady", tag);
-      final Link link = PerfMark.link();
+      final Link link = PerfMark.linkOut();
 
       final class StreamOnReady extends ContextRunnable {
         StreamOnReady() {
@@ -713,7 +713,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         @Override
         public void runInContext() {
           PerfMark.startTask("ClientCall$Listener.onReady", tag);
-          link.link();
+          PerfMark.linkIn(link);
           try {
             runInternal();
           } finally {
