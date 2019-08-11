@@ -41,7 +41,7 @@ public class DnsNameResolverProviderTest {
       });
   private final NameResolver.Args args = NameResolver.Args.newBuilder()
       .setDefaultPort(8080)
-      .setProxyDetector(GrpcUtil.getDefaultProxyDetector())
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .build();

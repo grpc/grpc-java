@@ -416,25 +416,7 @@ public class OkHttpChannelBuilder extends
       case TLS:
         try {
           if (sslSocketFactory == null) {
-            SSLContext sslContext;
-            if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-              // The following auth code circumvents the following AccessControlException:
-              // access denied ("java.util.PropertyPermission" "javax.net.ssl.keyStore" "read")
-              // Conscrypt will attempt to load the default KeyStore if a trust manager is not
-              // provided, which is forbidden on AppEngine
-              sslContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
-              TrustManagerFactory trustManagerFactory =
-                  TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-              trustManagerFactory.init((KeyStore) null);
-              sslContext.init(
-                  null,
-                  trustManagerFactory.getTrustManagers(),
-                  // Use an algorithm that doesn't need /dev/urandom
-                  SecureRandom.getInstance("SHA1PRNG", Platform.get().getProvider()));
-
-            } else {
-              sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
-            }
+            SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
             sslSocketFactory = sslContext.getSocketFactory();
           }
           return sslSocketFactory;

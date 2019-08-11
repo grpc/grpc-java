@@ -34,8 +34,7 @@ public final class OkHttpChannelProvider extends ManagedChannelProvider {
 
   @Override
   public int priority() {
-    return (GrpcUtil.IS_RESTRICTED_APPENGINE
-        || InternalServiceProviders.isAndroid(getClass().getClassLoader())) ? 8 : 3;
+    return InternalServiceProviders.isAndroid(getClass().getClassLoader()) ? 8 : 3;
   }
 
   @Override
