@@ -19,7 +19,6 @@ package io.grpc.okhttp;
 import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.ManagedChannelProvider;
-import io.grpc.internal.GrpcUtil;
 
 /**
  * Provider for {@link OkHttpChannelBuilder} instances.
