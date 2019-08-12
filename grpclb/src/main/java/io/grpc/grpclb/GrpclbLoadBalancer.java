@@ -54,8 +54,9 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
   private static final AtomicInteger pickFirstGlobalIndex = new AtomicInteger();
 
-  // backend list for pick_first will be picked from this index
-  private final int pickFirstIndex = Math.abs(pickFirstGlobalIndex.getAndIncrement());
+  /** Backend list for pick_first will be picked from this index. */
+  // & 0xFFFFFF to avoid overflow
+  private final int pickFirstIndex = pickFirstGlobalIndex.getAndIncrement() & 0xFFFFFF;
   private final Helper helper;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
