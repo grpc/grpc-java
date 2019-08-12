@@ -46,8 +46,7 @@ import java.util.concurrent.Executor;
 public final class XdsNameResolver extends NameResolver {
 
   // TODO(chengyuanzhang): figure out what the hard-coded balancer name should be.
-  private static final String SERVICE_CONFIG_HARDCODED =
-      "{"
+  private static final String SERVICE_CONFIG_HARDCODED = "{"
           + "\"loadBalancingConfig\": ["
           + "{\"xds_experimental\" : {"
           + "\"balancerName\" : \"trafficdirector\","
