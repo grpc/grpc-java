@@ -23,7 +23,10 @@ import io.grpc.Internal;
  * team. If you *really* think you need to use this, contact the gRPC team first.
  */
 @Internal
-public class InternalCronetChannelBuilder {
+public final class InternalCronetChannelBuilder {
+
+  // Prevent instantiation
+  private InternalCronetChannelBuilder() {}
 
   /**
    * Sets {@link android.net.TrafficStats} tag to use when accounting socket traffic caused by this

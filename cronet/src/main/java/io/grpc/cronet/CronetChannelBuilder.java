@@ -136,7 +136,7 @@ public final class CronetChannelBuilder extends
    *     application.
    * @return the builder to facilitate chaining.
    */
-  public final CronetChannelBuilder setTrafficStatsTag(int tag) {
+  final CronetChannelBuilder setTrafficStatsTag(int tag) {
     trafficStatsTagSet = true;
     trafficStatsTag = tag;
     return this;
@@ -157,7 +157,7 @@ public final class CronetChannelBuilder extends
    * @param uid the UID to attribute socket traffic caused by this channel.
    * @return the builder to facilitate chaining.
    */
-  public final CronetChannelBuilder setTrafficStatsUid(int uid) {
+  final CronetChannelBuilder setTrafficStatsUid(int uid) {
     trafficStatsUidSet = true;
     trafficStatsUid = uid;
     return this;
