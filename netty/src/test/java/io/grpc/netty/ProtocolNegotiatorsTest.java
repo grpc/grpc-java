@@ -629,7 +629,7 @@ public class ProtocolNegotiatorsTest {
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
 
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext);
-    WriteBufferingAndExceptionHandler wbaeh =
+    WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 
     SocketAddress addr = new LocalAddress("addr");
@@ -637,22 +637,24 @@ public class ProtocolNegotiatorsTest {
     ChannelHandler sh =
         ProtocolNegotiators.serverTls(serverSslContext)
             .newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    WriteBufferingAndExceptionHandler serverWbaeh = new WriteBufferingAndExceptionHandler(sh);
     Channel s = new ServerBootstrap()
-        .childHandler(sh)
+        .childHandler(serverWbaeh)
         .group(group)
         .channel(LocalServerChannel.class)
         .bind(addr)
         .sync()
         .channel();
     Channel c = new Bootstrap()
-        .handler(wbaeh)
+        .handler(clientWbaeh)
         .channel(LocalChannel.class)
         .group(group)
         .register()
         .sync()
         .channel();
     ChannelFuture write = c.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
-    c.connect(addr);
+    c.connect(addr).sync();
+    write.sync();
 
     boolean completed = gh.negotiated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     if (!completed) {
