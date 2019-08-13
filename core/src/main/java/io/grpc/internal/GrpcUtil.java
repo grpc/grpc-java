@@ -551,7 +551,6 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-
     return new ThreadFactoryBuilder()
         .setDaemon(daemon)
         .setNameFormat(nameFormat)
