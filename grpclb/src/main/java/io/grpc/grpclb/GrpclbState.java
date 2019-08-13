@@ -104,11 +104,13 @@ final class GrpclbState {
       }
     };
 
-  static enum Mode {
+  enum Mode {
     ROUND_ROBIN,
     PICK_FIRST,
   }
 
+  // backend list for pick_first will be picked from this index
+  private final int pickFirstIndex;
   private final String serviceName;
   private final Helper helper;
   private final SynchronizationContext syncContext;
@@ -158,7 +160,8 @@ final class GrpclbState {
       SubchannelPool subchannelPool,
       TimeProvider time,
       Stopwatch stopwatch,
-      BackoffPolicy.Provider backoffPolicyProvider) {
+      BackoffPolicy.Provider backoffPolicyProvider,
+      int pickFirstIndex) {
     this.mode = checkNotNull(mode, "mode");
     this.helper = checkNotNull(helper, "helper");
     this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
@@ -170,6 +173,7 @@ final class GrpclbState {
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.serviceName = checkNotNull(helper.getAuthority(), "helper returns null authority");
     this.logger = checkNotNull(helper.getChannelLogger(), "logger");
+    this.pickFirstIndex = pickFirstIndex;
   }
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
@@ -415,12 +419,14 @@ final class GrpclbState {
         subchannels = Collections.unmodifiableMap(newSubchannelMap);
         break;
       case PICK_FIRST:
-        List<EquivalentAddressGroup> eagList = new ArrayList<>();
+        int numOfEags = newBackendAddrList.size();
+        List<EquivalentAddressGroup> eagList = Arrays.asList(new EquivalentAddressGroup[numOfEags]);
         // Because for PICK_FIRST, we create a single Subchannel for all addresses, we have to
         // attach the tokens to the EAG attributes and use TokenAttachingLoadRecorder to put them on
         // headers.
         //
         // The PICK_FIRST code path doesn't cache Subchannels.
+        int offset = pickFirstIndex;
         for (BackendAddressGroup bag : newBackendAddrList) {
           EquivalentAddressGroup origEag = bag.getAddresses();
           Attributes eagAttrs = origEag.getAttributes();
@@ -428,7 +434,9 @@ final class GrpclbState {
             eagAttrs = eagAttrs.toBuilder()
                 .set(GrpclbConstants.TOKEN_ATTRIBUTE_KEY, bag.getToken()).build();
           }
-          eagList.add(new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
+          eagList.set(
+              offset++ % numOfEags,
+              new EquivalentAddressGroup(origEag.getAddresses(), eagAttrs));
         }
         Subchannel subchannel;
         if (subchannels.isEmpty()) {
