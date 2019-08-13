@@ -214,6 +214,7 @@ class NettyServerHandler extends AbstractNettyHandler {
         new DefaultHttp2LocalFlowController(connection, DEFAULT_WINDOW_UPDATE_RATIO, true));
     frameWriter = new WriteMonitoringFrameWriter(frameWriter, keepAliveEnforcer);
     Http2ConnectionEncoder encoder = new DefaultHttp2ConnectionEncoder(connection, frameWriter);
+    encoder = new Http2ControlFrameLimitEncoder(encoder, 10000);
     Http2ConnectionDecoder decoder = new DefaultHttp2ConnectionDecoder(connection, encoder,
         frameReader);
 
