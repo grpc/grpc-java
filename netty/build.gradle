@@ -40,3 +40,7 @@ jmh {
     // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
     includeTests = true
 }
+
+checkstyleMain {
+    source = source.minus(fileTree(dir: "src/main", include: "**/Http2ControlFrameLimitEncoder.java"))
+}
