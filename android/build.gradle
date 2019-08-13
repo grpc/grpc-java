@@ -57,14 +57,19 @@ dependencies {
 
 task javadocs(type: Javadoc) {
     source = android.sourceSets.main.java.srcDirs
-    // TODO(ericgribkoff) Fix javadoc errors
-    failOnError false
+    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
     options {
         // Disable JavaDoc doclint on Java 8.
         if (JavaVersion.current().isJava8Compatible()) {
             addStringOption('Xdoclint:none', '-quiet')
         }
     }
+}
+
+afterEvaluate {
+    javadocs.classpath += files(android.libraryVariants.collect { variant ->
+        variant.javaCompile.classpath
+    })
 }
 
 task javadocJar(type: Jar, dependsOn: javadocs) {
