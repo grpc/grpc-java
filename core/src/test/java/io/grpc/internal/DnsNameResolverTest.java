@@ -111,7 +111,7 @@ public class DnsNameResolverTest {
       });
   private final NameResolver.Args args = NameResolver.Args.newBuilder()
       .setDefaultPort(DEFAULT_PORT)
-      .setProxyDetector(GrpcUtil.getDefaultProxyDetector())
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .build();

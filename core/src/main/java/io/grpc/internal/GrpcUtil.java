@@ -25,7 +25,6 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import io.grpc.CallOptions;
 import io.grpc.ClientStreamTracer;
@@ -72,12 +71,6 @@ public final class GrpcUtil {
   private static final Logger log = Logger.getLogger(GrpcUtil.class.getName());
 
   public static final Charset US_ASCII = Charset.forName("US-ASCII");
-
-  // AppEngine runtimes have constraints on threading and socket handling
-  // that need to be accommodated.
-  public static final boolean IS_RESTRICTED_APPENGINE =
-      System.getProperty("com.google.appengine.runtime.environment") != null
-          && "1.7".equals(System.getProperty("java.specification.version"));
 
   /**
    * {@link io.grpc.Metadata.Key} for the timeout header.
@@ -264,17 +257,6 @@ public final class GrpcUtil {
    */
   public static boolean shouldBeCountedForInUse(CallOptions callOptions) {
     return !Boolean.TRUE.equals(callOptions.getOption(CALL_OPTIONS_RPC_OWNED_BY_BALANCER));
-  }
-
-  /**
-   * Returns a proxy detector appropriate for the current environment.
-   */
-  public static ProxyDetector getDefaultProxyDetector() {
-    if (IS_RESTRICTED_APPENGINE) {
-      return NOOP_PROXY_DETECTOR;
-    } else {
-      return DEFAULT_PROXY_DETECTOR;
-    }
   }
 
   /**
@@ -569,16 +551,10 @@ public final class GrpcUtil {
    * @return a {@link ThreadFactory}.
    */
   public static ThreadFactory getThreadFactory(String nameFormat, boolean daemon) {
-    if (IS_RESTRICTED_APPENGINE) {
-      @SuppressWarnings("BetaApi")
-      ThreadFactory factory = MoreExecutors.platformThreadFactory();
-      return factory;
-    } else {
-      return new ThreadFactoryBuilder()
-          .setDaemon(daemon)
-          .setNameFormat(nameFormat)
-          .build();
-    }
+    return new ThreadFactoryBuilder()
+        .setDaemon(daemon)
+        .setNameFormat(nameFormat)
+        .build();
   }
 
   /**

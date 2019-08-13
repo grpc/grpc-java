@@ -64,10 +64,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
   @Nullable
   @SuppressWarnings("LiteralClassName")
   private static Throwable initJndi() {
-    if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-      return new UnsupportedOperationException(
-          "Currently running in an AppEngine restricted environment");
-    }
     try {
       Class.forName("javax.naming.directory.InitialDirContext");
       Class.forName("com.sun.jndi.dns.DnsContextFactory");
