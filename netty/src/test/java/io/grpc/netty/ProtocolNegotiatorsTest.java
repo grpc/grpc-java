@@ -29,7 +29,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
-import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.Security;
