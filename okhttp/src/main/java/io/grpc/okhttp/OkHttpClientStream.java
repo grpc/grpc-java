@@ -233,7 +233,7 @@ class OkHttpClientStream extends AbstractClientStream {
     /** True iff neither {@link #cancel} nor {@link #start(int)} have been called. */
     @GuardedBy("lock")
     private boolean canStart = true;
-    private Tag tag;
+    private final Tag tag;
 
     public TransportState(
         int maxMessageSize,
