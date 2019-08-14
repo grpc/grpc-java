@@ -17,6 +17,8 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.InternalChannelz.Security;
@@ -50,6 +53,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
@@ -760,6 +764,7 @@ public class ProtocolNegotiatorsTest {
     private Attributes attrs;
     private Security securityInfo;
     private final CountDownLatch negotiated = new CountDownLatch(1);
+    private ChannelHandlerContext ctx;
 
     FakeGrpcHttp2ConnectionHandler(ChannelPromise channelUnused,
         Http2ConnectionDecoder decoder,
@@ -772,9 +777,22 @@ public class ProtocolNegotiatorsTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(Attributes attrs, Security securityInfo) {
+      checkNotNull(ctx, "handleProtocolNegotiationCompleted cannot be called before handlerAdded");
       super.handleProtocolNegotiationCompleted(attrs, securityInfo);
       this.attrs = attrs;
       this.securityInfo = securityInfo;
+      // Add a temp handler that verifies first message is a NOOP_MESSAGE
+      ctx.pipeline().addBefore(ctx.name(), null, new ChannelOutboundHandlerAdapter() {
+        @Override
+        public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+            throws Exception {
+          checkState(
+              msg == NettyClientHandler.NOOP_MESSAGE, "First message should be NOOP_MESSAGE");
+          promise.trySuccess();
+          ctx.pipeline().remove(this);
+        }
+      });
+      NettyClientHandler.writeBufferingAndRemove(ctx.channel());
       negotiated.countDown();
     }
 
@@ -785,6 +803,7 @@ public class ProtocolNegotiatorsTest {
       } else {
         super.handlerAdded(ctx);
       }
+      this.ctx = ctx;
     }
 
     @Override
