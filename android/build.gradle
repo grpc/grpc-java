@@ -68,7 +68,7 @@ task javadocs(type: Javadoc) {
 
 afterEvaluate {
     javadocs.classpath += files(android.libraryVariants.collect { variant ->
-        variant.javaCompile.classpath
+        variant.javaCompileProvider.get().classpath
     })
 }
 
