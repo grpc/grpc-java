@@ -6,7 +6,7 @@ buildscript {
     dependencies {
         classpath 'com.google.gradle:osdetector-gradle-plugin:1.4.0'
         classpath 'ru.vyarus:gradle-animalsniffer-plugin:1.5.0'
-        classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.6'
+        classpath 'net.ltgt.gradle:gradle-errorprone-plugin:0.8.1'
         classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.5"
         classpath 'me.champeau.gradle:japicmp-gradle-plugin:0.2.5'
     }
