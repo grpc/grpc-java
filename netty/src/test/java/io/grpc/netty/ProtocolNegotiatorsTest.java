@@ -17,6 +17,8 @@
 package io.grpc.netty;
 
 import static com.google.common.base.Charsets.UTF_8;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -50,6 +52,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultEventLoop;
@@ -240,21 +243,10 @@ public class ProtocolNegotiatorsTest {
     Object unused = ProtocolNegotiators.serverTls(null);
   }
 
-  @Test
-  public void tlsAdapter_exceptionClosesChannel() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
-
-    // Use addFirst due to the funny error handling in EmbeddedChannel.
-    pipeline.addFirst(handler);
-
-    pipeline.fireExceptionCaught(new Exception("bad"));
-
-    assertFalse(channel.isOpen());
-  }
 
   @Test
   public void tlsHandler_handlerAddedAddsSslHandler() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
 
     pipeline.addLast(handler);
 
@@ -263,7 +255,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void tlsHandler_userEventTriggeredNonSslEvent() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object nonSslEvent = new Object();
@@ -284,8 +276,18 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
+
+    final AtomicReference<Throwable> error = new AtomicReference<>();
+    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        error.set(cause);
+      }
+    };
+
+    pipeline.addLast(errorCapture);
 
     pipeline.replace(SslHandler.class, null, badSslHandler);
     channelHandlerCtx = pipeline.context(handler);
@@ -293,23 +295,33 @@ public class ProtocolNegotiatorsTest {
 
     pipeline.fireUserEventTriggered(sslEvent);
 
-    // No h2 protocol was specified, so this should be closed.
-    assertFalse(channel.isOpen());
+    // No h2 protocol was specified, so there should be an error, (normally handled by WBAEH)
+    assertThat(error.get()).hasMessageThat().contains("Unable to find compatible protocol");
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNull(grpcHandlerCtx);
   }
 
   @Test
   public void tlsHandler_userEventTriggeredSslEvent_handshakeFailure() throws Exception {
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
     Object sslEvent = new SslHandshakeCompletionEvent(new RuntimeException("bad"));
 
+    final AtomicReference<Throwable> error = new AtomicReference<>();
+    ChannelHandler errorCapture = new ChannelInboundHandlerAdapter() {
+      @Override
+      public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        error.set(cause);
+      }
+    };
+
+    pipeline.addLast(errorCapture);
+
     pipeline.fireUserEventTriggered(sslEvent);
 
-    // No h2 protocol was specified, so this should be closed.
-    assertFalse(channel.isOpen());
+    // No h2 protocol was specified, so there should be an error, (normally handled by WBAEH)
+    assertThat(error.get()).hasMessageThat().contains("bad");
     ChannelHandlerContext grpcHandlerCtx = pipeline.context(grpcHandler);
     assertNull(grpcHandlerCtx);
   }
@@ -323,7 +335,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -346,7 +358,7 @@ public class ProtocolNegotiatorsTest {
       }
     };
 
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
 
     pipeline.replace(SslHandler.class, null, goodSslHandler);
@@ -362,7 +374,7 @@ public class ProtocolNegotiatorsTest {
 
   @Test
   public void engineLog() {
-    ChannelHandler handler = new ServerTlsHandler(sslContext, grpcHandler);
+    ChannelHandler handler = new ServerTlsHandler(grpcHandler, sslContext);
     pipeline.addLast(handler);
     channelHandlerCtx = pipeline.context(handler);
 
@@ -620,7 +632,7 @@ public class ProtocolNegotiatorsTest {
     FakeGrpcHttp2ConnectionHandler gh = FakeGrpcHttp2ConnectionHandler.newHandler();
 
     ClientTlsProtocolNegotiator pn = new ClientTlsProtocolNegotiator(clientSslContext);
-    WriteBufferingAndExceptionHandler wbaeh =
+    WriteBufferingAndExceptionHandler clientWbaeh =
         new WriteBufferingAndExceptionHandler(pn.newHandler(gh));
 
     SocketAddress addr = new LocalAddress("addr");
@@ -628,22 +640,24 @@ public class ProtocolNegotiatorsTest {
     ChannelHandler sh =
         ProtocolNegotiators.serverTls(serverSslContext)
             .newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    WriteBufferingAndExceptionHandler serverWbaeh = new WriteBufferingAndExceptionHandler(sh);
     Channel s = new ServerBootstrap()
-        .childHandler(sh)
+        .childHandler(serverWbaeh)
         .group(group)
         .channel(LocalServerChannel.class)
         .bind(addr)
         .sync()
         .channel();
     Channel c = new Bootstrap()
-        .handler(wbaeh)
+        .handler(clientWbaeh)
         .channel(LocalChannel.class)
         .group(group)
         .register()
         .sync()
         .channel();
     ChannelFuture write = c.writeAndFlush(NettyClientHandler.NOOP_MESSAGE);
-    c.connect(addr);
+    c.connect(addr).sync();
+    write.sync();
 
     boolean completed = gh.negotiated.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     if (!completed) {
@@ -749,6 +763,7 @@ public class ProtocolNegotiatorsTest {
     private Attributes attrs;
     private Security securityInfo;
     private final CountDownLatch negotiated = new CountDownLatch(1);
+    private ChannelHandlerContext ctx;
 
     FakeGrpcHttp2ConnectionHandler(ChannelPromise channelUnused,
         Http2ConnectionDecoder decoder,
@@ -761,9 +776,22 @@ public class ProtocolNegotiatorsTest {
 
     @Override
     public void handleProtocolNegotiationCompleted(Attributes attrs, Security securityInfo) {
+      checkNotNull(ctx, "handleProtocolNegotiationCompleted cannot be called before handlerAdded");
       super.handleProtocolNegotiationCompleted(attrs, securityInfo);
       this.attrs = attrs;
       this.securityInfo = securityInfo;
+      // Add a temp handler that verifies first message is a NOOP_MESSAGE
+      ctx.pipeline().addBefore(ctx.name(), null, new ChannelOutboundHandlerAdapter() {
+        @Override
+        public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
+            throws Exception {
+          checkState(
+              msg == NettyClientHandler.NOOP_MESSAGE, "First message should be NOOP_MESSAGE");
+          promise.trySuccess();
+          ctx.pipeline().remove(this);
+        }
+      });
+      NettyClientHandler.writeBufferingAndRemove(ctx.channel());
       negotiated.countDown();
     }
 
@@ -774,6 +802,7 @@ public class ProtocolNegotiatorsTest {
       } else {
         super.handlerAdded(ctx);
       }
+      this.ctx = ctx;
     }
 
     @Override
