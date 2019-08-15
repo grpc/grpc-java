@@ -1813,6 +1813,28 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
+  @Test
+  public void shutdownWithoutSubchannel_roundRobin() throws Exception {
+    InOrder inOrder = inOrder(helper);
+    String lbConfig = "{\"childPolicy\" : [ {\"round_robin\" : {}} ]}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    balancer.shutdown();
+  }
+
+  @Test
+  public void shutdownWithoutSubchannel_pickFirst() throws Exception {
+    InOrder inOrder = inOrder(helper);
+    String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    balancer.shutdown();
+  }
+
   @SuppressWarnings("deprecation")
   @Test
   public void grpclbWorking_pickFirstMode_expectBackendsShuffled() throws Exception {
