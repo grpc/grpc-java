@@ -20,7 +20,6 @@
 
 package io.grpc.okhttp.internal;
 
-import io.grpc.internal.GrpcUtil;
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
