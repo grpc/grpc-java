@@ -208,6 +208,23 @@ public class XdsLoadBalancer2Test {
     assertThat(fallbackLbs).hasSize(1);
   }
 
+  @Test
+  public void fallbackWillHandleLastResolvedAddresses() {
+    verifyNotInFallbackMode();
+
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(
+            Attributes.newBuilder().set(Attributes.Key.create("k"), new Object()).build())
+        .setLoadBalancingPolicyConfig(new Object())
+        .build();
+    xdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    adsCallback.onError();
+    LoadBalancer fallbackLb =  Iterables.getLast(fallbackLbs);
+    verify(fallbackLb).handleResolvedAddresses(same(resolvedAddresses));
+  }
+
   private void verifyInFallbackMode() {
     assertThat(lookasideLbs).isNotEmpty();
     assertThat(fallbackLbs).isNotEmpty();
