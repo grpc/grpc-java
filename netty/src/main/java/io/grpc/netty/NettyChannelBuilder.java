@@ -545,7 +545,7 @@ public final class NettyChannelBuilder
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
         TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker) {
-      this.protocolNegotiator = protocolNegotiator;
+      this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
       this.groupPool = groupPool;
