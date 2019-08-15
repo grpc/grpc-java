@@ -34,6 +34,11 @@ android {
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
     }
     lintOptions { abortOnError false }
+    libraryVariants.all { variant ->
+        javadocs {
+            classpath += variant.javaCompileProvider.get().classpath
+        }
+    }
 }
 
 repositories {
@@ -64,12 +69,6 @@ task javadocs(type: Javadoc) {
             addStringOption('Xdoclint:none', '-quiet')
         }
     }
-}
-
-afterEvaluate {
-    javadocs.classpath += files(android.libraryVariants.collect { variant ->
-        variant.javaCompileProvider.get().classpath
-    })
 }
 
 task javadocJar(type: Jar, dependsOn: javadocs) {
