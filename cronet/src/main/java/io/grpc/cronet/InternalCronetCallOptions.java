@@ -27,17 +27,10 @@ import io.grpc.Internal;
 @Internal
 public final class InternalCronetCallOptions {
 
-  /**
-   * @deprecated Use {@link #withAnnotation} instead.
-   */
-  @Deprecated
-  public static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
-      CronetClientStream.CRONET_ANNOTATION_KEY;
+  // Prevent instantiation
+  private InternalCronetCallOptions() {}
 
   public static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
     return CronetClientStream.withAnnotation(callOptions, annotation);
   }
-
-  // Prevent instantiation
-  private InternalCronetCallOptions() {}
 }
