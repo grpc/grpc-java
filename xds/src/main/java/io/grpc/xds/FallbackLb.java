@@ -35,8 +35,6 @@ final class FallbackLb extends ForwardingLoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer fallbackPolicyLb;
 
-  private String fallbackPolicyName;
-
   FallbackLb(Helper fallbackLbHelper) {
     this(fallbackLbHelper, LoadBalancerRegistry.getDefaultRegistry());
   }
@@ -68,10 +66,7 @@ final class FallbackLb extends ForwardingLoadBalancer {
 
     LbConfig fallbackPolicy = xdsConfig.fallbackPolicy;
     String newFallbackPolicyName = fallbackPolicy.getPolicyName();
-    if (!newFallbackPolicyName.equals(fallbackPolicyName)) {
-      fallbackPolicyName = newFallbackPolicyName;
-      fallbackPolicyLb.switchTo(lbRegistry.getProvider(newFallbackPolicyName));
-    }
+    fallbackPolicyLb.switchTo(lbRegistry.getProvider(newFallbackPolicyName));
     ResolvedAddresses fallbackResolvedAddresses = resolvedAddresses.toBuilder()
         .setAttributes(attributes.toBuilder()
             .set(ATTR_LOAD_BALANCING_CONFIG, fallbackPolicy.getRawConfigValue()).build())
