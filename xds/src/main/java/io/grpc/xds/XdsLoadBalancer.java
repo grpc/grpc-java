@@ -196,7 +196,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   private void handleNewConfig(XdsConfig xdsConfig) {
-    String newBalancerName = xdsConfig.newBalancerName;
+    String newBalancerName = xdsConfig.balancerName;
     LbConfig childPolicy = xdsConfig.childPolicy;
     ManagedChannel lbChannel;
     if (xdsLbState == null) {

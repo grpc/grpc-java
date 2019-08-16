@@ -128,7 +128,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
    * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
    */
   static final class XdsConfig {
-    final String newBalancerName;
+    final String balancerName;
     // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
     @Nullable
     final LbConfig childPolicy;
@@ -136,8 +136,8 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     final LbConfig fallbackPolicy;
 
     XdsConfig(
-        String newBalancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy) {
-      this.newBalancerName = checkNotNull(newBalancerName, "newBalancerName");
+        String balancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy) {
+      this.balancerName = checkNotNull(balancerName, "balancerName");
       this.childPolicy = childPolicy;
       this.fallbackPolicy = fallbackPolicy;
     }
@@ -145,7 +145,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
-          .add("newBalancerName", newBalancerName)
+          .add("balancerName", balancerName)
           .add("childPolicy", childPolicy)
           .add("fallbackPolicy", fallbackPolicy)
           .toString();
@@ -157,14 +157,14 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
         return false;
       }
       XdsConfig that = (XdsConfig) obj;
-      return Objects.equal(this.newBalancerName, that.newBalancerName)
+      return Objects.equal(this.balancerName, that.balancerName)
           && Objects.equal(this.childPolicy, that.childPolicy)
           && Objects.equal(this.fallbackPolicy, that.fallbackPolicy);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(newBalancerName, childPolicy, fallbackPolicy);
+      return Objects.hashCode(balancerName, childPolicy, fallbackPolicy);
     }
   }
 }
