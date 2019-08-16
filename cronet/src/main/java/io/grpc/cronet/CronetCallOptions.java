@@ -17,9 +17,6 @@
 package io.grpc.cronet;
 
 import io.grpc.CallOptions;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 
 /** Call options for use with the Cronet transport. */
 public final class CronetCallOptions {
@@ -36,7 +33,7 @@ public final class CronetCallOptions {
    */
   @Deprecated
   public static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
-      CallOptions.Key.create("cronet-annotation");
+      CronetClientStream.CRONET_ANNOTATION_KEY;
 
   /**
    * Returns a copy of {@code callOptions} with {@code annotation} included as one of the Cronet
@@ -48,18 +45,6 @@ public final class CronetCallOptions {
    * @param annotation the object to attach to the Cronet stream
    */
   public static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
-    Collection<Object> existingAnnotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
-    ArrayList<Object> newAnnotations;
-    if (existingAnnotations == null) {
-      newAnnotations = new ArrayList<>();
-    } else {
-      newAnnotations = new ArrayList<>(existingAnnotations);
-    }
-    newAnnotations.add(annotation);
-    return callOptions.withOption(
-        CronetCallOptions.CRONET_ANNOTATIONS_KEY, Collections.unmodifiableList(newAnnotations));
+    return CronetClientStream.withAnnotation(callOptions, annotation);
   }
-
-  static final CallOptions.Key<Collection<Object>> CRONET_ANNOTATIONS_KEY =
-      CallOptions.Key.create("cronet-annotations");
 }
