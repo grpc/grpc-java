@@ -485,7 +485,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     @Nullable
     private final LbConfig childPolicy;
     @Nullable
-    private final LbConfig fallbackPolicy;
+    final LbConfig fallbackPolicy;
 
     XdsConfig(
         String newBalancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy) {
