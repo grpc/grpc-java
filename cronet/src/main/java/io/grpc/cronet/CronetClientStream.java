@@ -44,6 +44,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,14 @@ class CronetClientStream extends AbstractClientStream {
   private static final int READ_BUFFER_CAPACITY = 4 * 1024;
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
+
+  @Deprecated
+  static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
+      CallOptions.Key.create("cronet-annotation");
+
+  static final CallOptions.Key<Collection<Object>> CRONET_ANNOTATIONS_KEY =
+      CallOptions.Key.create("cronet-annotations");
+
   private final String url;
   private final String userAgent;
   private final StatsTraceContext statsTraceCtx;
@@ -107,8 +116,8 @@ class CronetClientStream extends AbstractClientStream {
     this.idempotent = method.isIdempotent() || alwaysUsePut;
     // Only delay flushing header for unary rpcs.
     this.delayRequestHeader = (method.getType() == MethodDescriptor.MethodType.UNARY);
-    this.annotation = callOptions.getOption(CronetCallOptions.CRONET_ANNOTATION_KEY);
-    this.annotations = callOptions.getOption(CronetCallOptions.CRONET_ANNOTATIONS_KEY);
+    this.annotation = callOptions.getOption(CRONET_ANNOTATION_KEY);
+    this.annotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
     this.state = new TransportState(maxMessageSize, statsTraceCtx, lock, transportTracer);
   }
 
@@ -125,6 +134,28 @@ class CronetClientStream extends AbstractClientStream {
   @Override
   public void setAuthority(String authority) {
     throw new UnsupportedOperationException("Cronet does not support overriding authority");
+  }
+
+  /**
+   * Returns a copy of {@code callOptions} with {@code annotation} included as one of the Cronet
+   * annotation objects. When an RPC is made using a {@link CallOptions} instance returned by this
+   * method, the annotation objects will be attached to the underlying Cronet bidirectional stream.
+   * When the stream finishes, the user can retrieve the annotation objects via {@link
+   * org.chromium.net.RequestFinishedInfo.Listener}.
+   *
+   * @param annotation the object to attach to the Cronet stream
+   */
+  static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
+    Collection<Object> existingAnnotations = callOptions.getOption(CRONET_ANNOTATIONS_KEY);
+    ArrayList<Object> newAnnotations;
+    if (existingAnnotations == null) {
+      newAnnotations = new ArrayList<>();
+    } else {
+      newAnnotations = new ArrayList<>(existingAnnotations);
+    }
+    newAnnotations.add(annotation);
+    return callOptions.withOption(
+        CRONET_ANNOTATIONS_KEY, Collections.unmodifiableList(newAnnotations));
   }
 
   class Sink implements AbstractClientStream.Sink {

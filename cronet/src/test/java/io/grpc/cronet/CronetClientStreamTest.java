@@ -587,7 +587,7 @@ public final class CronetClientStreamTest {
             false /* alwaysUsePut */,
             method,
             StatsTraceContext.NOOP,
-            CallOptions.DEFAULT.withOption(CronetCallOptions.CRONET_ANNOTATION_KEY, annotation),
+            CallOptions.DEFAULT.withOption(CronetClientStream.CRONET_ANNOTATION_KEY, annotation),
             transportTracer);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
