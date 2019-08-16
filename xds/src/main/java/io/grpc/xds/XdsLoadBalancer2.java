@@ -27,6 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -45,7 +46,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancer lookasideLb;
   private final LoadBalancer.Factory fallbackLbFactory;
-  private final AdsCallback adsCallback = new AdsCallback() {
+  private final AdsStreamCallback adsCallback = new AdsStreamCallback() {
     @Override
     public void onWorking() {
       if (childPolicyHasBeenReady) {
@@ -240,28 +241,6 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   /** Factory of a look-aside load balancer. The interface itself is for convenience in test. */
   @VisibleForTesting
   interface LookasideLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, AdsCallback adsCallback);
-  }
-
-  /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
-   */
-  interface AdsCallback {
-
-    /**
-     * Once the response observer receives the first response.
-     */
-    void onWorking();
-
-    /**
-     * Once an error occurs in ADS stream.
-     */
-    void onError();
-
-    /**
-     * Once receives a response indicating that 100% of calls should be dropped.
-     */
-    void onAllDrop();
+    LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback);
   }
 }
