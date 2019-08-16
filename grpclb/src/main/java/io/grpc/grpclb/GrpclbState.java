@@ -341,8 +341,10 @@ final class GrpclbState {
         subchannelPool.clear();
         break;
       case PICK_FIRST:
-        checkState(subchannels.size() == 1, "Excessive Subchannels: %s", subchannels);
-        subchannels.values().iterator().next().shutdown();
+        if (!subchannels.isEmpty()) {
+          checkState(subchannels.size() == 1, "Excessive Subchannels: %s", subchannels);
+          subchannels.values().iterator().next().shutdown();
+        }
         break;
       default:
         throw new AssertionError("Missing case for " + mode);

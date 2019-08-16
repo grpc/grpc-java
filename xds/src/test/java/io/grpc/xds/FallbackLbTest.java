@@ -49,8 +49,6 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class FallbackLbTest {
 
-  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-
   private final LoadBalancerProvider fallbackProvider1 = new LoadBalancerProvider() {
     @Override
     public boolean isAvailable() {
@@ -94,6 +92,7 @@ public class FallbackLbTest {
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
+      // just return mock and recored helper and balancer
       helpers2.add(helper);
       LoadBalancer balancer = mock(LoadBalancer.class);
       balancers2.add(balancer);
@@ -102,16 +101,16 @@ public class FallbackLbTest {
   };
 
   private final Helper helper = mock(Helper.class);
-  private FallbackLb fallbackLb;
-
   private final List<Helper> helpers1 = new ArrayList<>();
   private final List<Helper> helpers2 = new ArrayList<>();
   private final List<LoadBalancer> balancers1 = new ArrayList<>();
   private final List<LoadBalancer> balancers2 = new ArrayList<>();
 
+  private LoadBalancer fallbackLb;
 
   @Before
   public void setUp() {
+    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
     lbRegistry.register(fallbackProvider1);
     lbRegistry.register(fallbackProvider2);
     fallbackLb = new FallbackLb(helper, lbRegistry);

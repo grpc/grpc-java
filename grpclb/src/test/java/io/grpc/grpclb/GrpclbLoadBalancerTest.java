@@ -1813,6 +1813,31 @@ public class GrpclbLoadBalancerTest {
         .returnSubchannel(any(Subchannel.class), any(ConnectivityStateInfo.class));
   }
 
+  @Test
+  public void shutdownWithoutSubchannel_roundRobin() throws Exception {
+    subtestShutdownWithoutSubchannel("round_robin");
+  }
+
+  @Test
+  public void shutdownWithoutSubchannel_pickFirst() throws Exception {
+    subtestShutdownWithoutSubchannel("pick_first");
+  }
+
+  private void subtestShutdownWithoutSubchannel(String childPolicy) throws Exception {
+    String lbConfig = "{\"childPolicy\" : [ {\"" + childPolicy + "\" : {}} ]}";
+    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
+    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
+        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
+    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> requestObserver = lbRequestObservers.poll();
+
+    verify(requestObserver, never()).onCompleted();
+    balancer.shutdown();
+    verify(requestObserver).onCompleted();
+  }
+
   @SuppressWarnings("deprecation")
   @Test
   public void grpclbWorking_pickFirstMode_expectBackendsShuffled() throws Exception {

@@ -27,7 +27,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.XdsLoadBalancer.XdsConfig;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;

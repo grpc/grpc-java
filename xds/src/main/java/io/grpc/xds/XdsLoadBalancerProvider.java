@@ -16,7 +16,11 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Internal;
 import io.grpc.LoadBalancer;
@@ -28,7 +32,6 @@ import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.XdsLoadBalancer.XdsConfig;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -119,5 +122,49 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
       }
     }
     return null;
+  }
+
+  /**
+   * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
+   */
+  static final class XdsConfig {
+    final String balancerName;
+    // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
+    @Nullable
+    final LbConfig childPolicy;
+    @Nullable
+    final LbConfig fallbackPolicy;
+
+    XdsConfig(
+        String balancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy) {
+      this.balancerName = checkNotNull(balancerName, "balancerName");
+      this.childPolicy = childPolicy;
+      this.fallbackPolicy = fallbackPolicy;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("balancerName", balancerName)
+          .add("childPolicy", childPolicy)
+          .add("fallbackPolicy", fallbackPolicy)
+          .toString();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof XdsConfig)) {
+        return false;
+      }
+      XdsConfig that = (XdsConfig) obj;
+      return Objects.equal(this.balancerName, that.balancerName)
+          && Objects.equal(this.childPolicy, that.childPolicy)
+          && Objects.equal(this.fallbackPolicy, that.fallbackPolicy);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(balancerName, childPolicy, fallbackPolicy);
+    }
   }
 }

@@ -26,7 +26,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
-import io.grpc.xds.XdsLoadBalancer.XdsConfig;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
 
 /** Fallback load balancer. Handles fallback policy changes. */
