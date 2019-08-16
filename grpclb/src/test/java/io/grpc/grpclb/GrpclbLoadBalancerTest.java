@@ -1815,24 +1815,27 @@ public class GrpclbLoadBalancerTest {
 
   @Test
   public void shutdownWithoutSubchannel_roundRobin() throws Exception {
-    InOrder inOrder = inOrder(helper);
-    String lbConfig = "{\"childPolicy\" : [ {\"round_robin\" : {}} ]}";
-    List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
-    Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
-        LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
-    deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
-    balancer.shutdown();
+    subtestShutdownWithoutSubchannel("round_robin");
   }
 
   @Test
   public void shutdownWithoutSubchannel_pickFirst() throws Exception {
-    InOrder inOrder = inOrder(helper);
-    String lbConfig = "{\"childPolicy\" : [ {\"pick_first\" : {}} ]}";
+    subtestShutdownWithoutSubchannel("pick_first");
+  }
+
+  private void subtestShutdownWithoutSubchannel(String childPolicy) throws Exception {
+    String lbConfig = "{\"childPolicy\" : [ {\"" + childPolicy + "\" : {}} ]}";
     List<EquivalentAddressGroup> grpclbResolutionList = createResolvedServerAddresses(true);
     Attributes grpclbResolutionAttrs = Attributes.newBuilder().set(
         LoadBalancer.ATTR_LOAD_BALANCING_CONFIG, parseJsonObject(lbConfig)).build();
     deliverResolvedAddresses(grpclbResolutionList, grpclbResolutionAttrs);
+    verify(mockLbService).balanceLoad(lbResponseObserverCaptor.capture());
+    assertEquals(1, lbRequestObservers.size());
+    StreamObserver<LoadBalanceRequest> requestObserver = lbRequestObservers.poll();
+
+    verify(requestObserver, never()).onCompleted();
     balancer.shutdown();
+    verify(requestObserver).onCompleted();
   }
 
   @SuppressWarnings("deprecation")
