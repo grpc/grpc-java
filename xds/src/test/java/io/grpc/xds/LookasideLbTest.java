@@ -32,8 +32,8 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
-import io.grpc.xds.LookasideLb.AdsCallback;
 import io.grpc.xds.LookasideLb.LookasideChannelLbFactory;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +51,7 @@ public class LookasideLbTest {
       new LookasideChannelLbFactory() {
         @Override
         public LoadBalancer newLoadBalancer(
-            Helper helper, AdsCallback adsCallback, String balancerName) {
+            Helper helper, AdsStreamCallback adsCallback, String balancerName) {
           // just return a mock and record helper and balancer.
           helpers.add(helper);
           LoadBalancer balancer = mock(LoadBalancer.class);
@@ -61,7 +61,7 @@ public class LookasideLbTest {
       };
 
   private LoadBalancer lookasideLb = new LookasideLb(
-      helper, mock(AdsCallback.class), lookasideChannelLbFactory, new LoadBalancerRegistry());
+      helper, mock(AdsStreamCallback.class), lookasideChannelLbFactory, new LoadBalancerRegistry());
 
 
   @Test

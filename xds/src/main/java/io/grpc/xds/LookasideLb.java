@@ -26,13 +26,14 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
 
 /** Lookaside load balancer that handles balancer name changes. */
 final class LookasideLb extends ForwardingLoadBalancer {
 
-  private final AdsCallback adsCallback;
+  private final AdsStreamCallback adsCallback;
   private final LookasideChannelLbFactory lookasideChannelLbFactory;
   private final GracefulSwitchLoadBalancer lookasideChannelLb;
   private final LoadBalancerRegistry lbRegistry;
@@ -43,7 +44,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
-      AdsCallback adsCallback,
+      AdsStreamCallback adsCallback,
       LookasideChannelLbFactory lookasideChannelLbFactory,
       LoadBalancerRegistry lbRegistry) {
     this.adsCallback = adsCallback;
@@ -109,28 +110,6 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
   @VisibleForTesting
   interface LookasideChannelLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, AdsCallback adsCallback, String balancerName);
-  }
-
-  /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
-   */
-  interface AdsCallback {
-
-    /**
-     * Once the response observer receives the first response.
-     */
-    void onWorking();
-
-    /**
-     * Once an error occurs in ADS stream.
-     */
-    void onError();
-
-    /**
-     * Once receives a response indicating that 100% of calls should be dropped.
-     */
-    void onAllDrop();
+    LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback, String balancerName);
   }
 }
