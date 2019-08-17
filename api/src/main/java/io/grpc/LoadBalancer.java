@@ -117,6 +117,8 @@ public abstract class LoadBalancer {
   public static final Attributes.Key<Map<String, ?>> ATTR_LOAD_BALANCING_CONFIG =
       Attributes.Key.create("io.grpc.LoadBalancer.loadBalancingConfig");
 
+  private int recursionCount;
+
   /**
    * Handles newly resolved server groups and metadata attributes from name resolution system.
    * {@code servers} contained in {@link EquivalentAddressGroup} should be considered equivalent
@@ -133,8 +135,11 @@ public abstract class LoadBalancer {
   public void handleResolvedAddressGroups(
       List<EquivalentAddressGroup> servers,
       @NameResolver.ResolutionResultAttr Attributes attributes) {
-    handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+    if (recursionCount++ == 0) {
+      handleResolvedAddresses(
+          ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+    }
+    recursionCount = 0;
   }
 
   /**
@@ -149,8 +154,11 @@ public abstract class LoadBalancer {
    */
   @SuppressWarnings("deprecation")
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    handleResolvedAddressGroups(
-        resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+    if (recursionCount++ == 0) {
+      handleResolvedAddressGroups(
+          resolvedAddresses.getAddresses(), resolvedAddresses.getAttributes());
+    }
+    recursionCount = 0;
   }
 
   /**
