@@ -24,10 +24,8 @@ import java.net.URI;
 /**
  * A provider for {@link XdsNameResolver}.
  *
- * <p>It resolves a target URI whose scheme is {@code "xds-experimental"}. If the (optional)
- * authority of the target URI is not present, a default will be obtained from the environment
- * (e.g., either from a file on local disk or from an environment variable). In Google Cloud,
- * this default will point to Traffic Director. The path of the target URI, excluding the leading
+ * <p>It resolves a target URI whose scheme is {@code "xds-experimental"}. The authority of the
+ * target URI is never used for current release. The path of the target URI, excluding the leading
  * slash {@code '/'}, will indicate the name to use in the VHDS query.
  *
  * <p>This class should not be directly referenced in code. The resolver should be accessed

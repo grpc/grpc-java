@@ -39,7 +39,7 @@ import java.util.Map;
  *
  * @see XdsNameResolverProvider
  */
-public final class XdsNameResolver extends NameResolver {
+final class XdsNameResolver extends NameResolver {
 
   private static final String SERVICE_CONFIG_HARDCODED = "{"
           + "\"loadBalancingConfig\": ["
