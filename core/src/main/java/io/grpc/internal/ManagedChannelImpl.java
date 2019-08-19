@@ -37,6 +37,7 @@ import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
@@ -273,6 +274,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   // Called from syncContext
   private final ManagedClientTransport.Listener delayedTransportListener =
       new DelayedTransportListener();
+
+  private final List<ClientCallTracer.Factory> clientCallTracerFactories;
 
   // Must be called from syncContext
   private void maybeShutdownNowSubchannels() {
@@ -557,6 +560,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       ObjectPool<? extends Executor> balancerRpcExecutorPool,
       Supplier<Stopwatch> stopwatchSupplier,
       List<ClientInterceptor> interceptors,
+      List<ClientCallTracer.Factory> clientCallTracerFactories,
       final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
@@ -605,6 +609,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
       channel = builder.binlog.wrapChannel(channel);
     }
     this.interceptorChannel = ClientInterceptors.intercept(channel, interceptors);
+    this.clientCallTracerFactories =
+        checkNotNull(clientCallTracerFactories, "clientCallTracerFactories");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     if (builder.idleTimeoutMillis == IDLE_TIMEOUT_MILLIS_DISABLE) {
       this.idleTimeoutMillis = builder.idleTimeoutMillis;
@@ -851,6 +857,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> newCall(MethodDescriptor<ReqT, RespT> method,
         CallOptions callOptions) {
+      List<ClientCallTracer> clientCallTracers = new ArrayList<>();
+      for (ClientCallTracer.Factory factory : clientCallTracerFactories) {
+        clientCallTracers.add(factory.newClientCallTracer(method, callOptions));
+      }
       return new ClientCallImpl<>(
           method,
           getCallExecutor(callOptions),
@@ -858,6 +868,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
           transportProvider,
           terminated ? null : transportFactory.getScheduledExecutorService(),
           channelCallTracer,
+          Collections.unmodifiableList(clientCallTracers),
           retryEnabled)
           .setFullStreamDecompression(fullStreamDecompression)
           .setDecompressorRegistry(decompressorRegistry)

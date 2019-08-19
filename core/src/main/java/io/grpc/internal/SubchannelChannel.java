@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.Context;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
@@ -29,7 +30,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Status;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
-import io.grpc.internal.GrpcUtil;
+import java.util.Collections;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -109,7 +110,9 @@ final class SubchannelChannel extends Channel {
     return new ClientCallImpl<>(methodDescriptor,
         effectiveExecutor,
         callOptions.withOption(GrpcUtil.CALL_OPTIONS_RPC_OWNED_BY_BALANCER, Boolean.TRUE),
-        transportProvider, deadlineCancellationExecutor, callsTracer, false /* retryEnabled */);
+        transportProvider, deadlineCancellationExecutor, callsTracer,
+        Collections.<ClientCallTracer>emptyList() /* clientCallTracers */,
+        false /* retryEnabled */);
   }
 
   @Override

@@ -37,6 +37,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.ClientInterceptor;
 import io.grpc.ConnectivityState;
 import io.grpc.EquivalentAddressGroup;
@@ -182,6 +183,7 @@ public class ManagedChannelImplIdlenessTest {
         builder, mockTransportFactory, new FakeBackoffPolicyProvider(),
         oobExecutorPool, timer.getStopwatchSupplier(),
         Collections.<ClientInterceptor>emptyList(),
+        Collections.<ClientCallTracer.Factory>emptyList(),
         TimeProvider.SYSTEM_TIME_PROVIDER);
     newTransports = TestUtils.captureTransports(mockTransportFactory);
 

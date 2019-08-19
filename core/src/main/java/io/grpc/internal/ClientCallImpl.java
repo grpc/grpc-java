@@ -33,6 +33,7 @@ import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
@@ -40,6 +41,7 @@ import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.Deadline;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.InternalDecompressorRegistry;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.Metadata;
@@ -51,6 +53,7 @@ import io.perfmark.PerfMark;
 import io.perfmark.Tag;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
@@ -73,6 +76,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private final Tag tag;
   private final Executor callExecutor;
   private final CallTracer channelCallsTracer;
+  private final List<ClientCallTracer> clientCallTracers;
   private final Context context;
   private volatile ScheduledFuture<?> deadlineCancellationFuture;
   private final boolean unaryRequest;
@@ -94,6 +98,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       ClientTransportProvider clientTransportProvider,
       ScheduledExecutorService deadlineCancellationExecutor,
       CallTracer channelCallsTracer,
+      List<ClientCallTracer> clientCallTracers,
       boolean retryEnabled) {
     this.method = method;
     // TODO(carl-mastrangelo): consider moving this construction to ManagedChannelImpl.
@@ -105,10 +110,14 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         ? new SerializeReentrantCallsDirectExecutor()
         : new SerializingExecutor(executor);
     this.channelCallsTracer = channelCallsTracer;
+    this.clientCallTracers = clientCallTracers;
     // Propagate the context from the thread which initiated the call to all callbacks.
     this.context = Context.current();
     this.unaryRequest = method.getType() == MethodType.UNARY
         || method.getType() == MethodType.SERVER_STREAMING;
+    for (ClientCallTracer tracer : clientCallTracers) {
+      callOptions = callOptions.withStreamTracerFactory(tracer);
+    }
     this.callOptions = callOptions;
     this.clientTransportProvider = clientTransportProvider;
     this.deadlineCancellationExecutor = deadlineCancellationExecutor;
@@ -186,8 +195,26 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   @Override
   public void start(Listener<RespT> observer, Metadata headers) {
     PerfMark.startTask("ClientCall.start", tag);
+    Listener<RespT> callTracingObserver = new SimpleForwardingClientCallListener<RespT>(observer) {
+      @Override
+      public void onMessage(RespT message) {
+        for (ClientCallTracer tracer : clientCallTracers) {
+          tracer.inboundMessage(message);
+        }
+        super.onMessage(message);
+      }
+
+      @Override
+      public void onClose(Status status, Metadata trailers) {
+        for (ClientCallTracer tracer : clientCallTracers) {
+          tracer.callEnded(status);
+        }
+        super.onClose(status, trailers);
+      }
+    };
+
     try {
-      startInternal(observer, headers);
+      startInternal(callTracingObserver, headers);
     } finally {
       PerfMark.stopTask("ClientCall.start", tag);
     }
@@ -464,6 +491,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     checkState(stream != null, "Not started");
     checkState(!cancelCalled, "call was cancelled");
     checkState(!halfCloseCalled, "call was half-closed");
+    for (ClientCallTracer tracer : clientCallTracers) {
+      tracer.outboundMessage(message);
+    }
     try {
       if (stream instanceof RetriableStream) {
         @SuppressWarnings("unchecked")
@@ -504,6 +534,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return stream.getAttributes();
     }
     return Attributes.EMPTY;
+  }
+
+  @Override
+  public Attributes getTracerAttributes() {
+    Attributes.Builder attrsBuilder = Attributes.newBuilder();
+    for (ClientCallTracer tracer : clientCallTracers) {
+      tracer.getTracerAttributes(attrsBuilder);
+    }
+    return attrsBuilder.build();
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {

@@ -26,6 +26,7 @@ import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.Context;
@@ -194,6 +195,7 @@ final class OobChannel extends ManagedChannel implements InternalInstrumented<Ch
     return new ClientCallImpl<>(methodDescriptor,
         callOptions.getExecutor() == null ? executor : callOptions.getExecutor(),
         callOptions, transportProvider, deadlineCancellationExecutor, channelCallsTracer,
+        Collections.<ClientCallTracer>emptyList() /* clientCallTracers */,
         false /* retryEnabled */);
   }
 
