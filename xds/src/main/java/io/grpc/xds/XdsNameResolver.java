@@ -45,11 +45,9 @@ import java.util.concurrent.Executor;
  */
 public final class XdsNameResolver extends NameResolver {
 
-  // TODO(chengyuanzhang): figure out what the hard-coded balancer name should be.
   private static final String SERVICE_CONFIG_HARDCODED = "{"
           + "\"loadBalancingConfig\": ["
           + "{\"xds_experimental\" : {"
-          + "\"balancerName\" : \"trafficdirector\","
           + "\"childPolicy\" : [{\"round_robin\" : {}}]"
           + "}}"
           + "]}";
@@ -63,7 +61,7 @@ public final class XdsNameResolver extends NameResolver {
   private Executor executor;
   private Listener2 listener;
 
-  XdsNameResolver(String nsAuthority, String name, Args args, Resource<Executor> executorResource) {
+  XdsNameResolver(String name, Args args, Resource<Executor> executorResource) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =

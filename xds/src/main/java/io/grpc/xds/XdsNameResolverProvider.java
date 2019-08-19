@@ -42,11 +42,6 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      String nsAuthority = targetUri.getAuthority();
-      if (nsAuthority == null) {
-        // TODO(chengyuanzhang): get authority from a file on local disk or an environment variable.
-        nsAuthority = "trafficdirector";
-      }
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
           targetPath.startsWith("/"),
@@ -54,7 +49,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(nsAuthority, name, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+      return new XdsNameResolver(name, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);
     }
     return null;
   }

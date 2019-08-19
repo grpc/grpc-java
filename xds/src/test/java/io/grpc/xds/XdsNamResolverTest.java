@@ -104,7 +104,7 @@ public class XdsNamResolverTest {
   @Test
   public void invalidName_hostnameContainsUnderscore() {
     try {
-      provider.newNameResolver(URI.create("xds://foo_bar.googleapis.com"), args);
+      provider.newNameResolver(URI.create("xds:///foo_bar.googleapis.com"), args);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       // Expected
@@ -142,15 +142,12 @@ public class XdsNamResolverTest {
     assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
     Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
     assertThat(rawConfigValues)
-        .containsExactly(
-            "balancerName",
-            "trafficdirector",
-            "childPolicy",
+        .containsExactly("childPolicy",
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
   }
 
   private XdsNameResolver newResolver(String name) {
-    return new XdsNameResolver(null, name, args, fakeExecutorResource);
+    return new XdsNameResolver(name, args, fakeExecutorResource);
   }
 }
