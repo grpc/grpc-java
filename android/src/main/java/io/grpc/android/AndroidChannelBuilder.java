@@ -54,7 +54,7 @@ import javax.net.ssl.SSLSocketFactory;
  *
  * @since 1.12.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
@@ -73,15 +73,40 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   @Nullable private Context context;
 
+  /**
+   * Creates a new builder with the given target string that will be resolved by
+   * {@link io.grpc.NameResolver}.
+   */
   public static final AndroidChannelBuilder forTarget(String target) {
     return new AndroidChannelBuilder(target);
   }
 
+  /**
+   * Creates a new builder with the given host and port.
+   */
   public static AndroidChannelBuilder forAddress(String name, int port) {
     return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
   }
 
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} instead.
+   */
+  @Deprecated
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
+    return new AndroidChannelBuilder(builder);
+  }
+
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * <p>The builder being delegated to can still be modified and configuration changes will
+   * propagate to the channel built by this builder.
+   *
+   * @since 1.24.0
+   */
+  public static AndroidChannelBuilder usingBuilder(ManagedChannelBuilder<?> builder) {
     return new AndroidChannelBuilder(builder);
   }
 
@@ -104,7 +129,9 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     this.delegateBuilder = Preconditions.checkNotNull(delegateBuilder, "delegateBuilder");
   }
 
-  /** Enables automatic monitoring of the device's network state. */
+  /**
+   * Enables automatic monitoring of the device's network state.
+   */
   public AndroidChannelBuilder context(Context context) {
     this.context = context;
     return this;
@@ -113,7 +140,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   /**
    * Set the delegate channel builder's transportExecutor.
    *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} with a pre-configured
    *     ManagedChannelBuilder instead.
    */
   @Deprecated
@@ -131,7 +158,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   /**
    * Set the delegate channel builder's sslSocketFactory.
    *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} with a pre-configured
    *     ManagedChannelBuilder instead.
    */
   @Deprecated
@@ -149,7 +176,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   /**
    * Set the delegate channel builder's scheduledExecutorService.
    *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} with a pre-configured
    *     ManagedChannelBuilder instead.
    */
   @Deprecated
@@ -171,6 +198,9 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     return delegateBuilder;
   }
 
+  /**
+   * Builds a channel with current configurations.
+   */
   @Override
   public ManagedChannel build() {
     return new AndroidChannel(delegateBuilder.build(), context);
