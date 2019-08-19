@@ -70,13 +70,14 @@ public class XdsNameResolverProviderTest {
   @Test
   public void newNameResolver() {
     assertThat(
-        provider.newNameResolver(URI.create("xds://1.1.1.1/foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds-experimental://1.1.1.1/foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args))
         .isInstanceOf(XdsNameResolver.class);
     assertThat(
-        provider.newNameResolver(URI.create("notxds://1.1.1.1/foo.googleapis.com"), args))
+        provider.newNameResolver(URI.create("notxds-experimental://1.1.1.1/foo.googleapis.com"),
+            args))
         .isNull();
   }
 }

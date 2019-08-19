@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 
 /**
- * A {@link NameResolver} for resolving gRPC target names with "xds" scheme.
+ * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
  *
  * <p>The implementation is for load balancing alpha release only. No actual VHDS is involved. It
  * always returns a hard-coded service config that selects the xds_experimental LB policy with

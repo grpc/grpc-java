@@ -88,7 +88,7 @@ public class XdsNamResolverTest {
   public void validName_withAuthority() {
     XdsNameResolver resolver =
         provider.newNameResolver(
-            URI.create("xds://trafficdirector.google.com/foo.googleapis.com"), args);
+            URI.create("xds-experimental://trafficdirector.google.com/foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
@@ -96,7 +96,7 @@ public class XdsNamResolverTest {
   @Test
   public void validName_noAuthority() {
     XdsNameResolver resolver =
-        provider.newNameResolver(URI.create("xds:///foo.googleapis.com"), args);
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
   }
@@ -104,7 +104,7 @@ public class XdsNamResolverTest {
   @Test
   public void invalidName_hostnameContainsUnderscore() {
     try {
-      provider.newNameResolver(URI.create("xds:///foo_bar.googleapis.com"), args);
+      provider.newNameResolver(URI.create("xds-experimental:///foo_bar.googleapis.com"), args);
       fail("Expected IllegalArgumentException");
     } catch (IllegalArgumentException e) {
       // Expected
