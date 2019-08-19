@@ -95,7 +95,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
    */
   @Deprecated
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
-    return new AndroidChannelBuilder(builder);
+    return usingBuilder(builder);
   }
 
   /**
