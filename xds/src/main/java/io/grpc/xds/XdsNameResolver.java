@@ -72,7 +72,7 @@ final class XdsNameResolver extends NameResolver {
     } catch (IOException e) {
       listener.onError(
           Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
-      return;
+      throw new AssertionError("Invalid service config");
     }
     Attributes attrs =
         Attributes.newBuilder()
