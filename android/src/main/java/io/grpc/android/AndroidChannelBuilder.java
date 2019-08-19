@@ -61,7 +61,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
 
-  private static final Class<?> findOkHttp() {
+  private static Class<?> findOkHttp() {
     try {
       return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
     } catch (ClassNotFoundException e) {
@@ -77,7 +77,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
    * Creates a new builder with the given target string that will be resolved by
    * {@link io.grpc.NameResolver}.
    */
-  public static final AndroidChannelBuilder forTarget(String target) {
+  public static AndroidChannelBuilder forTarget(String target) {
     return new AndroidChannelBuilder(target);
   }
 
