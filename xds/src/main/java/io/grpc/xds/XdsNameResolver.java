@@ -50,8 +50,6 @@ final class XdsNameResolver extends NameResolver {
 
   private final String authority;
 
-  private boolean shutdown;
-
   XdsNameResolver(String name, Args args) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
@@ -90,9 +88,5 @@ final class XdsNameResolver extends NameResolver {
 
   @Override
   public void shutdown() {
-    if (shutdown) {
-      return;
-    }
-    shutdown = true;
   }
 }
