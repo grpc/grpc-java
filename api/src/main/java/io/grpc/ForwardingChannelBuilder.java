@@ -84,6 +84,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
+  public T clientCallTracerFactories(ClientCallTracer.Factory... factories) {
+    delegate().clientCallTracerFactories(factories);
+    return thisT();
+  }
+
+  @Override
   public T userAgent(String userAgent) {
     delegate().userAgent(userAgent);
     return thisT();

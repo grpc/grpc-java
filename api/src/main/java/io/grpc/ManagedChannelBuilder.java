@@ -128,6 +128,17 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T intercept(ClientInterceptor... interceptors);
 
   /**
+   * Adds {@link ClientCallTracer.Factory}s with each of which will create a {@link
+   * ClientCallTracer} (which is also {@link ClientStreamTracer.Factory}) for each {@link
+   * ClientCall} the channel creates.
+   * Instantiated {@link ClientStreamTracer}s run in the same order as their factories are added.
+   *
+   * @return this
+   * @since 1.24.0
+   */
+  public abstract T clientCallTracerFactories(ClientCallTracer.Factory... factories);
+
+  /**
    * Provides a custom {@code User-Agent} for the application.
    *
    * <p>It's an optional parameter. The library will provide a user agent independent of this

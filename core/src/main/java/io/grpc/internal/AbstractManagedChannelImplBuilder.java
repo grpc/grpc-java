@@ -23,6 +23,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.Attributes;
 import io.grpc.BinaryLog;
+import io.grpc.ClientCallTracer;
+import io.grpc.ClientCallTracer.Factory;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -96,6 +98,7 @@ public abstract class AbstractManagedChannelImplBuilder
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
+  private final List<ClientCallTracer.Factory> clientCallTracerFactories = new ArrayList<>();
   final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
   // Access via getter, which may perform authority override as needed
@@ -226,6 +229,12 @@ public abstract class AbstractManagedChannelImplBuilder
   @Override
   public final T intercept(ClientInterceptor... interceptors) {
     return intercept(Arrays.asList(interceptors));
+  }
+
+  @Override
+  public T clientCallTracerFactories(Factory... factories) {
+    this.clientCallTracerFactories.addAll(Arrays.asList(factories));
+    return thisT();
   }
 
   @Override
@@ -510,17 +519,17 @@ public abstract class AbstractManagedChannelImplBuilder
         SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
         GrpcUtil.STOPWATCH_SUPPLIER,
         getEffectiveInterceptors(),
+        getEffectiveClientCallTracerFactories(),
         TimeProvider.SYSTEM_TIME_PROVIDER));
   }
 
-  // Temporarily disable retry when stats or tracing is enabled to avoid breakage, until we know
-  // what should be the desired behavior for retry + stats/tracing.
+  // Temporarily disable retry when stats is enabled to avoid breakage, until we know
+  // what should be the desired behavior for retry + stats.
   // TODO(zdapeng): FIX IT
   @VisibleForTesting
   final List<ClientInterceptor> getEffectiveInterceptors() {
     List<ClientInterceptor> effectiveInterceptors =
         new ArrayList<>(this.interceptors);
-    temporarilyDisableRetry = false;
     if (statsEnabled) {
       temporarilyDisableRetry = true;
       CensusStatsModule censusStats = this.censusStatsOverride;
@@ -533,14 +542,27 @@ public abstract class AbstractManagedChannelImplBuilder
       // other interceptor can override the tracer factory we set in CallOptions.
       effectiveInterceptors.add(0, censusStats.getClientInterceptor());
     }
+    return effectiveInterceptors;
+  }
+
+  // Temporarily disable retry when tracing is enabled to avoid breakage, until we know
+  // what should be the desired behavior for retry + tracing.
+  // TODO(chengyuanzhang): FIX IT
+  @VisibleForTesting
+  final List<ClientCallTracer.Factory> getEffectiveClientCallTracerFactories() {
+    List<ClientCallTracer.Factory> effectiveClientCallTracerFactories =
+        new ArrayList<>(this.clientCallTracerFactories);
     if (tracingEnabled) {
       temporarilyDisableRetry = true;
       CensusTracingModule censusTracing =
           new CensusTracingModule(Tracing.getTracer(),
               Tracing.getPropagationComponent().getBinaryFormat());
-      effectiveInterceptors.add(0, censusTracing.getClientInterceptor());
+      // ClientStreamTracer.Factory instances run sequentially with the same arguments and
+      // ClientStreamTracers are not wrapping each other, so the order of ClientCallTracers
+      // does not matter.
+      effectiveClientCallTracerFactories.add(censusTracing.getClientCallTracerFactory());
     }
-    return effectiveInterceptors;
+    return effectiveClientCallTracerFactories;
   }
 
   /**
