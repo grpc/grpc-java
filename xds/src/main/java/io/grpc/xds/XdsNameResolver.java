@@ -50,7 +50,7 @@ final class XdsNameResolver extends NameResolver {
 
   private final String authority;
 
-  XdsNameResolver(String name, Args args) {
+  XdsNameResolver(String name) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =

@@ -127,6 +127,6 @@ public class XdsNamResolverTest {
   }
 
   private XdsNameResolver newResolver(String name) {
-    return new XdsNameResolver(name, args);
+    return new XdsNameResolver(name);
   }
 }

@@ -46,7 +46,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(name, args);
+      return new XdsNameResolver(name);
     }
     return null;
   }
