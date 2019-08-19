@@ -30,6 +30,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
@@ -67,6 +68,16 @@ public class AbstractManagedChannelImplBuilderTest {
         public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
             MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
           return next.newCall(method, callOptions);
+        }
+      };
+
+  private static final ClientCallTracer.Factory DUMMY_CLIENT_CALL_TRACER_FACTORY =
+      new ClientCallTracer.Factory() {
+        @Override
+        public ClientCallTracer newClientCallTracer(MethodDescriptor<?, ?> method,
+            CallOptions callOptions) {
+          return new ClientCallTracer() {
+          };
         }
       };
 
@@ -267,12 +278,10 @@ public class AbstractManagedChannelImplBuilderTest {
   public void getEffectiveInterceptors_default() {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertEquals(3, effectiveInterceptors.size());
+    assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -280,30 +289,30 @@ public class AbstractManagedChannelImplBuilderTest {
     builder.intercept(DUMMY_USER_INTERCEPTOR);
     builder.setStatsEnabled(false);
     List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
-  }
-
-  @Test
-  public void getEffectiveInterceptors_disableTracing() {
-    builder.intercept(DUMMY_USER_INTERCEPTOR);
-    builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
-    assertEquals(2, effectiveInterceptors.size());
-    assertThat(effectiveInterceptors.get(0))
-        .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
-  }
-
-  @Test
-  public void getEffectiveInterceptors_disableBoth() {
-    builder.intercept(DUMMY_USER_INTERCEPTOR);
-    builder.setStatsEnabled(false);
-    builder.setTracingEnabled(false);
-    List<ClientInterceptor> effectiveInterceptors = builder.getEffectiveInterceptors();
+    assertEquals(1, effectiveInterceptors.size());
     assertThat(effectiveInterceptors).containsExactly(DUMMY_USER_INTERCEPTOR);
+  }
+
+  @Test
+  public void getEffectiveClientCallTracerFactories_default() {
+    builder.clientCallTracerFactories(DUMMY_CLIENT_CALL_TRACER_FACTORY);
+    List<ClientCallTracer.Factory> effectiveClientCallTracerFactories =
+        builder.getEffectiveClientCallTracerFactories();
+    assertEquals(2, effectiveClientCallTracerFactories.size());
+    assertThat(effectiveClientCallTracerFactories).contains(DUMMY_CLIENT_CALL_TRACER_FACTORY);
+    assertThat(effectiveClientCallTracerFactories
+        .get(1 - effectiveClientCallTracerFactories.indexOf(DUMMY_CLIENT_CALL_TRACER_FACTORY)))
+        .isInstanceOf(CensusTracingModule.ClientCallTracerFactory.class);
+  }
+
+  @Test
+  public void getEffectiveClientCallTracerFactories_disableTracing() {
+    builder.clientCallTracerFactories(DUMMY_CLIENT_CALL_TRACER_FACTORY);
+    builder.setTracingEnabled(false);
+    List<ClientCallTracer.Factory> effectiveClientCallTracerFactories =
+        builder.getEffectiveClientCallTracerFactories();
+    assertThat(effectiveClientCallTracerFactories)
+        .containsExactly(DUMMY_CLIENT_CALL_TRACER_FACTORY);
   }
 
   @Test
