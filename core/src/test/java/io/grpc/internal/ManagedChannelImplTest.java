@@ -65,6 +65,8 @@ import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
+import io.grpc.ClientCallTracer.Factory;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
@@ -273,24 +275,38 @@ public class ManagedChannelImplTest {
   private ArgumentCaptor<ClientStreamListener> streamListenerCaptor =
       ArgumentCaptor.forClass(ClientStreamListener.class);
 
+  private void createChannel() {
+    createChannel(Collections.<Factory>emptyList(), Collections.<ClientInterceptor>emptyList());
+  }
+
+  private void createChannel(ClientCallTracer.Factory... clientCallTracerFactories) {
+    createChannel(Arrays.asList(clientCallTracerFactories),
+        Collections.<ClientInterceptor>emptyList());
+  }
+
   private void createChannel(ClientInterceptor... interceptors) {
+    createChannel(Collections.<Factory>emptyList(), Arrays.asList(interceptors));
+  }
+
+  private void createChannel(List<ClientCallTracer.Factory> clientCallTracerFactories,
+      List<ClientInterceptor> interceptors) {
     checkState(channel == null);
 
     channel = new ManagedChannelImpl(
         channelBuilder, mockTransportFactory, new FakeBackoffPolicyProvider(),
-        balancerRpcExecutorPool, timer.getStopwatchSupplier(), Arrays.asList(interceptors),
-        timer.getTimeProvider());
+        balancerRpcExecutorPool, timer.getStopwatchSupplier(), interceptors,
+        clientCallTracerFactories, timer.getTimeProvider());
 
     if (requestConnection) {
       int numExpectedTasks = 0;
 
       // Force-exit the initial idle-mode
       channel.syncContext.execute(new Runnable() {
-          @Override
-          public void run() {
-            channel.exitIdleMode();
-          }
-        });
+        @Override
+        public void run() {
+          channel.exitIdleMode();
+        }
+      });
       if (channelBuilder.idleTimeoutMillis != ManagedChannelImpl.IDLE_TIMEOUT_MILLIS_DISABLE) {
         numExpectedTasks += 1;
       }
@@ -816,6 +832,27 @@ public class ManagedChannelImplTest {
     createChannel(interceptor);
     assertNotNull(channel.newCall(method, CallOptions.DEFAULT));
     assertEquals(1, atomic.get());
+  }
+
+  @Test
+  public void clientCallTracerFactories() {
+    final Object tracer = new Object();
+    final Attributes.Key<Object> testTracerName = Attributes.Key.create("test tracer");
+    ClientCallTracer.Factory factory = new ClientCallTracer.Factory() {
+      @Override
+      public ClientCallTracer newClientCallTracer(MethodDescriptor<?, ?> method,
+          CallOptions callOptions) {
+        return new ClientCallTracer() {
+          @Override
+          public void getTracerAttributes(Attributes.Builder builder) {
+            builder.set(testTracerName, tracer);
+          }
+        };
+      }
+    };
+    createChannel(factory);
+    ClientCall<String, Integer> call = channel.newCall(method, CallOptions.DEFAULT);
+    assertThat(call.getTracerAttributes().get(testTracerName)).isSameInstanceAs(tracer);
   }
 
   @Test
