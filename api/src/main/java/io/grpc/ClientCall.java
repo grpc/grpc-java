@@ -279,4 +279,13 @@ public abstract class ClientCall<ReqT, RespT> {
   public Attributes getAttributes() {
     return Attributes.EMPTY;
   }
+
+  /**
+   * Returns tracer specific properties (if any) attached by tracing components.
+   *
+   * @return non-{@code null} attributes
+   */
+  public Attributes getTracerAttributes() {
+    return Attributes.EMPTY;
+  }
 }
