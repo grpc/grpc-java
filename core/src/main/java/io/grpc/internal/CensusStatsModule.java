@@ -138,12 +138,12 @@ public final class CensusStatsModule {
   }
 
   /**
-   * Creates a {@link ClientCallTracer} for a new call.
+   * Creates a {@link ClientCallFullLifecycleTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(
+  ClientCallFullLifecycleTracer newClientCallTracer(
       TagContext parentCtx, String fullMethodName) {
-    return new ClientCallTracer(this, parentCtx, fullMethodName);
+    return new ClientCallFullLifecycleTracer(this, parentCtx, fullMethodName);
   }
 
   /**
@@ -313,13 +313,19 @@ public final class CensusStatsModule {
     }
   }
 
+  /**
+   * Records stats for the full lifecycle of a {@link io.grpc.ClientCall}, from being created to
+   * being closed.
+   */
   @VisibleForTesting
-  static final class ClientCallTracer extends ClientStreamTracer.Factory {
+  static final class ClientCallFullLifecycleTracer extends ClientStreamTracer.Factory {
+
     @Nullable
-    private static final AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer>
+    private static final AtomicReferenceFieldUpdater<ClientCallFullLifecycleTracer, ClientTracer>
         streamTracerUpdater;
 
-    @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+    @Nullable
+    private static final AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> callEndedUpdater;
 
     /**
      * When using Atomic*FieldUpdater, some Samsung Android 5.0.x devices encounter a bug in their
@@ -327,14 +333,15 @@ public final class CensusStatsModule {
      * (potentially racy) direct updates of the volatile variables.
      */
     static {
-      AtomicReferenceFieldUpdater<ClientCallTracer, ClientTracer> tmpStreamTracerUpdater;
-      AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+      AtomicReferenceFieldUpdater<ClientCallFullLifecycleTracer,
+          ClientTracer> tmpStreamTracerUpdater;
+      AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> tmpCallEndedUpdater;
       try {
         tmpStreamTracerUpdater =
             AtomicReferenceFieldUpdater.newUpdater(
-                ClientCallTracer.class, ClientTracer.class, "streamTracer");
+                ClientCallFullLifecycleTracer.class, ClientTracer.class, "streamTracer");
         tmpCallEndedUpdater =
-            AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+            AtomicIntegerFieldUpdater.newUpdater(ClientCallFullLifecycleTracer.class, "callEnded");
       } catch (Throwable t) {
         logger.log(Level.SEVERE, "Creating atomic field updaters failed", t);
         tmpStreamTracerUpdater = null;
@@ -351,7 +358,8 @@ public final class CensusStatsModule {
     private final TagContext parentCtx;
     private final TagContext startCtx;
 
-    ClientCallTracer(CensusStatsModule module, TagContext parentCtx, String fullMethodName) {
+    ClientCallFullLifecycleTracer(CensusStatsModule module, TagContext parentCtx,
+        String fullMethodName) {
       this.module = checkNotNull(module);
       this.parentCtx = checkNotNull(parentCtx);
       TagValue methodTag = TagValue.create(fullMethodName);
@@ -685,7 +693,7 @@ public final class CensusStatsModule {
         MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
       // New RPCs on client-side inherit the tag context from the current Context.
       TagContext parentCtx = tagger.getCurrentTagContext();
-      final ClientCallTracer tracerFactory =
+      final ClientCallFullLifecycleTracer tracerFactory =
           newClientCallTracer(parentCtx, method.getFullMethodName());
       ClientCall<ReqT, RespT> call =
           next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));

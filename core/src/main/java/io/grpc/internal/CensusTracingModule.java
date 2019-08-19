@@ -19,14 +19,12 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
+import io.grpc.ClientCallTracer;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.Context;
-import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
-import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -37,7 +35,9 @@ import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.MessageEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
 import io.opencensus.trace.Status;
+import io.opencensus.trace.TraceId;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
 import io.opencensus.trace.unsafe.ContextUtils;
@@ -60,7 +60,16 @@ import javax.annotation.Nullable;
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
 
-  @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+  @VisibleForTesting
+  static final Attributes.Key<SpanId> SPAN_ID_ATTRIBUTES_KEY = Attributes.Key
+      .create("census-span-id");
+
+  @VisibleForTesting
+  static final Attributes.Key<TraceId> TRACE_ID_ATTRIBUTES_KEY = Attributes.Key
+      .create("census-trace-id");
+
+  @Nullable
+  private static final AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> callEndedUpdater;
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
 
@@ -70,11 +79,11 @@ final class CensusTracingModule {
    * (potentially racy) direct updates of the volatile variables.
    */
   static {
-    AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+    AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> tmpCallEndedUpdater;
     AtomicIntegerFieldUpdater<ServerTracer> tmpStreamClosedUpdater;
     try {
       tmpCallEndedUpdater =
-          AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+          AtomicIntegerFieldUpdater.newUpdater(ClientCallFullLifecycleTracer.class, "callEnded");
       tmpStreamClosedUpdater =
           AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
     } catch (Throwable t) {
@@ -89,8 +98,8 @@ final class CensusTracingModule {
   private final Tracer censusTracer;
   @VisibleForTesting
   final Metadata.Key<SpanContext> tracingHeader;
-  private final TracingClientInterceptor clientInterceptor = new TracingClientInterceptor();
   private final ServerTracerFactory serverTracerFactory = new ServerTracerFactory();
+  private final ClientCallTracerFactory clientCallTracerFactory = new ClientCallTracerFactory();
 
   CensusTracingModule(
       Tracer censusTracer, final BinaryFormat censusPropagationBinaryFormat) {
@@ -116,11 +125,12 @@ final class CensusTracingModule {
   }
 
   /**
-   * Creates a {@link ClientCallTracer} for a new call.
+   * Creates a {@link ClientCallFullLifecycleTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-    return new ClientCallTracer(parentSpan, method);
+  ClientCallFullLifecycleTracer newClientCallTracer(@Nullable Span parentSpan,
+      MethodDescriptor<?, ?> method) {
+    return new ClientCallFullLifecycleTracer(parentSpan, method);
   }
 
   /**
@@ -131,10 +141,11 @@ final class CensusTracingModule {
   }
 
   /**
-   * Returns the client interceptor that facilitates Census-based stats reporting.
+   * Returns the factory for creating {@link io.grpc.ClientCallTracer} instances that facilitate
+   * Census-based stats reporting.
    */
-  ClientInterceptor getClientInterceptor() {
-    return clientInterceptor;
+  ClientCallTracerFactory getClientCallTracerFactory() {
+    return clientCallTracerFactory;
   }
 
   @VisibleForTesting
@@ -220,56 +231,6 @@ final class CensusTracingModule {
       eventBuilder.setCompressedMessageSize(optionalWireSize);
     }
     span.addMessageEvent(eventBuilder.build());
-  }
-
-  @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
-    volatile int callEnded;
-
-    private final boolean isSampledToLocalTracing;
-    private final Span span;
-
-    ClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-      checkNotNull(method, "method");
-      this.isSampledToLocalTracing = method.isSampledToLocalTracing();
-      this.span =
-          censusTracer
-              .spanBuilderWithExplicitParent(
-                  generateTraceSpanName(false, method.getFullMethodName()),
-                  parentSpan)
-              .setRecordEvents(true)
-              .startSpan();
-    }
-
-    @Override
-    public ClientStreamTracer newClientStreamTracer(
-        ClientStreamTracer.StreamInfo info, Metadata headers) {
-      if (span != BlankSpan.INSTANCE) {
-        headers.discardAll(tracingHeader);
-        headers.put(tracingHeader, span.getContext());
-      }
-      return new ClientTracer(span);
-    }
-
-    /**
-     * Record a finished call and mark the current time as the end time.
-     *
-     * <p>Can be called from any thread without synchronization.  Calling it the second time or more
-     * is a no-op.
-     */
-    void callEnded(io.grpc.Status status) {
-      if (callEndedUpdater != null) {
-        if (callEndedUpdater.getAndSet(this, 1) != 0) {
-          return;
-        }
-      } else {
-        if (callEnded != 0) {
-          return;
-        }
-        callEnded = 1;
-      }
-      span.end(createEndSpanOptions(status, isSampledToLocalTracing));
-    }
   }
 
   private static final class ClientTracer extends ClientStreamTracer {
@@ -373,35 +334,72 @@ final class CensusTracingModule {
     }
   }
 
+  /**
+   * Traces the full lifecycle of a {@link io.grpc.ClientCall}, from being created to being closed.
+   */
   @VisibleForTesting
-  final class TracingClientInterceptor implements ClientInterceptor {
+  final class ClientCallFullLifecycleTracer extends io.grpc.ClientCallTracer {
+
+    private final boolean isSampledToLocalTracing;
+    private final Span span;
+    volatile int callEnded;
+
+    ClientCallFullLifecycleTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+      checkNotNull(method, "method");
+      this.isSampledToLocalTracing = method.isSampledToLocalTracing();
+      this.span =
+          censusTracer
+              .spanBuilderWithExplicitParent(
+                  generateTraceSpanName(false, method.getFullMethodName()),
+                  parentSpan)
+              .setRecordEvents(true)
+              .startSpan();
+    }
+
     @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      // New RPCs on client-side inherit the tracing context from the current Context.
-      // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
-      // as Tracer.getCurrentSpan() except when no value available when the return value is null
-      // for the direct access and BlankSpan when Tracer API is used.
-      final ClientCallTracer tracerFactory =
-          newClientCallTracer(ContextUtils.getValue(Context.current()), method);
-      ClientCall<ReqT, RespT> call =
-          next.newCall(
-              method,
-              callOptions.withStreamTracerFactory(tracerFactory));
-      return new SimpleForwardingClientCall<ReqT, RespT>(call) {
-        @Override
-        public void start(Listener<RespT> responseListener, Metadata headers) {
-          delegate().start(
-              new SimpleForwardingClientCallListener<RespT>(responseListener) {
-                @Override
-                public void onClose(io.grpc.Status status, Metadata trailers) {
-                  tracerFactory.callEnded(status);
-                  super.onClose(status, trailers);
-                }
-              },
-              headers);
+    public void getTracerAttributes(Attributes.Builder builder) {
+      builder.set(SPAN_ID_ATTRIBUTES_KEY, span.getContext().getSpanId());
+      builder.set(TRACE_ID_ATTRIBUTES_KEY, span.getContext().getTraceId());
+    }
+
+    /**
+     * Record a finished call and mark the current time as the end time.
+     *
+     * <p>Can be called from any thread without synchronization. Calling it the second time or more
+     * is a no-op.
+     */
+    @Override
+    public void callEnded(io.grpc.Status status) {
+      if (callEndedUpdater != null) {
+        if (callEndedUpdater.getAndSet(this, 1) != 0) {
+          return;
         }
-      };
+      } else {
+        if (callEnded != 0) {
+          return;
+        }
+        callEnded = 1;
+      }
+      span.end(createEndSpanOptions(status, isSampledToLocalTracing));
+    }
+
+    @Override
+    public ClientStreamTracer newClientStreamTracer(StreamInfo info, Metadata headers) {
+      if (span != BlankSpan.INSTANCE) {
+        headers.discardAll(tracingHeader);
+        headers.put(tracingHeader, span.getContext());
+      }
+      return new ClientTracer(span);
+    }
+  }
+
+  @VisibleForTesting
+  final class ClientCallTracerFactory implements ClientCallTracer.Factory {
+
+    @Override
+    public io.grpc.ClientCallTracer newClientCallTracer(MethodDescriptor<?, ?> method,
+        CallOptions callOptions) {
+      return new ClientCallFullLifecycleTracer(ContextUtils.getValue(Context.current()), method);
     }
   }
 
