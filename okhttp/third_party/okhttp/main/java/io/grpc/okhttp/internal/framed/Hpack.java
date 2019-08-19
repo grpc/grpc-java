@@ -47,6 +47,8 @@ final class Hpack {
   private static final int PREFIX_6_BITS = 0x3f;
   private static final int PREFIX_7_BITS = 0x7f;
 
+  private static final ByteString PSEUDO_PREFIX = ByteString.encodeUtf8(":");
+
   private static final int SETTINGS_HEADER_TABLE_SIZE = 4_096;
 
   /**
@@ -398,15 +400,17 @@ final class Hpack {
      * header blocks, we need to keep track of the smallest value in that interval.
      */
     private int smallestHeaderTableSizeSetting = Integer.MAX_VALUE;
-    private boolean emitDynamicTableSizeUpdate = false;
+    private boolean emitDynamicTableSizeUpdate;
     private int maxDynamicTableByteCount;
 
     // Visible for testing.
     io.grpc.okhttp.internal.framed.Header[] dynamicTable = new io.grpc.okhttp.internal.framed.Header[8];
+    // Visible for testing.
+    int dynamicTableHeaderCount;
+
     // Array is populated back to front, so new entries always have lowest index.
-    int nextDynamicTableIndex = dynamicTable.length - 1;
-    int dynamicTableHeaderCount = 0;
-    int dynamicTableByteCount = 0;
+    private int nextDynamicTableIndex = dynamicTable.length - 1;
+    private int dynamicTableByteCount;
 
     Writer(Buffer out) {
       this(SETTINGS_HEADER_TABLE_SIZE, true, out);
@@ -478,7 +482,7 @@ final class Hpack {
           writeByteString(name);
           writeByteString(value);
           insertIntoDynamicTable(header);
-        } else if (name.startsWith(Header.PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
+        } else if (name.startsWith(PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
           // Follow Chromes lead - only include the :authority pseudo header, but exclude all other
           // pseudo headers. Literal Header Field without Indexing - Indexed Name.
           writeInt(headerNameIndex, PREFIX_4_BITS, 0);
