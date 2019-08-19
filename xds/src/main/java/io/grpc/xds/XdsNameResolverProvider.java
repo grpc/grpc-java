@@ -19,7 +19,6 @@ package io.grpc.xds;
 import com.google.common.base.Preconditions;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
-import io.grpc.internal.GrpcUtil;
 import java.net.URI;
 
 /**
@@ -49,7 +48,7 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
           targetPath,
           targetUri);
       String name = targetPath.substring(1);
-      return new XdsNameResolver(name, args, GrpcUtil.SHARED_CHANNEL_EXECUTOR);
+      return new XdsNameResolver(name, args);
     }
     return null;
   }

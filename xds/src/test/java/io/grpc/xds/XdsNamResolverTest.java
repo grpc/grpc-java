@@ -27,15 +27,12 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
-import io.grpc.internal.FakeClock;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.internal.SharedResourceHolder.Resource;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,17 +66,6 @@ public class XdsNamResolverTest {
           .build();
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
-  private final FakeClock fakeExecutor = new FakeClock();
-  private final Resource<Executor> fakeExecutorResource =
-      new Resource<Executor>() {
-        @Override
-        public Executor create() {
-          return fakeExecutor.getScheduledExecutorService();
-        }
-
-        @Override
-        public void close(Executor instance) {}
-      };
 
   @Mock private NameResolver.Listener2 mockListener;
   @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
@@ -115,19 +101,12 @@ public class XdsNamResolverTest {
   public void resolve_hardcodedResult() {
     XdsNameResolver resolver = newResolver("foo.googleapis.com");
     resolver.start(mockListener);
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
     verify(mockListener).onResult(resultCaptor.capture());
-    assertHardCodedServiceConfig(resultCaptor.getValue());
-
-    resolver.refresh();
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
 
     resolver = newResolver("bar.googleapis.com");
     resolver.start(mockListener);
-    assertThat(fakeExecutor.runDueTasks()).isEqualTo(1);
-    verify(mockListener, times(3)).onResult(resultCaptor.capture());
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
   }
 
@@ -148,6 +127,6 @@ public class XdsNamResolverTest {
   }
 
   private XdsNameResolver newResolver(String name) {
-    return new XdsNameResolver(name, args, fakeExecutorResource);
+    return new XdsNameResolver(name, args);
   }
 }

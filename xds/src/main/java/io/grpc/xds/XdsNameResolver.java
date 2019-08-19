@@ -23,16 +23,12 @@ import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
 import io.grpc.Status;
-import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
-import io.grpc.internal.SharedResourceHolder;
-import io.grpc.internal.SharedResourceHolder.Resource;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.Executor;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
@@ -53,22 +49,15 @@ public final class XdsNameResolver extends NameResolver {
           + "]}";
 
   private final String authority;
-  private final Resource<Executor> executorResource;
-  private final SynchronizationContext syncContext;
 
-  private boolean resolving;
   private boolean shutdown;
-  private Executor executor;
-  private Listener2 listener;
 
-  XdsNameResolver(String name, Args args, Resource<Executor> executorResource) {
+  XdsNameResolver(String name, Args args) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         Preconditions.checkNotNull(
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-    this.executorResource = Preconditions.checkNotNull(executorResource, "executorResource");
-    this.syncContext = Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
   }
 
   @Override
@@ -76,11 +65,27 @@ public final class XdsNameResolver extends NameResolver {
     return authority;
   }
 
+  @SuppressWarnings("unchecked")
   @Override
   public void start(final Listener2 listener) {
-    this.listener = listener;
-    executor = SharedResourceHolder.get(executorResource);
-    resolve();
+    Map<String, ?> config;
+    try {
+      config = (Map<String, ?>) JsonParser.parse(SERVICE_CONFIG_HARDCODED);
+    } catch (IOException e) {
+      listener.onError(
+          Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
+      return;
+    }
+    Attributes attrs =
+        Attributes.newBuilder()
+            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
+            .build();
+    ResolutionResult result =
+        ResolutionResult.newBuilder()
+            .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
+            .setAttributes(attrs)
+            .build();
+    listener.onResult(result);
   }
 
   @Override
@@ -89,53 +94,5 @@ public final class XdsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (executor != null) {
-      executor = SharedResourceHolder.release(executorResource, executor);
-    }
-  }
-
-  @Override
-  public void refresh() {
-    Preconditions.checkState(listener != null, "not started");
-    resolve();
-  }
-
-  @SuppressWarnings("unchecked")
-  private void resolve() {
-    if (resolving || shutdown) {
-      return;
-    }
-    resolving = true;
-    executor.execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            Map<String, ?> config;
-            try {
-              config = (Map<String, ?>) JsonParser.parse(SERVICE_CONFIG_HARDCODED);
-            } catch (IOException e) {
-              listener.onError(
-                  Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
-              return;
-            }
-            Attributes attrs =
-                Attributes.newBuilder()
-                    .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-                    .build();
-            ResolutionResult result =
-                ResolutionResult.newBuilder()
-                    .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
-                    .setAttributes(attrs)
-                    .build();
-            listener.onResult(result);
-            syncContext.execute(
-                new Runnable() {
-                  @Override
-                  public void run() {
-                    resolving = false;
-                  }
-                });
-          }
-        });
   }
 }
