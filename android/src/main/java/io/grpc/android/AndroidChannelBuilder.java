@@ -101,8 +101,10 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
   /**
    * Creates a new builder, which delegates to the given ManagedChannelBuilder.
    *
-   * <p>The builder being delegated to can still be modified and configuration changes will
-   * propagate to the channel built by this builder.
+   * <p>The provided {@code builder} becomes "owned" by AndroidChannelBuilder. The caller should
+   * not modify the provided builder and AndroidChannelBuilder may modify it. That implies reusing
+   * the provided builder to build another channel may result with unexpected configurations. That
+   * usage should be discouraged.
    *
    * @since 1.24.0
    */
