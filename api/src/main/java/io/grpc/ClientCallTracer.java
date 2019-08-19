@@ -32,6 +32,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * @since 1.24.0
  */
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
 @ThreadSafe
 public abstract class ClientCallTracer extends ClientStreamTracer.Factory {
 

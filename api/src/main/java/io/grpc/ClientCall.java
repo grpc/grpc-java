@@ -285,6 +285,7 @@ public abstract class ClientCall<ReqT, RespT> {
    *
    * @return non-{@code null} attributes
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
   public Attributes getTracerAttributes() {
     return Attributes.EMPTY;
   }

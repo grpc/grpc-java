@@ -136,6 +136,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.24.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
   public abstract T clientCallTracerFactories(ClientCallTracer.Factory... factories);
 
   /**
