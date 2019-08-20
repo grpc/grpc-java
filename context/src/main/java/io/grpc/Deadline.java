@@ -55,6 +55,9 @@ public final class Deadline implements Comparable<Deadline> {
    * Create a deadline that will expire at the specified offset based on the {@link #getSystemTicker
    * system ticker}.
    *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
+   *
    * @param duration A non-negative duration.
    * @param units The time unit for the duration.
    * @return A new deadline.
@@ -65,6 +68,9 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Create a deadline that will expire at the specified offset based on the given {@link Ticker}.
+   *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
    *
    * <p><strong>CAUTION</strong>: Only deadlines created with the same {@link Ticker} instance can
    * be compared by methods like {@link #minimum}, {@link #isBefore} and {@link #compareTo}.  Custom
@@ -141,6 +147,9 @@ public final class Deadline implements Comparable<Deadline> {
 
   /**
    * Create a new deadline that is offset from {@code this}.
+   *
+   * <p>If the given offset is extraordinarily long, say 100 years, the actual deadline created
+   * might saturate.
    */
   // TODO(ejona): This method can cause deadlines to grow too far apart. For example:
   // Deadline.after(100 * 365, DAYS).offset(100 * 365, DAYS) would be less than
