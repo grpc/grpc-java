@@ -93,7 +93,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
     <extension>
       <groupId>kr.motd.maven</groupId>
       <artifactId>os-maven-plugin</artifactId>
-      <version>1.6.2.Final</version>
+      <version>1.6.2</version>
     </extension>
   </extensions>
   <plugins>
