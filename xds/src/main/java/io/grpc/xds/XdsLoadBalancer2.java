@@ -54,12 +54,12 @@ final class XdsLoadBalancer2 extends LoadBalancer {
         cancelFallbackTimer();
       }
 
-      childBalancerWorked = true;
+      adsWorked = true;
     }
 
     @Override
     public void onError() {
-      if (!childBalancerWorked) {
+      if (!adsWorked) {
         // start Fallback-at-Startup immediately
         useFallbackPolicy();
       } else if (childPolicyHasBeenReady) {
@@ -77,10 +77,10 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private LoadBalancer fallbackLb;
   @Nullable
   private ResolvedAddresses resolvedAddresses;
-  // Scheduled only once.  Never reset.
+  // Scheduled only once.  Never reset to null.
   @CheckForNull
   private ScheduledHandle fallbackTimer;
-  private boolean childBalancerWorked;
+  private boolean adsWorked;
   private boolean childPolicyHasBeenReady;
 
   // TODO(zdapeng): Add XdsLoadBalancer2(Helper helper) with default factories
@@ -108,7 +108,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     }
 
     if (fallbackTimer == null) {
-      class FallbackTask implements Runnable {
+      class EnterFallbackTask implements Runnable {
 
         @Override
         public void run() {
@@ -117,7 +117,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
       }
 
       fallbackTimer = helper.getSynchronizationContext().schedule(
-          new FallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
+          new EnterFallbackTask(), FALLBACK_TIMEOUT_MS, TimeUnit.MILLISECONDS,
           helper.getScheduledExecutorService());
     }
 
@@ -203,7 +203,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
       if (newState == ConnectivityState.READY) {
         checkState(
-            childBalancerWorked,
+            adsWorked,
             "channel goes to READY before the load balancer even worked");
         childPolicyHasBeenReady = true;
         cancelFallback();
@@ -226,7 +226,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
 
     @Override
     public void updateBalancingState(ConnectivityState newState, SubchannelPicker newPicker) {
-      checkNotNull(balancer, "there is a bug");
+      checkNotNull(balancer, "balancer not set yet");
       if (balancer != fallbackLb) {
         // ignore updates from a misbehaving shutdown fallback balancer
         return;
