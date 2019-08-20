@@ -94,9 +94,9 @@ public final class AndroidChannelBuilderTest {
   }
 
   @Test
-  public void fromBuilderConstructor() {
+  public void usingBuilderConstructor() {
     OkHttpChannelBuilder wrappedBuilder = OkHttpChannelBuilder.forTarget("target");
-    AndroidChannelBuilder androidBuilder = AndroidChannelBuilder.fromBuilder(wrappedBuilder);
+    AndroidChannelBuilder androidBuilder = AndroidChannelBuilder.usingBuilder(wrappedBuilder);
     assertThat(androidBuilder.delegate()).isSameInstanceAs(wrappedBuilder);
   }
 
