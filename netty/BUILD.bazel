@@ -28,10 +28,13 @@ java_library(
     ],
 )
 
-# Not actually shaded, but mirrors the shaded dependencies included in the
-# artifact on Maven Central for usage with maven_install's override_targets.
+# Mirrors the dependencies included in the artifact on Maven Central for usage
+# with maven_install's override_targets. Purposefully does not export any
+# symbols, as it should only be used as a dep for pre-compiled binaries on
+# Maven Central. Not actually shaded; libraries should not be referencing
+# unstable APIs so there should not be any references to the shaded package.
 java_library(
-    name = "shaded",
+    name = "shaded_maven",
     visibility = ["//visibility:public"],
-    exports = ["//netty/shaded"],
+    runtime_deps = ["//netty/shaded"],
 )
