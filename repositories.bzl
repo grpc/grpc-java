@@ -3,6 +3,40 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 
+# For use with maven_install's override_targets.
+# maven_install(
+#     ...
+#     override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+# )
+#
+# If you have your own overrides as well, you can use:
+#     override_targets = dict(
+#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+#         "your.target:artifact": "@//third_party/artifact",
+#     )
+#
+# To combine OVERRIDE_TARGETS from multiple libraries:
+#     override_targets = dict(
+#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
+#         OTHER_OVERRIDE_TARGETS.items(),
+#         "your.target:artifact": "@//third_party/artifact",
+#     )
+IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
+    "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
+    "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
+    "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
+    "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
+    "io.grpc:grpc-core": "@io_grpc_grpc_java//core_maven",
+    "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
+    "io.grpc:grpc-netty": "@io_grpc_grpc_java//netty",
+    "io.grpc:grpc-netty-shaded": "@io_grpc_grpc_java//netty:shaded_maven",
+    "io.grpc:grpc-okhttp": "@io_grpc_grpc_java//okhttp",
+    "io.grpc:grpc-protobuf": "@io_grpc_grpc_java//protobuf",
+    "io.grpc:grpc-protobuf-lite": "@io_grpc_grpc_java//protobuf-lite",
+    "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
+    "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
+}
+
 def grpc_java_repositories(
         omit_bazel_skylib = False,
         omit_com_google_android_annotations = False,
