@@ -27,3 +27,11 @@ java_library(
         "@io_perfmark_perfmark_api//jar",
     ],
 )
+
+# Not actually shaded, but mirrors the shaded dependencies included in the
+# artifact on Maven Central for usage with maven_install's override_targets.
+java_library(
+    name = "shaded",
+    visibility = ["//visibility:public"],
+    exports = ["//netty/shaded"],
+)

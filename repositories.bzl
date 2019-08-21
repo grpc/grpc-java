@@ -25,6 +25,7 @@ def grpc_java_repositories(
         omit_io_netty_buffer = False,
         omit_io_netty_common = False,
         omit_io_netty_transport = False,
+        omit_io_netty_transport_native_epoll = False,
         omit_io_netty_codec = False,
         omit_io_netty_codec_socks = False,
         omit_io_netty_codec_http = False,
@@ -84,6 +85,8 @@ def grpc_java_repositories(
         io_netty_common()
     if not omit_io_netty_transport:
         io_netty_transport()
+    if not omit_io_netty_transport_native_epoll:
+        io_netty_transport_native_epoll()
     if not omit_io_netty_codec:
         io_netty_codec()
     if not omit_io_netty_codec_socks:
@@ -380,6 +383,15 @@ def io_netty_transport():
         artifact = "io.netty:netty-transport:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "5f826976585a49aae9b495290125a60a59dc6887fbe4c70da3182a83fb8bfa88",
+        licenses = ["notice"],  # Apache 2.0
+    )
+
+def io_netty_transport_native_epoll():
+    jvm_maven_import_external(
+        name = "io_netty_netty_transport_native_epoll",
+        artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.38.Final",
+        server_urls = ["http://central.maven.org/maven2"],
+        artifact_sha256 = "7933467e1cfc37bc6fb3f22af471ed69cb66bebaceab73d2041772bb6a38218a",
         licenses = ["notice"],  # Apache 2.0
     )
 
