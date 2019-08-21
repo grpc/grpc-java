@@ -36,12 +36,10 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.Callable;
-import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLSocketFactory;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -98,27 +96,6 @@ public final class AndroidChannelBuilderTest {
     OkHttpChannelBuilder wrappedBuilder = OkHttpChannelBuilder.forTarget("target");
     AndroidChannelBuilder androidBuilder = AndroidChannelBuilder.usingBuilder(wrappedBuilder);
     assertThat(androidBuilder.delegate()).isSameInstanceAs(wrappedBuilder);
-  }
-
-  @Test
-  public void transportExecutor() {
-    AndroidChannelBuilder.forTarget("target")
-        .transportExecutor(
-            new Executor() {
-              @Override
-              public void execute(Runnable r) {}
-            });
-  }
-
-  @Test
-  public void sslSocketFactory() {
-    AndroidChannelBuilder.forTarget("target")
-        .sslSocketFactory((SSLSocketFactory) SSLSocketFactory.getDefault());
-  }
-
-  @Test
-  public void scheduledExecutorService() {
-    AndroidChannelBuilder.forTarget("target").scheduledExecutorService(new ScheduledExecutorImpl());
   }
 
   @Test
