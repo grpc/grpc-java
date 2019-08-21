@@ -60,7 +60,8 @@ import javax.annotation.Nullable;
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
 
-  @Nullable private static final AtomicIntegerFieldUpdater<ClientCallTracer> callEndedUpdater;
+  @Nullable
+  private static final AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> callEndedUpdater;
 
   @Nullable private static final AtomicIntegerFieldUpdater<ServerTracer> streamClosedUpdater;
 
@@ -70,11 +71,11 @@ final class CensusTracingModule {
    * (potentially racy) direct updates of the volatile variables.
    */
   static {
-    AtomicIntegerFieldUpdater<ClientCallTracer> tmpCallEndedUpdater;
+    AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> tmpCallEndedUpdater;
     AtomicIntegerFieldUpdater<ServerTracer> tmpStreamClosedUpdater;
     try {
       tmpCallEndedUpdater =
-          AtomicIntegerFieldUpdater.newUpdater(ClientCallTracer.class, "callEnded");
+          AtomicIntegerFieldUpdater.newUpdater(ClientCallFullLifecycleTracer.class, "callEnded");
       tmpStreamClosedUpdater =
           AtomicIntegerFieldUpdater.newUpdater(ServerTracer.class, "streamClosed");
     } catch (Throwable t) {
@@ -116,11 +117,12 @@ final class CensusTracingModule {
   }
 
   /**
-   * Creates a {@link ClientCallTracer} for a new call.
+   * Creates a {@link ClientCallFullLifecycleTracer} for a new call.
    */
   @VisibleForTesting
-  ClientCallTracer newClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
-    return new ClientCallTracer(parentSpan, method);
+  ClientCallFullLifecycleTracer newClientCallTracer(@Nullable Span parentSpan,
+      MethodDescriptor<?, ?> method) {
+    return new ClientCallFullLifecycleTracer(parentSpan, method);
   }
 
   /**
@@ -223,13 +225,13 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class ClientCallTracer extends ClientStreamTracer.Factory {
+  final class ClientCallFullLifecycleTracer extends ClientStreamTracer.Factory {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;
     private final Span span;
 
-    ClientCallTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
+    ClientCallFullLifecycleTracer(@Nullable Span parentSpan, MethodDescriptor<?, ?> method) {
       checkNotNull(method, "method");
       this.isSampledToLocalTracing = method.isSampledToLocalTracing();
       this.span =
@@ -382,7 +384,7 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final ClientCallTracer tracerFactory =
+      final ClientCallFullLifecycleTracer tracerFactory =
           newClientCallTracer(ContextUtils.getValue(Context.current()), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
