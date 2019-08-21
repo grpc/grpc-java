@@ -18,6 +18,8 @@ package io.grpc.cronet;
 
 import io.grpc.CallOptions;
 import io.grpc.Internal;
+import java.util.Collection;
+import java.util.Collections;
 
 /**
  * Internal accessor class for call options using with the Cronet transport. This is intended for
@@ -32,5 +34,18 @@ public final class InternalCronetCallOptions {
 
   public static CallOptions withAnnotation(CallOptions callOptions, Object annotation) {
     return CronetClientStream.withAnnotation(callOptions, annotation);
+  }
+
+  /**
+   * Returns Cronet annotations for gRPC included in the given {@code callOptions}. Annotations
+   * are attached via {@link #withAnnotation(CallOptions, Object)}.
+   */
+  public static Collection<Object> getAnnotations(CallOptions callOptions) {
+    Collection<Object> annotations =
+        callOptions.getOption(CronetClientStream.CRONET_ANNOTATIONS_KEY);
+    if (annotations == null) {
+      annotations = Collections.emptyList();
+    }
+    return annotations;
   }
 }
