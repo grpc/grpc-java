@@ -49,7 +49,9 @@ public final class StatsTraceContext {
    */
   public static StatsTraceContext newClientContext(
       final CallOptions callOptions, final Attributes transportAttrs, Metadata headers) {
-    List<ClientStreamTracer.Factory> factories = callOptions.getStreamTracerFactories();
+    List<ClientStreamTracer.Factory> factories =
+        new ArrayList<>(callOptions.getStreamTracerFactories());
+    factories.addAll(callOptions.getClientCallTracers());
     if (factories.isEmpty()) {
       return NOOP;
     }
