@@ -33,6 +33,7 @@ import com.google.common.base.MoreObjects;
 import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.CompressorRegistry;
@@ -504,6 +505,15 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       return stream.getAttributes();
     }
     return Attributes.EMPTY;
+  }
+
+  @Override
+  public Attributes getTracerAttributes() {
+    Attributes.Builder attrsBuilder = Attributes.newBuilder();
+    for (ClientCallTracer tracer : callOptions.getClientCallTracers()) {
+      tracer.getTracerAttributes(attrsBuilder);
+    }
+    return attrsBuilder.build();
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
