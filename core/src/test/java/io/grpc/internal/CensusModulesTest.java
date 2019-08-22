@@ -50,6 +50,7 @@ import io.grpc.ClientInterceptor;
 import io.grpc.ClientInterceptors;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
+import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerCall;
@@ -57,12 +58,14 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.testing.StatsTestUtils;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagContextBinarySerializer;
 import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import io.grpc.internal.testing.StatsTestUtils.MockableSpan;
-import io.grpc.testing.GrpcServerRule;
+import io.grpc.testing.GrpcCleanupRule;
 import io.opencensus.common.Function;
 import io.opencensus.common.Functions;
 import io.opencensus.contrib.grpc.metrics.RpcMeasureConstants;
@@ -89,6 +92,7 @@ import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
 import io.opencensus.trace.propagation.SpanContextParseException;
 import io.opencensus.trace.unsafe.ContextUtils;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
 import java.util.List;
@@ -177,7 +181,7 @@ public class CensusModulesTest {
   private final SpanBuilder spyServerSpanBuilder = spy(new MockableSpan.Builder());
 
   @Rule
-  public final GrpcServerRule grpcServerRule = new GrpcServerRule().directExecutor();
+  public final GrpcCleanupRule grpcCleanupRule = new GrpcCleanupRule();
 
   @Mock
   private Tracer tracer;
@@ -221,32 +225,43 @@ public class CensusModulesTest {
   }
 
   @Test
-  public void clientInterceptorNoCustomTag() {
+  public void clientInterceptorNoCustomTag() throws IOException {
     testClientInterceptors(false);
   }
 
   @Test
-  public void clientInterceptorCustomTag() {
+  public void clientInterceptorCustomTag() throws IOException {
     testClientInterceptors(true);
   }
 
   // Test that Census ClientInterceptors uses the TagContext and Span out of the current Context
   // to create the ClientCallFullLifecycleTracer, and that it intercepts
   // ClientCall.Listener.onClose() to call ClientCallFullLifecycleTracer.callEnded().
-  private void testClientInterceptors(boolean nonDefaultContext) {
-    grpcServerRule.getServiceRegistry().addService(
-        ServerServiceDefinition.builder("package1.service2").addMethod(
+  private void testClientInterceptors(boolean nonDefaultContext) throws IOException {
+    String serverName = InProcessServerBuilder.generateName();
+    grpcCleanupRule.register(InProcessServerBuilder.forName(serverName).directExecutor()
+        .addService(ServerServiceDefinition.builder("package1.service2").addMethod(
             method, new ServerCallHandler<String, String>() {
-                @Override
-                public ServerCall.Listener<String> startCall(
-                    ServerCall<String, String> call, Metadata headers) {
-                  call.sendHeaders(new Metadata());
-                  call.sendMessage("Hello");
-                  call.close(
-                      Status.PERMISSION_DENIED.withDescription("No you don't"), new Metadata());
-                  return mockServerCallListener;
-                }
-              }).build());
+              @Override
+              public ServerCall.Listener<String> startCall(
+                  ServerCall<String, String> call, Metadata headers) {
+                call.sendHeaders(new Metadata());
+                call.sendMessage("Hello");
+                call.close(
+                    Status.PERMISSION_DENIED.withDescription("No you don't"), new Metadata());
+                return mockServerCallListener;
+              }
+            }).build()).build().start());
+
+    InProcessChannelBuilder builder =
+        InProcessChannelBuilder
+            .forName(serverName)
+            .directExecutor();
+
+    // Disable default Census stats/tracing module and used the stubbed ones for test.
+    builder.setStatsEnabled(false);
+    builder.setTracingEnabled(false);
+    ManagedChannel channel = grpcCleanupRule.register(builder.build());
 
     final AtomicReference<CallOptions> capturedCallOptions = new AtomicReference<>();
     ClientInterceptor callOptionsCaptureInterceptor = new ClientInterceptor() {
@@ -259,7 +274,7 @@ public class CensusModulesTest {
       };
     Channel interceptedChannel =
         ClientInterceptors.intercept(
-            grpcServerRule.getChannel(), callOptionsCaptureInterceptor,
+            channel, callOptionsCaptureInterceptor,
             censusStats.getClientInterceptor(), censusTracing.getClientInterceptor());
     ClientCall<String, String> call;
     if (nonDefaultContext) {
@@ -285,14 +300,22 @@ public class CensusModulesTest {
       call = interceptedChannel.newCall(method, CALL_OPTIONS);
     }
 
+    // Tracer properties are available.
+    Attributes tracerAttrs = call.getTracerAttributes();
+    assertEquals(spyClientSpan.getContext().getSpanId(),
+        tracerAttrs.get(CensusTracingModule.SPAN_ID_ATTRIBUTES_KEY));
+    assertEquals(spyClientSpan.getContext().getTraceId(),
+        tracerAttrs.get(CensusTracingModule.TRACE_ID_ATTRIBUTES_KEY));
+
     // The interceptor adds tracer factory to CallOptions
     assertEquals("customvalue", capturedCallOptions.get().getOption(CUSTOM_OPTION));
-    assertEquals(2, capturedCallOptions.get().getStreamTracerFactories().size());
+    assertEquals(1, capturedCallOptions.get().getClientCallTracers().size());
+    assertEquals(1, capturedCallOptions.get().getStreamTracerFactories().size());
     assertTrue(
-        capturedCallOptions.get().getStreamTracerFactories().get(0)
+        capturedCallOptions.get().getClientCallTracers().get(0)
             instanceof CensusTracingModule.ClientCallFullLifecycleTracer);
     assertTrue(
-        capturedCallOptions.get().getStreamTracerFactories().get(1)
+        capturedCallOptions.get().getStreamTracerFactories().get(0)
             instanceof CensusStatsModule.ClientCallFullLifecycleTracer);
 
     // Make the call

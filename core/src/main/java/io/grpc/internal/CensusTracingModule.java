@@ -19,9 +19,11 @@ package io.grpc.internal;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
+import io.grpc.ClientCallTracer;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
@@ -37,7 +39,9 @@ import io.opencensus.trace.MessageEvent;
 import io.opencensus.trace.MessageEvent.Type;
 import io.opencensus.trace.Span;
 import io.opencensus.trace.SpanContext;
+import io.opencensus.trace.SpanId;
 import io.opencensus.trace.Status;
+import io.opencensus.trace.TraceId;
 import io.opencensus.trace.Tracer;
 import io.opencensus.trace.propagation.BinaryFormat;
 import io.opencensus.trace.unsafe.ContextUtils;
@@ -59,6 +63,14 @@ import javax.annotation.Nullable;
  */
 final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
+
+  @VisibleForTesting
+  static final Attributes.Key<SpanId> SPAN_ID_ATTRIBUTES_KEY = Attributes.Key
+      .create("census-span-id");
+
+  @VisibleForTesting
+  static final Attributes.Key<TraceId> TRACE_ID_ATTRIBUTES_KEY = Attributes.Key
+      .create("census-trace-id");
 
   @Nullable
   private static final AtomicIntegerFieldUpdater<ClientCallFullLifecycleTracer> callEndedUpdater;
@@ -225,7 +237,7 @@ final class CensusTracingModule {
   }
 
   @VisibleForTesting
-  final class ClientCallFullLifecycleTracer extends ClientStreamTracer.Factory {
+  final class ClientCallFullLifecycleTracer extends ClientCallTracer {
     volatile int callEnded;
 
     private final boolean isSampledToLocalTracing;
@@ -251,6 +263,12 @@ final class CensusTracingModule {
         headers.put(tracingHeader, span.getContext());
       }
       return new ClientTracer(span);
+    }
+
+    @Override
+    public void getTracerAttributes(Attributes.Builder builder) {
+      builder.set(SPAN_ID_ATTRIBUTES_KEY, span.getContext().getSpanId());
+      builder.set(TRACE_ID_ATTRIBUTES_KEY, span.getContext().getTraceId());
     }
 
     /**
@@ -384,12 +402,12 @@ final class CensusTracingModule {
       // Safe usage of the unsafe trace API because CONTEXT_SPAN_KEY.get() returns the same value
       // as Tracer.getCurrentSpan() except when no value available when the return value is null
       // for the direct access and BlankSpan when Tracer API is used.
-      final ClientCallFullLifecycleTracer tracerFactory =
+      final ClientCallFullLifecycleTracer clientcallTracer =
           newClientCallTracer(ContextUtils.getValue(Context.current()), method);
       ClientCall<ReqT, RespT> call =
           next.newCall(
               method,
-              callOptions.withStreamTracerFactory(tracerFactory));
+              callOptions.withClientCallTracer(clientcallTracer));
       return new SimpleForwardingClientCall<ReqT, RespT>(call) {
         @Override
         public void start(Listener<RespT> responseListener, Metadata headers) {
@@ -397,7 +415,7 @@ final class CensusTracingModule {
               new SimpleForwardingClientCallListener<RespT>(responseListener) {
                 @Override
                 public void onClose(io.grpc.Status status, Metadata trailers) {
-                  tracerFactory.callEnded(status);
+                  clientcallTracer.callEnded(status);
                   super.onClose(status, trailers);
                 }
               },
