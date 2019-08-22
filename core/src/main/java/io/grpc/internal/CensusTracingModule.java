@@ -29,6 +29,7 @@ import io.grpc.ClientStreamTracer;
 import io.grpc.Context;
 import io.grpc.ForwardingClientCall.SimpleForwardingClientCall;
 import io.grpc.ForwardingClientCallListener.SimpleForwardingClientCallListener;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.ServerStreamTracer;
@@ -65,10 +66,12 @@ final class CensusTracingModule {
   private static final Logger logger = Logger.getLogger(CensusTracingModule.class.getName());
 
   @VisibleForTesting
+  @Grpc.TracerAttr
   static final Attributes.Key<SpanId> SPAN_ID_ATTRIBUTES_KEY = Attributes.Key
       .create("census-span-id");
 
   @VisibleForTesting
+  @Grpc.TracerAttr
   static final Attributes.Key<TraceId> TRACE_ID_ATTRIBUTES_KEY = Attributes.Key
       .create("census-trace-id");
 

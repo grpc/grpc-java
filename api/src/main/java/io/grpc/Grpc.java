@@ -67,7 +67,7 @@ public final class Grpc {
    * Annotation for tracer attributes. It follows the annotation semantics defined by
    * {@link Attributes}.
    */
-  @ExperimentalApi("")
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/4972")
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface TracerAttr {}

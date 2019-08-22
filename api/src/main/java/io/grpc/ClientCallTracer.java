@@ -32,5 +32,5 @@ public abstract class ClientCallTracer extends ClientStreamTracer.Factory {
    *
    * @param builder receiver of tracer information.
    */
-  public void getTracerAttributes(Attributes.Builder builder) {}
+  public void getTracerAttributes(@Grpc.TracerAttr Attributes.Builder builder) {}
 }
