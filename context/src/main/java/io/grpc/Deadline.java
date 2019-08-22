@@ -16,6 +16,7 @@
 
 package io.grpc;
 
+import java.util.Arrays;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -229,6 +230,30 @@ public final class Deadline implements Comparable<Deadline> {
       return 1;
     }
     return 0;
+  }
+
+  @Override
+  public int hashCode() {
+    return Arrays.asList(this.ticker, this.deadlineNanos).hashCode();
+  }
+
+  @Override
+  public boolean equals(final Object o) {
+    if (o == this) {
+      return true;
+    }
+    if (!(o instanceof Deadline)) {
+      return false;
+    }
+
+    final Deadline other = (Deadline) o;
+    if (this.ticker == null ? other.ticker != null : this.ticker != other.ticker) {
+      return false;
+    }
+    if (this.deadlineNanos != other.deadlineNanos) {
+      return false;
+    }
+    return true;
   }
 
   /**
