@@ -237,6 +237,36 @@ public class CallOptionsTest {
   }
 
   @Test
+  public void withClientCallTracer() {
+    ClientCallTracer tracer1 = mock(ClientCallTracer.class);
+    ClientCallTracer tracer2 = mock(ClientCallTracer.class);
+
+    CallOptions opts1 = CallOptions.DEFAULT.withClientCallTracer(tracer1);
+    CallOptions opts2 = opts1.withClientCallTracer(tracer2);
+    CallOptions opts3 = opts2.withClientCallTracer(tracer2);
+
+    assertThat(opts1.getClientCallTracers()).containsExactly(tracer1);
+    assertThat(opts2.getClientCallTracers()).containsExactly(tracer1, tracer2)
+        .inOrder();
+    assertThat(opts3.getClientCallTracers())
+        .containsExactly(tracer1, tracer2, tracer2).inOrder();
+
+    try {
+      CallOptions.DEFAULT.getClientCallTracers().add(tracer1);
+      fail("Should have thrown. The list should be unmodifiable.");
+    } catch (UnsupportedOperationException e) {
+      // Expected
+    }
+
+    try {
+      opts2.getClientCallTracers().clear();
+      fail("Should have thrown. The list should be unmodifiable.");
+    } catch (UnsupportedOperationException e) {
+      // Expected
+    }
+  }
+
+  @Test
   public void getWaitForReady() {
     assertNull(CallOptions.DEFAULT.getWaitForReady());
     assertSame(CallOptions.DEFAULT.withWaitForReady().getWaitForReady(), Boolean.TRUE);

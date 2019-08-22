@@ -66,6 +66,9 @@ public final class CallOptions {
   // Unmodifiable list
   private List<ClientStreamTracer.Factory> streamTracerFactories = Collections.emptyList();
 
+  // Unmodifiable list
+  private List<ClientCallTracer> clientCallTracers = Collections.emptyList();
+
   /**
    * Opposite to fail fast.
    */
@@ -234,6 +237,32 @@ public final class CallOptions {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2861")
   public List<ClientStreamTracer.Factory> getStreamTracerFactories() {
     return streamTracerFactories;
+  }
+
+  /**
+   * Returns a new {@code CallOptions} with a {@link ClientCallTracer} in addition to the existing
+   * client call tracers.
+   *
+   * <p>This method doesn't replace or try to de-duplicate existing client call tracers.
+   *
+   * @since 1.24.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
+  public CallOptions withClientCallTracer(ClientCallTracer tracer) {
+    CallOptions newOptions = new CallOptions(this);
+    List<ClientCallTracer> newList = new ArrayList<>(clientCallTracers.size() + 1);
+    newList.addAll(clientCallTracers);
+    newList.add(tracer);
+    newOptions.clientCallTracers = Collections.unmodifiableList(newList);
+    return newOptions;
+  }
+
+  /**
+   * Returns an immutable list of {@link ClientCallTracer}s.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
+  public List<ClientCallTracer> getClientCallTracers() {
+    return clientCallTracers;
   }
 
   /**
@@ -432,6 +461,7 @@ public final class CallOptions {
     maxInboundMessageSize = other.maxInboundMessageSize;
     maxOutboundMessageSize = other.maxOutboundMessageSize;
     streamTracerFactories = other.streamTracerFactories;
+    clientCallTracers = other.clientCallTracers;
   }
 
   @Override
@@ -447,6 +477,7 @@ public final class CallOptions {
         .add("maxInboundMessageSize", maxInboundMessageSize)
         .add("maxOutboundMessageSize", maxOutboundMessageSize)
         .add("streamTracerFactories", streamTracerFactories)
+        .add("clientCallTracers", clientCallTracers)
         .toString();
   }
 }
