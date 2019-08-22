@@ -62,4 +62,13 @@ public final class Grpc {
   @Retention(RetentionPolicy.SOURCE)
   @Documented
   public @interface TransportAttr {}
+
+  /**
+   * Annotation for tracer attributes. It follows the annotation semantics defined by
+   * {@link Attributes}.
+   */
+  @ExperimentalApi("")
+  @Retention(RetentionPolicy.SOURCE)
+  @Documented
+  public @interface TracerAttr {}
 }

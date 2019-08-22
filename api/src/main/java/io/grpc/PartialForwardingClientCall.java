@@ -60,6 +60,11 @@ abstract class PartialForwardingClientCall<ReqT, RespT> extends ClientCall<ReqT,
   }
 
   @Override
+  public Attributes getTracerAttributes() {
+    return delegate().getTracerAttributes();
+  }
+
+  @Override
   public String toString() {
     return MoreObjects.toStringHelper(this).add("delegate", delegate()).toString();
   }

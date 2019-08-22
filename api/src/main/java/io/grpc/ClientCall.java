@@ -279,4 +279,16 @@ public abstract class ClientCall<ReqT, RespT> {
   public Attributes getAttributes() {
     return Attributes.EMPTY;
   }
+
+  /**
+   * Returns tracer specific properties (if any) attached by tracing components via
+   * {@link ClientCallTracer}. Tracer properties are available as soon as the call is created.
+   *
+   * @return non-{@code null} attributes
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6080")
+  @Grpc.TracerAttr
+  public Attributes getTracerAttributes() {
+    return Attributes.EMPTY;
+  }
 }
