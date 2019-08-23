@@ -20,6 +20,7 @@ import static com.google.common.base.Charsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 
 import com.google.common.io.CharStreams;
+import io.grpc.Deadline;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 import io.grpc.alts.ComputeEngineChannelBuilder;
@@ -44,7 +45,6 @@ public final class GrpclbFallbackTestClient {
   public static void main(String[] args) throws Exception {
     final GrpclbFallbackTestClient client = new GrpclbFallbackTestClient();
     client.parseArgs(args);
-    client.setUp();
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       @SuppressWarnings("CatchAndPrintStackTrace")
@@ -152,15 +152,17 @@ public final class GrpclbFallbackTestClient {
     return builder.build();
   }
 
-  void setUp() {
+  void initStub() {
     channel = createChannel();
     blockingStub = TestServiceGrpc.newBlockingStub(channel);
   }
 
   private void tearDown() {
     try {
-      channel.shutdownNow();
-      channel.awaitTermination(1, TimeUnit.SECONDS);
+      if (channel != null) {
+        channel.shutdownNow();
+        channel.awaitTermination(1, TimeUnit.SECONDS);
+      }
     } catch (Exception ex) {
       throw new RuntimeException(ex);
     }
@@ -179,33 +181,16 @@ public final class GrpclbFallbackTestClient {
     assertEquals(0, exitCode);
   }
 
-  private enum RpcMode {
-    FailFast,
-    WaitForReady,
-  }
-
-  private GrpclbRouteType doRpcAndGetPath(
-      TestServiceGrpc.TestServiceBlockingStub blockingStub,
-      int deadlineSeconds,
-      RpcMode rpcMode) {
-    logger.info("doRpcAndGetPath deadlineSeconds: " + deadlineSeconds + " rpcMode: "
-        + rpcMode);
+  private GrpclbRouteType doRpcAndGetPath(Deadline deadline) {
+    logger.info("doRpcAndGetPath deadline: " + deadline);
     final SimpleRequest request = SimpleRequest.newBuilder()
         .setFillGrpclbRouteType(true)
         .build();
     GrpclbRouteType result = GrpclbRouteType.GRPCLB_ROUTE_TYPE_UNKNOWN;
     try {
-      SimpleResponse response = null;
-      if (rpcMode == RpcMode.WaitForReady) {
-        response = blockingStub
-          .withDeadlineAfter(deadlineSeconds, TimeUnit.SECONDS)
-          .withWaitForReady()
-          .unaryCall(request);
-      } else {
-        response = blockingStub
-          .withDeadlineAfter(deadlineSeconds, TimeUnit.SECONDS)
-          .unaryCall(request);
-      }
+      SimpleResponse response = blockingStub
+        .withDeadline(deadline)
+        .unaryCall(request);
       result = response.getGrpclbRouteType();
     } catch (StatusRuntimeException ex) {
       logger.warning("doRpcAndGetPath failed. Status: " + ex);
@@ -220,34 +205,12 @@ public final class GrpclbFallbackTestClient {
     return result;
   }
 
-  private void doFallbackBeforeStartupTest(
-      String breakLbAndBackendConnsCmd, int deadlineSeconds) throws Exception {
-    runShellCmd(breakLbAndBackendConnsCmd);
-    for (int i = 0; i < 30; i++) {
+  private void waitForFallbackAndDoRPCs(Deadline fallbackDeadline) throws Exception {
+    int fallbackRetryCount = 0;
+    boolean fellBack = false;
+    while (!fallbackDeadline.isExpired()) {
       GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
-          blockingStub, deadlineSeconds, RpcMode.FailFast);
-      assertEquals(GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK, grpclbRouteType);
-      Thread.sleep(1000);
-    }
-  }
-
-  private void runFastFallbackBeforeStartup() throws Exception {
-    doFallbackBeforeStartupTest(unrouteLbAndBackendAddrsCmd, 9);
-  }
-
-  private void runSlowFallbackBeforeStartup() throws Exception {
-    doFallbackBeforeStartupTest(blackholeLbAndBackendAddrsCmd, 20);
-  }
-
-  private void doFallbackAfterStartupTest(
-      String breakLbAndBackendConnsCmd) throws Exception {
-    assertEquals(
-        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
-        doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast));
-    runShellCmd(breakLbAndBackendConnsCmd);
-    for (int i = 0; i < 40; i++) {
-      GrpclbRouteType grpclbRouteType = doRpcAndGetPath(
-          blockingStub, 1, RpcMode.WaitForReady);
+        Deadline.after(1, TimeUnit.SECONDS));
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND) {
         throw new AssertionError("Got grpclb route type backend. Backends are "
             + "supposed to be unreachable, so this test is broken");
@@ -255,26 +218,56 @@ public final class GrpclbFallbackTestClient {
       if (grpclbRouteType == GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK) {
         logger.info("Made one successful RPC to a fallback. Now expect the "
             + "same for the rest.");
+	fellBack = true;
         break;
       } else {
-        logger.info("Retryable RPC failure on iteration: " + i);
-        continue;
+        logger.info("Retryable RPC failure on iteration: " + fallbackRetryCount);
       }
+      fallbackRetryCount++;
+    }
+    if (!fellBack) {
+      throw new AssertionError("Didn't fall back within deadline");
     }
     for (int i = 0; i < 30; i++) {
       assertEquals(
           GrpclbRouteType.GRPCLB_ROUTE_TYPE_FALLBACK,
-          doRpcAndGetPath(blockingStub, 20, RpcMode.FailFast));
+          doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
       Thread.sleep(1000);
     }
   }
 
+  private void runFastFallbackBeforeStartup() throws Exception {
+    runShellCmd(unrouteLbAndBackendAddrsCmd);
+    final Deadline fallbackDeadline = Deadline.after(5, TimeUnit.SECONDS);
+    initStub();
+    waitForFallbackAndDoRPCs(fallbackDeadline);
+  }
+
+  private void runSlowFallbackBeforeStartup() throws Exception {
+    runShellCmd(blackholeLbAndBackendAddrsCmd);
+    final Deadline fallbackDeadline = Deadline.after(20, TimeUnit.SECONDS);
+    initStub();
+    waitForFallbackAndDoRPCs(fallbackDeadline);
+  }
+
   private void runFastFallbackAfterStartup() throws Exception {
-    doFallbackAfterStartupTest(unrouteLbAndBackendAddrsCmd);
+    initStub();
+    assertEquals(
+        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
+        doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
+    runShellCmd(unrouteLbAndBackendAddrsCmd);
+    final Deadline fallbackDeadline = Deadline.after(40, TimeUnit.SECONDS);
+    waitForFallbackAndDoRPCs(fallbackDeadline);
   }
 
   private void runSlowFallbackAfterStartup() throws Exception {
-    doFallbackAfterStartupTest(blackholeLbAndBackendAddrsCmd);
+    initStub();
+    assertEquals(
+        GrpclbRouteType.GRPCLB_ROUTE_TYPE_BACKEND,
+        doRpcAndGetPath(Deadline.after(20, TimeUnit.SECONDS)));
+    runShellCmd(blackholeLbAndBackendAddrsCmd);
+    final Deadline fallbackDeadline = Deadline.after(40, TimeUnit.SECONDS);
+    waitForFallbackAndDoRPCs(fallbackDeadline);
   }
 
   private void run() throws Exception {
