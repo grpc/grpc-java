@@ -49,6 +49,7 @@ sourceSets {
             srcDir 'third_party/envoy/src/main/proto'
             srcDir 'third_party/gogoproto/src/main/proto'
             srcDir 'third_party/protoc-gen-validate/src/main/proto'
+            srcDir 'third_party/udpa/src/main/proto'
         }
     }
 }
@@ -64,6 +65,7 @@ shadowJar {
     dependencies {
         include(project(':grpc-xds'))
     }
+    relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'validate', 'io.grpc.xds.shaded.com.lyft.pgv.validate'
     exclude "**/*.proto"
