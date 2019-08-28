@@ -31,6 +31,7 @@ import com.google.common.base.Preconditions;
 import io.grpc.CallOptions;
 import io.grpc.ClientCall;
 import io.grpc.ConnectivityState;
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -88,6 +89,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
    *
    * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} instead.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
   @Deprecated
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
     return usingBuilder(builder);
