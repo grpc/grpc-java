@@ -603,8 +603,8 @@ public final class CronetClientStreamTest {
   public void withAnnotation() {
     Object annotation1 = new Object();
     Object annotation2 = new Object();
-    CallOptions callOptions = CronetCallOptions.withAnnotation(CallOptions.DEFAULT, annotation1);
-    callOptions = CronetCallOptions.withAnnotation(callOptions, annotation2);
+    CallOptions callOptions = CronetClientStream.withAnnotation(CallOptions.DEFAULT, annotation1);
+    callOptions = CronetClientStream.withAnnotation(callOptions, annotation2);
 
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     CronetClientStream stream =
