@@ -16,8 +16,8 @@
 
 package io.grpc.xds;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import com.google.common.annotations.VisibleForTesting;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.Context;
 import io.grpc.Contexts;
 import io.grpc.ExperimentalApi;
