@@ -18,27 +18,17 @@
 set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=6ff0bce8ff417a252cde4d04dfb9cba2bab463d8
-GIT_REPO="https://github.com/envoyproxy/envoy.git"
-GIT_BASE_DIR=envoy
-SOURCE_PROTO_BASE_DIR=envoy/api
+VERSION=94324803a497c8f76dbc78df393ef629d3a9f3c3
+GIT_REPO="https://github.com/cncf/udpa.git"
+GIT_BASE_DIR=udpa
+SOURCE_PROTO_BASE_DIR=udpa
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
-envoy/api/v2/core/address.proto
-envoy/api/v2/core/base.proto
-envoy/api/v2/core/health_check.proto
-envoy/api/v2/core/http_uri.proto
-envoy/api/v2/discovery.proto
-envoy/api/v2/eds.proto
-envoy/api/v2/endpoint/endpoint.proto
-envoy/api/v2/endpoint/load_report.proto
-envoy/service/discovery/v2/ads.proto
-envoy/service/load_stats/v2/lrs.proto
-envoy/type/percent.proto
-envoy/type/range.proto
+udpa/data/orca/v1/orca_load_report.proto
+udpa/service/orca/v1/orca.proto
 )
 
-# clone the envoy github repo in a tmp directory
+# clone the udpa github repo in a tmp directory
 tmpdir="$(mktemp -d)"
 pushd "${tmpdir}"
 rm -rf $GIT_BASE_DIR
@@ -48,7 +38,6 @@ git checkout $VERSION
 popd
 
 cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
-cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
 
 rm -rf "${TARGET_PROTO_BASE_DIR}"
 mkdir -p "${TARGET_PROTO_BASE_DIR}"
