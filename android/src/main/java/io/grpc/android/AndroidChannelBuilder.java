@@ -51,7 +51,6 @@ import javax.annotation.concurrent.GuardedBy;
  *
  * @since 1.12.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
@@ -90,6 +89,7 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
    *
    * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} instead.
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
   @Deprecated
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
     return usingBuilder(builder);
