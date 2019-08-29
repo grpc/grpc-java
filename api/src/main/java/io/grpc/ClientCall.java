@@ -105,6 +105,10 @@ public abstract class ClientCall<ReqT, RespT> {
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
    * required to be thread-safe.
+   *
+   * <p>If an implementation is used for a {@link ClientInterceptor}, a similar restriction of
+   * {@link ForwardingClientCallListener#onClose(Status, Metadata)} may apply to the {@link
+   * #onClose(Status, Metadata)} method.
    */
   public abstract static class Listener<T> {
 

@@ -23,7 +23,8 @@ package io.grpc;
 public abstract class ForwardingClientCallListener<RespT>
     extends PartialForwardingClientCallListener<RespT> {
   /**
-   * Returns the delegated {@code ClientCall.Listener}.
+   * Returns the delegated {@code ClientCall.Listener}. Never returns null. Never throws an
+   * exception.
    */
   @Override
   protected abstract ClientCall.Listener<RespT> delegate();
@@ -31,6 +32,32 @@ public abstract class ForwardingClientCallListener<RespT>
   @Override
   public void onMessage(RespT message) {
     delegate().onMessage(message);
+  }
+
+  /**
+   * {@inheritDoc}.
+   *
+   * <p>It is ensured to call {@code delegate().onClose()} with either the same or different
+   * arguments. Failing to do so, such as spuriously throwing a {@code RuntimeException} or
+   * erroneously returning early, will end up the client call silently hanging forever without an
+   * easy clue to debug. An example of a safe implementation is as follows:
+   * <pre>
+   *   {@literal @}Override
+   *   public void onClose(Status status, Metadata trailers) {
+   *     Status newStatus = status;
+   *     Metadata newTrailers = trailers;
+   *     try {
+   *       // some implementation logic
+   *     } finally {
+   *       delegate().onClose(newStatus, newTrailers);
+   *     }
+   *     // some other implementation logic
+   *   }
+   * </pre>
+   */
+  @Override
+  public void onClose(Status status, Metadata trailers) {
+    delegate().onClose(status, trailers);
   }
 
   /**
