@@ -393,7 +393,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void jwtAccessCredentialsInRequestMetadata() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    RequestInfo requestInfo = new RequestInfoImpl();
+    RequestInfo requestInfo = new RequestInfoImpl("example.com:123");
 
     ServiceAccountJwtAccessCredentials jwtCreds =
         ServiceAccountJwtAccessCredentials.newBuilder()
@@ -402,10 +402,8 @@ public class GoogleAuthLibraryCallCredentialsTest {
             .setPrivateKey(pair.getPrivate())
             .setPrivateKeyId("test-private-key-id")
             .build();
-    URI uri =
-        GoogleAuthLibraryCallCredentials
-            .serviceUri(requestInfo.getAuthority(), requestInfo.getMethodDescriptor());
-    List<String> expectedAuthMetadata = jwtCreds.getRequestMetadata(uri).get("Authorization");
+    List<String> expectedAuthMetadata = jwtCreds
+        .getRequestMetadata(new URI("https://example.com:123/a.service")).get("Authorization");
 
     ServiceAccountCredentials credentials =
         ServiceAccountCredentials.newBuilder()
