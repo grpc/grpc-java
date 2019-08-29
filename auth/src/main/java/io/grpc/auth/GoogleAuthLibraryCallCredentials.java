@@ -154,7 +154,8 @@ final class GoogleAuthLibraryCallCredentials extends io.grpc.CallCredentials2 {
    * for a service to know that the JWT was intended for it. The URI will commonly be verified with
    * a simple string equality check.
    */
-  private static URI serviceUri(String authority, MethodDescriptor<?, ?> method)
+  @VisibleForTesting
+  static URI serviceUri(String authority, MethodDescriptor<?, ?> method)
       throws StatusException {
     // Always use HTTPS, by definition.
     final String scheme = "https";
