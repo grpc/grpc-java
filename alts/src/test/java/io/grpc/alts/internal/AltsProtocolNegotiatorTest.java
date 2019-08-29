@@ -95,7 +95,6 @@ public class AltsProtocolNegotiatorTest {
   private EmbeddedChannel channel;
   private Throwable caughtException;
 
-
   private TsiPeer mockedTsiPeer = new TsiPeer(Collections.<Property<?>>emptyList());
   private AltsAuthContext mockedAltsContext =
       new AltsAuthContext(
