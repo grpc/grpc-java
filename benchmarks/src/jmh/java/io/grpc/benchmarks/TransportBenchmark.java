@@ -67,7 +67,7 @@ public class TransportBenchmark {
     INPROCESS, NETTY, NETTY_LOCAL, NETTY_EPOLL, OKHTTP
   }
 
-  @Param({"INPROCESS", "NETTY", "NETTY_LOCAL", "OKHTTP"})
+  @Param({"INPROCESS", "NETTY", "OKHTTP"})
   public Transport transport;
   @Param({"true", "false"})
   public boolean direct;
@@ -313,6 +313,8 @@ public class TransportBenchmark {
     }
   }
 
+  // NOTE: Causes OOM with NETTY_LOCAL. Probably a flow control problem in NETTY_LOCAL, but we
+  // aren't too concerned.
   @Benchmark
   @BenchmarkMode(Mode.Throughput)
   @Threads(10)
