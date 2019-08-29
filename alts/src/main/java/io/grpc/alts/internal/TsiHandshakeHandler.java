@@ -48,6 +48,7 @@ public final class TsiHandshakeHandler extends ProtocolNegotiationHandler {
   private final HandshakeValidator handshakeValidator;
   private ChannelHandlerContext ctx;
 
+  /** Constructs a TsiHandshakeHandler. */
   public TsiHandshakeHandler(
       ChannelHandler next, NettyTsiHandshaker handshaker, HandshakeValidator handshakeValidator) {
     super(next);
