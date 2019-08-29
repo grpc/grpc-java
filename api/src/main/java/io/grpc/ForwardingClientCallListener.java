@@ -35,7 +35,7 @@ public abstract class ForwardingClientCallListener<RespT>
   }
 
   /**
-   * {@inheritDoc}.
+   * {@inheritDoc}
    *
    * <p>It is ensured to call {@code delegate().onClose()} with either the same or different
    * arguments. Failing to do so, such as spuriously throwing a {@code RuntimeException} or
