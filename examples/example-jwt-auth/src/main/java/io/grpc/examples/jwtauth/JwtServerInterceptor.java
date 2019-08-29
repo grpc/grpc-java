@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.authentication;
+package io.grpc.examples.jwtauth;
 
 import io.grpc.Context;
 import io.grpc.Contexts;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.authentication;
+package io.grpc.examples.jwtauth;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;

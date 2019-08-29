@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package io.grpc.examples.authentication;
+package io.grpc.examples.jwtauth;
 
 import io.grpc.CallCredentials;
 import io.grpc.ManagedChannel;
