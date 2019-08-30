@@ -510,7 +510,7 @@ public class AltsProtocolNegotiatorTest {
     }
   }
 
-  /** Kicks off negotiation of the server.  This is a hack workaround until server uses WBAEH.*/
+  /** Kicks off negotiation of the server. */
   private static final class KickNegotiationHandler extends ChannelInboundHandlerAdapter {
 
     private final ChannelHandler next;
