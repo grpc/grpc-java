@@ -336,7 +336,7 @@ interface LocalityStore {
 
     @Nullable
     private static ConnectivityState aggregateState(
-        @Nullable ConnectivityState overallState, @Nullable ConnectivityState childState) {
+        @Nullable ConnectivityState overallState, ConnectivityState childState) {
       if (overallState == null) {
         return childState;
       }
@@ -402,9 +402,6 @@ interface LocalityStore {
 
       if (!dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random, loadStatsStore);
-        if (state == null) {
-          state = IDLE;
-        }
       }
 
       if (state != null) {
@@ -494,7 +491,7 @@ interface LocalityStore {
       private final OrcaReportingHelperWrapper orcaReportingHelperWrapper;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
-      private ConnectivityState currentChildState = null;
+      private ConnectivityState currentChildState = CONNECTING;
 
       ChildHelper(final XdsLocality locality, final ClientLoadCounter counter,
           OrcaOobUtil orcaOobUtil) {

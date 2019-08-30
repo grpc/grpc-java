@@ -19,8 +19,8 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -420,6 +420,7 @@ public class LocalityStoreTest {
     Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
 
     assertThat(loadBalancers).hasSize(3);
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
@@ -436,7 +437,8 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz3")).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
     assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
-    verify(helper, never()).updateBalancingState(
+    // verify no more updateBalancingState except the initial CONNECTING state
+    verify(helper, times(1)).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
     // subchannel12 goes to CONNECTING
@@ -450,7 +452,8 @@ public class LocalityStoreTest {
     childHelpers.get("sz1").updateBalancingState(CONNECTING, subchannelPicker12);
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor12 =
         ArgumentCaptor.forClass(SubchannelPicker.class);
-    verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor12.capture());
+    verify(helper, times(2)).updateBalancingState(
+        same(CONNECTING), subchannelPickerCaptor12.capture());
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
     assertThat(subchannelPickerCaptor12.getValue().pickSubchannel(pickSubchannelArgs))
         .isEqualTo(PickResult.withNoResult());
@@ -645,7 +648,7 @@ public class LocalityStoreTest {
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
         ArgumentCaptor.forClass(SubchannelPicker.class);
-    verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
+    verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor.capture());
 
     int times = 0;
     InOrder inOrder = inOrder(loadStatsStore);
@@ -729,7 +732,7 @@ public class LocalityStoreTest {
 
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
         ArgumentCaptor.forClass(SubchannelPicker.class);
-    verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
+    verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor.capture());
     doReturn(999_999).when(random).nextInt(1000_000);
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).isDrop())
         .isTrue();
