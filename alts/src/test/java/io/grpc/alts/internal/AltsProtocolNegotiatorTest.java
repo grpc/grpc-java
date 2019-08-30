@@ -16,6 +16,7 @@
 
 package io.grpc.alts.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
@@ -30,12 +31,14 @@ import io.grpc.InternalChannelz;
 import io.grpc.ManagedChannel;
 import io.grpc.SecurityLevel;
 import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
+import io.grpc.alts.internal.AltsProtocolNegotiator.ServerAltsProtocolNegotiator;
 import io.grpc.alts.internal.TsiFrameProtector.Consumer;
 import io.grpc.alts.internal.TsiPeer.Property;
 import io.grpc.internal.FixedObjectPool;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ObjectPool;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
+import io.grpc.netty.InternalProtocolNegotiationEvent;
 import io.grpc.netty.NettyChannelBuilder;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
@@ -46,6 +49,7 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http2.DefaultHttp2Connection;
@@ -90,8 +94,6 @@ public class AltsProtocolNegotiatorTest {
 
   private EmbeddedChannel channel;
   private Throwable caughtException;
-
-  private ChannelHandler handler;
 
   private TsiPeer mockedTsiPeer = new TsiPeer(Collections.<Property<?>>emptyList());
   private AltsAuthContext mockedAltsContext =
@@ -145,9 +147,11 @@ public class AltsProtocolNegotiatorTest {
     ManagedChannel fakeChannel = NettyChannelBuilder.forTarget("localhost:8080").build();
     ObjectPool<Channel> fakeChannelPool = new FixedObjectPool<Channel>(fakeChannel);
     LazyChannel lazyFakeChannel = new LazyChannel(fakeChannelPool);
-    handler =
-        new AltsProtocolNegotiator.ServerAltsProtocolNegotiator(handshakerFactory, lazyFakeChannel)
-            .newHandler(grpcHandler);
+    ChannelHandler altsServerHandler = new ServerAltsProtocolNegotiator(
+        handshakerFactory, lazyFakeChannel)
+        .newHandler(grpcHandler);
+    // On real server, WBAEH fires default ProtocolNegotiationEvent. KickNH provides this behavior.
+    ChannelHandler handler = new KickNegotiationHandler(altsServerHandler);
     channel = new EmbeddedChannel(uncaughtExceptionHandler, handler);
   }
 
@@ -503,6 +507,23 @@ public class AltsProtocolNegotiatorTest {
     @Override
     public void destroy() {
       delegate.destroy();
+    }
+  }
+
+  /** Kicks off negotiation of the server. */
+  private static final class KickNegotiationHandler extends ChannelInboundHandlerAdapter {
+
+    private final ChannelHandler next;
+
+    KickNegotiationHandler(ChannelHandler next) {
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      super.handlerAdded(ctx);
+      ctx.pipeline().replace(ctx.name(), /*newName= */ null, next);
+      ctx.pipeline().fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
     }
   }
 }
