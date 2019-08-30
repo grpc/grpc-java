@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -52,6 +53,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
@@ -71,6 +73,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
@@ -125,6 +128,7 @@ public class LocalityStoreTest {
   private final Map<String, LoadBalancer> loadBalancers = new HashMap<>();
   private final Map<String, Helper> childHelpers = new HashMap<>();
   private final Map<String, FakeOrcaReportingHelperWrapper> childHelperWrappers = new HashMap<>();
+  private final FakeClock fakeClock = new FakeClock();
 
   private final LoadBalancerProvider lbProvider = new LoadBalancerProvider() {
 
@@ -208,6 +212,7 @@ public class LocalityStoreTest {
   public void setUp() {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     when(orcaOobUtil.newOrcaReportingHelperWrapper(any(Helper.class),
         any(OrcaOobReportListener.class)))
         .thenAnswer(new Answer<OrcaReportingHelperWrapper>() {
@@ -481,7 +486,7 @@ public class LocalityStoreTest {
     }
     assertThat(pickedReadySubchannels).containsExactly(subchannel31, subchannel12);
 
-    // update with new addressed
+    // update with new addresses
     localityInfo1 =
         new LocalityInfo(ImmutableList.of(lbEndpoint11), 1);
     LocalityInfo localityInfo4 =
@@ -491,7 +496,6 @@ public class LocalityStoreTest {
     localityStore.updateLocalityStore(localityInfoMap);
 
     assertThat(loadBalancers).hasSize(4);
-    verify(loadBalancers.get("sz3")).shutdown();
     verify(loadBalancers.get("sz2"), times(2))
         .handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag21, eag22);
@@ -504,7 +508,110 @@ public class LocalityStoreTest {
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
 
+    fakeClock.forwardTime(14, TimeUnit.MINUTES);
+    verify(loadBalancers.get("sz3"), never()).shutdown();
+    fakeClock.forwardTime(1, TimeUnit.MINUTES);
+    verify(loadBalancers.get("sz3")).shutdown();
+
     verify(random, never()).nextInt(1000_000);
+  }
+
+  @Test
+  public void updateLoaclityStore_deactivateAndReactivate() {
+    localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+    LocalityInfo localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
+    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
+
+    final Subchannel subchannel1 = mock(Subchannel.class);
+    SubchannelPicker subchannelPicker1 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel1);
+      }
+    };
+    childHelpers.get("sz1").updateBalancingState(READY, subchannelPicker1);
+    final Subchannel subchannel3 = mock(Subchannel.class);
+    SubchannelPicker subchannelPicker3 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel3);
+      }
+    };
+    childHelpers.get("sz3").updateBalancingState(READY, subchannelPicker3);
+
+    // update localities, removing sz1, sz2, keeping sz3, and adding sz4
+    LocalityInfo localityInfo4 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4);
+    localityInfoMap = ImmutableMap.of(locality3, localityInfo3, locality4, localityInfo4);
+    localityStore.updateLocalityStore(localityInfoMap);
+
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor = ArgumentCaptor.forClass(null);
+    // helper updated multiple times. Don't care how many times, just capture the latest picker
+    verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+    pickerFactory.nextIndex = 0;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+        .isEqualTo(subchannel3);
+
+    // verify no traffic will go to deactivated locality
+    final Subchannel subchannel2 = mock(Subchannel.class);
+    SubchannelPicker subchannelPicker2 = new SubchannelPicker() {
+      @Override
+      public PickResult pickSubchannel(PickSubchannelArgs args) {
+        return PickResult.withSubchannel(subchannel2);
+      }
+    };
+    childHelpers.get("sz2").updateBalancingState(READY, subchannelPicker2);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+    pickerFactory.nextIndex = 0;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+        .isEqualTo(subchannel3);
+
+    // update localities, reactivating sz1
+    localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality3, localityInfo3, locality4, localityInfo4);
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
+    pickerFactory.nextIndex = 0;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+        .isEqualTo(subchannel1);
+    pickerFactory.nextIndex = 1;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+        .isEqualTo(subchannel3);
+
+    // delayed deletion timer expires, no reactivation
+    fakeClock.forwardTime(15, TimeUnit.MINUTES);
+    verify(loadBalancers.get("sz1"), never()).shutdown();
+    LoadBalancer oldBalancer2 = loadBalancers.get("sz2");
+    verify(oldBalancer2).shutdown();
+    // update localities, re-adding sz2, keeping sz1, and removing sz3, sz4
+    localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2);
+    localityStore.updateLocalityStore(localityInfoMap);
+    verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
+    pickerFactory.nextIndex = 0;
+    assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
+        .isEqualTo(subchannel1);
+    assertThat(fakeClock.getPendingTasks()).hasSize(2); // sz3, sz4 pending removal
+
+    localityStore.reset();
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
   @Test

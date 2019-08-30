@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
@@ -51,6 +52,7 @@ import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -81,6 +83,7 @@ interface LocalityStore {
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
+    private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;
 
     private final Helper helper;
     private final PickerFactory pickerFactory;
@@ -90,7 +93,8 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
+    private LocalityMap localityMap =
+        LocalityMap.of(ImmutableMap.<XdsLocality, LocalityLbInfo>of());
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -174,7 +178,7 @@ interface LocalityStore {
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
       // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
+      for (LocalityLbInfo localityLbInfo : localityMap.localityLbInfos()) {
         // This will probably trigger childHelper.updateBalancingState
         localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
       }
@@ -182,26 +186,28 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (XdsLocality locality : localityMap.keySet()) {
-        localityMap.get(locality).shutdown();
-        loadStatsStore.removeLocality(locality);
+      for (XdsLocality locality : localityMap.localities()) {
+        localityMap.getLocalityLbInfo(locality).shutdown();
+        if (!localityMap.getLocalityLbInfo(locality).isDeactivated()) {
+          loadStatsStore.removeLocality(locality);
+        }
       }
-      localityMap = ImmutableMap.of();
+      localityMap = LocalityMap.of(ImmutableMap.<XdsLocality, LocalityLbInfo>of());
     }
 
     // This is triggered by EDS response.
     @Override
     public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
-      Set<XdsLocality> oldLocalities = localityMap.keySet();
+      Set<XdsLocality> oldLocalities = localityMap.localities();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
       Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
 
       final Set<XdsLocality> toRemove = new HashSet<>();
       for (XdsLocality oldLocality : oldLocalities) {
-        if (!newLocalities.contains(oldLocality)) {
+        if (!newLocalities.contains(oldLocality)
+            && !localityMap.getLocalityLbInfo(oldLocality).isDeactivated()) {
+          deactivate(oldLocality);
           toRemove.add(oldLocality);
-          // No graceful transition until a high-level lb graceful transition design is available.
-          localityMap.get(oldLocality).shutdown();
         }
       }
 
@@ -214,7 +220,13 @@ interface LocalityStore {
         LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
+          LocalityLbInfo oldLocalityLbInfo = localityMap.getLocalityLbInfo(newLocality);
+
+          if (oldLocalityLbInfo.isDeactivated()) {
+            oldLocalityLbInfo.reactivate();
+            loadStatsStore.addLocality(newLocality);
+          }
+
           childHelper = oldLocalityLbInfo.childHelper;
           localityLbInfo =
               new LocalityLbInfo(
@@ -249,7 +261,14 @@ interface LocalityStore {
         }
         newState = aggregateState(newState, childHelper.currentChildState);
       }
-      localityMap = Collections.unmodifiableMap(updatedLocalityMap);
+
+      // append deactivated localities to the end of localityMap
+      for (XdsLocality locality : oldLocalities) {
+        if (localityMap.getLocalityLbInfo(locality).isDeactivated()) {
+          updatedLocalityMap.put(locality, localityMap.getLocalityLbInfo(locality));
+        }
+      }
+      localityMap = LocalityMap.of(updatedLocalityMap);
 
       updatePicker(newState, childPickers);
 
@@ -273,6 +292,35 @@ interface LocalityStore {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
+    private void deactivate(final XdsLocality locality) {
+      if (!localityMap.contains(locality)
+          || localityMap.getLocalityLbInfo(locality).isDeactivated()) {
+        return;
+      }
+
+      final LocalityLbInfo localityLbInfo = localityMap.getLocalityLbInfo(locality);
+      class DeletionTask implements Runnable {
+
+        @Override
+        public void run() {
+          localityLbInfo.shutdown();
+
+          // remove the locality from localityMap
+          Map<XdsLocality, LocalityLbInfo> map = localityMap.toMutableMap();
+          map.remove(locality);
+          localityMap = LocalityMap.of(map);
+        }
+      }
+
+      localityLbInfo.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
+          new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
+          TimeUnit.MINUTES, helper.getScheduledExecutorService());
+
+      updateChildState(
+          locality, localityLbInfo.childHelper.currentChildState,
+          localityLbInfo.childHelper.currentChildPicker);
+    }
+
     @Override
     public LoadStatsStore getLoadStatsStore() {
       return loadStatsStore;
@@ -281,7 +329,7 @@ interface LocalityStore {
     @Override
     public void updateOobMetricsReportInterval(long reportIntervalNano) {
       metricsReportIntervalNano = reportIntervalNano;
-      for (LocalityLbInfo lbInfo : localityMap.values()) {
+      for (LocalityLbInfo lbInfo : localityMap.localityLbInfos()) {
         lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
       }
     }
@@ -306,15 +354,15 @@ interface LocalityStore {
 
     private void updateChildState(
         XdsLocality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (!localityMap.containsKey(locality)) {
+      if (!localityMap.contains(locality)) {
         return;
       }
 
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
-      for (XdsLocality l : localityMap.keySet()) {
-        LocalityLbInfo localityLbInfo = localityMap.get(l);
+      for (XdsLocality l : localityMap.localities()) {
+        LocalityLbInfo localityLbInfo = localityMap.getLocalityLbInfo(l);
         ConnectivityState childState;
         SubchannelPicker childPicker;
         if (l.equals(locality)) {
@@ -324,11 +372,14 @@ interface LocalityStore {
           childState = localityLbInfo.childHelper.currentChildState;
           childPicker = localityLbInfo.childHelper.currentChildPicker;
         }
-        overallState = aggregateState(overallState, childState);
 
-        if (READY == childState) {
-          childPickers.add(
-              new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
+        if (!localityMap.getLocalityLbInfo(l).isDeactivated()) {
+          overallState = aggregateState(overallState, childState);
+
+          if (READY == childState) {
+            childPickers.add(
+                new WeightedChildPicker(localityLbInfo.localityWeight, childPicker));
+          }
         }
       }
 
@@ -361,6 +412,41 @@ interface LocalityStore {
       }
     }
 
+    private static final class LocalityMap {
+
+      final ImmutableMap<XdsLocality, LocalityLbInfo> map;
+
+      LocalityMap(ImmutableMap<XdsLocality, LocalityLbInfo> map) {
+        this.map = map;
+      }
+
+      Set<XdsLocality> localities() {
+        return map.keySet();
+      }
+
+      Collection<LocalityLbInfo> localityLbInfos() {
+        return map.values();
+      }
+
+      boolean contains(XdsLocality locality) {
+        return map.containsKey(locality);
+      }
+
+      LocalityLbInfo getLocalityLbInfo(XdsLocality locality) {
+        return checkNotNull(
+            map.get(locality),
+            "The locality map %s does not contain the locality %s", map, locality);
+      }
+
+      Map<XdsLocality, LocalityLbInfo> toMutableMap() {
+        return new LinkedHashMap<>(map);
+      }
+
+      static LocalityMap of(Map<XdsLocality, LocalityLbInfo> map) {
+        return new LocalityMap(ImmutableMap.copyOf(map));
+      }
+    }
+
     /**
      * State of a single Locality.
      */
@@ -369,6 +455,9 @@ interface LocalityStore {
       final int localityWeight;
       final LoadBalancer childBalancer;
       final ChildHelper childHelper;
+
+      @Nullable
+      private ScheduledHandle delayedDeletionTimer;
 
       LocalityLbInfo(
           int localityWeight, LoadBalancer childBalancer, ChildHelper childHelper) {
@@ -379,7 +468,24 @@ interface LocalityStore {
       }
 
       void shutdown() {
+        if (isDeactivated()) {
+          delayedDeletionTimer.cancel();
+          // not to set delayedDeletionTimer = null, in order to keep isDeactivated() unchanged
+        }
         childBalancer.shutdown();
+      }
+
+      void reactivate() {
+        if (delayedDeletionTimer != null) {
+          delayedDeletionTimer.cancel();
+          delayedDeletionTimer = null;
+          childHelper.updateBalancingState(
+              childHelper.currentChildState, childHelper.currentChildPicker);
+        }
+      }
+
+      boolean isDeactivated() {
+        return delayedDeletionTimer != null;
       }
     }
 
