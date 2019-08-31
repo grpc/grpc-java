@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+import android.util.Log;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.MoreExecutors;
@@ -31,6 +32,8 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
@@ -45,6 +48,8 @@ import org.chromium.net.ExperimentalCronetEngine;
 @ExperimentalApi("There is no plan to make this API stable, given transport API instability")
 public final class CronetChannelBuilder extends
     AbstractManagedChannelImplBuilder<CronetChannelBuilder> {
+
+  private static final String LOG_TAG = "CronetChannelBuilder";
 
   /** BidirectionalStream.Builder factory used for getting the gRPC BidirectionalStream. */
   public static abstract class StreamBuilderFactory {
@@ -271,12 +276,50 @@ public final class CronetChannelBuilder extends
           ((ExperimentalCronetEngine) cronetEngine)
               .newBidirectionalStreamBuilder(url, callback, executor);
       if (trafficStatsTagSet) {
-        builder.setTrafficStatsTag(trafficStatsTag);
+        setTrafficStatsTag(builder, trafficStatsTag);
       }
       if (trafficStatsUidSet) {
-        builder.setTrafficStatsUid(trafficStatsUid);
+        setTrafficStatsUid(builder, trafficStatsUid);
       }
       return builder;
+    }
+
+    private static void setTrafficStatsTag(ExperimentalBidirectionalStream.Builder builder,
+        int tag) {
+      Exception caughtException = null;
+      try {
+        Method setTagMethod = ExperimentalBidirectionalStream.Builder.class
+            .getMethod("setTrafficStatsTag", int.class);
+        setTagMethod.invoke(builder, tag);
+      } catch (NoSuchMethodException e) {
+        caughtException = e;
+      } catch (InvocationTargetException e) {
+        caughtException = e;
+      } catch (IllegalAccessException e) {
+        caughtException = e;
+      }
+      if (caughtException != null) {
+        Log.w(LOG_TAG, "Failed to set traffic stats tag", caughtException);
+      }
+    }
+
+    private static void setTrafficStatsUid(ExperimentalBidirectionalStream.Builder builder,
+        int uid) {
+      Exception caughtException = null;
+      try {
+        Method setUidMethod = ExperimentalBidirectionalStream.Builder.class
+            .getMethod("setTrafficStatsUid", int.class);
+        setUidMethod.invoke(builder, uid);
+      } catch (NoSuchMethodException e) {
+        caughtException = e;
+      } catch (InvocationTargetException e) {
+        caughtException = e;
+      } catch (IllegalAccessException e) {
+        caughtException = e;
+      }
+      if (caughtException != null) {
+        Log.w(LOG_TAG, "Failed to set traffic stats uid", caughtException);
+      }
     }
   }
 }

@@ -40,6 +40,8 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportFrameUtil;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.WritableBuffer;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -182,12 +184,30 @@ class CronetClientStream extends AbstractClientStream {
       if (delayRequestHeader) {
         builder.delayRequestHeadersUntilFirstFlush(true);
       }
-      if (annotation != null) {
-        ((ExperimentalBidirectionalStream.Builder) builder).addRequestAnnotation(annotation);
-      }
-      if (annotations != null) {
-        for (Object o : annotations) {
-          ((ExperimentalBidirectionalStream.Builder) builder).addRequestAnnotation(o);
+      if (annotation != null || annotations != null) {
+        ExperimentalBidirectionalStream.Builder expBidiStreamBuilder =
+            (ExperimentalBidirectionalStream.Builder) builder;
+        Exception caughtException = null;
+        try {
+          Method setTagMethod = ExperimentalBidirectionalStream.Builder.class
+              .getMethod("addRequestAnnotation", Object.class);
+          if (annotation != null) {
+            setTagMethod.invoke(expBidiStreamBuilder, annotation);
+          }
+          if (annotations != null) {
+            for (Object o : annotations) {
+              setTagMethod.invoke(expBidiStreamBuilder, o);
+            }
+          }
+        } catch (NoSuchMethodException e) {
+          caughtException = e;
+        } catch (InvocationTargetException e) {
+          caughtException = e;
+        } catch (IllegalAccessException e) {
+          caughtException = e;
+        }
+        if (caughtException != null) {
+          Log.w(LOG_TAG, "Failed to add request annotation", caughtException);
         }
       }
       setGrpcHeaders(builder);
