@@ -384,7 +384,7 @@ public class AltsProtocolNegotiatorTest {
 
   private CapturingGrpcHttp2ConnectionHandler capturingGrpcHandler() {
     // Netty Boilerplate.  We don't really need any of this, but there is a tight coupling
-    // between a Http2ConnectionHandler and its dependencies.
+    // between an Http2ConnectionHandler and its dependencies.
     Http2Connection connection = new DefaultHttp2Connection(true);
     Http2FrameWriter frameWriter = new DefaultHttp2FrameWriter();
     Http2FrameReader frameReader = new DefaultHttp2FrameReader(false);
