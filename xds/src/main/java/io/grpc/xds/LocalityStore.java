@@ -52,10 +52,8 @@ import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,8 +91,7 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
-    private LocalityMap localityMap =
-        LocalityMap.of(ImmutableMap.<XdsLocality, LocalityLbInfo>of());
+    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -178,7 +175,7 @@ interface LocalityStore {
     @Override
     public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
       // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityMap.localityLbInfos()) {
+      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
         // This will probably trigger childHelper.updateBalancingState
         localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
       }
@@ -186,26 +183,26 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (XdsLocality locality : localityMap.localities()) {
-        localityMap.getLocalityLbInfo(locality).shutdown();
-        if (!localityMap.getLocalityLbInfo(locality).isDeactivated()) {
+      for (XdsLocality locality : localityMap.keySet()) {
+        localityMap.get(locality).shutdown();
+        if (!localityMap.get(locality).isDeactivated()) {
           loadStatsStore.removeLocality(locality);
         }
       }
-      localityMap = LocalityMap.of(ImmutableMap.<XdsLocality, LocalityLbInfo>of());
+      localityMap = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
     @Override
     public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
-      Set<XdsLocality> oldLocalities = localityMap.localities();
+      Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
-      Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
+      ImmutableMap.Builder<XdsLocality, LocalityLbInfo> updatedLocalityMap = ImmutableMap.builder();
 
       final Set<XdsLocality> toRemove = new HashSet<>();
       for (XdsLocality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)
-            && !localityMap.getLocalityLbInfo(oldLocality).isDeactivated()) {
+            && !localityMap.get(oldLocality).isDeactivated()) {
           deactivate(oldLocality);
           toRemove.add(oldLocality);
         }
@@ -220,7 +217,7 @@ interface LocalityStore {
         LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
-          LocalityLbInfo oldLocalityLbInfo = localityMap.getLocalityLbInfo(newLocality);
+          LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
 
           if (oldLocalityLbInfo.isDeactivated()) {
             oldLocalityLbInfo.reactivate();
@@ -264,11 +261,11 @@ interface LocalityStore {
 
       // append deactivated localities to the end of localityMap
       for (XdsLocality locality : oldLocalities) {
-        if (localityMap.getLocalityLbInfo(locality).isDeactivated()) {
-          updatedLocalityMap.put(locality, localityMap.getLocalityLbInfo(locality));
+        if (localityMap.get(locality).isDeactivated()) {
+          updatedLocalityMap.put(locality, localityMap.get(locality));
         }
       }
-      localityMap = LocalityMap.of(updatedLocalityMap);
+      localityMap = updatedLocalityMap.build();
 
       updatePicker(newState, childPickers);
 
@@ -293,22 +290,25 @@ interface LocalityStore {
     }
 
     private void deactivate(final XdsLocality locality) {
-      if (!localityMap.contains(locality)
-          || localityMap.getLocalityLbInfo(locality).isDeactivated()) {
+      if (!localityMap.containsKey(locality)
+          || localityMap.get(locality).isDeactivated()) {
         return;
       }
 
-      final LocalityLbInfo localityLbInfo = localityMap.getLocalityLbInfo(locality);
+      final LocalityLbInfo localityLbInfo = localityMap.get(locality);
       class DeletionTask implements Runnable {
 
         @Override
         public void run() {
           localityLbInfo.shutdown();
 
-          // remove the locality from localityMap
-          Map<XdsLocality, LocalityLbInfo> map = localityMap.toMutableMap();
-          map.remove(locality);
-          localityMap = LocalityMap.of(map);
+          ImmutableMap.Builder<XdsLocality, LocalityLbInfo> builder = ImmutableMap.builder();
+          for (Map.Entry<XdsLocality, LocalityLbInfo> entry : localityMap.entrySet()) {
+            if (!entry.getKey().equals(locality)) {
+              builder.put(entry);
+            }
+          }
+          localityMap = builder.build();
         }
       }
 
@@ -329,7 +329,7 @@ interface LocalityStore {
     @Override
     public void updateOobMetricsReportInterval(long reportIntervalNano) {
       metricsReportIntervalNano = reportIntervalNano;
-      for (LocalityLbInfo lbInfo : localityMap.localityLbInfos()) {
+      for (LocalityLbInfo lbInfo : localityMap.values()) {
         lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
       }
     }
@@ -354,15 +354,15 @@ interface LocalityStore {
 
     private void updateChildState(
         XdsLocality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (!localityMap.contains(locality)) {
+      if (!localityMap.containsKey(locality)) {
         return;
       }
 
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
-      for (XdsLocality l : localityMap.localities()) {
-        LocalityLbInfo localityLbInfo = localityMap.getLocalityLbInfo(l);
+      for (XdsLocality l : localityMap.keySet()) {
+        LocalityLbInfo localityLbInfo = localityMap.get(l);
         ConnectivityState childState;
         SubchannelPicker childPicker;
         if (l.equals(locality)) {
@@ -373,7 +373,7 @@ interface LocalityStore {
           childPicker = localityLbInfo.childHelper.currentChildPicker;
         }
 
-        if (!localityMap.getLocalityLbInfo(l).isDeactivated()) {
+        if (!localityMap.get(l).isDeactivated()) {
           overallState = aggregateState(overallState, childState);
 
           if (READY == childState) {
@@ -406,41 +406,6 @@ interface LocalityStore {
 
       if (state != null) {
         helper.updateBalancingState(state, picker);
-      }
-    }
-
-    private static final class LocalityMap {
-
-      final ImmutableMap<XdsLocality, LocalityLbInfo> map;
-
-      LocalityMap(ImmutableMap<XdsLocality, LocalityLbInfo> map) {
-        this.map = map;
-      }
-
-      Set<XdsLocality> localities() {
-        return map.keySet();
-      }
-
-      Collection<LocalityLbInfo> localityLbInfos() {
-        return map.values();
-      }
-
-      boolean contains(XdsLocality locality) {
-        return map.containsKey(locality);
-      }
-
-      LocalityLbInfo getLocalityLbInfo(XdsLocality locality) {
-        return checkNotNull(
-            map.get(locality),
-            "The locality map %s does not contain the locality %s", map, locality);
-      }
-
-      Map<XdsLocality, LocalityLbInfo> toMutableMap() {
-        return new LinkedHashMap<>(map);
-      }
-
-      static LocalityMap of(Map<XdsLocality, LocalityLbInfo> map) {
-        return new LocalityMap(ImmutableMap.copyOf(map));
       }
     }
 
