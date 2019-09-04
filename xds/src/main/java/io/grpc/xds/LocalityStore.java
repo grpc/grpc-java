@@ -183,11 +183,15 @@ interface LocalityStore {
 
     @Override
     public void reset() {
+      List<XdsLocality> toRemove = new ArrayList<>();
       for (XdsLocality locality : localityMap.keySet()) {
-        localityMap.get(locality).shutdown();
         if (!localityMap.get(locality).isDeactivated()) {
-          loadStatsStore.removeLocality(locality);
+          toRemove.add(locality);
         }
+        localityMap.get(locality).shutdown();
+      }
+      for (XdsLocality locality : toRemove) {
+        loadStatsStore.removeLocality(locality);
       }
       localityMap = ImmutableMap.of();
     }
@@ -432,7 +436,7 @@ interface LocalityStore {
       void shutdown() {
         if (isDeactivated()) {
           delayedDeletionTimer.cancel();
-          // not to set delayedDeletionTimer = null, in order to keep isDeactivated() unchanged
+          delayedDeletionTimer = null;
         }
         childBalancer.shutdown();
       }
