@@ -28,6 +28,8 @@ envoy/api/v2/core/address.proto
 envoy/api/v2/core/base.proto
 envoy/api/v2/core/health_check.proto
 envoy/api/v2/core/http_uri.proto
+envoy/api/v2/core/config_source.proto
+envoy/api/v2/core/grpc_service.proto
 envoy/api/v2/discovery.proto
 envoy/api/v2/eds.proto
 envoy/api/v2/endpoint/endpoint.proto
