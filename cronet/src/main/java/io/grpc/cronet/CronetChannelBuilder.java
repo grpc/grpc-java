@@ -250,6 +250,11 @@ public final class CronetChannelBuilder extends
    * StreamBuilderFactory impl that applies TrafficStats tags to stream builders that are produced.
    */
   private static class TaggingStreamFactory extends StreamBuilderFactory {
+    private static volatile boolean loadSetTrafficStatsTagAttempted;
+    private static volatile boolean loadSetTrafficStatsUidAttempted;
+    private static volatile Method setTrafficStatsTagMethod;
+    private static volatile Method setTrafficStatsUidMethod;
+
     private final CronetEngine cronetEngine;
     private final boolean trafficStatsTagSet;
     private final int trafficStatsTag;
@@ -286,39 +291,59 @@ public final class CronetChannelBuilder extends
 
     private static void setTrafficStatsTag(ExperimentalBidirectionalStream.Builder builder,
         int tag) {
-      Exception caughtException = null;
-      try {
-        Method setTagMethod = ExperimentalBidirectionalStream.Builder.class
-            .getMethod("setTrafficStatsTag", int.class);
-        setTagMethod.invoke(builder, tag);
-      } catch (NoSuchMethodException e) {
-        caughtException = e;
-      } catch (InvocationTargetException e) {
-        caughtException = e;
-      } catch (IllegalAccessException e) {
-        caughtException = e;
+      if (!loadSetTrafficStatsTagAttempted) {
+        synchronized (TaggingStreamFactory.class) {
+          if (!loadSetTrafficStatsTagAttempted) {
+            try {
+              setTrafficStatsTagMethod = ExperimentalBidirectionalStream.Builder.class
+                  .getMethod("setTrafficStatsTag", int.class);
+            } catch (NoSuchMethodException e) {
+              Log.w(LOG_TAG,
+                  "Failed to load method ExperimentalBidirectionalStream.Builder.setTrafficStatsTag",
+                  e);
+            } finally {
+              loadSetTrafficStatsTagAttempted = true;
+            }
+          }
+        }
       }
-      if (caughtException != null) {
-        Log.w(LOG_TAG, "Failed to set traffic stats tag", caughtException);
+      if (setTrafficStatsTagMethod != null) {
+        try {
+          setTrafficStatsTagMethod.invoke(builder, tag);
+        } catch (InvocationTargetException e) {
+          throw new RuntimeException(e.getCause() == null ? e.getTargetException() : e.getCause());
+        } catch (IllegalAccessException e) {
+          Log.w(LOG_TAG, "Failed to set traffic stats tag: " + tag, e);
+        }
       }
     }
 
     private static void setTrafficStatsUid(ExperimentalBidirectionalStream.Builder builder,
         int uid) {
-      Exception caughtException = null;
-      try {
-        Method setUidMethod = ExperimentalBidirectionalStream.Builder.class
-            .getMethod("setTrafficStatsUid", int.class);
-        setUidMethod.invoke(builder, uid);
-      } catch (NoSuchMethodException e) {
-        caughtException = e;
-      } catch (InvocationTargetException e) {
-        caughtException = e;
-      } catch (IllegalAccessException e) {
-        caughtException = e;
+      if (!loadSetTrafficStatsUidAttempted) {
+        synchronized (TaggingStreamFactory.class) {
+          if (!loadSetTrafficStatsUidAttempted) {
+            try {
+              setTrafficStatsUidMethod = ExperimentalBidirectionalStream.Builder.class
+                  .getMethod("setTrafficStatsUid", int.class);
+            } catch (NoSuchMethodException e) {
+              Log.w(LOG_TAG,
+                  "Failed to load method ExperimentalBidirectionalStream.Builder.setTrafficStatsUid",
+                  e);
+            } finally {
+              loadSetTrafficStatsUidAttempted = true;
+            }
+          }
+        }
       }
-      if (caughtException != null) {
-        Log.w(LOG_TAG, "Failed to set traffic stats uid", caughtException);
+      if (setTrafficStatsUidMethod != null) {
+        try {
+          setTrafficStatsUidMethod.invoke(builder, uid);
+        } catch (InvocationTargetException e) {
+          throw new RuntimeException(e.getCause() == null ? e.getTargetException() : e.getCause());
+        } catch (IllegalAccessException e) {
+          Log.w(LOG_TAG, "Failed to set traffic stats uid: " + uid, e);
+        }
       }
     }
   }

@@ -67,6 +67,9 @@ class CronetClientStream extends AbstractClientStream {
   private static final ByteBuffer EMPTY_BUFFER = ByteBuffer.allocateDirect(0);
   private static final String LOG_TAG = "grpc-java-cronet";
 
+  private static volatile boolean loadAddRequestAnnotationAttempted;
+  private static volatile Method addRequestAnnotationMethod;
+
   @Deprecated
   static final CallOptions.Key<Object> CRONET_ANNOTATION_KEY =
       CallOptions.Key.create("cronet-annotation");
@@ -187,27 +190,13 @@ class CronetClientStream extends AbstractClientStream {
       if (annotation != null || annotations != null) {
         ExperimentalBidirectionalStream.Builder expBidiStreamBuilder =
             (ExperimentalBidirectionalStream.Builder) builder;
-        Exception caughtException = null;
-        try {
-          Method setTagMethod = ExperimentalBidirectionalStream.Builder.class
-              .getMethod("addRequestAnnotation", Object.class);
-          if (annotation != null) {
-            setTagMethod.invoke(expBidiStreamBuilder, annotation);
-          }
-          if (annotations != null) {
-            for (Object o : annotations) {
-              setTagMethod.invoke(expBidiStreamBuilder, o);
-            }
-          }
-        } catch (NoSuchMethodException e) {
-          caughtException = e;
-        } catch (InvocationTargetException e) {
-          caughtException = e;
-        } catch (IllegalAccessException e) {
-          caughtException = e;
+        if (annotation != null) {
+          addRequestAnnotation(expBidiStreamBuilder, annotation);
         }
-        if (caughtException != null) {
-          Log.w(LOG_TAG, "Failed to add request annotation", caughtException);
+        if (annotations != null) {
+          for (Object o : annotations) {
+            addRequestAnnotation(expBidiStreamBuilder, o);
+          }
         }
       }
       setGrpcHeaders(builder);
@@ -377,6 +366,35 @@ class CronetClientStream extends AbstractClientStream {
     return !CONTENT_TYPE_KEY.name().equalsIgnoreCase(key)
         && !USER_AGENT_KEY.name().equalsIgnoreCase(key)
         && !TE_HEADER.name().equalsIgnoreCase(key);
+  }
+
+  private static void addRequestAnnotation(ExperimentalBidirectionalStream.Builder builder,
+      Object annotation) {
+    if (!loadAddRequestAnnotationAttempted) {
+      synchronized (CronetClientStream.class) {
+        if (!loadAddRequestAnnotationAttempted) {
+          try {
+            addRequestAnnotationMethod = ExperimentalBidirectionalStream.Builder.class
+                .getMethod("addRequestAnnotation", Object.class);
+          } catch (NoSuchMethodException e) {
+            Log.w(LOG_TAG,
+                "Failed to load method ExperimentalBidirectionalStream.Builder.addRequestAnnotation",
+                e);
+          } finally {
+            loadAddRequestAnnotationAttempted = true;
+          }
+        }
+      }
+    }
+    if (addRequestAnnotationMethod != null) {
+      try {
+        addRequestAnnotationMethod.invoke(builder, annotation);
+      } catch (InvocationTargetException e) {
+        throw new RuntimeException(e.getCause() == null ? e.getTargetException() : e.getCause());
+      } catch (IllegalAccessException e) {
+        Log.w(LOG_TAG, "Failed to add request annotation: " + annotation, e);
+      }
+    }
   }
 
   private void setGrpcHeaders(BidirectionalStream.Builder builder) {
