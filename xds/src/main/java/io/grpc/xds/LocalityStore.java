@@ -201,8 +201,7 @@ interface LocalityStore {
       ImmutableMap.Builder<XdsLocality, LocalityLbInfo> updatedLocalityMap = ImmutableMap.builder();
 
       for (XdsLocality oldLocality : oldLocalities) {
-        if (!newLocalities.contains(oldLocality)
-            && !localityMap.get(oldLocality).isDeactivated()) {
+        if (!newLocalities.contains(oldLocality)) {
           deactivate(oldLocality);
         }
       }
@@ -222,9 +221,7 @@ interface LocalityStore {
         if (oldLocalities.contains(newLocality)) {
           LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
 
-          if (oldLocalityLbInfo.isDeactivated()) {
-            oldLocalityLbInfo.reactivate();
-          }
+          oldLocalityLbInfo.reactivate();
 
           childHelper = oldLocalityLbInfo.childHelper;
           localityLbInfo =
@@ -260,7 +257,7 @@ interface LocalityStore {
         newState = aggregateState(newState, childHelper.currentChildState);
       }
 
-      // append deactivated localities to the end of localityMap
+      // Add deactivated localities to localityMap to keep track of them
       for (XdsLocality locality : oldLocalities) {
         if (localityMap.get(locality).isDeactivated()) {
           updatedLocalityMap.put(locality, localityMap.get(locality));
@@ -298,8 +295,7 @@ interface LocalityStore {
     }
 
     private void deactivate(final XdsLocality locality) {
-      if (!localityMap.containsKey(locality)
-          || localityMap.get(locality).isDeactivated()) {
+      if (!localityMap.containsKey(locality) || localityMap.get(locality).isDeactivated()) {
         return;
       }
 
@@ -439,7 +435,7 @@ interface LocalityStore {
       }
 
       void shutdown() {
-        if (isDeactivated()) {
+        if (delayedDeletionTimer != null) {
           delayedDeletionTimer.cancel();
           delayedDeletionTimer = null;
         }
