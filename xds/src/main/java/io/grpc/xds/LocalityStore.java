@@ -206,8 +206,6 @@ interface LocalityStore {
         }
       }
 
-      ConnectivityState newState = null;
-      List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
       for (XdsLocality newLocality : newLocalities) {
 
         if (!edsResponsLocalityInfo.containsKey(newLocality)) {
@@ -255,14 +253,6 @@ interface LocalityStore {
                     ResolvedAddresses.newBuilder().setAddresses(newEags).build());
           }
         });
-
-        if (localityLbInfo.childHelper.currentChildState == READY) {
-          childPickers.add(
-              new WeightedChildPicker(
-                  localityInfoMap.get(newLocality).localityWeight,
-                  localityLbInfo.childHelper.currentChildPicker));
-        }
-        newState = aggregateState(newState, childHelper.currentChildState);
       }
 
       // Add deactivated localities to localityMap to keep track of them.
@@ -294,7 +284,7 @@ interface LocalityStore {
       });
 
       edsResponsLocalityInfo = ImmutableMap.copyOf(localityInfoMap);
-      updatePicker(newState, childPickers);
+      onChildStateUpdated();
     }
 
     @Override
@@ -328,7 +318,9 @@ interface LocalityStore {
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
 
-      onChildStateUpdated(locality);
+      if (localityMap.containsKey(locality)) {
+        onChildStateUpdated();
+      }
     }
 
     @Override
@@ -362,10 +354,7 @@ interface LocalityStore {
       return overallState;
     }
 
-    private void onChildStateUpdated(XdsLocality locality) {
-      if (!localityMap.containsKey(locality)) {
-        return;
-      }
+    private void onChildStateUpdated() {
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
@@ -483,8 +472,10 @@ interface LocalityStore {
                     new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
                         newPicker, orcaPerRequestUtil));
 
-            // delegate to parent helper
-            onChildStateUpdated(locality);
+            if (localityMap.containsKey(locality)) {
+              // delegate to parent helper
+              onChildStateUpdated();
+            }
           }
 
           @Override
