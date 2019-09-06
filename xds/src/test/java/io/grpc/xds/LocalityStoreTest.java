@@ -533,6 +533,10 @@ public class LocalityStoreTest {
 
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
 
+    LoadBalancer lb1 = loadBalancers.get("sz1");
+    LoadBalancer lb2 = loadBalancers.get("sz2");
+    LoadBalancer lb3 = loadBalancers.get("sz3");
+
     final Subchannel subchannel1 = mock(Subchannel.class);
     SubchannelPicker subchannelPicker1 = new SubchannelPicker() {
       @Override
@@ -555,6 +559,10 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4);
     localityInfoMap = ImmutableMap.of(locality3, localityInfo3, locality4, localityInfo4);
     localityStore.updateLocalityStore(localityInfoMap);
+
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3", "sz4");
+
+    LoadBalancer lb4 = loadBalancers.get("sz4");
 
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor = ArgumentCaptor.forClass(null);
     // helper updated multiple times. Don't care how many times, just capture the latest picker
@@ -595,15 +603,19 @@ public class LocalityStoreTest {
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel3);
 
+    verify(lb2, never()).shutdown();
     // delayed deletion timer expires, no reactivation
     fakeClock.forwardTime(15, TimeUnit.MINUTES);
-    verify(loadBalancers.get("sz1"), never()).shutdown();
-    LoadBalancer oldBalancer2 = loadBalancers.get("sz2");
-    verify(oldBalancer2).shutdown();
+    verify(lb1, never()).shutdown();
+    verify(lb2).shutdown();
     // update localities, re-adding sz2, keeping sz1, and removing sz3, sz4
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
     localityStore.updateLocalityStore(localityInfoMap);
+
+    LoadBalancer newLb2 = loadBalancers.get("sz2");
+    assertThat(newLb2).isNotSameInstanceAs(lb2);
+
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(1);
@@ -612,8 +624,22 @@ public class LocalityStoreTest {
         .isEqualTo(subchannel1);
     assertThat(fakeClock.getPendingTasks()).hasSize(2); // sz3, sz4 pending removal
 
+    // verify lb1, lb3, and lb4 never shutdown and never changed since created
+    verify(lb1, never()).shutdown();
+    verify(newLb2, never()).shutdown();
+    verify(lb3, never()).shutdown();
+    verify(lb4, never()).shutdown();
+    assertThat(loadBalancers.get("sz1")).isSameInstanceAs(lb1);
+    assertThat(loadBalancers.get("sz2")).isSameInstanceAs(newLb2);
+    assertThat(loadBalancers.get("sz3")).isSameInstanceAs(lb3);
+    assertThat(loadBalancers.get("sz4")).isSameInstanceAs(lb4);
+
     localityStore.reset();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
+    verify(lb1).shutdown();
+    verify(newLb2).shutdown();
+    verify(lb3).shutdown();
+    verify(lb4).shutdown();
   }
 
   @Test
