@@ -96,6 +96,8 @@ final class XdsLoadBalancer2 extends LoadBalancer {
 
   @Override
   public boolean canHandleEmptyAddressListFromNameResolution() {
+    // This does not sound correct, but it's fine as we don't support fallback at this moment. 
+    // TODO(zdapeng): revisit it once we officially support fallback.
     return true;
   }
 
