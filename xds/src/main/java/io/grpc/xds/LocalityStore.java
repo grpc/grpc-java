@@ -54,6 +54,7 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -91,7 +92,7 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
+    private final Map<XdsLocality, LocalityLbInfo> localityMap = new LinkedHashMap<>();
     private Map<XdsLocality, LocalityInfo> edsResponsLocalityInfo = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
@@ -187,7 +188,7 @@ interface LocalityStore {
       for (XdsLocality locality : localityMap.keySet()) {
         localityMap.get(locality).shutdown();
       }
-      localityMap = ImmutableMap.of();
+      localityMap.clear();
       for (XdsLocality locality : edsResponsLocalityInfo.keySet()) {
         loadStatsStore.removeLocality(locality);
       }
@@ -198,7 +199,7 @@ interface LocalityStore {
     public void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap) {
       Set<XdsLocality> oldLocalities = localityMap.keySet();
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
-      ImmutableMap.Builder<XdsLocality, LocalityLbInfo> updatedLocalityMap = ImmutableMap.builder();
+      Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
 
       for (XdsLocality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
@@ -261,7 +262,8 @@ interface LocalityStore {
           updatedLocalityMap.put(locality, localityMap.get(locality));
         }
       }
-      localityMap = updatedLocalityMap.build();
+      localityMap.clear();
+      localityMap.putAll(updatedLocalityMap);
 
       final Set<XdsLocality> toBeRemovedFromStatsStore = new HashSet<>();
       // There is a race between picking a subchannel and updating localities, which leads to
@@ -303,14 +305,7 @@ interface LocalityStore {
         @Override
         public void run() {
           localityLbInfo.shutdown();
-
-          ImmutableMap.Builder<XdsLocality, LocalityLbInfo> builder = ImmutableMap.builder();
-          for (Map.Entry<XdsLocality, LocalityLbInfo> entry : localityMap.entrySet()) {
-            if (!entry.getKey().equals(locality)) {
-              builder.put(entry);
-            }
-          }
-          localityMap = builder.build();
+          localityMap.remove(locality);
         }
       }
 
