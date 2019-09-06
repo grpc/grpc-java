@@ -54,6 +54,7 @@ import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -306,13 +307,9 @@ interface LocalityStore {
         public void run() {
           localityLbInfo.shutdown();
 
-          ImmutableMap.Builder<XdsLocality, LocalityLbInfo> builder = ImmutableMap.builder();
-          for (Map.Entry<XdsLocality, LocalityLbInfo> entry : localityMap.entrySet()) {
-            if (!entry.getKey().equals(locality)) {
-              builder.put(entry);
-            }
-          }
-          localityMap = builder.build();
+          Map<XdsLocality, LocalityLbInfo> copy = new LinkedHashMap<>(localityMap);
+          copy.remove(locality);
+          localityMap = ImmutableMap.copyOf(copy);
         }
       }
 
