@@ -293,12 +293,14 @@ public class XdsCommsTest {
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint11),
             new XdsComms.LbEndpoint(endpoint12)),
-        1);
+        1,
+        0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint21),
             new XdsComms.LbEndpoint(endpoint22)),
-        2);
+        2,
+        0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
 
     InOrder inOrder = inOrder(localityStore);
@@ -405,9 +407,9 @@ public class XdsCommsTest {
 
     XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
-        ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1);
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
-        ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2);
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2, 0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();

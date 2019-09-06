@@ -80,8 +80,9 @@ final class XdsComms {
     final List<EquivalentAddressGroup> eags;
     final List<Integer> endPointWeights;
     final int localityWeight;
+    final int priority;
 
-    LocalityInfo(Collection<LbEndpoint> lbEndPoints, int localityWeight) {
+    LocalityInfo(Collection<LbEndpoint> lbEndPoints, int localityWeight, int priority) {
       List<EquivalentAddressGroup> eags = new ArrayList<>(lbEndPoints.size());
       List<Integer> endPointWeights = new ArrayList<>(lbEndPoints.size());
       for (LbEndpoint lbEndPoint : lbEndPoints) {
@@ -91,6 +92,7 @@ final class XdsComms {
       this.eags = Collections.unmodifiableList(eags);
       this.endPointWeights = Collections.unmodifiableList(new ArrayList<>(endPointWeights));
       this.localityWeight = localityWeight;
+      this.priority = priority;
     }
 
     @Override
@@ -103,13 +105,14 @@ final class XdsComms {
       }
       LocalityInfo that = (LocalityInfo) o;
       return localityWeight == that.localityWeight
+          && priority == that.priority
           && Objects.equal(eags, that.eags)
           && Objects.equal(endPointWeights, that.endPointWeights);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eags, endPointWeights, localityWeight);
+      return Objects.hashCode(eags, endPointWeights, localityWeight, priority);
     }
   }
 
@@ -250,10 +253,11 @@ final class XdsComms {
                       lbEndPoints.add(new LbEndpoint(lbEndpoint));
                     }
                     int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
+                    int priority = localityLbEndpoints.getPriority();
 
                     if (localityWeight != 0) {
                       localityEndpointsMapping.put(
-                          locality, new LocalityInfo(lbEndPoints, localityWeight));
+                          locality, new LocalityInfo(lbEndPoints, localityWeight, priority));
                     }
                   }
 
