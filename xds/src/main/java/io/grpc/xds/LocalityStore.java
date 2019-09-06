@@ -318,9 +318,7 @@ interface LocalityStore {
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
 
-      if (localityMap.containsKey(locality)) {
-        onChildStateUpdated();
-      }
+      onChildStateUpdated();
     }
 
     @Override
@@ -472,10 +470,8 @@ interface LocalityStore {
                     new MetricsObservingSubchannelPicker(new MetricsRecordingListener(counter),
                         newPicker, orcaPerRequestUtil));
 
-            if (localityMap.containsKey(locality)) {
-              // delegate to parent helper
-              onChildStateUpdated();
-            }
+            // delegate to parent helper
+            onChildStateUpdated();
           }
 
           @Override
