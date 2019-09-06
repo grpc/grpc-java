@@ -52,7 +52,8 @@ dependencies {
     implementation 'io.grpc:grpc-core:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     testImplementation 'io.grpc:grpc-testing:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
-    implementation "org.chromium.net:cronet-embedded:66.3359.158"
+    implementation 'org.chromium.net:cronet-api:76.3809.111'
+    testImplementation 'org.chromium.net:cronet-embedded:66.3359.158'
 
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.mockito:mockito-core:2.25.1'
