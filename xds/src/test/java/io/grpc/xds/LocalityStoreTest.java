@@ -521,7 +521,6 @@ public class LocalityStoreTest {
 
   @Test
   public void updateLoaclityStore_deactivateAndReactivate() {
-    localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
     LocalityInfo localityInfo1 =
         new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
     LocalityInfo localityInfo2 =
