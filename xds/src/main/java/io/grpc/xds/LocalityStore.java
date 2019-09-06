@@ -206,8 +206,6 @@ interface LocalityStore {
         }
       }
 
-      ConnectivityState newState = null;
-      List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
       for (XdsLocality newLocality : newLocalities) {
 
         if (!edsResponsLocalityInfo.containsKey(newLocality)) {
@@ -215,8 +213,8 @@ interface LocalityStore {
         }
 
         // Assuming standard mode only (EDS response with a list of endpoints) for now.
-        List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
-        LocalityLbInfo localityLbInfo;
+        final List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
+        final LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
           LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
@@ -243,18 +241,18 @@ interface LocalityStore {
           }
         }
         updatedLocalityMap.put(newLocality, localityLbInfo);
-        // TODO: put endPointWeights into attributes for WRR.
-        localityLbInfo.childBalancer
-            .handleResolvedAddresses(
-                ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
-        if (localityLbInfo.childHelper.currentChildState == READY) {
-          childPickers.add(
-              new WeightedChildPicker(
-                  localityInfoMap.get(newLocality).localityWeight,
-                  localityLbInfo.childHelper.currentChildPicker));
-        }
-        newState = aggregateState(newState, childHelper.currentChildState);
+        // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
+        // so execute handleResolvedAddresses() after all the setup in this method is complete.
+        helper.getSynchronizationContext().execute(new Runnable() {
+          @Override
+          public void run() {
+            // TODO: put endPointWeights into attributes for WRR.
+            localityLbInfo.childBalancer
+                .handleResolvedAddresses(
+                    ResolvedAddresses.newBuilder().setAddresses(newEags).build());
+          }
+        });
       }
 
       // Add deactivated localities to localityMap to keep track of them.
@@ -286,7 +284,7 @@ interface LocalityStore {
       });
 
       edsResponsLocalityInfo = ImmutableMap.copyOf(localityInfoMap);
-      updatePicker(newState, childPickers);
+      onChildStateUpdated();
     }
 
     @Override
@@ -320,9 +318,7 @@ interface LocalityStore {
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
 
-      updateChildState(
-          locality, localityLbInfo.childHelper.currentChildState,
-          localityLbInfo.childHelper.currentChildPicker);
+      onChildStateUpdated();
     }
 
     @Override
@@ -356,12 +352,7 @@ interface LocalityStore {
       return overallState;
     }
 
-    private void updateChildState(
-        XdsLocality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (!localityMap.containsKey(locality)) {
-        return;
-      }
-
+    private void onChildStateUpdated() {
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
@@ -370,15 +361,8 @@ interface LocalityStore {
           continue;
         }
         LocalityLbInfo localityLbInfo = localityMap.get(l);
-        ConnectivityState childState;
-        SubchannelPicker childPicker;
-        if (l.equals(locality)) {
-          childState = newChildState;
-          childPicker = newChildPicker;
-        } else {
-          childState = localityLbInfo.childHelper.currentChildState;
-          childPicker = localityLbInfo.childHelper.currentChildPicker;
-        }
+        ConnectivityState childState = localityLbInfo.childHelper.currentChildState;
+        SubchannelPicker childPicker = localityLbInfo.childHelper.currentChildPicker;
 
         overallState = aggregateState(overallState, childState);
 
@@ -487,7 +471,7 @@ interface LocalityStore {
                         newPicker, orcaPerRequestUtil));
 
             // delegate to parent helper
-            updateChildState(locality, newState, currentChildPicker);
+            onChildStateUpdated();
           }
 
           @Override
