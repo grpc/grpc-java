@@ -214,7 +214,7 @@ interface LocalityStore {
           loadStatsStore.addLocality(newLocality);
         }
 
-        // Assuming standard mode only (EDS response with a list of endpoints) for now
+        // Assuming standard mode only (EDS response with a list of endpoints) for now.
         List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
         LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
@@ -257,7 +257,7 @@ interface LocalityStore {
         newState = aggregateState(newState, childHelper.currentChildState);
       }
 
-      // Add deactivated localities to localityMap to keep track of them
+      // Add deactivated localities to localityMap to keep track of them.
       for (XdsLocality locality : oldLocalities) {
         if (localityMap.get(locality).isDeactivated()) {
           updatedLocalityMap.put(locality, localityMap.get(locality));
