@@ -1,4 +1,6 @@
 plugins {
+    id "maven-publish"
+
     id "com.github.johnrengelman.shadow"
 }
 

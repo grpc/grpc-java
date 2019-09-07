@@ -1,3 +1,7 @@
+plugins {
+    id "maven-publish"
+}
+
 description = "gRPC: Stub"
 dependencies {
     compile project(':grpc-api')
