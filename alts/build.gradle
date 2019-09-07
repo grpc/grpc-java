@@ -1,22 +1,12 @@
-buildscript {
-    repositories { jcenter() }
-    dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.4' }
+plugins {
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
 }
-
-apply plugin: 'com.github.johnrengelman.shadow'
 
 description = "gRPC: ALTS"
 
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
 
 dependencies {
     compile project(':grpc-auth'),

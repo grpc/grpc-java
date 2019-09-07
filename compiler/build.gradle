@@ -1,16 +1,10 @@
-apply plugin: "cpp"
-apply plugin: "com.google.protobuf"
+plugins {
+    id "cpp"
+
+    id "com.google.protobuf"
+}
 
 description = 'The protoc plugin for gRPC Java'
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-        mavenLocal()
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
 
 def artifactStagingPath = "$buildDir/artifacts" as File
 // Adds space-delimited arguments from the environment variable env to the

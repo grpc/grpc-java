@@ -1,13 +1,6 @@
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-        mavenLocal()
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+plugins {
+    id "com.google.protobuf"
 }
-
-apply plugin: 'com.google.protobuf'
 
 description = 'gRPC: Protobuf Lite'
 
