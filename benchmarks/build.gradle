@@ -18,6 +18,10 @@ jmh {
     includeTests = true
 }
 
+configurations {
+    alpnagent
+}
+
 dependencies {
     compile project(':grpc-core'),
             project(':grpc-netty'),
@@ -32,6 +36,7 @@ dependencies {
             libraries.netty_epoll,
             libraries.math
     compileOnly libraries.javax_annotation
+    alpnagent libraries.jetty_alpn_agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
