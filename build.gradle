@@ -9,7 +9,6 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 
 subprojects {
     apply plugin: "checkstyle"
-    apply plugin: "java"
     apply plugin: "maven"
     apply plugin: "idea"
     apply plugin: "signing"
@@ -20,29 +19,9 @@ subprojects {
     apply plugin: "ru.vyarus.animalsniffer"
 
     apply plugin: "net.ltgt.errorprone"
-    if (rootProject.properties.get('errorProne', true)) {
-        dependencies {
-            errorprone 'com.google.errorprone:error_prone_core:2.3.3'
-            errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
-
-            annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
-        }
-    } else {
-        // Disable Error Prone
-        allprojects {
-            afterEvaluate { project ->
-                project.tasks.withType(JavaCompile) {
-                    options.errorprone.enabled = false
-                }
-            }
-        }
-    }
 
     group = "io.grpc"
     version = "1.25.0-SNAPSHOT" // CURRENT_GRPC_VERSION
-
-    sourceCompatibility = 1.7
-    targetCompatibility = 1.7
 
     repositories {
         maven { // The google mirror is less flaky than mavenCentral()
@@ -61,31 +40,6 @@ subprojects {
         if (rootProject.hasProperty('failOnWarnings') && rootProject.failOnWarnings.toBoolean()) {
             it.options.compilerArgs += ["-Werror"]
         }
-    }
-
-    compileTestJava {
-        // serialVersionUID is basically guaranteed to be useless in our tests
-        options.compilerArgs += [
-            "-Xlint:-serial"
-        ]
-        // LinkedList doesn't hurt much in tests and has lots of usages
-        options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
-    }
-
-    jar.manifest {
-        attributes('Implementation-Title': name,
-        'Implementation-Version': version,
-        'Built-By': System.getProperty('user.name'),
-        'Built-JDK': System.getProperty('java.version'),
-        'Source-Compatibility': sourceCompatibility,
-        'Target-Compatibility': targetCompatibility)
-    }
-
-    javadoc.options {
-        encoding = 'UTF-8'
-        use = true
-        links 'https://docs.oracle.com/javase/8/docs/api/'
-        source = "8"
     }
 
     ext {
@@ -233,12 +187,6 @@ subprojects {
         }
     }
 
-    dependencies {
-        testCompile libraries.junit,
-                libraries.mockito,
-                libraries.truth
-    }
-
     // Disable JavaDoc doclint on Java 8. It's annoying.
     if (JavaVersion.current().isJava8Compatible()) {
         allprojects {
@@ -268,12 +216,81 @@ subprojects {
         }
     }
 
-    checkstyleMain {
-        source = fileTree(dir: "src/main", include: "**/*.java")
-    }
+    plugins.withId("java") {
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
 
-    checkstyleTest {
-        source = fileTree(dir: "src/test", include: "**/*.java")
+        dependencies {
+            testCompile libraries.junit,
+                    libraries.mockito,
+                    libraries.truth
+        }
+
+        compileTestJava {
+            // serialVersionUID is basically guaranteed to be useless in our tests
+            options.compilerArgs += [
+                "-Xlint:-serial"
+            ]
+        }
+
+        jar.manifest {
+            attributes('Implementation-Title': name,
+            'Implementation-Version': version,
+            'Built-By': System.getProperty('user.name'),
+            'Built-JDK': System.getProperty('java.version'),
+            'Source-Compatibility': sourceCompatibility,
+            'Target-Compatibility': targetCompatibility)
+        }
+
+        javadoc.options {
+            encoding = 'UTF-8'
+            use = true
+            links 'https://docs.oracle.com/javase/8/docs/api/'
+            source = "8"
+        }
+
+        checkstyleMain {
+            source = fileTree(dir: "src/main", include: "**/*.java")
+        }
+
+        checkstyleTest {
+            source = fileTree(dir: "src/test", include: "**/*.java")
+        }
+
+        // At a test failure, log the stack trace to the console so that we don't
+        // have to open the HTML in a browser.
+        test {
+            testLogging {
+                exceptionFormat = 'full'
+                showExceptions true
+                showCauses true
+                showStackTraces true
+            }
+            maxHeapSize = '1500m'
+        }
+
+        if (rootProject.properties.get('errorProne', true)) {
+            dependencies {
+                errorprone 'com.google.errorprone:error_prone_core:2.3.3'
+                errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
+
+                annotationProcessor 'com.google.guava:guava-beta-checker:1.0'
+            }
+        } else {
+            // Disable Error Prone
+            allprojects {
+                afterEvaluate { project ->
+                    project.tasks.withType(JavaCompile) {
+                        options.errorprone.enabled = false
+                    }
+                }
+            }
+        }
+
+        compileTestJava {
+            // LinkedList doesn't hurt much in tests and has lots of usages
+            options.errorprone.check("JdkObsolete", CheckSeverity.OFF)
+        }
     }
 
     plugins.withId("me.champeau.gradle.jmh") {
@@ -300,27 +317,10 @@ subprojects {
     }
 
     plugins.withId("maven-publish") {
-        task javadocJar(type: Jar) {
-            classifier = 'javadoc'
-            from javadoc
-        }
-
-        task sourcesJar(type: Jar) {
-            classifier = 'sources'
-            from sourceSets.main.allSource
-        }
-
         publishing {
             publications {
                 // do not use mavenJava, as java plugin will modify it via "magic"
                 maven(MavenPublication) {
-                    if (project.name != 'grpc-netty-shaded') {
-                        from components.java
-                    }
-
-                    artifact javadocJar
-                    artifact sourcesJar
-
                     pom {
                         name = project.group + ":" + project.name
                         url = 'https://github.com/grpc/grpc-java'
@@ -400,18 +400,31 @@ subprojects {
             required false
             sign publishing.publications.maven
         }
-    }
 
-    // At a test failure, log the stack trace to the console so that we don't
-    // have to open the HTML in a browser.
-    test {
-        testLogging {
-            exceptionFormat = 'full'
-            showExceptions true
-            showCauses true
-            showStackTraces true
+        plugins.withId("java") {
+            task javadocJar(type: Jar) {
+                classifier = 'javadoc'
+                from javadoc
+            }
+
+            task sourcesJar(type: Jar) {
+                classifier = 'sources'
+                from sourceSets.main.allSource
+            }
+
+            publishing {
+                publications {
+                    maven {
+                        if (project.name != 'grpc-netty-shaded') {
+                            from components.java
+                        }
+
+                        artifact javadocJar
+                        artifact sourcesJar
+                    }
+                }
+            }
         }
-        maxHeapSize = '1500m'
     }
 
     // Run with: ./gradlew japicmp --continue

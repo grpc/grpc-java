@@ -1,4 +1,5 @@
 plugins {
+    id "java"
     id "maven-publish"
 
     id "com.google.protobuf"
@@ -6,6 +7,8 @@ plugins {
 }
 
 description = "gRPC: GRPCLB LoadBalancer plugin"
+
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     compile project(':grpc-core'),
