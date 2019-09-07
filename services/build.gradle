@@ -3,6 +3,7 @@ plugins {
     id "maven-publish"
 
     id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Services"

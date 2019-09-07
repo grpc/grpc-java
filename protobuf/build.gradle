@@ -4,6 +4,7 @@ plugins {
 
     id "com.google.protobuf"
     id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: Protobuf'

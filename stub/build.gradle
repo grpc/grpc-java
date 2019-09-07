@@ -3,6 +3,7 @@ plugins {
     id "maven-publish"
 
     id "me.champeau.gradle.japicmp"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Stub"
