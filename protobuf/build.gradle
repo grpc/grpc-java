@@ -2,6 +2,7 @@ plugins {
     id "maven-publish"
 
     id "com.google.protobuf"
+    id "me.champeau.gradle.japicmp"
 }
 
 description = 'gRPC: Protobuf'
