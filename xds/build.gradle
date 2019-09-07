@@ -1,4 +1,6 @@
 plugins {
+    id "maven-publish"
+
     id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
 }
@@ -68,3 +70,4 @@ publishing {
         }
     }
 }
+[publishMavenPublicationToMavenRepository, publishMavenPublicationToMavenLocal]*.onlyIf { false }

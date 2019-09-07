@@ -1,5 +1,6 @@
 plugins {
     id "cpp"
+    id "maven-publish"
 
     id "com.google.protobuf"
 }
