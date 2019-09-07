@@ -1,13 +1,26 @@
 pluginManagement {
     plugins {
+        id "com.android.library" version "3.3.0"
         id "com.github.johnrengelman.shadow" version "2.0.4"
         id "com.github.kt3k.coveralls" version "2.0.1"
         id "com.google.osdetector" version "1.4.0"
         id "com.google.protobuf" version "0.8.8"
+        id "digital.wup.android-maven-publish" version "3.6.2"
         id "me.champeau.gradle.japicmp" version "0.2.5"
         id "me.champeau.gradle.jmh" version "0.4.5"
         id "net.ltgt.errorprone" version "0.8.1"
         id "ru.vyarus.animalsniffer" version "1.5.0"
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (target.id.namespace == "com.android") {
+                useModule("com.android.tools.build:gradle:${target.version}")
+            }
+        }
+    }
+    repositories {
+        gradlePluginPortal()
+        google()
     }
 }
 
@@ -61,4 +74,12 @@ if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
 } else {
     include ":grpc-compiler"
     project(':grpc-compiler').projectDir = "$rootDir/compiler" as File
+}
+
+if (settings.hasProperty('skipAndroid') && skipAndroid.toBoolean()) {
+    println '  * Skipping the build of Android projects because skipAndroid=true'
+} else {
+    println '*** Android SDK is required. To avoid building Android projects, set -PskipAndroid=true'
+    include ":grpc-cronet"
+    project(':grpc-cronet').projectDir = "$rootDir/cronet" as File
 }

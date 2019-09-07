@@ -11,6 +11,11 @@ developers don't have C compilers installed and don't need to run or modify the
 codegen, the build can skip it. To skip, create the file
 `<project-root>/gradle.properties` and add `skipCodegen=true`.
 
+Some parts of grpc-java depend on Android. Since many Java developers don't have
+the Android SDK installed and don't need to run or modify the Android
+components, the build can skip it. To skip, create the file
+`<project-root>/gradle.properties` and add `skipAndroid=true`.
+
 Then, to build, run:
 ```
 $ ./gradlew build

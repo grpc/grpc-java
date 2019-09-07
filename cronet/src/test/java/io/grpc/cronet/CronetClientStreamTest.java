@@ -257,7 +257,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame(new String("response1").getBytes(Charset.forName("UTF-8"))),
         false);
     // Haven't request any message, so no callback is called here.
     verify(clientListener, times(0)).messagesAvailable(isA(MessageProducer.class));
@@ -308,7 +308,7 @@ public final class CronetClientStreamTest {
     callback.onReadCompleted(
         cronetStream,
         info,
-        (ByteBuffer) createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
+        createMessageFrame(new String("response").getBytes(Charset.forName("UTF-8"))),
         false);
     verify(clientListener, times(1)).messagesAvailable(isA(MessageProducer.class));
     verify(cronetStream, times(2)).read(isA(ByteBuffer.class));
@@ -573,6 +573,7 @@ public final class CronetClientStreamTest {
     assertEquals(Status.UNAUTHENTICATED.getCode(), status.getCode());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void addCronetRequestAnnotation_deprecated() {
     Object annotation = new Object();
