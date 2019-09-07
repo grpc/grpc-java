@@ -1,5 +1,7 @@
 plugins {
     id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
 }
 
 description = "gRPC: Testing"
