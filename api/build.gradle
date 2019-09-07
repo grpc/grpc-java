@@ -3,6 +3,7 @@ plugins {
     id "maven-publish"
 
     id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = 'gRPC: API'

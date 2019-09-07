@@ -4,6 +4,7 @@ plugins {
 
     id "com.github.johnrengelman.shadow"
     id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: ALTS"

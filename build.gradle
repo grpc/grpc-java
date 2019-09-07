@@ -2,7 +2,6 @@ plugins {
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
     id "net.ltgt.errorprone" apply false
-    id "ru.vyarus.animalsniffer" apply false
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -15,9 +14,6 @@ subprojects {
     apply plugin: "jacoco"
 
     apply plugin: "com.google.osdetector"
-    // The plugin only has an effect if a signature is specified
-    apply plugin: "ru.vyarus.animalsniffer"
-
     apply plugin: "net.ltgt.errorprone"
 
     group = "io.grpc"
