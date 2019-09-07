@@ -1,14 +1,8 @@
-apply plugin: 'com.github.kt3k.coveralls'
+plugins {
+    id "com.github.kt3k.coveralls"
+}
 
 description = "gRPC: All"
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath 'org.kt3k.gradle.plugin:coveralls-gradle-plugin:2.0.1' }
-}
 
 def subprojects = [
     project(':grpc-api'),
