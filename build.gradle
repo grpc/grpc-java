@@ -1,7 +1,6 @@
 plugins {
     id "com.google.osdetector" apply false
     id "me.champeau.gradle.japicmp" apply false
-    id "me.champeau.gradle.jmh" apply false
     id "net.ltgt.errorprone" apply false
     id "ru.vyarus.animalsniffer" apply false
 }
@@ -17,7 +16,6 @@ subprojects {
     apply plugin: "signing"
     apply plugin: "jacoco"
 
-    apply plugin: "me.champeau.gradle.jmh"
     apply plugin: "com.google.osdetector"
     // The plugin only has an effect if a signature is specified
     apply plugin: "ru.vyarus.animalsniffer"
@@ -53,11 +51,7 @@ subprojects {
         mavenLocal()
     }
 
-    [
-        compileJava,
-        compileTestJava,
-        compileJmhJava
-    ].each() {
+    tasks.withType(JavaCompile) {
         it.options.compilerArgs += [
             "-Xlint:all",
             "-Xlint:-options",
@@ -160,11 +154,7 @@ subprojects {
                 }
             }
 
-            [
-                compileJava,
-                compileTestJava,
-                compileJmhJava
-            ].each() {
+            tasks.withType(JavaCompile) {
                 // Protobuf-generated code produces some warnings.
                 // https://github.com/google/protobuf/issues/2718
                 it.options.compilerArgs += [
@@ -253,9 +243,6 @@ subprojects {
 
         // Configuration for modules that use Jetty ALPN agent
         alpnagent libraries.jetty_alpn_agent
-
-        jmh 'org.openjdk.jmh:jmh-core:1.19',
-                'org.openjdk.jmh:jmh-generator-bytecode:1.19'
     }
 
     // Disable JavaDoc doclint on Java 8. It's annoying.
@@ -295,20 +282,26 @@ subprojects {
         source = fileTree(dir: "src/test", include: "**/*.java")
     }
 
-    // invoke jmh on a single benchmark class like so:
-    //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
-    jmh {
-        warmupIterations = 10
-        iterations = 10
-        fork = 1
-        // None of our benchmarks need the tests, and we have pseudo-circular
-        // dependencies that break when including them. (context's testCompile
-        // depends on core; core's testCompile depends on testing)
-        includeTests = false
-        if (project.hasProperty('jmhIncludeSingleClass')) {
-            include = [
-                project.property('jmhIncludeSingleClass')
-            ]
+    plugins.withId("me.champeau.gradle.jmh") {
+        dependencies {
+            jmh 'org.openjdk.jmh:jmh-core:1.19',
+                    'org.openjdk.jmh:jmh-generator-bytecode:1.19'
+        }
+        // invoke jmh on a single benchmark class like so:
+        //   ./gradlew -PjmhIncludeSingleClass=StatsTraceContextBenchmark clean :grpc-core:jmh
+        jmh {
+            warmupIterations = 10
+            iterations = 10
+            fork = 1
+            // None of our benchmarks need the tests, and we have pseudo-circular
+            // dependencies that break when including them. (context's testCompile
+            // depends on core; core's testCompile depends on testing)
+            includeTests = false
+            if (project.hasProperty('jmhIncludeSingleClass')) {
+                include = [
+                    project.property('jmhIncludeSingleClass')
+                ]
+            }
         }
     }
 
