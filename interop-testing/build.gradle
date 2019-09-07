@@ -8,6 +8,10 @@ plugins {
 description = "gRPC: Integration Testing"
 startScripts.enabled = false
 
+configurations {
+    alpnagent
+}
+
 dependencies {
     compile project(':grpc-alts'),
             project(':grpc-auth'),
@@ -26,6 +30,7 @@ dependencies {
             project(':grpc-grpclb')
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
+    alpnagent libraries.jetty_alpn_agent
 }
 
 configureProtoCompilation()
