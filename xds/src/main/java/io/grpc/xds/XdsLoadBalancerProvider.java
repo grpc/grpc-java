@@ -67,7 +67,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
     return new XdsLoadBalancer(helper, LoadBalancerRegistry.getDefaultRegistry(),
-        new ExponentialBackoffPolicy.Provider());
+        new ExponentialBackoffPolicy.Provider(), false);
   }
 
   @Override
