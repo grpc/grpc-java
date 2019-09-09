@@ -24,7 +24,7 @@ Running auth-server is similar to the normal hello world example and there are n
 The auth-server accepts optional argument for port on which the server should run:
 
 ```text
-USAGE: AuthServer [port]
+USAGE: auth-server [port]
 ```
 
 The auth-client accepts optional arguments for server-host, server-port, user-name and client-id:
@@ -32,7 +32,7 @@ The auth-client accepts optional arguments for server-host, server-port, user-na
 **auth-client**:
 
 ```text
-USAGE: AuthClient [server-host [server-port [user-name [client-id]]]]
+USAGE: auth-client [server-host [server-port [user-name [client-id]]]]
 ```
 
 The `user-name` value is simply passed in the `HelloRequest` message as payload and the value of
