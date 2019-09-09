@@ -20,6 +20,9 @@ LOCAL_MVN_ARTIFACTS="$KOKORO_GFILE_DIR"/github/grpc-java/mvn-artifacts/
 # android artifact from linux job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'grpc-android-*.aar' | wc -l)" != '0' ]]
 
+# cronet artifact from linux job:
+[[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'grpc-cronet-*.aar' | wc -l)" != '0' ]]
+
 # from linux job:
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-linux-x86_64.exe' | wc -l)" != '0' ]]
 [[ "$(find "$LOCAL_MVN_ARTIFACTS" -type f -iname 'protoc-gen-grpc-java-*-linux-x86_32.exe' | wc -l)" != '0' ]]
