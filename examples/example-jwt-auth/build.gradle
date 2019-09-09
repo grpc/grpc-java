@@ -64,14 +64,14 @@ sourceSets {
 startScripts.enabled = false
 
 task authServer(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.authentication.AuthServer'
+    mainClassName = 'io.grpc.examples.jwtauth.AuthServer'
     applicationName = 'auth-server'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
 }
 
 task authClient(type: CreateStartScripts) {
-    mainClassName = 'io.grpc.examples.authentication.AuthClient'
+    mainClassName = 'io.grpc.examples.jwtauth.AuthClient'
     applicationName = 'auth-client'
     outputDir = new File(project.buildDir, 'tmp')
     classpath = startScripts.classpath
