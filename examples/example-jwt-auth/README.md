@@ -21,16 +21,18 @@ Running auth-server is similar to the normal hello world example and there are n
 
 **auth-server**:
 
+The auth-server accepts optional argument for port on which the server should run:
+
 ```text
-USAGE: AuthServer
+USAGE: AuthServer [port]
 ```
 
-The auth-client accepts optional arguments for user-name and client-id:
+The auth-client accepts optional arguments for server-host, server-port, user-name and client-id:
 
 **auth-client**:
 
 ```text
-USAGE: AuthClient [user-name [client-id]]
+USAGE: AuthClient [server-host [server-port [user-name [client-id]]]]
 ```
 
 The `user-name` value is simply passed in the `HelloRequest` message as payload and the value of
@@ -41,9 +43,9 @@ The `user-name` value is simply passed in the `HelloRequest` message as payload 
 
 ```bash
 # Run the server:
-./build/install/example-jwt-auth/bin/auth-server
+./build/install/example-jwt-auth/bin/auth-server 50051
 # In another terminal run the client
-./build/install/example-jwt-auth/bin/auth-client userA clientB
+./build/install/example-jwt-auth/bin/auth-client localhost 50051 userA clientB
 ```
 
 That's it! The client will show the user-name reflected back in the message from the server as follows:
@@ -62,7 +64,7 @@ If you prefer to use Maven follow these [steps](../README.md#maven). You can run
 
 ```
 $ # Run the server
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.authentication.AuthServer
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.authentication.AuthServer -Dexec.args="50051"
 $ # In another terminal run the client
-$ mvn exec:java -Dexec.mainClass=io.grpc.examples.authentication.AuthClient -Dexec.args="userA clientB"
+$ mvn exec:java -Dexec.mainClass=io.grpc.examples.authentication.AuthClient -Dexec.args="localhost 50051 userA clientB"
 ```

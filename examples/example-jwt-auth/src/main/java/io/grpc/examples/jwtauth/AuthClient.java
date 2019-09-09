@@ -95,18 +95,28 @@ public class AuthClient {
    * and the second is the client identifier to set in JWT
    */
   public static void main(String[] args) throws Exception {
-    AuthClient client = new AuthClient("localhost", 50051);
+
+    String host = "localhost";
+    int port = 50051;
+    String user = "world";
+    String clientId = "default-client";
+
+    if (args.length > 0) {
+      host = args[0]; // Use the arg as the server host if provided
+    }
+    if (args.length > 1) {
+      port = Integer.parseInt(args[1]); // Use the second argument as the server port if provided
+    }
+    if (args.length > 2) {
+      user = args[2]; // Use the the third argument as the name to greet if provided
+    }
+    if (args.length > 3) {
+      clientId = args[3]; // Use the fourth argument as the client identifier if provided
+    }
+
+    AuthClient client = new AuthClient(host, port);
 
     try {
-      String user = "world";
-      String clientId = "default-client";
-      if (args.length > 0) {
-        user = args[0]; // Use the arg as the name to greet if provided
-      }
-      if (args.length > 1) {
-        clientId = args[1]; // Use the second argument as the client identifier if provided
-      }
-
       client.greet(user, clientId);
     } finally {
       client.shutdown();

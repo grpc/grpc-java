@@ -34,10 +34,13 @@ public class AuthServer {
   private static final Logger logger = Logger.getLogger(AuthServer.class.getName());
 
   private Server server;
+  private int port;
+
+  public AuthServer(int port) {
+    this.port = port;
+  }
 
   private void start() throws IOException {
-    // The port on which the server should run
-    int port = 50051;
     server = ServerBuilder.forPort(port)
         .addService(new GreeterImpl())
         .intercept(new JwtServerInterceptor())  // add the JwtServerInterceptor
@@ -74,7 +77,14 @@ public class AuthServer {
    * Main launches the server from the command line.
    */
   public static void main(String[] args) throws IOException, InterruptedException {
-    final AuthServer server = new AuthServer();
+
+    // The port on which the server should run
+    int port = 50051; // default
+    if (args.length > 0) {
+      port = Integer.parseInt(args[0]);
+    }
+
+    final AuthServer server = new AuthServer(port);
     server.start();
     server.blockUntilShutdown();
   }
