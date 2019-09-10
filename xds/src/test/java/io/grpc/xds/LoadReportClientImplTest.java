@@ -454,6 +454,86 @@ public class LoadReportClientImplTest {
   }
 
   @Test
+  public void lrsStreamRetryAndRereport() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    assertThat(lrsRequestObservers).hasSize(1);
+    StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
+
+    // First LRS request sent.
+    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.poll();
+    assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
+
+    // Balancer sends back a normal response.
+    responseObserver.onNext(buildLrsResponse(100));
+    assertThat(logs).containsExactly(
+        "DEBUG: Received LRS initial response: " + buildLrsResponse(100));
+    logs.poll();
+
+    // A load reporting task is scheduled.
+    assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    fakeClock.forwardNanos(99);
+    verifyNoMoreInteractions(requestObserver);
+
+    // Balancer closes the stream with error.
+    responseObserver.onError(Status.UNKNOWN.asException());
+
+    // The unsent load report is cancelled.
+    assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
+    // Will retry immediately as balancer has responded previously.
+    verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
+    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 0 second(s)",
+        "DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
+    logs.clear();
+    responseObserver = lrsResponseObserverCaptor.getValue();
+    assertThat(lrsRequestObservers).hasSize(1);
+    requestObserver = lrsRequestObservers.poll();
+    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
+    inOrder.verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+
+    // Balancer sends another response with a different report interval.
+    responseObserver.onNext(buildLrsResponse(50));
+
+    // Load reporting runs normally.
+    ClusterStats stats1 = ClusterStats.newBuilder()
+        .setClusterName(CLUSTER_NAME)
+        .setLoadReportInterval(Durations.fromNanos(50))
+        .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+            .setLocality(TEST_LOCALITY)
+            .setTotalRequestsInProgress(542)
+            .setTotalSuccessfulRequests(645)
+            .setTotalErrorRequests(85)
+            .setTotalIssuedRequests(27))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("lb")
+            .setDroppedCount(0))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("throttle")
+            .setDroppedCount(14))
+        .setTotalDroppedRequests(14)
+        .build();
+    ClusterStats stats2 = ClusterStats.newBuilder()
+        .setClusterName(CLUSTER_NAME)
+        .setLoadReportInterval(Durations.fromNanos(50))
+        .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+            .setLocality(TEST_LOCALITY)
+            .setTotalRequestsInProgress(89))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("lb")
+            .setDroppedCount(0))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("throttle")
+            .setDroppedCount(0))
+        .setTotalDroppedRequests(0)
+        .build();
+    when(loadStatsStore.generateLoadReport()).thenReturn(stats1, stats2);
+    assertNextReport(inOrder, requestObserver, stats1);
+    assertNextReport(inOrder, requestObserver, stats2);
+  }
+
+  @Test
   public void raceBetweenLoadReportingAndLbStreamClosure() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
