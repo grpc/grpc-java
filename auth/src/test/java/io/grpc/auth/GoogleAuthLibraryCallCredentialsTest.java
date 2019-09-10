@@ -28,13 +28,14 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
 import com.google.auth.oauth2.ServiceAccountCredentials;
-import com.google.auth.oauth2.ServiceAccountJwtAccessCredentials;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
@@ -42,7 +43,6 @@ import com.google.common.collect.Multimaps;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
-import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
@@ -393,17 +393,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void jwtAccessCredentialsInRequestMetadata() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    RequestInfo requestInfo = new RequestInfoImpl("example.com:123");
-
-    ServiceAccountJwtAccessCredentials jwtCreds =
-        ServiceAccountJwtAccessCredentials.newBuilder()
-            .setClientId("test-client")
-            .setClientEmail("test-email@example.com")
-            .setPrivateKey(pair.getPrivate())
-            .setPrivateKeyId("test-private-key-id")
-            .build();
-    List<String> expectedAuthMetadata = jwtCreds
-        .getRequestMetadata(new URI("https://example.com:123/a.service")).get("Authorization");
 
     ServiceAccountCredentials credentials =
         ServiceAccountCredentials.newBuilder()
@@ -414,12 +403,18 @@ public class GoogleAuthLibraryCallCredentialsTest {
             .build();
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
-    callCredentials.applyRequestMetadata(requestInfo, executor, applier);
+    callCredentials.applyRequestMetadata(new RequestInfoImpl("example.com:123"), executor, applier);
 
     verify(applier).apply(headersCaptor.capture());
     Metadata headers = headersCaptor.getValue();
-    assertArrayEquals(Iterables.toArray(expectedAuthMetadata, String.class),
-        Iterables.toArray(headers.getAll(AUTHORIZATION), String.class));
+    String token =
+        Iterables.getOnlyElement(headers.getAll(AUTHORIZATION)).substring("Bearer".length());
+    DecodedJWT decoded = JWT.decode(token);
+    assertEquals("test-private-key-id", decoded.getKeyId());
+    assertEquals("https://example.com:123/a.service",
+        Iterables.getOnlyElement(decoded.getAudience()));
+    assertEquals("test-email@example.com", decoded.getIssuer());
+    assertEquals("test-email@example.com", decoded.getSubject());
   }
 
   private int runPendingRunnables() {
