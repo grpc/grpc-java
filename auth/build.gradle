@@ -3,7 +3,8 @@ dependencies {
     compile project(':grpc-api'),
             libraries.google_auth_credentials
     testCompile project(':grpc-testing'),
-            libraries.google_auth_oauth2_http
+            libraries.google_auth_oauth2_http,
+            libraries.jwt
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
