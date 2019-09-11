@@ -241,7 +241,7 @@ def com_google_errorprone_error_prone_annotations():
 def com_google_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:26.0-android",
+        artifact = "com.google.guava:guava:28.0-android",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "1d044ebb866ef08b7d04e998b4260c9b52fab6e6d6b68d207859486bb3686cd5",
         licenses = ["notice"],  # Apache 2.0
