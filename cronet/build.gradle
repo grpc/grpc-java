@@ -1,7 +1,7 @@
 apply plugin: 'com.android.library'
 
 group = "io.grpc"
-version = "1.24.0-SNAPSHOT" // CURRENT_GRPC_VERSION
+version = "1.25.0-SNAPSHOT" // CURRENT_GRPC_VERSION
 description = "gRPC: Cronet Android"
 
 buildscript {
@@ -54,8 +54,8 @@ dependencies {
     errorprone 'com.google.errorprone:error_prone_core:2.3.3'
     errorproneJavac 'com.google.errorprone:javac:9+181-r4173-1'
 
-    implementation 'io.grpc:grpc-core:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
-    testImplementation 'io.grpc:grpc-testing:1.24.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    implementation 'io.grpc:grpc-core:1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
+    testImplementation 'io.grpc:grpc-testing:1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
 
     implementation 'org.chromium.net:cronet-api:76.3809.111'
     testImplementation 'org.chromium.net:cronet-embedded:66.3359.158'
