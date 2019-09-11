@@ -196,7 +196,7 @@ def com_google_api_grpc_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.9.0",
+        artifact = "com.google.auth:google-auth-library-credentials:0.16.0",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "ac9efdd6a930e4df906fa278576fa825d979f74315f2faf5c91fe7e6aabb2788",
         licenses = ["notice"],  # BSD 3-clause
@@ -205,7 +205,7 @@ def com_google_auth_google_auth_library_credentials():
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.9.0",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.17.0",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "e55d9722102cc1245c8c43d69acd49d3c9bbfcc1bcf722e971425506b970097e",
         licenses = ["notice"],  # BSD 3-clause
@@ -260,7 +260,7 @@ def com_google_guava_failureaccess():
 def com_google_j2objc_j2objc_annotations():
     jvm_maven_import_external(
         name = "com_google_j2objc_j2objc_annotations",
-        artifact = "com.google.j2objc:j2objc-annotations:1.1",
+        artifact = "com.google.j2objc:j2objc-annotations:1.3",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "2994a7eb78f2710bd3d3bfb639b2c94e219cedac0d4d084d516e78c16dddecf6",
         licenses = ["notice"],  # Apache 2.0
