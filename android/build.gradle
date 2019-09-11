@@ -52,7 +52,7 @@ dependencies {
     testImplementation 'io.grpc:grpc-okhttp:1.25.0-SNAPSHOT' // CURRENT_GRPC_VERSION
     testImplementation 'junit:junit:4.12'
     testImplementation 'org.robolectric:robolectric:3.7.1'
-    testImplementation 'com.google.truth:truth:0.45'
+    testImplementation 'com.google.truth:truth:1.0'
 }
 
 task javadocs(type: Javadoc) {
