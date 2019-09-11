@@ -289,9 +289,9 @@ def com_google_protobuf_javalite():
 def com_google_truth_truth():
     jvm_maven_import_external(
         name = "com_google_truth_truth",
-        artifact = "com.google.truth:truth:0.45",
+        artifact = "com.google.truth:truth:1.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "0f7dced2a16e55a77e44fc3ff9c5be98d4bf4bb30abc18d78ffd735df950a69f",
+        artifact_sha256 = "edaa12f3b581fcf1c07311e94af8766919c4f3d904b00d3503147b99bf5b4004",
         licenses = ["notice"],  # Apache 2.0
     )
 
