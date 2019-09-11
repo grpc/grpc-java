@@ -831,6 +831,15 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz2")).shutdown();
     verify(loadStatsStore).removeLocality(locality1);
     verify(loadStatsStore).removeLocality(locality2);
+
+    // Regression test for same locality added back.
+    localityStore.updateLocalityStore(localityInfoMap);
+    assertThat(loadBalancers).hasSize(2);
+    localityStore.reset();
+    verify(loadBalancers.get("sz1")).shutdown();
+    verify(loadBalancers.get("sz2")).shutdown();
+    verify(loadStatsStore, times(2)).removeLocality(locality1);
+    verify(loadStatsStore, times(2)).removeLocality(locality2);
   }
 
   private static final class FakeLoadStatsStore implements LoadStatsStore {
