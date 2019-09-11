@@ -462,15 +462,10 @@ public class LoadReportClientImplTest {
 
     // First LRS request sent.
     verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
-    assertThat(logs).containsExactly("DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
-    logs.poll();
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Balancer sends back a normal response.
     responseObserver.onNext(buildLrsResponse(100));
-    assertThat(logs).containsExactly(
-        "DEBUG: Received LRS initial response: " + buildLrsResponse(100));
-    logs.poll();
 
     // A load reporting task is scheduled.
     assertEquals(1, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
@@ -484,9 +479,6 @@ public class LoadReportClientImplTest {
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     // Will retry immediately as balancer has responded previously.
     verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
-    assertThat(logs).containsExactly("DEBUG: LRS stream closed, backoff in 0 second(s)",
-        "DEBUG: Initial LRS request sent: " + EXPECTED_INITIAL_REQ);
-    logs.clear();
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
