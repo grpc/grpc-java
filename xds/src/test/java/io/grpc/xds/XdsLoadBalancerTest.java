@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
-import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
@@ -663,7 +662,7 @@ public class XdsLoadBalancerTest {
 
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
         ArgumentCaptor.forClass(SubchannelPicker.class);
-    verify(helper).updateBalancingState(same(IDLE), subchannelPickerCaptor.capture());
+    verify(helper).updateBalancingState(same(CONNECTING), subchannelPickerCaptor.capture());
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(mock(PickSubchannelArgs.class))
         .isDrop()).isTrue();
   }
@@ -707,6 +706,7 @@ public class XdsLoadBalancerTest {
     serverResponseWriter.onNext(edsResponse);
     assertNotNull(childHelper);
     assertNull(fallbackHelper1);
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
 
     serverResponseWriter.onError(new Exception("fake error"));
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
@@ -716,7 +716,7 @@ public class XdsLoadBalancerTest {
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     childHelper.updateBalancingState(CONNECTING, picker1);
-    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    verify(helper, times(2)).updateBalancingState(CONNECTING, BUFFER_PICKER);
     childHelper.updateBalancingState(TRANSIENT_FAILURE, picker1);
     verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
 
@@ -731,7 +731,7 @@ public class XdsLoadBalancerTest {
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     childHelper.updateBalancingState(CONNECTING, picker2);
     // verify childHelper no more delegates updateBalancingState to parent helper
-    verify(helper, times(2)).updateBalancingState(
+    verify(helper, times(3)).updateBalancingState(
         any(ConnectivityState.class), any(SubchannelPicker.class));
 
     SubchannelPicker picker3 = mock(SubchannelPicker.class);
@@ -755,6 +755,7 @@ public class XdsLoadBalancerTest {
     assertNotNull(childHelper);
     assertThat(fakeClock.getPendingTasks()).hasSize(1);
     assertNull(fallbackHelper1);
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
 
     childHelper.updateBalancingState(READY, mock(SubchannelPicker.class));
     verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
@@ -767,7 +768,7 @@ public class XdsLoadBalancerTest {
 
     // verify childHelper still delegates updateBalancingState to parent helper
     childHelper.updateBalancingState(CONNECTING, mock(SubchannelPicker.class));
-    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    verify(helper, times(2)).updateBalancingState(CONNECTING, BUFFER_PICKER);
   }
 
   private static Attributes standardModeWithFallback1Attributes() throws Exception {

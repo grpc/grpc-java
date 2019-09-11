@@ -40,6 +40,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
@@ -81,6 +82,7 @@ interface LocalityStore {
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
+    private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;
 
     private final Helper helper;
     private final PickerFactory pickerFactory;
@@ -90,7 +92,8 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
 
-    private Map<XdsLocality, LocalityLbInfo> localityMap = ImmutableMap.of();
+    private final Map<XdsLocality, LocalityLbInfo> localityMap = new LinkedHashMap<>();
+    private Map<XdsLocality, LocalityInfo> edsResponsLocalityInfo = ImmutableMap.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -184,9 +187,11 @@ interface LocalityStore {
     public void reset() {
       for (XdsLocality locality : localityMap.keySet()) {
         localityMap.get(locality).shutdown();
+      }
+      localityMap.clear();
+      for (XdsLocality locality : edsResponsLocalityInfo.keySet()) {
         loadStatsStore.removeLocality(locality);
       }
-      localityMap = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
@@ -196,25 +201,27 @@ interface LocalityStore {
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
       Map<XdsLocality, LocalityLbInfo> updatedLocalityMap = new LinkedHashMap<>();
 
-      final Set<XdsLocality> toRemove = new HashSet<>();
       for (XdsLocality oldLocality : oldLocalities) {
         if (!newLocalities.contains(oldLocality)) {
-          toRemove.add(oldLocality);
-          // No graceful transition until a high-level lb graceful transition design is available.
-          localityMap.get(oldLocality).shutdown();
+          deactivate(oldLocality);
         }
       }
 
-      ConnectivityState newState = null;
-      List<WeightedChildPicker> childPickers = new ArrayList<>(newLocalities.size());
       for (XdsLocality newLocality : newLocalities) {
 
-        // Assuming standard mode only (EDS response with a list of endpoints) for now
-        List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
-        LocalityLbInfo localityLbInfo;
+        if (!edsResponsLocalityInfo.containsKey(newLocality)) {
+          loadStatsStore.addLocality(newLocality);
+        }
+
+        // Assuming standard mode only (EDS response with a list of endpoints) for now.
+        final List<EquivalentAddressGroup> newEags = localityInfoMap.get(newLocality).eags;
+        final LocalityLbInfo localityLbInfo;
         ChildHelper childHelper;
         if (oldLocalities.contains(newLocality)) {
           LocalityLbInfo oldLocalityLbInfo = localityMap.get(newLocality);
+
+          oldLocalityLbInfo.reactivate();
+
           childHelper = oldLocalityLbInfo.childHelper;
           localityLbInfo =
               new LocalityLbInfo(
@@ -222,7 +229,6 @@ interface LocalityStore {
                   oldLocalityLbInfo.childBalancer,
                   childHelper);
         } else {
-          loadStatsStore.addLocality(newLocality);
           childHelper =
               new ChildHelper(newLocality, loadStatsStore.getLocalityCounter(newLocality),
                   orcaOobUtil);
@@ -236,41 +242,78 @@ interface LocalityStore {
           }
         }
         updatedLocalityMap.put(newLocality, localityLbInfo);
-        // TODO: put endPointWeights into attributes for WRR.
-        localityLbInfo.childBalancer
-            .handleResolvedAddresses(
-                ResolvedAddresses.newBuilder().setAddresses(newEags).build());
 
-        if (localityLbInfo.childHelper.currentChildState == READY) {
-          childPickers.add(
-              new WeightedChildPicker(
-                  localityInfoMap.get(newLocality).localityWeight,
-                  localityLbInfo.childHelper.currentChildPicker));
-        }
-        newState = aggregateState(newState, childHelper.currentChildState);
+        // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
+        // so execute handleResolvedAddresses() after all the setup in this method is complete.
+        helper.getSynchronizationContext().execute(new Runnable() {
+          @Override
+          public void run() {
+            // TODO: put endPointWeights into attributes for WRR.
+            localityLbInfo.childBalancer
+                .handleResolvedAddresses(
+                    ResolvedAddresses.newBuilder().setAddresses(newEags).build());
+          }
+        });
       }
-      localityMap = Collections.unmodifiableMap(updatedLocalityMap);
 
-      updatePicker(newState, childPickers);
+      // Add deactivated localities to localityMap to keep track of them.
+      for (XdsLocality locality : oldLocalities) {
+        if (localityMap.get(locality).isDeactivated()) {
+          updatedLocalityMap.put(locality, localityMap.get(locality));
+        }
+      }
+      localityMap.clear();
+      localityMap.putAll(updatedLocalityMap);
 
+      final Set<XdsLocality> toBeRemovedFromStatsStore = new HashSet<>();
       // There is a race between picking a subchannel and updating localities, which leads to
       // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
       // loads will not be recorded. We consider this to be natural. By removing locality counters
       // after updating subchannel pickers, we eliminate the race and conservatively record loads
       // happening in that period.
+      for (XdsLocality oldLocality : edsResponsLocalityInfo.keySet()) {
+        if (!localityInfoMap.containsKey(oldLocality)) {
+          toBeRemovedFromStatsStore.add(oldLocality);
+        }
+      }
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
-          for (XdsLocality locality : toRemove) {
+          for (XdsLocality locality : toBeRemovedFromStatsStore) {
             loadStatsStore.removeLocality(locality);
           }
         }
       });
+
+      edsResponsLocalityInfo = ImmutableMap.copyOf(localityInfoMap);
+      onChildStateUpdated();
     }
 
     @Override
     public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
+    }
+
+    private void deactivate(final XdsLocality locality) {
+      if (!localityMap.containsKey(locality) || localityMap.get(locality).isDeactivated()) {
+        return;
+      }
+
+      final LocalityLbInfo localityLbInfo = localityMap.get(locality);
+      class DeletionTask implements Runnable {
+
+        @Override
+        public void run() {
+          localityLbInfo.shutdown();
+          localityMap.remove(locality);
+        }
+      }
+
+      localityLbInfo.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
+          new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
+          TimeUnit.MINUTES, helper.getScheduledExecutorService());
+
+      onChildStateUpdated();
     }
 
     @Override
@@ -288,7 +331,7 @@ interface LocalityStore {
 
     @Nullable
     private static ConnectivityState aggregateState(
-        @Nullable ConnectivityState overallState, @Nullable ConnectivityState childState) {
+        @Nullable ConnectivityState overallState, ConnectivityState childState) {
       if (overallState == null) {
         return childState;
       }
@@ -304,26 +347,18 @@ interface LocalityStore {
       return overallState;
     }
 
-    private void updateChildState(
-        XdsLocality locality, ConnectivityState newChildState, SubchannelPicker newChildPicker) {
-      if (!localityMap.containsKey(locality)) {
-        return;
-      }
-
+    private void onChildStateUpdated() {
       List<WeightedChildPicker> childPickers = new ArrayList<>();
 
       ConnectivityState overallState = null;
       for (XdsLocality l : localityMap.keySet()) {
-        LocalityLbInfo localityLbInfo = localityMap.get(l);
-        ConnectivityState childState;
-        SubchannelPicker childPicker;
-        if (l.equals(locality)) {
-          childState = newChildState;
-          childPicker = newChildPicker;
-        } else {
-          childState = localityLbInfo.childHelper.currentChildState;
-          childPicker = localityLbInfo.childHelper.currentChildPicker;
+        if (localityMap.get(l).isDeactivated()) {
+          continue;
         }
+        LocalityLbInfo localityLbInfo = localityMap.get(l);
+        ConnectivityState childState = localityLbInfo.childHelper.currentChildState;
+        SubchannelPicker childPicker = localityLbInfo.childHelper.currentChildPicker;
+
         overallState = aggregateState(overallState, childState);
 
         if (READY == childState) {
@@ -351,9 +386,6 @@ interface LocalityStore {
 
       if (!dropOverloads.isEmpty()) {
         picker = new DroppablePicker(dropOverloads, picker, random, loadStatsStore);
-        if (state == null) {
-          state = IDLE;
-        }
       }
 
       if (state != null) {
@@ -370,6 +402,9 @@ interface LocalityStore {
       final LoadBalancer childBalancer;
       final ChildHelper childHelper;
 
+      @Nullable
+      private ScheduledHandle delayedDeletionTimer;
+
       LocalityLbInfo(
           int localityWeight, LoadBalancer childBalancer, ChildHelper childHelper) {
         checkArgument(localityWeight >= 0, "localityWeight must be non-negative");
@@ -379,7 +414,24 @@ interface LocalityStore {
       }
 
       void shutdown() {
+        if (delayedDeletionTimer != null) {
+          delayedDeletionTimer.cancel();
+          delayedDeletionTimer = null;
+        }
         childBalancer.shutdown();
+      }
+
+      void reactivate() {
+        if (delayedDeletionTimer != null) {
+          delayedDeletionTimer.cancel();
+          delayedDeletionTimer = null;
+          childHelper.updateBalancingState(
+              childHelper.currentChildState, childHelper.currentChildPicker);
+        }
+      }
+
+      boolean isDeactivated() {
+        return delayedDeletionTimer != null;
       }
     }
 
@@ -388,7 +440,7 @@ interface LocalityStore {
       private final OrcaReportingHelperWrapper orcaReportingHelperWrapper;
 
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
-      private ConnectivityState currentChildState = null;
+      private ConnectivityState currentChildState = CONNECTING;
 
       ChildHelper(final XdsLocality locality, final ClientLoadCounter counter,
           OrcaOobUtil orcaOobUtil) {
@@ -414,7 +466,7 @@ interface LocalityStore {
                         newPicker, orcaPerRequestUtil));
 
             // delegate to parent helper
-            updateChildState(locality, newState, currentChildPicker);
+            onChildStateUpdated();
           }
 
           @Override
