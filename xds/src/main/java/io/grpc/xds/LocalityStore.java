@@ -192,6 +192,7 @@ interface LocalityStore {
       for (XdsLocality locality : edsResponsLocalityInfo.keySet()) {
         loadStatsStore.removeLocality(locality);
       }
+      edsResponsLocalityInfo = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
