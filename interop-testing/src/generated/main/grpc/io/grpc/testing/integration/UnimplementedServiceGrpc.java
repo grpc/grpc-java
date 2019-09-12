@@ -45,22 +45,21 @@ public final class UnimplementedServiceGrpc {
     if ((getUnimplementedCallMethod = UnimplementedServiceGrpc.getUnimplementedCallMethod) == null) {
       synchronized (UnimplementedServiceGrpc.class) {
         if ((getUnimplementedCallMethod = UnimplementedServiceGrpc.getUnimplementedCallMethod) == null) {
-          UnimplementedServiceGrpc.getUnimplementedCallMethod = getUnimplementedCallMethod = 
+          UnimplementedServiceGrpc.getUnimplementedCallMethod = getUnimplementedCallMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.EmptyProtos.Empty, io.grpc.testing.integration.EmptyProtos.Empty>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.UnimplementedService", "UnimplementedCall"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "UnimplementedCall"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.EmptyProtos.Empty.getDefaultInstance()))
-                  .setSchemaDescriptor(new UnimplementedServiceMethodDescriptorSupplier("UnimplementedCall"))
-                  .build();
-          }
+              .setSchemaDescriptor(new UnimplementedServiceMethodDescriptorSupplier("UnimplementedCall"))
+              .build();
         }
-     }
-     return getUnimplementedCallMethod;
+      }
+    }
+    return getUnimplementedCallMethod;
   }
 
   /**

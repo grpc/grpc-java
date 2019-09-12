@@ -43,6 +43,9 @@ import io.netty.channel.EventLoop;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.handler.codec.http2.Http2Stream;
 import io.netty.util.AsciiString;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
+import io.perfmark.Tag;
 import javax.annotation.Nullable;
 
 /**
@@ -114,8 +117,18 @@ class NettyClientStream extends AbstractClientStream {
   }
 
   private class Sink implements AbstractClientStream.Sink {
+
     @Override
     public void writeHeaders(Metadata headers, byte[] requestPayload) {
+      PerfMark.startTask("NettyClientStream$Sink.writeHeaders");
+      try {
+        writeHeadersInternal(headers, requestPayload);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.writeHeaders");
+      }
+    }
+
+    private void writeHeadersInternal(Metadata headers, byte[] requestPayload) {
       // Convert the headers into Netty HTTP/2 headers.
       AsciiString defaultPath = (AsciiString) methodDescriptorAccessor.geRawMethodName(method);
       if (defaultPath == null) {
@@ -152,18 +165,17 @@ class NettyClientStream extends AbstractClientStream {
           }
         }
       };
-
       // Write the command requesting the creation of the stream.
       writeQueue.enqueue(
           new CreateStreamCommand(http2Headers, transportState(), shouldBeCountedForInUse(), get),
           !method.getType().clientSendsOneMessage() || get).addListener(failureListener);
     }
 
-    @Override
-    public void writeFrame(
+    private void writeFrameInternal(
         WritableBuffer frame, boolean endOfStream, boolean flush, final int numMessages) {
       Preconditions.checkArgument(numMessages >= 0);
-      ByteBuf bytebuf = frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf();
+      ByteBuf bytebuf =
+          frame == null ? EMPTY_BUFFER : ((NettyWritableBuffer) frame).bytebuf().touch();
       final int numBytes = bytebuf.readableBytes();
       if (numBytes > 0) {
         // Add the bytes to outbound flow control.
@@ -184,28 +196,65 @@ class NettyClientStream extends AbstractClientStream {
             });
       } else {
         // The frame is empty and will not impact outbound flow control. Just send it.
-        writeQueue.enqueue(new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
+        writeQueue.enqueue(
+            new SendGrpcFrameCommand(transportState(), bytebuf, endOfStream), flush);
       }
     }
 
     @Override
-    public void request(final int numMessages) {
+    public void writeFrame(
+        WritableBuffer frame, boolean endOfStream, boolean flush, int numMessages) {
+      PerfMark.startTask("NettyClientStream$Sink.writeFrame");
+      try {
+        writeFrameInternal(frame, endOfStream, flush, numMessages);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.writeFrame");
+      }
+    }
+
+    private void requestInternal(final int numMessages) {
       if (channel.eventLoop().inEventLoop()) {
         // Processing data read in the event loop so can call into the deframer immediately
         transportState().requestMessagesFromDeframer(numMessages);
       } else {
         channel.eventLoop().execute(new Runnable() {
+          final Link link = PerfMark.linkOut();
           @Override
           public void run() {
-            transportState().requestMessagesFromDeframer(numMessages);
+            PerfMark.startTask(
+                "NettyClientStream$Sink.requestMessagesFromDeframer",
+                transportState().tag());
+            PerfMark.linkIn(link);
+            try {
+              transportState().requestMessagesFromDeframer(numMessages);
+            } finally {
+              PerfMark.stopTask(
+                  "NettyClientStream$Sink.requestMessagesFromDeframer",
+                  transportState().tag());
+            }
           }
         });
       }
     }
 
     @Override
+    public void request(int numMessages) {
+      PerfMark.startTask("NettyClientStream$Sink.request");
+      try {
+        requestInternal(numMessages);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.request");
+      }
+    }
+
+    @Override
     public void cancel(Status status) {
-      writeQueue.enqueue(new CancelClientStreamCommand(transportState(), status), true);
+      PerfMark.startTask("NettyClientStream$Sink.cancel");
+      try {
+        writeQueue.enqueue(new CancelClientStreamCommand(transportState(), status), true);
+      } finally {
+        PerfMark.stopTask("NettyClientStream$Sink.cancel");
+      }
     }
   }
 
@@ -214,20 +263,25 @@ class NettyClientStream extends AbstractClientStream {
       implements StreamIdHolder {
     private static final int NON_EXISTENT_ID = -1;
 
+    private final String methodName;
     private final NettyClientHandler handler;
     private final EventLoop eventLoop;
     private int id;
     private Http2Stream http2Stream;
+    private Tag tag;
 
     public TransportState(
         NettyClientHandler handler,
         EventLoop eventLoop,
         int maxMessageSize,
         StatsTraceContext statsTraceCtx,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer,
+        String methodName) {
       super(maxMessageSize, statsTraceCtx, transportTracer);
+      this.methodName = checkNotNull(methodName, "methodName");
       this.handler = checkNotNull(handler, "handler");
       this.eventLoop = checkNotNull(eventLoop, "eventLoop");
+      tag = PerfMark.createTag(methodName);
     }
 
     @Override
@@ -240,6 +294,7 @@ class NettyClientStream extends AbstractClientStream {
       checkArgument(id > 0, "id must be positive %s", id);
       checkState(this.id == 0, "id has been previously set: %s", this.id);
       this.id = id;
+      this.tag = PerfMark.createTag(methodName, id);
     }
 
     /**
@@ -323,6 +378,11 @@ class NettyClientStream extends AbstractClientStream {
 
     void transportDataReceived(ByteBuf frame, boolean endOfStream) {
       transportDataReceived(new NettyReadableBuffer(frame.retain()), endOfStream);
+    }
+
+    @Override
+    public final Tag tag() {
+      return tag;
     }
   }
 }

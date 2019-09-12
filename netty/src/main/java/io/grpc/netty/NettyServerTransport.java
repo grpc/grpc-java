@@ -137,12 +137,14 @@ class NettyServerTransport implements ServerTransport {
       }
     }
 
+    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
+    ChannelHandler bufferingHandler = new WriteBufferingAndExceptionHandler(negotiationHandler);
+
     ChannelFutureListener terminationNotifier = new TerminationNotifier();
     channelUnused.addListener(terminationNotifier);
     channel.closeFuture().addListener(terminationNotifier);
 
-    ChannelHandler negotiationHandler = protocolNegotiator.newHandler(grpcHandler);
-    channel.pipeline().addLast(negotiationHandler);
+    channel.pipeline().addLast(bufferingHandler);
   }
 
   @Override
@@ -184,7 +186,7 @@ class NettyServerTransport implements ServerTransport {
   static Level getLogLevel(Throwable t) {
     if (t instanceof IOException && t.getMessage() != null) {
       for (String msg : QUIET_ERRORS) {
-        if (t.getMessage().equals(msg)) {
+        if (t.getMessage().contains(msg)) {
           return Level.FINE;
         }
       }

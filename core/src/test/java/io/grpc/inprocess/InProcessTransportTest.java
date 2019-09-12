@@ -18,10 +18,10 @@ package io.grpc.inprocess;
 
 import com.google.common.collect.ImmutableList;
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.testing.AbstractTransportTest;
 import java.util.List;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -58,7 +58,8 @@ public class InProcessTransportTest extends AbstractTransportTest {
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
     return new InProcessTransport(
-        TRANSPORT_NAME, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, testAuthority(server), USER_AGENT);
+        TRANSPORT_NAME, GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, testAuthority(server), USER_AGENT,
+        eagAttrs());
   }
 
   @Override

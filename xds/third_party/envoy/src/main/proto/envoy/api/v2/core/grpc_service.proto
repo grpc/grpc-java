@@ -1,8 +1,10 @@
 syntax = "proto3";
 
 package envoy.api.v2.core;
-option java_package = "io.grpc.xds.shaded.envoy.api.v2.core";
+
+option java_outer_classname = "GrpcServiceProto";
 option java_multiple_files = true;
+option java_package = "io.envoyproxy.envoy.api.v2.core";
 
 import "envoy/api/v2/core/base.proto";
 
@@ -12,9 +14,9 @@ import "google/protobuf/struct.proto";
 import "google/protobuf/empty.proto";
 
 import "validate/validate.proto";
+import "gogoproto/gogo.proto";
 
-
-
+option (gogoproto.equal_all) = true;
 
 // [#protodoc-title: gRPC services]
 
@@ -84,7 +86,6 @@ message GrpcService {
         oneof config_type {
           google.protobuf.Struct config = 2;
 
-          // [#not-implemented-hide:]
           google.protobuf.Any typed_config = 3;
         }
       }

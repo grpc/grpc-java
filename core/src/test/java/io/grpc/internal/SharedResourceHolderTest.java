@@ -23,8 +23,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -106,7 +106,7 @@ public class SharedResourceHolderTest {
     ResourceInstance foo3 = holder.getInternal(SHARED_FOO);
     assertNotSame(sharedFoo, foo3);
 
-    bar1 = holder.releaseInternal(SHARED_BAR, bar1);
+    holder.releaseInternal(SHARED_BAR, bar1);
 
     // bar refcount has reached 0, a destroying task is scheduled
     assertEquals(1, scheduledDestroyTasks.size());
@@ -122,7 +122,7 @@ public class SharedResourceHolderTest {
   @Test public void cancelDestroyTask() {
     ResourceInstance foo1 = holder.getInternal(SHARED_FOO);
     ResourceInstance sharedFoo = foo1;
-    foo1 = holder.releaseInternal(SHARED_FOO, foo1);
+    holder.releaseInternal(SHARED_FOO, foo1);
     // A destroying task for foo is scheduled
     MockScheduledFuture<?> scheduledDestroyTask = scheduledDestroyTasks.poll();
     assertFalse(scheduledDestroyTask.cancelled);
@@ -137,7 +137,7 @@ public class SharedResourceHolderTest {
     assertSame(sharedFoo, foo2);
 
     // Release it and the destroying task is scheduled again
-    foo2 = holder.releaseInternal(SHARED_FOO, foo2);
+    holder.releaseInternal(SHARED_FOO, foo2);
     scheduledDestroyTask = scheduledDestroyTasks.poll();
     assertFalse(scheduledDestroyTask.cancelled);
     scheduledDestroyTask.runTask();
@@ -171,6 +171,34 @@ public class SharedResourceHolderTest {
     } catch (IllegalStateException e) {
       // expected
     }
+  }
+
+  @Test public void handleInstanceCloseError() {
+    class ExceptionOnCloseResource implements Resource<ResourceInstance> {
+      @Override
+      public ResourceInstance create() {
+        return new ResourceInstance();
+      }
+
+      @Override
+      public void close(ResourceInstance instance) {
+        throw new RuntimeException();
+      }
+    }
+
+    Resource<ResourceInstance> resource = new ExceptionOnCloseResource();
+    ResourceInstance instance = holder.getInternal(resource);
+    holder.releaseInternal(resource, instance);
+    MockScheduledFuture<?> scheduledDestroyTask = scheduledDestroyTasks.poll();
+    try {
+      scheduledDestroyTask.runTask();
+      fail("Should throw RuntimeException");
+    } catch (RuntimeException e) {
+      // expected
+    }
+
+    // Future resource fetches should not get the partially-closed one.
+    assertNotSame(instance, holder.getInternal(resource));
   }
 
   private class MockExecutorFactory implements

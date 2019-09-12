@@ -28,20 +28,13 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
-import io.grpc.alts.internal.AltsClientOptions;
-import io.grpc.alts.internal.AltsProtocolNegotiator;
-import io.grpc.alts.internal.AltsProtocolNegotiator.LazyChannel;
-import io.grpc.alts.internal.AltsTsiHandshaker;
-import io.grpc.alts.internal.HandshakerServiceGrpc;
-import io.grpc.alts.internal.RpcProtocolVersionsUtil;
-import io.grpc.alts.internal.TsiHandshaker;
-import io.grpc.alts.internal.TsiHandshakerFactory;
+import io.grpc.alts.internal.AltsProtocolNegotiator.ClientAltsProtocolNegotiatorFactory;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.SharedResourcePool;
 import io.grpc.netty.InternalNettyChannelBuilder;
+import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.NettyChannelBuilder;
-import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -61,8 +54,6 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
       SharedResourcePool.forResource(HandshakerServiceChannel.SHARED_HANDSHAKER_CHANNEL);
   private boolean enableUntrustedAlts;
 
-  private AltsProtocolNegotiator negotiatorForTest;
-
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
   public static final AltsChannelBuilder forTarget(String target) {
     return new AltsChannelBuilder(target);
@@ -74,13 +65,7 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
   }
 
   private AltsChannelBuilder(String target) {
-    delegate =
-        NettyChannelBuilder.forTarget(target)
-            .keepAliveTime(20, TimeUnit.SECONDS)
-            .keepAliveTimeout(10, TimeUnit.SECONDS)
-            .keepAliveWithoutCalls(true);
-    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        delegate(), new ProtocolNegotiatorFactory());
+    delegate = NettyChannelBuilder.forTarget(target);
   }
 
   /**
@@ -130,41 +115,20 @@ public final class AltsChannelBuilder extends ForwardingChannelBuilder<AltsChann
         delegate().intercept(new FailingClientInterceptor(status));
       }
     }
+    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
+        delegate(),
+        new ClientAltsProtocolNegotiatorFactory(
+            targetServiceAccountsBuilder.build(), handshakerChannelPool));
 
     return delegate().build();
   }
 
   @VisibleForTesting
   @Nullable
-  AltsProtocolNegotiator getProtocolNegotiatorForTest() {
-    return negotiatorForTest;
-  }
-
-  private final class ProtocolNegotiatorFactory
-      implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
-
-    @Override
-    public AltsProtocolNegotiator buildProtocolNegotiator() {
-      final ImmutableList<String> targetServiceAccounts = targetServiceAccountsBuilder.build();
-      final LazyChannel lazyHandshakerChannel = new LazyChannel(handshakerChannelPool);
-      TsiHandshakerFactory altsHandshakerFactory =
-          new TsiHandshakerFactory() {
-            @Override
-            public TsiHandshaker newHandshaker(String authority) {
-              AltsClientOptions handshakerOptions =
-                  new AltsClientOptions.Builder()
-                      .setRpcProtocolVersions(RpcProtocolVersionsUtil.getRpcProtocolVersions())
-                      .setTargetServiceAccounts(targetServiceAccounts)
-                      .setTargetName(authority)
-                      .build();
-              return AltsTsiHandshaker.newClient(
-                  HandshakerServiceGrpc.newStub(lazyHandshakerChannel.get()), handshakerOptions);
-            }
-          };
-      return negotiatorForTest =
-          AltsProtocolNegotiator.createClientNegotiator(
-              altsHandshakerFactory, lazyHandshakerChannel);
-    }
+  ProtocolNegotiator getProtocolNegotiatorForTest() {
+    return new ClientAltsProtocolNegotiatorFactory(
+        targetServiceAccountsBuilder.build(), handshakerChannelPool)
+            .buildProtocolNegotiator();
   }
 
   /** An implementation of {@link ClientInterceptor} that fails each call. */

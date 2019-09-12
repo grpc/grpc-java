@@ -33,7 +33,6 @@ import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
-import io.grpc.LoadBalancer;
 import io.grpc.MethodDescriptor;
 import io.grpc.NameResolver;
 import io.grpc.internal.testing.StatsTestUtils.FakeStatsRecorder;
@@ -42,7 +41,11 @@ import io.grpc.internal.testing.StatsTestUtils.FakeTagger;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import org.junit.Rule;
@@ -119,34 +122,6 @@ public class AbstractManagedChannelImplBuilderTest {
   @Test(expected = IllegalStateException.class)
   public void nameResolverFactory_notAllowedWithDirectAddress() {
     directAddressBuilder.nameResolverFactory(mock(NameResolver.Factory.class));
-  }
-
-  @Test
-  public void loadBalancerFactory_default() {
-    assertNull(builder.loadBalancerFactory);
-  }
-
-  @Test
-  @Deprecated
-  public void loadBalancerFactory_normal() {
-    LoadBalancer.Factory loadBalancerFactory = mock(LoadBalancer.Factory.class);
-    assertEquals(builder, builder.loadBalancerFactory(loadBalancerFactory));
-    assertEquals(loadBalancerFactory, builder.loadBalancerFactory);
-  }
-
-  @Test
-  @Deprecated
-  public void loadBalancerFactory_null() {
-    LoadBalancer.Factory defaultValue = builder.loadBalancerFactory;
-    builder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
-    assertEquals(builder, builder.loadBalancerFactory(null));
-    assertEquals(defaultValue, builder.loadBalancerFactory);
-  }
-
-  @Test(expected = IllegalStateException.class)
-  @Deprecated
-  public void loadBalancerFactory_notAllowedWithDirectAddress() {
-    directAddressBuilder.loadBalancerFactory(mock(LoadBalancer.Factory.class));
   }
 
   @Test
@@ -297,7 +272,7 @@ public class AbstractManagedChannelImplBuilderTest {
         .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
     assertThat(effectiveInterceptors.get(1))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(2)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(2)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -308,7 +283,7 @@ public class AbstractManagedChannelImplBuilderTest {
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
         .isInstanceOf(CensusTracingModule.TracingClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -319,7 +294,7 @@ public class AbstractManagedChannelImplBuilderTest {
     assertEquals(2, effectiveInterceptors.size());
     assertThat(effectiveInterceptors.get(0))
         .isInstanceOf(CensusStatsModule.StatsClientInterceptor.class);
-    assertThat(effectiveInterceptors.get(1)).isSameAs(DUMMY_USER_INTERCEPTOR);
+    assertThat(effectiveInterceptors.get(1)).isSameInstanceAs(DUMMY_USER_INTERCEPTOR);
   }
 
   @Test
@@ -427,6 +402,70 @@ public class AbstractManagedChannelImplBuilderTest {
 
     builder.disableRetry();
     assertFalse(builder.retryEnabled);
+  }
+
+  @Test
+  public void defaultServiceConfig_nullKey() {
+    Builder builder = new Builder("target");
+    Map<String, Object> config = new HashMap<>();
+    config.put(null, "val");
+
+    thrown.expect(IllegalArgumentException.class);
+    builder.defaultServiceConfig(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_intKey() {
+    Builder builder = new Builder("target");
+    Map<Integer, Object> subConfig = new HashMap<>();
+    subConfig.put(3, "val");
+    Map<String, Object> config = new HashMap<>();
+    config.put("key", subConfig);
+
+    thrown.expect(IllegalArgumentException.class);
+    builder.defaultServiceConfig(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_intValue() {
+    Builder builder = new Builder("target");
+    Map<String, Object> config = new HashMap<>();
+    config.put("key", 3);
+
+    thrown.expect(IllegalArgumentException.class);
+    builder.defaultServiceConfig(config);
+  }
+
+  @Test
+  public void defaultServiceConfig_nested() {
+    Builder builder = new Builder("target");
+    Map<String, Object> config = new HashMap<>();
+    List<Object> list1 = new ArrayList<>();
+    list1.add(123D);
+    list1.add(null);
+    list1.add(true);
+    list1.add("str");
+    Map<String, Object> map2 = new HashMap<>();
+    map2.put("key2", false);
+    map2.put("key3", null);
+    map2.put("key4", Collections.singletonList("v4"));
+    map2.put("key4", 3.14D);
+    map2.put("key5", new HashMap<String, Object>());
+    list1.add(map2);
+    config.put("key1", list1);
+
+    builder.defaultServiceConfig(config);
+
+    assertThat(builder.defaultServiceConfig).containsExactlyEntriesIn(config);
+  }
+
+  @Test
+  public void disableNameResolverServiceConfig() {
+    Builder builder = new Builder("target");
+    assertThat(builder.lookUpServiceConfig).isTrue();
+
+    builder.disableServiceConfigLookUp();
+    assertThat(builder.lookUpServiceConfig).isFalse();
   }
 
   static class Builder extends AbstractManagedChannelImplBuilder<Builder> {

@@ -19,9 +19,11 @@ package io.grpc.internal;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
 
 import io.grpc.NameResolver;
-import io.grpc.ProxyDetector;
+import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.SynchronizationContext;
 import java.net.URI;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,18 +32,19 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link DnsNameResolverProvider}. */
 @RunWith(JUnit4.class)
 public class DnsNameResolverProviderTest {
-
-  private static final NameResolver.Helper HELPER = new NameResolver.Helper() {
-      @Override
-      public int getDefaultPort() {
-        throw new UnsupportedOperationException("Should not be called");
-      }
-
-      @Override
-      public ProxyDetector getProxyDetector() {
-        return GrpcUtil.getDefaultProxyDetector();
-      }
-    };
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final NameResolver.Args args = NameResolver.Args.newBuilder()
+      .setDefaultPort(8080)
+      .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
+      .setSynchronizationContext(syncContext)
+      .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .build();
 
   private DnsNameResolverProvider provider = new DnsNameResolverProvider();
 
@@ -53,8 +56,8 @@ public class DnsNameResolverProviderTest {
   @Test
   public void newNameResolver() {
     assertSame(DnsNameResolver.class,
-        provider.newNameResolver(URI.create("dns:///localhost:443"), HELPER).getClass());
+        provider.newNameResolver(URI.create("dns:///localhost:443"), args).getClass());
     assertNull(
-        provider.newNameResolver(URI.create("notdns:///localhost:443"), HELPER));
+        provider.newNameResolver(URI.create("notdns:///localhost:443"), args));
   }
 }

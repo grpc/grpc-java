@@ -21,9 +21,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -43,6 +43,7 @@ import io.grpc.ServerCall;
 import io.grpc.Status;
 import io.grpc.internal.ServerCallImpl.ServerStreamListenerImpl;
 import io.grpc.internal.testing.SingleMessageProducer;
+import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -90,7 +91,7 @@ public class ServerCallImplTest {
     context = Context.ROOT.withCancellation();
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer, PerfMark.createTag());
   }
 
   @Test
@@ -113,7 +114,7 @@ public class ServerCallImplTest {
 
     call = new ServerCallImpl<>(stream, UNARY_METHOD, requestHeaders, context,
         DecompressorRegistry.getDefaultInstance(), CompressorRegistry.getDefaultInstance(),
-        tracer);
+        tracer, PerfMark.createTag());
 
     // required boilerplate
     call.sendHeaders(new Metadata());
@@ -224,7 +225,8 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer,
+        PerfMark.createTag());
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     verify(stream, times(1)).writeMessage(any(InputStream.class));
@@ -258,7 +260,8 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer,
+        PerfMark.createTag());
     serverCall.sendHeaders(new Metadata());
     serverCall.sendMessage(1L);
     serverCall.sendMessage(1L);
@@ -295,7 +298,8 @@ public class ServerCallImplTest {
         context,
         DecompressorRegistry.getDefaultInstance(),
         CompressorRegistry.getDefaultInstance(),
-        serverCallTracer);
+        serverCallTracer,
+        PerfMark.createTag());
     serverCall.close(Status.OK, new Metadata());
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
     verify(stream, times(1)).cancel(statusCaptor.capture());

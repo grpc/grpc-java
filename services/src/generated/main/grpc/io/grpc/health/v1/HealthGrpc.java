@@ -41,22 +41,21 @@ public final class HealthGrpc {
     if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
       synchronized (HealthGrpc.class) {
         if ((getCheckMethod = HealthGrpc.getCheckMethod) == null) {
-          HealthGrpc.getCheckMethod = getCheckMethod = 
+          HealthGrpc.getCheckMethod = getCheckMethod =
               io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.health.v1.Health", "Check"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Check"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Check"))
+              .build();
         }
-     }
-     return getCheckMethod;
+      }
+    }
+    return getCheckMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.health.v1.HealthCheckRequest,
@@ -73,22 +72,21 @@ public final class HealthGrpc {
     if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
       synchronized (HealthGrpc.class) {
         if ((getWatchMethod = HealthGrpc.getWatchMethod) == null) {
-          HealthGrpc.getWatchMethod = getWatchMethod = 
+          HealthGrpc.getWatchMethod = getWatchMethod =
               io.grpc.MethodDescriptor.<io.grpc.health.v1.HealthCheckRequest, io.grpc.health.v1.HealthCheckResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.health.v1.Health", "Watch"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "Watch"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.health.v1.HealthCheckResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Watch"))
-                  .build();
-          }
+              .setSchemaDescriptor(new HealthMethodDescriptorSupplier("Watch"))
+              .build();
         }
-     }
-     return getWatchMethod;
+      }
+    }
+    return getWatchMethod;
   }
 
   /**

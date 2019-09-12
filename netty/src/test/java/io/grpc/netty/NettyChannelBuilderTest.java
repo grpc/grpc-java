@@ -22,7 +22,10 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.ManagedChannel;
 import io.grpc.netty.InternalNettyChannelBuilder.OverrideAuthorityChecker;
-import io.grpc.netty.ProtocolNegotiators.TlsNegotiator;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.local.LocalChannel;
 import io.netty.handler.ssl.SslContext;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -151,7 +154,7 @@ public class NettyChannelBuilderTest {
         NegotiationType.PLAINTEXT_UPGRADE,
         noSslContext);
     // just check that the classes are the same, and that negotiator is not null.
-    assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeNegotiator);
+    assertTrue(negotiator instanceof ProtocolNegotiators.PlaintextUpgradeProtocolNegotiator);
   }
 
   @Test
@@ -164,13 +167,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithClientContext() throws SSLException {
-    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
-
-    assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
-    ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
-    ProtocolNegotiators.HostPort hostPort = n.parseAuthority("authority:1234");
+    ProtocolNegotiators.HostPort hostPort = ProtocolNegotiators.parseAuthority("authority:1234");
 
     assertEquals("authority", hostPort.host);
     assertEquals(1234, hostPort.port);
@@ -178,13 +175,7 @@ public class NettyChannelBuilderTest {
 
   @Test
   public void createProtocolNegotiatorByType_tlsWithAuthorityFallback() throws SSLException {
-    ProtocolNegotiator negotiator = NettyChannelBuilder.createProtocolNegotiatorByType(
-        NegotiationType.TLS,
-        GrpcSslContexts.forClient().build());
-
-    assertTrue(negotiator instanceof ProtocolNegotiators.TlsNegotiator);
-    ProtocolNegotiators.TlsNegotiator n = (TlsNegotiator) negotiator;
-    ProtocolNegotiators.HostPort hostPort = n.parseAuthority("bad_authority");
+    ProtocolNegotiators.HostPort hostPort = ProtocolNegotiators.parseAuthority("bad_authority");
 
     assertEquals("bad_authority", hostPort.host);
     assertEquals(-1, hostPort.port);
@@ -206,5 +197,64 @@ public class NettyChannelBuilderTest {
     thrown.expect(IllegalArgumentException.class);
     thrown.expectMessage("keepalive timeout must be positive");
     builder.keepAliveTimeout(-1L, TimeUnit.HOURS);
+  }
+
+  @Test
+  public void assertEventLoopAndChannelType_onlyGroupProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    builder.eventLoopGroup(mock(EventLoopGroup.class));
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopAndChannelType_onlyTypeProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    builder.channelType(LocalChannel.class);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopAndChannelType_onlyFactoryProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    builder.channelFactory(new ChannelFactory<Channel>() {
+      @Override
+      public Channel newChannel() {
+        return null;
+      }
+    });
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopAndChannelType_usingDefault() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+
+    builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopAndChannelType_bothProvided() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    builder.eventLoopGroup(mock(EventLoopGroup.class));
+    builder.channelType(LocalChannel.class);
+
+    builder.assertEventLoopAndChannelType();
+  }
+
+  @Test
+  public void useNioTransport_shouldNotFallBack() {
+    NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
+    InternalNettyChannelBuilder.useNioTransport(builder);
+
+    builder.assertEventLoopAndChannelType();
   }
 }

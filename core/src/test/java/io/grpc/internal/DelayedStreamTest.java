@@ -16,13 +16,14 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -40,7 +41,7 @@ import io.grpc.Status;
 import io.grpc.internal.testing.SingleMessageProducer;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -48,7 +49,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link DelayedStream}.  Most of the state checking is enforced by
@@ -56,15 +60,13 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class DelayedStreamTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock private ClientStreamListener listener;
   @Mock private ClientStream realStream;
   @Captor private ArgumentCaptor<ClientStreamListener> listenerCaptor;
   private DelayedStream stream = new DelayedStream();
-
-  @Before
-  public void setUp() {
-    MockitoAnnotations.initMocks(this);
-  }
 
   @Test
   public void setStream_setAuthority() {
@@ -187,12 +189,7 @@ public class DelayedStreamTest {
 
     stream.start(listener);
 
-    try {
-      stream.getAttributes(); // expect to throw IllegalStateException, otherwise fail()
-      fail();
-    } catch (IllegalStateException expected) {
-      // ignore
-    }
+    assertEquals(Attributes.EMPTY, stream.getAttributes());
 
     stream.setStream(realStream);
     assertEquals(attributes, stream.getAttributes());
@@ -347,5 +344,39 @@ public class DelayedStreamTest {
     verify(listener).messagesAvailable(producer);
     delayedListener.closed(status, trailers);
     verify(listener).closed(status, trailers);
+  }
+
+  @Test
+  public void appendTimeoutInsight_notStarted() {
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[]");
+  }
+
+  @Test
+  public void appendTimeoutInsight_realStreamNotSet() {
+    InsightBuilder insight = new InsightBuilder();
+    stream.start(listener);
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).matches("\\[buffered_nanos=[0-9]+\\, waiting_for_connection]");
+  }
+
+  @Test
+  public void appendTimeoutInsight_realStreamSet() {
+    doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock in) {
+          InsightBuilder insight = (InsightBuilder) in.getArguments()[0];
+          insight.appendKeyValue("remote_addr", "127.0.0.1:443");
+          return null;
+        }
+      }).when(realStream).appendTimeoutInsight(any(InsightBuilder.class));
+    stream.start(listener);
+    stream.setStream(realStream);
+
+    InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString())
+        .matches("\\[buffered_nanos=[0-9]+, remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 }

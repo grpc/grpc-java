@@ -20,6 +20,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.base.Ticker;
 import com.google.common.util.concurrent.AbstractFuture;
+import io.grpc.Deadline;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -57,6 +58,13 @@ public final class FakeClock {
   private final Ticker ticker =
       new Ticker() {
         @Override public long read() {
+          return currentTimeNanos;
+        }
+      };
+
+  private final Deadline.Ticker deadlineTicker =
+      new Deadline.Ticker() {
+        @Override public long nanoTime() {
           return currentTimeNanos;
         }
       };
@@ -227,6 +235,13 @@ public final class FakeClock {
    */
   public Ticker getTicker() {
     return ticker;
+  }
+
+  /**
+   * Deadline ticker of the FakeClock.
+   */
+  public Deadline.Ticker getDeadlineTicker() {
+    return deadlineTicker;
   }
 
   /**

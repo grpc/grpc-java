@@ -19,6 +19,7 @@ package io.grpc.internal;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.InternalChannelz.id;
 import static io.grpc.internal.GrpcUtil.MESSAGE_ENCODING_KEY;
+import static io.grpc.internal.GrpcUtil.TIMEOUT_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -28,13 +29,11 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
-import static org.mockito.Matchers.isNotNull;
-import static org.mockito.Matchers.notNull;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -79,6 +78,7 @@ import io.grpc.internal.ServerImpl.JumpToApplicationThreadServerStreamListener;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.internal.testing.TestServerStreamTracer;
 import io.grpc.util.MutableHandlerRegistry;
+import io.perfmark.PerfMark;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
@@ -107,8 +107,8 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -200,6 +200,7 @@ public class ServerImplTest {
   public void startUp() throws IOException {
     MockitoAnnotations.initMocks(this);
     builder.channelz = channelz;
+    builder.ticker = timer.getDeadlineTicker();
     streamTracerFactories = Arrays.asList(streamTracerFactory);
     when(executorPool.getObject()).thenReturn(executor.getScheduledExecutorService());
     when(streamTracerFactory.newServerStreamTracer(anyString(), any(Metadata.class)))
@@ -484,10 +485,12 @@ public class ServerImplTest {
 
     transportListener.streamCreated(stream, "Waiter/nonexist", requestHeaders);
 
+    verify(stream).streamId();
     verify(stream).close(statusCaptor.capture(), any(Metadata.class));
     Status status = statusCaptor.getValue();
     assertEquals(Status.Code.UNIMPLEMENTED, status.getCode());
     assertEquals("Can't find decompressor for " + decompressorName, status.getDescription());
+
     verifyNoMoreInteractions(stream);
   }
 
@@ -787,6 +790,7 @@ public class ServerImplTest {
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
 
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
+    verify(stream).streamId();
     verify(stream).setListener(streamListenerCaptor.capture());
     ServerStreamListener streamListener = streamListenerCaptor.getValue();
     assertNotNull(streamListener);
@@ -796,7 +800,7 @@ public class ServerImplTest {
 
     assertEquals(1, executor.runDueTasks());
     verify(fallbackRegistry).lookupMethod("Waiter/serve", AUTHORITY);
-    verify(stream).close(same(status), notNull(Metadata.class));
+    verify(stream).close(same(status), ArgumentMatchers.<Metadata>notNull());
     verify(stream, atLeast(1)).statsTraceContext();
   }
 
@@ -972,13 +976,14 @@ public class ServerImplTest {
     assertTrue(onCancelCalled.get());
 
     // Close should never be called if asserts in listener pass.
-    verify(stream, times(0)).close(isA(Status.class), isNotNull(Metadata.class));
+    verify(stream, times(0)).close(isA(Status.class), ArgumentMatchers.<Metadata>isNotNull());
   }
 
-  private ServerStreamListener testClientClose_setup(
+  private ServerStreamListener testStreamClose_setup(
       final AtomicReference<ServerCall<String, Integer>> callReference,
       final AtomicReference<Context> context,
-      final AtomicBoolean contextCancelled) throws Exception {
+      final AtomicBoolean contextCancelled,
+      @Nullable Long timeoutNanos) throws Exception {
     createAndStartServer();
     callListener = new ServerCall.Listener<String>() {
       @Override
@@ -1009,6 +1014,9 @@ public class ServerImplTest {
         = transportServer.registerNewServerTransport(new SimpleServerTransport());
     transportListener.transportReady(Attributes.EMPTY);
     Metadata requestHeaders = new Metadata();
+    if (timeoutNanos != null) {
+      requestHeaders.put(TIMEOUT_KEY, timeoutNanos);
+    }
     StatsTraceContext statsTraceCtx =
         StatsTraceContext.newServerContext(streamTracerFactories, "Waitier/serve", requestHeaders);
     when(stream.statsTraceContext()).thenReturn(statsTraceCtx);
@@ -1023,14 +1031,14 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_cancelTriggersImmediateCancellation() throws Exception {
+  public void testStreamClose_clientCancelTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status being non OK:
     // isCancelled is expected to be true immediately after calling closed(), without needing
@@ -1046,14 +1054,14 @@ public class ServerImplTest {
   }
 
   @Test
-  public void testClientClose_OkTriggersDelayedCancellation() throws Exception {
+  public void testStreamClose_clientOkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
     AtomicReference<ServerCall<String, Integer>> callReference
         = new AtomicReference<>();
 
-    ServerStreamListener streamListener = testClientClose_setup(callReference,
-        context, contextCancelled);
+    ServerStreamListener streamListener = testStreamClose_setup(callReference,
+        context, contextCancelled, null);
 
     // For close status OK:
     // isCancelled is expected to be true after all pending work is done
@@ -1064,6 +1072,27 @@ public class ServerImplTest {
     assertFalse(context.get().isCancelled());
 
     assertEquals(1, executor.runDueTasks());
+    assertTrue(callReference.get().isCancelled());
+    assertTrue(context.get().isCancelled());
+    assertTrue(contextCancelled.get());
+  }
+
+  @Test
+  public void testStreamClose_deadlineExceededTriggersImmediateCancellation() throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<>();
+
+    testStreamClose_setup(callReference, context, contextCancelled, 50L);
+
+    timer.forwardNanos(49);
+
+    assertFalse(callReference.get().isCancelled());
+    assertFalse(context.get().isCancelled());
+
+    assertEquals(1, timer.forwardNanos(1));
+    
     assertTrue(callReference.get().isCancelled());
     assertTrue(context.get().isCancelled());
     assertTrue(contextCancelled.get());
@@ -1123,8 +1152,8 @@ public class ServerImplTest {
     // This call will be handled by callHandler from the internal registry
     transportListener.streamCreated(stream, "Waiter/serve", requestHeaders);
     assertEquals(1, executor.runDueTasks());
-    verify(callHandler).startCall(Matchers.<ServerCall<String, Integer>>anyObject(),
-        Matchers.<Metadata>anyObject());
+    verify(callHandler).startCall(ArgumentMatchers.<ServerCall<String, Integer>>any(),
+        ArgumentMatchers.<Metadata>any());
     // This call will be handled by the fallbackRegistry because it's not registred in the internal
     // registry.
     transportListener.streamCreated(stream, "Service1/Method2", requestHeaders);
@@ -1142,7 +1171,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1167,7 +1197,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1192,7 +1223,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1215,7 +1247,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1238,7 +1271,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 
@@ -1261,7 +1295,8 @@ public class ServerImplTest {
             executor.getScheduledExecutorService(),
             executor.getScheduledExecutorService(),
             stream,
-            Context.ROOT.withCancellation());
+            Context.ROOT.withCancellation(),
+            PerfMark.createTag());
     ServerStreamListener mockListener = mock(ServerStreamListener.class);
     listener.setListener(mockListener);
 

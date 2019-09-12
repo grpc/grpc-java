@@ -22,6 +22,8 @@ import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
+import io.perfmark.Link;
+import io.perfmark.PerfMark;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,6 +106,7 @@ class WriteQueue {
    * called in the event loop
    */
   private void flush() {
+    PerfMark.startTask("WriteQueue.periodicFlush");
     try {
       QueuedCommand cmd;
       int i = 0;
@@ -115,15 +118,26 @@ class WriteQueue {
           // Flush each chunk so we are releasing buffers periodically. In theory this loop
           // might never end as new events are continuously added to the queue, if we never
           // flushed in that case we would be guaranteed to OOM.
-          channel.flush();
+          PerfMark.startTask("WriteQueue.flush0");
+          try {
+            channel.flush();
+          } finally {
+            PerfMark.stopTask("WriteQueue.flush0");
+          }
           flushedOnce = true;
         }
       }
       // Must flush at least once, even if there were no writes.
       if (i != 0 || !flushedOnce) {
-        channel.flush();
+        PerfMark.startTask("WriteQueue.flush1");
+        try {
+          channel.flush();
+        } finally {
+          PerfMark.stopTask("WriteQueue.flush1");
+        }
       }
     } finally {
+      PerfMark.stopTask("WriteQueue.periodicFlush");
       // Mark the write as done, if the queue is non-empty after marking trigger a new write.
       scheduled.set(false);
       if (!queue.isEmpty()) {
@@ -134,8 +148,10 @@ class WriteQueue {
 
   private static class RunnableCommand implements QueuedCommand {
     private final Runnable runnable;
+    private final Link link;
 
     public RunnableCommand(Runnable runnable) {
+      this.link = PerfMark.linkOut();
       this.runnable = runnable;
     }
 
@@ -153,11 +169,21 @@ class WriteQueue {
     public final void run(Channel channel) {
       runnable.run();
     }
+
+    @Override
+    public Link getLink() {
+      return link;
+    }
   }
 
   abstract static class AbstractQueuedCommand implements QueuedCommand {
 
     private ChannelPromise promise;
+    private final Link link;
+
+    AbstractQueuedCommand() {
+      this.link = PerfMark.linkOut();
+    }
 
     @Override
     public final void promise(ChannelPromise promise) {
@@ -172,6 +198,11 @@ class WriteQueue {
     @Override
     public final void run(Channel channel) {
       channel.write(this, promise);
+    }
+
+    @Override
+    public Link getLink() {
+      return link;
     }
   }
 
@@ -190,5 +221,7 @@ class WriteQueue {
     void promise(ChannelPromise promise);
 
     void run(Channel channel);
+
+    Link getLink();
   }
 }

@@ -129,6 +129,7 @@ public final class ServerCalls {
       private final ServerCall<ReqT, RespT> call;
       private final ServerCallStreamObserverImpl<ReqT, RespT> responseObserver;
       private boolean canInvoke = true;
+      private boolean wasReady;
       private ReqT request;
 
       // Non private to avoid synthetic class
@@ -169,8 +170,9 @@ public final class ServerCalls {
         }
 
         method.invoke(request, responseObserver);
+        request = null;
         responseObserver.freeze();
-        if (call.isReady()) {
+        if (wasReady) {
           // Since we are calling invoke in halfClose we have missed the onReady
           // event from the transport so recover it here.
           onReady();
@@ -187,6 +189,7 @@ public final class ServerCalls {
 
       @Override
       public void onReady() {
+        wasReady = true;
         if (responseObserver.onReadyHandler != null) {
           responseObserver.onReadyHandler.run();
         }
@@ -309,6 +312,8 @@ public final class ServerCalls {
     private boolean sentHeaders;
     private Runnable onReadyHandler;
     private Runnable onCancelHandler;
+    private boolean aborted = false;
+    private boolean completed = false;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
@@ -337,6 +342,8 @@ public final class ServerCalls {
         }
         return;
       }
+      checkState(!aborted, "Stream was terminated by error, no further calls are allowed");
+      checkState(!completed, "Stream is already completed, no further calls are allowed");
       if (!sentHeaders) {
         call.sendHeaders(new Metadata());
         sentHeaders = true;
@@ -351,6 +358,7 @@ public final class ServerCalls {
         metadata = new Metadata();
       }
       call.close(Status.fromThrowable(t), metadata);
+      aborted = true;
     }
 
     @Override
@@ -361,6 +369,7 @@ public final class ServerCalls {
         }
       } else {
         call.close(Status.OK, new Metadata());
+        completed = true;
       }
     }
 

@@ -33,10 +33,7 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.PickResult;
-import io.grpc.LoadBalancer.PickSubchannelArgs;
-import io.grpc.LoadBalancer.Subchannel;
-import io.grpc.LoadBalancer.SubchannelPicker;
+import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Metadata;
 import io.grpc.Metadata.Key;
 import io.grpc.NameResolver;
@@ -45,6 +42,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -87,15 +85,14 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
   }
 
   @Override
-  public void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes) {
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
+    Attributes attributes = resolvedAddresses.getAttributes();
     Set<EquivalentAddressGroup> currentAddrs = subchannels.keySet();
-    Set<EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
-    Set<EquivalentAddressGroup> addedAddrs = setsDifference(latestAddrs, currentAddrs);
-    Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs);
+    Map<EquivalentAddressGroup, EquivalentAddressGroup> latestAddrs = stripAttrs(servers);
+    Set<EquivalentAddressGroup> removedAddrs = setsDifference(currentAddrs, latestAddrs.keySet());
 
-    Map<String, Object> serviceConfig =
-        attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    Map<String, ?> serviceConfig = attributes.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
     if (serviceConfig != null) {
       String stickinessMetadataKey =
           ServiceConfigUtil.getStickinessMetadataKeyFromServiceConfig(serviceConfig);
@@ -112,8 +109,18 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
       }
     }
 
-    // Create new subchannels for new addresses.
-    for (EquivalentAddressGroup addressGroup : addedAddrs) {
+    for (Map.Entry<EquivalentAddressGroup, EquivalentAddressGroup> latestEntry :
+        latestAddrs.entrySet()) {
+      EquivalentAddressGroup strippedAddressGroup = latestEntry.getKey();
+      EquivalentAddressGroup originalAddressGroup = latestEntry.getValue();
+      Subchannel existingSubchannel = subchannels.get(strippedAddressGroup);
+      if (existingSubchannel != null) {
+        // EAG's Attributes may have changed.
+        existingSubchannel.updateAddresses(Collections.singletonList(originalAddressGroup));
+        continue;
+      }
+      // Create new subchannels for new addresses.
+
       // NB(lukaszx0): we don't merge `attributes` with `subchannelAttr` because subchannel
       // doesn't need them. They're describing the resolved server list but we're not taking
       // any action based on this information.
@@ -129,12 +136,22 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         subchannelAttrs.set(STICKY_REF, stickyRef = new Ref<>(null));
       }
 
-      Subchannel subchannel = checkNotNull(
-          helper.createSubchannel(addressGroup, subchannelAttrs.build()), "subchannel");
+      final Subchannel subchannel = checkNotNull(
+          helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+              .setAddresses(originalAddressGroup)
+              .setAttributes(subchannelAttrs.build())
+              .build()),
+          "subchannel");
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo state) {
+            processSubchannelState(subchannel, state);
+          }
+        });
       if (stickyRef != null) {
         stickyRef.value = subchannel;
       }
-      subchannels.put(addressGroup, subchannel);
+      subchannels.put(strippedAddressGroup, subchannel);
       subchannel.requestConnection();
     }
 
@@ -160,9 +177,8 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
         currentPicker instanceof ReadyPicker ? currentPicker : new EmptyPicker(error));
   }
 
-  @Override
-  public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
-    if (subchannels.get(subchannel.getAddresses()) != subchannel) {
+  private void processSubchannelState(Subchannel subchannel, ConnectivityStateInfo stateInfo) {
+    if (subchannels.get(stripAttrs(subchannel.getAddresses())) != subchannel) {
       return;
     }
     if (stateInfo.getState() == SHUTDOWN && stickinessState != null) {
@@ -251,14 +267,19 @@ final class RoundRobinLoadBalancer extends LoadBalancer {
 
   /**
    * Converts list of {@link EquivalentAddressGroup} to {@link EquivalentAddressGroup} set and
-   * remove all attributes.
+   * remove all attributes. The values are the original EAGs.
    */
-  private static Set<EquivalentAddressGroup> stripAttrs(List<EquivalentAddressGroup> groupList) {
-    Set<EquivalentAddressGroup> addrs = new HashSet<>(groupList.size());
+  private static Map<EquivalentAddressGroup, EquivalentAddressGroup> stripAttrs(
+      List<EquivalentAddressGroup> groupList) {
+    Map<EquivalentAddressGroup, EquivalentAddressGroup> addrs = new HashMap<>(groupList.size() * 2);
     for (EquivalentAddressGroup group : groupList) {
-      addrs.add(new EquivalentAddressGroup(group.getAddresses()));
+      addrs.put(stripAttrs(group), group);
     }
     return addrs;
+  }
+
+  private static EquivalentAddressGroup stripAttrs(EquivalentAddressGroup eag) {
+    return new EquivalentAddressGroup(eag.getAddresses());
   }
 
   @VisibleForTesting

@@ -18,11 +18,11 @@ package io.grpc.okhttp;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIMEOUT_NANOS;
-import static io.grpc.internal.GrpcUtil.DEFAULT_KEEPALIVE_TIME_NANOS;
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.grpc.ChannelLogger;
 import io.grpc.ExperimentalApi;
 import io.grpc.Internal;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
@@ -41,18 +41,16 @@ import io.grpc.okhttp.internal.TlsVersion;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.security.GeneralSecurityException;
-import java.security.KeyStore;
-import java.security.SecureRandom;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
+import javax.net.SocketFactory;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManagerFactory;
 
 /** Convenience class for building channels with the OkHttp transport. */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1785")
@@ -120,6 +118,7 @@ public class OkHttpChannelBuilder extends
   private Executor transportExecutor;
   private ScheduledExecutorService scheduledExecutorService;
 
+  private SocketFactory socketFactory;
   private SSLSocketFactory sslSocketFactory;
   private HostnameVerifier hostnameVerifier;
   private ConnectionSpec connectionSpec = INTERNAL_DEFAULT_CONNECTION_SPEC;
@@ -157,6 +156,17 @@ public class OkHttpChannelBuilder extends
   }
 
   /**
+   * Override the default {@link SocketFactory} used to create sockets. If the socket factory is not
+   * set or set to null, a default one will be used.
+   *
+   * @since 1.20.0
+   */
+  public final OkHttpChannelBuilder socketFactory(@Nullable SocketFactory socketFactory) {
+    this.socketFactory = socketFactory;
+    return this;
+  }
+
+  /**
    * Sets the negotiation type for the HTTP/2 connection.
    *
    * <p>If TLS is enabled a default {@link SSLSocketFactory} is created using the best
@@ -182,36 +192,6 @@ public class OkHttpChannelBuilder extends
         throw new AssertionError("Unknown negotiation type: " + type);
     }
     return this;
-  }
-
-  /**
-   * Enable keepalive with default delay and timeout.
-   *
-   * @deprecated Use {@link #keepAliveTime} instead
-   */
-  @Deprecated
-  public final OkHttpChannelBuilder enableKeepAlive(boolean enable) {
-    if (enable) {
-      return keepAliveTime(DEFAULT_KEEPALIVE_TIME_NANOS, TimeUnit.NANOSECONDS);
-    } else {
-      return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
-    }
-  }
-
-  /**
-   * Enable keepalive with custom delay and timeout.
-   *
-   * @deprecated Use {@link #keepAliveTime} and {@link #keepAliveTimeout} instead
-   */
-  @Deprecated
-  public final OkHttpChannelBuilder enableKeepAlive(boolean enable, long keepAliveTime,
-      TimeUnit delayUnit, long keepAliveTimeout, TimeUnit timeoutUnit) {
-    if (enable) {
-      return keepAliveTime(keepAliveTime, delayUnit)
-          .keepAliveTimeout(keepAliveTimeout, timeoutUnit);
-    } else {
-      return keepAliveTime(KEEPALIVE_TIME_NANOS_DISABLED, TimeUnit.NANOSECONDS);
-    }
   }
 
   /**
@@ -397,10 +377,21 @@ public class OkHttpChannelBuilder extends
   @Internal
   protected final ClientTransportFactory buildTransportFactory() {
     boolean enableKeepAlive = keepAliveTimeNanos != KEEPALIVE_TIME_NANOS_DISABLED;
-    return new OkHttpTransportFactory(transportExecutor, scheduledExecutorService,
-        createSocketFactory(), hostnameVerifier, connectionSpec, maxInboundMessageSize(),
-        enableKeepAlive, keepAliveTimeNanos, keepAliveTimeoutNanos, flowControlWindow,
-        keepAliveWithoutCalls, maxInboundMetadataSize, transportTracerFactory);
+    return new OkHttpTransportFactory(
+        transportExecutor,
+        scheduledExecutorService,
+        socketFactory,
+        createSslSocketFactory(),
+        hostnameVerifier,
+        connectionSpec,
+        maxInboundMessageSize(),
+        enableKeepAlive,
+        keepAliveTimeNanos,
+        keepAliveTimeoutNanos,
+        flowControlWindow,
+        keepAliveWithoutCalls,
+        maxInboundMetadataSize,
+        transportTracerFactory);
   }
 
   @Override
@@ -417,30 +408,12 @@ public class OkHttpChannelBuilder extends
 
   @VisibleForTesting
   @Nullable
-  SSLSocketFactory createSocketFactory() {
+  SSLSocketFactory createSslSocketFactory() {
     switch (negotiationType) {
       case TLS:
         try {
           if (sslSocketFactory == null) {
-            SSLContext sslContext;
-            if (GrpcUtil.IS_RESTRICTED_APPENGINE) {
-              // The following auth code circumvents the following AccessControlException:
-              // access denied ("java.util.PropertyPermission" "javax.net.ssl.keyStore" "read")
-              // Conscrypt will attempt to load the default KeyStore if a trust manager is not
-              // provided, which is forbidden on AppEngine
-              sslContext = SSLContext.getInstance("TLS", Platform.get().getProvider());
-              TrustManagerFactory trustManagerFactory =
-                  TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-              trustManagerFactory.init((KeyStore) null);
-              sslContext.init(
-                  null,
-                  trustManagerFactory.getTrustManagers(),
-                  // Use an algorithm that doesn't need /dev/urandom
-                  SecureRandom.getInstance("SHA1PRNG", Platform.get().getProvider()));
-
-            } else {
-              sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
-            }
+            SSLContext sslContext = SSLContext.getInstance("Default", Platform.get().getProvider());
             sslSocketFactory = sslContext.getSocketFactory();
           }
           return sslSocketFactory;
@@ -463,8 +436,8 @@ public class OkHttpChannelBuilder extends
     private final boolean usingSharedExecutor;
     private final boolean usingSharedScheduler;
     private final TransportTracer.Factory transportTracerFactory;
-    @Nullable
-    private final SSLSocketFactory socketFactory;
+    private final SocketFactory socketFactory;
+    @Nullable private final SSLSocketFactory sslSocketFactory;
     @Nullable
     private final HostnameVerifier hostnameVerifier;
     private final ConnectionSpec connectionSpec;
@@ -478,9 +451,11 @@ public class OkHttpChannelBuilder extends
     private final ScheduledExecutorService timeoutService;
     private boolean closed;
 
-    private OkHttpTransportFactory(Executor executor,
+    private OkHttpTransportFactory(
+        Executor executor,
         @Nullable ScheduledExecutorService timeoutService,
-        @Nullable SSLSocketFactory socketFactory,
+        @Nullable SocketFactory socketFactory,
+        @Nullable SSLSocketFactory sslSocketFactory,
         @Nullable HostnameVerifier hostnameVerifier,
         ConnectionSpec connectionSpec,
         int maxMessageSize,
@@ -495,6 +470,7 @@ public class OkHttpChannelBuilder extends
       this.timeoutService = usingSharedScheduler
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
       this.socketFactory = socketFactory;
+      this.sslSocketFactory = sslSocketFactory;
       this.hostnameVerifier = hostnameVerifier;
       this.connectionSpec = connectionSpec;
       this.maxMessageSize = maxMessageSize;
@@ -518,7 +494,7 @@ public class OkHttpChannelBuilder extends
 
     @Override
     public ConnectionClientTransport newClientTransport(
-        SocketAddress addr, ClientTransportOptions options) {
+        SocketAddress addr, ClientTransportOptions options, ChannelLogger channelLogger) {
       if (closed) {
         throw new IllegalStateException("The transport factory is closed.");
       }
@@ -530,12 +506,15 @@ public class OkHttpChannelBuilder extends
         }
       };
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
+      // TODO(carl-mastrangelo): Pass channelLogger in.
       OkHttpClientTransport transport = new OkHttpClientTransport(
           inetSocketAddr,
           options.getAuthority(),
           options.getUserAgent(),
+          options.getEagAttributes(),
           executor,
           socketFactory,
+          sslSocketFactory,
           hostnameVerifier,
           connectionSpec,
           maxMessageSize,

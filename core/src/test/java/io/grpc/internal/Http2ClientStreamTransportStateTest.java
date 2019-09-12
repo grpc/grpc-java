@@ -21,8 +21,8 @@ import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -32,20 +32,25 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
-import org.mockito.Matchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link Http2ClientStreamTransportState}. */
 @RunWith(JUnit4.class)
 public class Http2ClientStreamTransportStateTest {
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private final Metadata.Key<String> testStatusMashaller =
       InternalMetadata.keyOf(":status", Metadata.ASCII_STRING_MARSHALLER);
@@ -56,7 +61,6 @@ public class Http2ClientStreamTransportStateTest {
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     transportTracer = new TransportTracer();
 
     doAnswer(new Answer<Void>() {
@@ -67,7 +71,7 @@ public class Http2ClientStreamTransportStateTest {
         while (producer.next() != null) {}
         return null;
       }
-    }).when(mockListener).messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+    }).when(mockListener).messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   @Test

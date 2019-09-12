@@ -16,32 +16,35 @@
 
 package io.grpc.xds;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
+import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
+import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
-import io.grpc.Status;
+import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.XdsLbState.XdsComms;
-import io.grpc.xds.shaded.envoy.api.v2.DiscoveryRequest;
-import io.grpc.xds.shaded.envoy.api.v2.DiscoveryResponse;
-import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
-import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
-import io.grpc.xds.shaded.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub;
-import java.util.concurrent.TimeUnit;
-import org.junit.After;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
@@ -49,18 +52,40 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class XdsLbStateTest {
+  private static final String BALANCER_NAME = "balancerName";
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+  @Mock
+  private Helper helper;
+  @Mock
+  private AdsStreamCallback adsStreamCallback;
+  @Mock
+  private LocalityStore localityStore;
+  @Mock
+  private BackoffPolicy.Provider backoffPolicyProvider;
+
+  private final FakeClock fakeClock = new FakeClock();
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
-
-  private XdsComms xdsComms;
-
   private ManagedChannel channel;
+  private XdsLbState xdsLbState;
+
 
   @Before
   public void setUp() throws Exception {
     MockitoAnnotations.initMocks(this);
+    doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
+    doReturn("fake_authority").when(helper).getAuthority();
+    doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
     String serverName = InProcessServerBuilder.generateName();
 
@@ -93,43 +118,39 @@ public class XdsLbStateTest {
         InProcessServerBuilder
             .forName(serverName)
             .addService(serviceImpl)
+            .directExecutor()
             .build()
             .start());
     channel =
-        cleanupRule.register(InProcessChannelBuilder.forName(serverName).build());
-    AggregatedDiscoveryServiceStub stub = AggregatedDiscoveryServiceGrpc.newStub(channel);
-    AdsStream adsStream = new AdsStream(stub);
-    adsStream.start();
-    xdsComms = new XdsComms(channel, adsStream);
-  }
+        cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+    doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
 
-  @After
-  public void tearDown() {
-    if (!channel.isShutdown()) {
-      channel.shutdownNow();
-    }
+    xdsLbState = new XdsLbState(
+        BALANCER_NAME, null, helper, localityStore, channel, adsStreamCallback,
+        backoffPolicyProvider);
   }
 
   @Test
-  public void shutdownLbComm() throws Exception {
-    xdsComms.shutdownChannel();
-    assertTrue(channel.isShutdown());
-    assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
-    assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
+  public void shutdownResetsLocalityStore() {
+    xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    verify(localityStore).reset();
   }
 
   @Test
-  public void shutdownLbRpc_verifyChannelNotShutdown() throws Exception {
-    xdsComms.shutdownLbRpc("shutdown msg1");
-    assertTrue(streamRecorder.awaitCompletion(1, TimeUnit.SECONDS));
-    assertEquals(Status.Code.CANCELLED, Status.fromThrowable(streamRecorder.getError()).getCode());
-    assertFalse(channel.isShutdown());
+  public void shutdownDoesNotTearDownChannel() {
+    ManagedChannel lbChannel = xdsLbState.shutdownAndReleaseChannel("Client shutdown");
+    assertThat(lbChannel).isSameInstanceAs(channel);
+    assertThat(channel.isShutdown()).isFalse();
   }
 
   @Test
-  public void shutdownAndReleaseXdsCommsDoesShutdown() {
-    XdsLbState xdsLbState = mock(XdsLbState.class);
-    xdsLbState.shutdownAndReleaseXdsComms();
-    verify(xdsLbState).shutdown();
+  public void handleResolvedAddressGroupsTriggerEds() throws Exception {
+    xdsLbState.handleResolvedAddressGroups(
+        ImmutableList.<EquivalentAddressGroup>of(), Attributes.EMPTY);
+
+    assertThat(streamRecorder.firstValue().get().getTypeUrl())
+        .isEqualTo("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment");
+
+    xdsLbState.shutdownAndReleaseChannel("End test");
   }
 }

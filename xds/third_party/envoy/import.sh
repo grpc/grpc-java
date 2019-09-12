@@ -13,25 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# in this directory run the following commands
+# Update VERSION then in this directory run ./import.sh
+
+set -e
 BRANCH=master
 # import VERSION from one of the google internal CLs
-VERSION=553c21b796f9dd7b3d1ae01cdfc4bebdd3b28338
+VERSION=6ff0bce8ff417a252cde4d04dfb9cba2bab463d8
 GIT_REPO="https://github.com/envoyproxy/envoy.git"
 GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
-envoy/api/v2/auth/cert.proto
-envoy/api/v2/cds.proto
-envoy/api/v2/cluster/circuit_breaker.proto
-envoy/api/v2/cluster/outlier_detection.proto
 envoy/api/v2/core/address.proto
 envoy/api/v2/core/base.proto
 envoy/api/v2/core/config_source.proto
 envoy/api/v2/core/grpc_service.proto
 envoy/api/v2/core/health_check.proto
-envoy/api/v2/core/protocol.proto
+envoy/api/v2/core/http_uri.proto
 envoy/api/v2/discovery.proto
 envoy/api/v2/eds.proto
 envoy/api/v2/endpoint/endpoint.proto
@@ -39,64 +37,31 @@ envoy/api/v2/endpoint/load_report.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/percent.proto
+envoy/type/range.proto
 )
 
-# clone the envoy github repo in /tmp directory
-pushd /tmp
+# clone the envoy github repo in a tmp directory
+tmpdir="$(mktemp -d)"
+pushd "${tmpdir}"
 rm -rf $GIT_BASE_DIR
 git clone -b $BRANCH $GIT_REPO
-cd $GIT_BASE_DIR
+cd "$GIT_BASE_DIR"
 git checkout $VERSION
 popd
 
-cp -p /tmp/${GIT_BASE_DIR}/LICENSE LICENSE
-cp -p /tmp/${GIT_BASE_DIR}/NOTICE NOTICE
+cp -p "${tmpdir}/${GIT_BASE_DIR}/LICENSE" LICENSE
+cp -p "${tmpdir}/${GIT_BASE_DIR}/NOTICE" NOTICE
 
-mkdir -p ${TARGET_PROTO_BASE_DIR}
-pushd ${TARGET_PROTO_BASE_DIR}
+rm -rf "${TARGET_PROTO_BASE_DIR}"
+mkdir -p "${TARGET_PROTO_BASE_DIR}"
+pushd "${TARGET_PROTO_BASE_DIR}"
 
 # copy proto files to project directory
 for file in "${FILES[@]}"
 do
-  mkdir -p $(dirname ${file})
-  cp -p /tmp/${SOURCE_PROTO_BASE_DIR}/${file} ${file}
-done
-
-# See google internal third_party/envoy/envoy-update.sh
-# ===========================================================================
-# Fix up proto imports and remove references to gogoproto.
-# ===========================================================================
-for f in "${FILES[@]}"
-do
-  commands=(
-    # Import mangling.
-    -e 's#import "gogoproto/gogo.proto";##'
-    # Remove references to gogo.proto extensions.
-    -e 's#option (gogoproto\.[a-z_]\+) = \(true\|false\);##'
-    -e 's#\(, \)\?(gogoproto\.[a-z_]\+) = \(true\|false\),\?##'
-    # gogoproto removal can result in empty brackets.
-    -e 's# \[\]##'
-    # gogoproto removal can result in four spaces on a line by itself.
-    -e '/^    $/d'
-  )
-  sed -i "${commands[@]}" "$f"
-
-  # gogoproto removal can leave a comma on the last element in a list.
-  # This needs to run separately after all the commands above have finished
-  # since it is multi-line and rewrites the output of the above patterns.
-  sed -i -e '$!N; s#\(.*\),\([[:space:]]*\];\)#\1\2#; t; P; D;' "$f"
-done
-
-for file in "${FILES[@]}"
-do
-  # remove old "option java_multiple_files" if any
-  sed -i -e '/^option\sjava_multiple_files\s=/d' $file
-  # add new "option java_multiple_files"
-  sed -i -e "/^package\s/a option java_multiple_files = true;" $file
-  # remove old "option java_package" if any
-  sed -i -e '/^option\sjava_package\s=/d' $file
-  cmd='grep -Po "^package \K.*(?=;$)" '"${file}"
-  # add new "option java_package"
-  sed -i -e "/^package\s/a option java_package = \"io.grpc.xds.shaded.$(eval $cmd)\";" $file
+  mkdir -p "$(dirname "${file}")"
+  cp -p "${tmpdir}/${SOURCE_PROTO_BASE_DIR}/${file}" "${file}"
 done
 popd
+
+rm -rf "$tmpdir"

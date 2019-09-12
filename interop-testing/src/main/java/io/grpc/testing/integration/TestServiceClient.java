@@ -20,6 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
 import io.grpc.alts.AltsChannelBuilder;
+import io.grpc.alts.ComputeEngineChannelBuilder;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -33,6 +34,7 @@ import io.netty.handler.ssl.SslContext;
 import java.io.File;
 import java.io.FileInputStream;
 import java.nio.charset.Charset;
+import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLSocketFactory;
 
 /**
@@ -277,6 +279,20 @@ public class TestServiceClient {
         tester.computeEngineCreds(defaultServiceAccount, oauthScope);
         break;
 
+      case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
+        ManagedChannel channel = ComputeEngineChannelBuilder
+            .forAddress(serverHost, serverPort).build();
+        try {
+          TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
+              TestServiceGrpc.newBlockingStub(channel);
+          tester.computeEngineChannelCredentials(defaultServiceAccount, computeEngineStub);
+        } finally {
+          channel.shutdownNow();
+          channel.awaitTermination(5, TimeUnit.SECONDS);
+        }
+        break;
+      }
+
       case SERVICE_ACCOUNT_CREDS: {
         String jsonKey = Files.asCharSource(new File(serviceAccountKeyFile), UTF_8).read();
         FileInputStream credentialsStream = new FileInputStream(new File(serviceAccountKeyFile));
@@ -361,6 +377,11 @@ public class TestServiceClient {
         break;
       }
 
+      case PICK_FIRST_UNARY: {
+        tester.pickFirstUnary();
+        break;
+      }
+
       default:
         throw new IllegalArgumentException("Unknown test case: " + testCase);
     }
@@ -372,6 +393,10 @@ public class TestServiceClient {
       if (customCredentialsType != null
           && customCredentialsType.equals("google_default_credentials")) {
         return GoogleDefaultChannelBuilder.forAddress(serverHost, serverPort).build();
+      }
+      if (customCredentialsType != null
+          && customCredentialsType.equals("compute_engine_channel_creds")) {
+        return ComputeEngineChannelBuilder.forAddress(serverHost, serverPort).build();
       }
       if (useAlts) {
         return AltsChannelBuilder.forAddress(serverHost, serverPort).build();
@@ -408,14 +433,14 @@ public class TestServiceClient {
               GrpcUtil.authorityFromHostAndPort(serverHostOverride, serverPort));
         }
         if (useTls) {
-          try {
-            SSLSocketFactory factory = useTestCa
-                ? TestUtils.newSslSocketFactoryForCa(Platform.get().getProvider(),
-                    TestUtils.loadCert("ca.pem"))
-                : (SSLSocketFactory) SSLSocketFactory.getDefault();
-            okBuilder.sslSocketFactory(factory);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
+          if (useTestCa) {
+            try {
+              SSLSocketFactory factory = TestUtils.newSslSocketFactoryForCa(
+                  Platform.get().getProvider(), TestUtils.loadCert("ca.pem"));
+              okBuilder.sslSocketFactory(factory);
+            } catch (Exception e) {
+              throw new RuntimeException(e);
+            }
           }
         } else {
           okBuilder.usePlaintext();

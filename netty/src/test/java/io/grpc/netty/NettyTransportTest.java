@@ -17,11 +17,11 @@
 package io.grpc.netty;
 
 import io.grpc.ServerStreamTracer;
+import io.grpc.internal.AbstractTransportTest;
 import io.grpc.internal.ClientTransportFactory;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.InternalServer;
 import io.grpc.internal.ManagedClientTransport;
-import io.grpc.internal.testing.AbstractTransportTest;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -91,10 +91,13 @@ public class NettyTransportTest extends AbstractTransportTest {
 
   @Override
   protected ManagedClientTransport newClientTransport(InternalServer server) {
+
     return clientFactory.newClientTransport(
         server.getListenSocketAddress(),
         new ClientTransportFactory.ClientTransportOptions()
-          .setAuthority(testAuthority(server)));
+            .setAuthority(testAuthority(server))
+            .setEagAttributes(eagAttrs()),
+        transportLogger());
   }
 
   @org.junit.Ignore

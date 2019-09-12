@@ -44,6 +44,7 @@ import io.grpc.internal.ConnectionClientTransport;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.InUseStateAggregator;
+import io.grpc.internal.InsightBuilder;
 import io.grpc.internal.ManagedClientTransport;
 import io.grpc.internal.NoopClientStream;
 import io.grpc.internal.ObjectPool;
@@ -94,9 +95,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
   private Set<InProcessStream> streams = new HashSet<>();
   @GuardedBy("this")
   private List<ServerStreamTracer.Factory> serverStreamTracerFactories;
-  private final Attributes attributes = Attributes.newBuilder()
-      .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
-      .build();
+  private final Attributes attributes;
+
   @GuardedBy("this")
   private final InUseStateAggregator<InProcessStream> inUseState =
       new InUseStateAggregator<InProcessStream>() {
@@ -112,11 +112,17 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       };
 
   public InProcessTransport(
-      String name, int maxInboundMetadataSize, String authority, String userAgent) {
+      String name, int maxInboundMetadataSize, String authority, String userAgent,
+      Attributes eagAttrs) {
     this.name = name;
     this.clientMaxInboundMetadataSize = maxInboundMetadataSize;
     this.authority = authority;
     this.userAgent = GrpcUtil.getGrpcUserAgent("inprocess", userAgent);
+    checkNotNull(eagAttrs, "eagAttrs");
+    this.attributes = Attributes.newBuilder()
+        .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
+        .build();
     logId = InternalLogId.allocate(getClass(), name);
   }
 
@@ -167,7 +173,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       final MethodDescriptor<?, ?> method, final Metadata headers, final CallOptions callOptions) {
     if (shutdownStatus != null) {
       return failedClientStream(
-          StatsTraceContext.newClientContext(callOptions, headers), shutdownStatus);
+          StatsTraceContext.newClientContext(callOptions, attributes, headers), shutdownStatus);
     }
 
     headers.put(GrpcUtil.USER_AGENT_KEY, userAgent);
@@ -186,7 +192,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
                 serverMaxInboundMetadataSize,
                 metadataSize));
         return failedClientStream(
-            StatsTraceContext.newClientContext(callOptions, headers), status);
+            StatsTraceContext.newClientContext(callOptions, attributes, headers), status);
       }
     }
 
@@ -603,6 +609,11 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
       public StatsTraceContext statsTraceContext() {
         return statsTraceCtx;
       }
+
+      @Override
+      public int streamId() {
+        return -1;
+      }
     }
 
     private class InProcessClientStream implements ClientStream {
@@ -625,7 +636,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       InProcessClientStream(CallOptions callOptions, Metadata headers) {
         this.callOptions = callOptions;
-        statsTraceCtx = StatsTraceContext.newClientContext(callOptions, headers);
+        statsTraceCtx = StatsTraceContext.newClientContext(callOptions, attributes, headers);
       }
 
       private synchronized void setListener(ServerStreamListener listener) {
@@ -795,6 +806,10 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
         headers.discardAll(TIMEOUT_KEY);
         long effectiveTimeout = max(0, deadline.timeRemaining(TimeUnit.NANOSECONDS));
         headers.put(TIMEOUT_KEY, effectiveTimeout);
+      }
+
+      @Override
+      public void appendTimeoutInsight(InsightBuilder insight) {
       }
     }
   }

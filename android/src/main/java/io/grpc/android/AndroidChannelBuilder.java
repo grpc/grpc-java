@@ -37,12 +37,9 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.MethodDescriptor;
 import io.grpc.internal.GrpcUtil;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
-import javax.net.ssl.SSLSocketFactory;
 
 /**
  * Builds a {@link ManagedChannel} that, when provided with a {@link Context}, will automatically
@@ -54,14 +51,13 @@ import javax.net.ssl.SSLSocketFactory;
  *
  * @since 1.12.0
  */
-@ExperimentalApi("https://github.com/grpc/grpc-java/issues/4056")
 public final class AndroidChannelBuilder extends ForwardingChannelBuilder<AndroidChannelBuilder> {
 
   private static final String LOG_TAG = "AndroidChannelBuilder";
 
   @Nullable private static final Class<?> OKHTTP_CHANNEL_BUILDER_CLASS = findOkHttp();
 
-  private static final Class<?> findOkHttp() {
+  private static Class<?> findOkHttp() {
     try {
       return Class.forName("io.grpc.okhttp.OkHttpChannelBuilder");
     } catch (ClassNotFoundException e) {
@@ -73,15 +69,43 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
 
   @Nullable private Context context;
 
-  public static final AndroidChannelBuilder forTarget(String target) {
+  /**
+   * Creates a new builder with the given target string that will be resolved by
+   * {@link io.grpc.NameResolver}.
+   */
+  public static AndroidChannelBuilder forTarget(String target) {
     return new AndroidChannelBuilder(target);
   }
 
+  /**
+   * Creates a new builder with the given host and port.
+   */
   public static AndroidChannelBuilder forAddress(String name, int port) {
     return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
   }
 
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * @deprecated Use {@link #usingBuilder(ManagedChannelBuilder)} instead.
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6043")
+  @Deprecated
   public static AndroidChannelBuilder fromBuilder(ManagedChannelBuilder<?> builder) {
+    return usingBuilder(builder);
+  }
+
+  /**
+   * Creates a new builder, which delegates to the given ManagedChannelBuilder.
+   *
+   * <p>The provided {@code builder} becomes "owned" by AndroidChannelBuilder. The caller should
+   * not modify the provided builder and AndroidChannelBuilder may modify it. That implies reusing
+   * the provided builder to build another channel may result with unexpected configurations. That
+   * usage should be discouraged.
+   *
+   * @since 1.24.0
+   */
+  public static AndroidChannelBuilder usingBuilder(ManagedChannelBuilder<?> builder) {
     return new AndroidChannelBuilder(builder);
   }
 
@@ -104,66 +128,12 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     this.delegateBuilder = Preconditions.checkNotNull(delegateBuilder, "delegateBuilder");
   }
 
-  /** Enables automatic monitoring of the device's network state. */
+  /**
+   * Enables automatic monitoring of the device's network state.
+   */
   public AndroidChannelBuilder context(Context context) {
     this.context = context;
     return this;
-  }
-
-  /**
-   * Set the delegate channel builder's transportExecutor.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder transportExecutor(@Nullable Executor transportExecutor) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("transportExecutor", Executor.class)
-          .invoke(delegateBuilder, transportExecutor);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to invoke transportExecutor on delegate builder", e);
-    }
-  }
-
-  /**
-   * Set the delegate channel builder's sslSocketFactory.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder sslSocketFactory(SSLSocketFactory factory) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("sslSocketFactory", SSLSocketFactory.class)
-          .invoke(delegateBuilder, factory);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException("Failed to invoke sslSocketFactory on delegate builder", e);
-    }
-  }
-
-  /**
-   * Set the delegate channel builder's scheduledExecutorService.
-   *
-   * @deprecated Use {@link #fromBuilder(ManagedChannelBuilder)} with a pre-configured
-   *     ManagedChannelBuilder instead.
-   */
-  @Deprecated
-  public AndroidChannelBuilder scheduledExecutorService(
-      ScheduledExecutorService scheduledExecutorService) {
-    try {
-      OKHTTP_CHANNEL_BUILDER_CLASS
-          .getMethod("scheduledExecutorService", ScheduledExecutorService.class)
-          .invoke(delegateBuilder, scheduledExecutorService);
-      return this;
-    } catch (Exception e) {
-      throw new RuntimeException(
-          "Failed to invoke scheduledExecutorService on delegate builder", e);
-    }
   }
 
   @Override
@@ -171,6 +141,9 @@ public final class AndroidChannelBuilder extends ForwardingChannelBuilder<Androi
     return delegateBuilder;
   }
 
+  /**
+   * Builds a channel with current configurations.
+   */
   @Override
   public ManagedChannel build() {
     return new AndroidChannel(delegateBuilder.build(), context);

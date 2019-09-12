@@ -23,12 +23,13 @@ dependencies {
             project(':grpc-testing'),
             libraries.google_auth_oauth2_http,
             libraries.junit,
-            libraries.mockito,
             libraries.truth
     compileOnly libraries.javax_annotation
     runtime libraries.opencensus_impl,
-            libraries.netty_tcnative
-    testCompile project(':grpc-context').sourceSets.test.output
+            libraries.netty_tcnative,
+            project(':grpc-grpclb')
+    testCompile project(':grpc-context').sourceSets.test.output,
+            libraries.mockito
 }
 
 configureProtoCompilation()
@@ -95,11 +96,23 @@ task http2_client(type: CreateStartScripts) {
     classpath = jar.outputs.files + configurations.runtime
 }
 
+task grpclb_long_lived_affinity_test_client(type: CreateStartScripts) {
+    mainClassName = "io.grpc.testing.integration.GrpclbLongLivedAffinityTestClient"
+    applicationName = "grpclb-long-lived-affinity-test-client"
+    outputDir = new File(project.buildDir, 'tmp')
+    classpath = jar.outputs.files + configurations.runtime
+    defaultJvmOpts = [
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_grpclb=true",
+        "-Dio.grpc.internal.DnsNameResolverProvider.enable_service_config=true"
+    ]
+}
+
 applicationDistribution.into("bin") {
     from(test_client)
     from(test_server)
     from(reconnect_test_client)
     from(stresstest_client)
     from(http2_client)
+    from(grpclb_long_lived_affinity_test_client)
     fileMode = 0755
 }

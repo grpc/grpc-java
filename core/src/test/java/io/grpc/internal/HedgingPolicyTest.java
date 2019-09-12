@@ -20,7 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.internal.ServiceConfigInterceptor.HEDGING_POLICY_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
@@ -57,7 +57,7 @@ public class HedgingPolicyTest {
       assertTrue(serviceConfigObj instanceof Map);
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
+      Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
           /* retryEnabled = */ true, /* maxRetryAttemptsLimit = */ 3,
@@ -129,7 +129,7 @@ public class HedgingPolicyTest {
       assertTrue(serviceConfigObj instanceof Map);
 
       @SuppressWarnings("unchecked")
-      Map<String, Object> serviceConfig = (Map<String, Object>) serviceConfigObj;
+      Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
       ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
           /* retryEnabled = */ false, /* maxRetryAttemptsLimit = */ 3,

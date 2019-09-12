@@ -25,10 +25,10 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -39,6 +39,7 @@ import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Deadline;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -50,6 +51,7 @@ import io.grpc.internal.testing.TestClientStreamTracer;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -58,10 +60,11 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -71,16 +74,22 @@ import org.mockito.stubbing.Answer;
 @RunWith(JUnit4.class)
 public class AbstractClientStreamTest {
 
+  @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   @Rule public final ExpectedException thrown = ExpectedException.none();
 
   private final StatsTraceContext statsTraceCtx = StatsTraceContext.NOOP;
   private final TransportTracer transportTracer = new TransportTracer();
+  private static final SocketAddress SERVER_ADDR = new SocketAddress() {
+      @Override
+      public String toString() {
+        return "fake_server_addr";
+      }
+    };
+
   @Mock private ClientStreamListener mockListener;
 
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
-
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
@@ -89,7 +98,7 @@ public class AbstractClientStreamTest {
         while (producer.next() != null) {}
         return null;
       }
-    }).when(mockListener).messagesAvailable(Matchers.<StreamListener.MessageProducer>any());
+    }).when(mockListener).messagesAvailable(ArgumentMatchers.<StreamListener.MessageProducer>any());
   }
 
   private final WritableBufferAllocator allocator = new WritableBufferAllocator() {
@@ -454,7 +463,7 @@ public class AbstractClientStreamTest {
     stream.start(mockListener);
 
     ArgumentCaptor<Metadata> headersCaptor = ArgumentCaptor.forClass(Metadata.class);
-    verify(sink).writeHeaders(headersCaptor.capture(), any(byte[].class));
+    verify(sink).writeHeaders(headersCaptor.capture(), ArgumentMatchers.<byte[]>any());
 
     Metadata headers = headersCaptor.getValue();
     assertTrue(headers.containsKey(GrpcUtil.TIMEOUT_KEY));
@@ -462,6 +471,15 @@ public class AbstractClientStreamTest {
         .isLessThan(TimeUnit.SECONDS.toNanos(1));
     assertThat(headers.get(GrpcUtil.TIMEOUT_KEY).longValue())
         .isGreaterThan(TimeUnit.MILLISECONDS.toNanos(600));
+  }
+
+  @Test
+  public void appendTimeoutInsight() {
+    InsightBuilder insight = new InsightBuilder();
+    AbstractClientStream stream =
+        new BaseAbstractClientStream(allocator, statsTraceCtx, transportTracer);
+    stream.appendTimeoutInsight(insight);
+    assertThat(insight.toString()).isEqualTo("[remote_addr=fake_server_addr]");
   }
 
   /**
@@ -525,7 +543,7 @@ public class AbstractClientStreamTest {
 
     @Override
     public Attributes getAttributes() {
-      return Attributes.EMPTY;
+      return Attributes.newBuilder().set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, SERVER_ADDR).build();
     }
   }
 

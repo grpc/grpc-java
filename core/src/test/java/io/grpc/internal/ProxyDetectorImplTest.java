@@ -22,8 +22,9 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -40,14 +41,21 @@ import java.net.ProxySelector;
 import java.net.SocketAddress;
 import java.net.URI;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.AdditionalMatchers;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 @RunWith(JUnit4.class)
 public class ProxyDetectorImplTest {
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   @Mock private ProxySelector proxySelector;
   @Mock private ProxyDetectorImpl.AuthenticationProvider authenticator;
   private InetSocketAddress destination = InetSocketAddress.createUnresolved("10.10.10.10", 5678);
@@ -59,7 +67,6 @@ public class ProxyDetectorImplTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     proxySelectorSupplier = new Supplier<ProxySelector>() {
       @Override
       public ProxySelector get() {
@@ -188,12 +195,12 @@ public class ProxyDetectorImplTest {
         proxyUser,
         proxyPassword.toCharArray());
     when(authenticator.requestPasswordAuthentication(
-            any(String.class),
-            any(InetAddress.class),
+            anyString(),
+            ArgumentMatchers.<InetAddress>any(),
             anyInt(),
-            any(String.class),
-            any(String.class),
-            any(String.class)))
+            anyString(),
+            anyString(),
+            AdditionalMatchers.or(anyString(), ArgumentMatchers.<String>any())))
       .thenReturn(auth);
     when(proxySelector.select(any(URI.class))).thenReturn(ImmutableList.of(proxy));
 

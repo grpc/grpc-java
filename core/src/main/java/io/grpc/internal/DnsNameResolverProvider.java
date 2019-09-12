@@ -43,7 +43,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   private static final String SCHEME = "dns";
 
   @Override
-  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Helper helper) {
+  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
       String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(targetPath.startsWith("/"),
@@ -52,7 +52,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
       return new DnsNameResolver(
           targetUri.getAuthority(),
           name,
-          helper,
+          args,
           GrpcUtil.SHARED_CHANNEL_EXECUTOR,
           Stopwatch.createUnstarted(),
           InternalServiceProviders.isAndroid(getClass().getClassLoader()));

@@ -1,11 +1,81 @@
+"""Build rule for java_grpc_library."""
+
+load("@bazel_tools//tools/jdk:toolchain_utils.bzl", "find_java_runtime_toolchain", "find_java_toolchain")
+
+_JavaRpcToolchainInfo = provider(
+    fields = [
+        "host_javabase",
+        "java_toolchain",
+        "plugin",
+        "plugin_arg",
+        "protoc",
+        "runtime",
+    ],
+)
+
+def _java_rpc_toolchain_impl(ctx):
+    return [
+        _JavaRpcToolchainInfo(
+            host_javabase = ctx.attr._host_javabase,
+            java_toolchain = ctx.attr._java_toolchain,
+            plugin = ctx.executable.plugin,
+            plugin_arg = ctx.attr.plugin_arg,
+            protoc = ctx.executable._protoc,
+            runtime = ctx.attr.runtime,
+        ),
+        platform_common.ToolchainInfo(),  # Magic for b/78647825
+    ]
+
+java_rpc_toolchain = rule(
+    attrs = {
+        # This attribute has a "magic" name recognized by the native DexArchiveAspect (b/78647825).
+        "runtime": attr.label_list(
+            cfg = "target",
+            providers = [JavaInfo],
+        ),
+        "plugin": attr.label(
+            cfg = "host",
+            executable = True,
+        ),
+        "plugin_arg": attr.string(),
+        "_protoc": attr.label(
+            cfg = "host",
+            default = Label("@com_google_protobuf//:protoc"),
+            executable = True,
+        ),
+        "_java_toolchain": attr.label(
+            default = Label("@bazel_tools//tools/jdk:current_java_toolchain"),
+        ),
+        "_host_javabase": attr.label(
+            cfg = "host",
+            default = Label("@bazel_tools//tools/jdk:current_java_runtime"),
+        ),
+    },
+    provides = [
+        _JavaRpcToolchainInfo,
+        platform_common.ToolchainInfo,
+    ],
+    implementation = _java_rpc_toolchain_impl,
+)
+
 # "repository" here is for Bazel builds that span multiple WORKSPACES.
 def _path_ignoring_repository(f):
-    if len(f.owner.workspace_root) == 0:
+    # Bazel creates a _virtual_imports directory in case the .proto source files
+    # need to be accessed at a path that's different from their source path:
+    # https://github.com/bazelbuild/bazel/blob/0.27.1/src/main/java/com/google/devtools/build/lib/rules/proto/ProtoCommon.java#L289
+    #
+    # In that case, the import path of the .proto file is the path relative to
+    # the virtual imports directory of the rule in question.
+    virtual_imports = "/_virtual_imports/"
+    if virtual_imports in f.path:
+        return f.path.split(virtual_imports)[1].split("/", 1)[1]
+    elif len(f.owner.workspace_root) == 0:
+        # |f| is in the main repository
         return f.short_path
-    return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
-
-def _create_include_path(include):
-    return "-I{0}={1}".format(_path_ignoring_repository(include), include.path)
+    else:
+        # If |f| is a generated file, it will have "bazel-out/*/genfiles" prefix
+        # before "external/workspace", so we need to add the starting index of "external/workspace"
+        return f.path[f.path.find(f.owner.workspace_root) + len(f.owner.workspace_root) + 1:]
 
 def _java_rpc_library_impl(ctx):
     if len(ctx.attr.srcs) != 1:
@@ -14,22 +84,22 @@ def _java_rpc_library_impl(ctx):
         print(("in srcs attribute of {0}: Proto source with label {1} should be in " +
                "same package as consuming rule").format(ctx.label, ctx.attr.srcs[0].label))
 
-    srcs = ctx.attr.srcs[0].proto.direct_sources
-    includes = ctx.attr.srcs[0].proto.transitive_imports
-    flavor = ctx.attr.flavor
-    if flavor == "normal":
-        flavor = ""
+    toolchain = ctx.attr._toolchain[_JavaRpcToolchainInfo]
+    srcs = ctx.attr.srcs[0][ProtoInfo].direct_sources
+    descriptor_set_in = ctx.attr.srcs[0][ProtoInfo].transitive_descriptor_sets
+
+    srcjar = ctx.actions.declare_file("%s-proto-gensrc.jar" % ctx.label.name)
 
     args = ctx.actions.args()
-    args.add(ctx.executable._java_plugin.path, format = "--plugin=protoc-gen-grpc-java=%s")
-    args.add("--grpc-java_out={0}:{1}".format(flavor, ctx.outputs.srcjar.path))
-    args.add_all(includes, map_each = _create_include_path)
+    args.add(toolchain.plugin, format = "--plugin=protoc-gen-rpc-plugin=%s")
+    args.add("--rpc-plugin_out={0}:{1}".format(toolchain.plugin_arg, srcjar.path))
+    args.add_joined("--descriptor_set_in", descriptor_set_in, join_with = ctx.host_configuration.host_path_separator)
     args.add_all(srcs, map_each = _path_ignoring_repository)
 
-    ctx.action(
-        inputs = depset([ctx.executable._java_plugin] + srcs, transitive = [includes]),
-        outputs = [ctx.outputs.srcjar],
-        executable = ctx.executable._protoc,
+    ctx.actions.run(
+        inputs = depset([toolchain.plugin] + srcs, transitive = [descriptor_set_in]),
+        outputs = [srcjar],
+        executable = toolchain.protoc,
         arguments = [args],
     )
 
@@ -37,55 +107,58 @@ def _java_rpc_library_impl(ctx):
 
     java_info = java_common.compile(
         ctx,
-        java_toolchain = ctx.attr._java_toolchain,
-        host_javabase = ctx.attr._host_javabase,
-        source_jars = [ctx.outputs.srcjar],
+        java_toolchain = find_java_toolchain(ctx, toolchain.java_toolchain),
+        host_javabase = find_java_runtime_toolchain(ctx, toolchain.host_javabase),
+        source_jars = [srcjar],
         output = ctx.outputs.jar,
+        output_source_jar = ctx.outputs.srcjar,
         deps = [
             java_common.make_non_strict(deps_java_info),
-            ctx.attr.runtime[JavaInfo],
-        ],
+        ] + [dep[JavaInfo] for dep in toolchain.runtime],
     )
+
     return [java_info]
 
-_java_rpc_library = rule(
+_java_grpc_library = rule(
     attrs = {
         "srcs": attr.label_list(
             mandatory = True,
-            non_empty = True,
-            providers = ["proto"],
+            allow_empty = False,
+            providers = [ProtoInfo],
         ),
         "deps": attr.label_list(
             mandatory = True,
-            non_empty = True,
+            allow_empty = False,
             providers = [JavaInfo],
         ),
-        "flavor": attr.string(
-            values = [
-                "normal",
-                "lite",
-            ],
-            default = "normal",
+        "_toolchain": attr.label(
+            default = Label("//compiler:java_grpc_library_toolchain"),
         ),
-        "runtime": attr.label(
+    },
+    fragments = ["java"],
+    outputs = {
+        "jar": "lib%{name}.jar",
+        "srcjar": "lib%{name}-src.jar",
+    },
+    provides = [JavaInfo],
+    implementation = _java_rpc_library_impl,
+)
+
+_java_lite_grpc_library = rule(
+    attrs = {
+        "srcs": attr.label_list(
             mandatory = True,
+            allow_empty = False,
+            providers = [ProtoInfo],
         ),
-        "_protoc": attr.label(
-            default = Label("@com_google_protobuf//:protoc"),
-            executable = True,
-            cfg = "host",
+        "deps": attr.label_list(
+            mandatory = True,
+            allow_empty = False,
+            providers = [JavaInfo],
         ),
-        "_java_plugin": attr.label(
-            default = Label("//compiler:grpc_java_plugin"),
-            executable = True,
-            cfg = "host",
-        ),
-        "_java_toolchain": attr.label(
-            default = Label("@bazel_tools//tools/jdk:current_java_toolchain"),
-        ),
-        "_host_javabase": attr.label(
-            cfg = "host",
-            default = Label("@bazel_tools//tools/jdk:current_host_java_runtime"),
+        # This attribute has a "magic" name recognized by the native DexArchiveAspect (b/78647825).
+        "_toolchain": attr.label(
+            default = Label("//compiler:java_lite_grpc_library_toolchain"),
         ),
     },
     fragments = ["java"],
@@ -102,65 +175,40 @@ def java_grpc_library(
         srcs,
         deps,
         flavor = None,
-        tags = None,
-        visibility = None,
         **kwargs):
-    """Generates and compiles gRPC Java sources for services defined in a proto
-    file. This rule is compatible with proto_library with java_api_version,
-    java_proto_library, and java_lite_proto_library.
+    """Generates gRPC Java code for services in a `proto_library`.
 
-    Do note that this rule only scans through the proto file for RPC services. It
-    does not generate Java classes for proto messages. You will need a separate
-    proto_library with java_api_version, java_proto_library, or
+    This rule only generates code for services; it does not generate code for
+    messages. You will need a separate java_proto_library or
     java_lite_proto_library rule.
 
     Args:
-      name: (str) A unique name for this rule. Required.
-      srcs: (list) a single proto_library target that contains the schema of the
-          service. Required.
-      deps: (list) a single java_proto_library target for the proto_library in
-          srcs.  Required.
+      name: A unique name for this rule.
+      srcs: (List of `labels`) a single proto_library target that contains the
+        schema of the service.
+      deps: (List of `labels`) a single java_proto_library or
+        java_lite_proto_library target for the proto_library in srcs.
       flavor: (str) "normal" (default) for normal proto runtime. "lite"
-          for the lite runtime.
-      visibility: (list) the visibility list
-      **kwargs: Passed through to generated targets
+        for the lite runtime.
+      **kwargs: Other common attributes
     """
 
     if len(deps) > 1:
         print("Multiple values in 'deps' is deprecated in " + name)
 
-    if flavor == "lite":
-        inner_name = name + "__do_not_reference"
-        inner_visibility = ["//visibility:private"]
-        inner_tags = ["avoid_dep"]
-        runtime = "@io_grpc_grpc_java//:java_lite_grpc_library_deps__do_not_reference"
-    else:
-        inner_name = name
-        inner_visibility = visibility
-        inner_tags = tags
-        runtime = "@io_grpc_grpc_java//:java_grpc_library_deps__do_not_reference"
-
-    _java_rpc_library(
-        name = inner_name,
-        srcs = srcs,
-        deps = deps,
-        flavor = flavor,
-        runtime = runtime,
-        visibility = inner_visibility,
-        tags = inner_tags,
-        **kwargs
-    )
-
-    if flavor == "lite":
-        # Use java_import to work around error with android_binary:
-        # Dependencies on .jar artifacts are not allowed in Android binaries,
-        # please use a java_import to depend on...
-        native.java_import(
+    if flavor == None or flavor == "normal":
+        _java_grpc_library(
             name = name,
-            deps = deps + [runtime],
-            jars = [":lib{}.jar".format(inner_name)],
-            srcjar = ":lib{}-src.jar".format(inner_name),
-            visibility = visibility,
-            tags = tags,
+            srcs = srcs,
+            deps = deps,
             **kwargs
         )
+    elif flavor == "lite":
+        _java_lite_grpc_library(
+            name = name,
+            srcs = srcs,
+            deps = deps,
+            **kwargs
+        )
+    else:
+        fail("Flavor must be normal or lite")

@@ -19,9 +19,9 @@ package io.grpc.cronet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Matchers.isA;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -587,7 +587,7 @@ public final class CronetClientStreamTest {
             false /* alwaysUsePut */,
             method,
             StatsTraceContext.NOOP,
-            CallOptions.DEFAULT.withOption(CronetCallOptions.CRONET_ANNOTATION_KEY, annotation),
+            CallOptions.DEFAULT.withOption(CronetClientStream.CRONET_ANNOTATION_KEY, annotation),
             transportTracer);
     callback.setStream(stream);
     when(factory.newBidirectionalStreamBuilder(
@@ -603,8 +603,8 @@ public final class CronetClientStreamTest {
   public void withAnnotation() {
     Object annotation1 = new Object();
     Object annotation2 = new Object();
-    CallOptions callOptions = CronetCallOptions.withAnnotation(CallOptions.DEFAULT, annotation1);
-    callOptions = CronetCallOptions.withAnnotation(callOptions, annotation2);
+    CallOptions callOptions = CronetClientStream.withAnnotation(CallOptions.DEFAULT, annotation1);
+    callOptions = CronetClientStream.withAnnotation(callOptions, annotation2);
 
     SetStreamFactoryRunnable callback = new SetStreamFactoryRunnable(factory);
     CronetClientStream stream =

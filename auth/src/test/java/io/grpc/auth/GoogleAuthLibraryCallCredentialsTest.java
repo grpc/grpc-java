@@ -21,13 +21,15 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.auth.oauth2.AccessToken;
@@ -58,14 +60,16 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -73,6 +77,9 @@ import org.mockito.stubbing.Answer;
  */
 @RunWith(JUnit4.class)
 public class GoogleAuthLibraryCallCredentialsTest {
+
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
 
   private static final Metadata.Key<String> AUTHORIZATION = Metadata.Key.of("Authorization",
       Metadata.ASCII_STRING_MARSHALLER);
@@ -112,7 +119,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
 
   @Before
   public void setUp() throws Exception {
-    MockitoAnnotations.initMocks(this);
     doAnswer(new Answer<Void>() {
       @Override
       public Void answer(InvocationOnMock invocation) {
@@ -382,6 +388,33 @@ public class GoogleAuthLibraryCallCredentialsTest {
     Iterable<String> authorization = headers.getAll(AUTHORIZATION);
     assertArrayEquals(new String[]{"token1"},
         Iterables.toArray(authorization, String.class));
+  }
+
+  @Test
+  public void jwtAccessCredentialsInRequestMetadata() throws Exception {
+    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientId("test-client")
+            .setClientEmail("test-email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId("test-private-key-id")
+            .build();
+    GoogleAuthLibraryCallCredentials callCredentials =
+        new GoogleAuthLibraryCallCredentials(credentials);
+    callCredentials.applyRequestMetadata(new RequestInfoImpl("example.com:123"), executor, applier);
+
+    verify(applier).apply(headersCaptor.capture());
+    Metadata headers = headersCaptor.getValue();
+    String token =
+        Iterables.getOnlyElement(headers.getAll(AUTHORIZATION)).substring("Bearer".length());
+    DecodedJWT decoded = JWT.decode(token);
+    assertEquals("test-private-key-id", decoded.getKeyId());
+    assertEquals("https://example.com:123/a.service",
+        Iterables.getOnlyElement(decoded.getAudience()));
+    assertEquals("test-email@example.com", decoded.getIssuer());
+    assertEquals("test-email@example.com", decoded.getSubject());
   }
 
   private int runPendingRunnables() {

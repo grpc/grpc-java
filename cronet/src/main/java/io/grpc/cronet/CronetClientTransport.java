@@ -82,6 +82,7 @@ class CronetClientTransport implements ConnectionClientTransport {
       InetSocketAddress address,
       String authority,
       @Nullable String userAgent,
+      Attributes eagAttrs,
       Executor executor,
       int maxMessageSize,
       boolean alwaysUsePut,
@@ -97,6 +98,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
     this.attrs = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
+        .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
         .build();
   }
 
@@ -117,7 +119,7 @@ class CronetClientTransport implements ConnectionClientTransport {
     final String url = "https://" + authority + defaultPath;
 
     final StatsTraceContext statsTraceCtx =
-        StatsTraceContext.newClientContext(callOptions, headers);
+        StatsTraceContext.newClientContext(callOptions, attrs, headers);
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,

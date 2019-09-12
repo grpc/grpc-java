@@ -1,4 +1,5 @@
 rootProject.name = "grpc"
+include ":grpc-api"
 include ":grpc-core"
 include ":grpc-context"
 include ":grpc-stub"
@@ -6,7 +7,6 @@ include ":grpc-auth"
 include ":grpc-okhttp"
 include ":grpc-protobuf"
 include ":grpc-protobuf-lite"
-include ":grpc-protobuf-nano"
 include ":grpc-netty"
 include ":grpc-netty-shaded"
 include ":grpc-grpclb"
@@ -21,6 +21,7 @@ include ":grpc-services"
 include ":grpc-xds"
 include ":grpc-bom"
 
+project(':grpc-api').projectDir = "$rootDir/api" as File
 project(':grpc-core').projectDir = "$rootDir/core" as File
 project(':grpc-context').projectDir = "$rootDir/context" as File
 project(':grpc-stub').projectDir = "$rootDir/stub" as File
@@ -28,7 +29,6 @@ project(':grpc-auth').projectDir = "$rootDir/auth" as File
 project(':grpc-okhttp').projectDir = "$rootDir/okhttp" as File
 project(':grpc-protobuf').projectDir = "$rootDir/protobuf" as File
 project(':grpc-protobuf-lite').projectDir = "$rootDir/protobuf-lite" as File
-project(':grpc-protobuf-nano').projectDir = "$rootDir/protobuf-nano" as File
 project(':grpc-netty').projectDir = "$rootDir/netty" as File
 project(':grpc-netty-shaded').projectDir = "$rootDir/netty/shaded" as File
 project(':grpc-grpclb').projectDir = "$rootDir/grpclb" as File
@@ -49,6 +49,3 @@ if (settings.hasProperty('skipCodegen') && skipCodegen.toBoolean()) {
     include ":grpc-compiler"
     project(':grpc-compiler').projectDir = "$rootDir/compiler" as File
 }
-
-// Gradle 5.0 changed the behavior of publishing block, use new stable behavior
-enableFeaturePreview('STABLE_PUBLISHING')

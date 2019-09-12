@@ -19,7 +19,7 @@ package io.grpc.examples.routeguide;
 import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
@@ -33,7 +33,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
@@ -48,6 +48,10 @@ import org.mockito.ArgumentCaptor;
  * Unit tests for {@link RouteGuideServer}.
  * For demonstrating how to write gRPC unit test only.
  * Not intended to provide a high code coverage or to test every major usecase.
+ *
+ * directExecutor() makes it easier to have deterministic tests.
+ * However, if your implementation uses another thread and uses streaming it is better to use
+ * the default executor, to avoid hitting bug #3084.
  *
  * <p>For basic unit test examples see {@link io.grpc.examples.helloworld.HelloWorldClientTest} and
  * {@link io.grpc.examples.helloworld.HelloWorldServerTest}.
@@ -133,7 +137,7 @@ public class RouteGuideServerTest {
     features.add(f2);
     features.add(f3);
     features.add(f4);
-    final Collection<Feature> result = new HashSet<Feature>();
+    final List<Feature> result = new ArrayList<Feature>();
     final CountDownLatch latch = new CountDownLatch(1);
     StreamObserver<Feature> responseObserver =
         new StreamObserver<Feature>() {
@@ -159,7 +163,7 @@ public class RouteGuideServerTest {
     assertTrue(latch.await(1, TimeUnit.SECONDS));
 
     // verify
-    assertEquals(new HashSet<>(Arrays.asList(f2, f3)), result);
+    assertEquals(Arrays.asList(f2, f3), result);
   }
 
   @Test

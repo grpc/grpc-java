@@ -28,11 +28,10 @@ import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.InternalChannelz;
-import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
-import io.grpc.NameResolverProvider;
+import io.grpc.NameResolverRegistry;
 import io.grpc.ProxyDetector;
 import io.opencensus.trace.Tracing;
 import java.net.SocketAddress;
@@ -41,7 +40,9 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
@@ -83,9 +84,6 @@ public abstract class AbstractManagedChannelImplBuilder
   private static final ObjectPool<? extends Executor> DEFAULT_EXECUTOR_POOL =
       SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR);
 
-  private static final NameResolver.Factory DEFAULT_NAME_RESOLVER_FACTORY =
-      NameResolverProvider.asFactory();
-
   private static final DecompressorRegistry DEFAULT_DECOMPRESSOR_REGISTRY =
       DecompressorRegistry.getDefaultInstance();
 
@@ -98,9 +96,10 @@ public abstract class AbstractManagedChannelImplBuilder
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
+  final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
   // Access via getter, which may perform authority override as needed
-  private NameResolver.Factory nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+  private NameResolver.Factory nameResolverFactory = nameResolverRegistry.asFactory();
 
   final String target;
 
@@ -113,8 +112,6 @@ public abstract class AbstractManagedChannelImplBuilder
   @VisibleForTesting
   @Nullable
   String authorityOverride;
-
-  @Nullable LoadBalancer.Factory loadBalancerFactory;
 
   String defaultLbPolicy = GrpcUtil.DEFAULT_LB_POLICY;
 
@@ -138,6 +135,10 @@ public abstract class AbstractManagedChannelImplBuilder
 
   InternalChannelz channelz = InternalChannelz.instance();
   int maxTraceEvents;
+
+  @Nullable
+  Map<String, ?> defaultServiceConfig;
+  boolean lookUpServiceConfig = true;
 
   protected TransportTracer.Factory transportTracerFactory = TransportTracer.getDefaultFactory();
 
@@ -235,18 +236,8 @@ public abstract class AbstractManagedChannelImplBuilder
     if (resolverFactory != null) {
       this.nameResolverFactory = resolverFactory;
     } else {
-      this.nameResolverFactory = DEFAULT_NAME_RESOLVER_FACTORY;
+      this.nameResolverFactory = nameResolverRegistry.asFactory();
     }
-    return thisT();
-  }
-
-  @Deprecated
-  @Override
-  public final T loadBalancerFactory(LoadBalancer.Factory loadBalancerFactory) {
-    Preconditions.checkState(directServerAddress == null,
-        "directServerAddress is set (%s), which forbids the use of LoadBalancer.Factory",
-        directServerAddress);
-    this.loadBalancerFactory = loadBalancerFactory;
     return thisT();
   }
 
@@ -379,6 +370,78 @@ public abstract class AbstractManagedChannelImplBuilder
     return thisT();
   }
 
+  @Override
+  public T defaultServiceConfig(@Nullable Map<String, ?> serviceConfig) {
+    // TODO(notcarl): use real parsing
+    defaultServiceConfig = checkMapEntryTypes(serviceConfig);
+    return thisT();
+  }
+
+  @Nullable
+  private static Map<String, ?> checkMapEntryTypes(@Nullable Map<?, ?> map) {
+    if (map == null) {
+      return null;
+    }
+    // Not using ImmutableMap.Builder because of extra guava dependency for Android.
+    Map<String, Object> parsedMap = new LinkedHashMap<>();
+    for (Map.Entry<?, ?> entry : map.entrySet()) {
+      checkArgument(
+          entry.getKey() instanceof String,
+          "The key of the entry '%s' is not of String type", entry);
+
+      String key = (String) entry.getKey();
+      Object value = entry.getValue();
+      if (value == null) {
+        parsedMap.put(key, null);
+      } else if (value instanceof Map) {
+        parsedMap.put(key, checkMapEntryTypes((Map<?, ?>) value));
+      } else if (value instanceof List) {
+        parsedMap.put(key, checkListEntryTypes((List<?>) value));
+      } else if (value instanceof String) {
+        parsedMap.put(key, value);
+      } else if (value instanceof Double) {
+        parsedMap.put(key, value);
+      } else if (value instanceof Boolean) {
+        parsedMap.put(key, value);
+      } else {
+        throw new IllegalArgumentException(
+            "The value of the map entry '" + entry + "' is of type '" + value.getClass()
+                + "', which is not supported");
+      }
+    }
+    return Collections.unmodifiableMap(parsedMap);
+  }
+
+  private static List<?> checkListEntryTypes(List<?> list) {
+    List<Object> parsedList = new ArrayList<>(list.size());
+    for (Object value : list) {
+      if (value == null) {
+        parsedList.add(null);
+      } else if (value instanceof Map) {
+        parsedList.add(checkMapEntryTypes((Map<?, ?>) value));
+      } else if (value instanceof List) {
+        parsedList.add(checkListEntryTypes((List<?>) value));
+      } else if (value instanceof String) {
+        parsedList.add(value);
+      } else if (value instanceof Double) {
+        parsedList.add(value);
+      } else if (value instanceof Boolean) {
+        parsedList.add(value);
+      } else {
+        throw new IllegalArgumentException(
+            "The entry '" + value + "' is of type '" + value.getClass()
+                + "', which is not supported");
+      }
+    }
+    return Collections.unmodifiableList(parsedList);
+  }
+
+  @Override
+  public T disableServiceConfigLookUp() {
+    this.lookUpServiceConfig = false;
+    return thisT();
+  }
+
   /**
    * Disable or enable stats features. Enabled by default.
    *
@@ -490,7 +553,7 @@ public abstract class AbstractManagedChannelImplBuilder
   /**
    * Subclasses can override this method to provide a default port to {@link NameResolver} for use
    * in cases where the target string doesn't include a port.  The default implementation returns
-   * {@link GrpcUtil.DEFAULT_PORT_SSL}.
+   * {@link GrpcUtil#DEFAULT_PORT_SSL}.
    */
   protected int getDefaultPort() {
     return GrpcUtil.DEFAULT_PORT_SSL;
@@ -517,7 +580,7 @@ public abstract class AbstractManagedChannelImplBuilder
     }
 
     @Override
-    public NameResolver newNameResolver(URI notUsedUri, NameResolver.Helper helper) {
+    public NameResolver newNameResolver(URI notUsedUri, NameResolver.Args args) {
       return new NameResolver() {
         @Override
         public String getServiceAuthority() {
@@ -525,10 +588,12 @@ public abstract class AbstractManagedChannelImplBuilder
         }
 
         @Override
-        public void start(final Listener listener) {
-          listener.onAddresses(
-              Collections.singletonList(new EquivalentAddressGroup(address)),
-              Attributes.EMPTY);
+        public void start(Listener2 listener) {
+          listener.onResult(
+              ResolutionResult.newBuilder()
+                  .setAddresses(Collections.singletonList(new EquivalentAddressGroup(address)))
+                  .setAttributes(Attributes.EMPTY)
+                  .build());
         }
 
         @Override

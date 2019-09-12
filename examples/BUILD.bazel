@@ -59,6 +59,9 @@ java_library(
     resources = glob(
         ["src/main/resources/**"],
     ),
+    runtime_deps = [
+        "@io_grpc_grpc_java//netty",
+    ],
     deps = [
         ":hello_streaming_java_grpc",
         ":hello_streaming_java_proto",
@@ -68,16 +71,14 @@ java_library(
         ":route_guide_java_proto",
         "@com_google_api_grpc_proto_google_common_protos//jar",
         "@com_google_code_findbugs_jsr305//jar",
+        "@com_google_code_gson_gson//:com_google_code_gson_gson",
         "@com_google_guava_guava//jar",
         "@com_google_protobuf//:protobuf_java",
         "@com_google_protobuf//:protobuf_java_util",
-        "@io_grpc_grpc_java//core",
+        "@io_grpc_grpc_java//api",
         "@io_grpc_grpc_java//protobuf",
         "@io_grpc_grpc_java//stub",
     ],
-    runtime_deps = [
-        "@io_grpc_grpc_java//netty",
-    ]
 )
 
 java_binary(
@@ -93,24 +94,6 @@ java_binary(
     name = "hello-world-server",
     testonly = 1,
     main_class = "io.grpc.examples.helloworld.HelloWorldServer",
-    runtime_deps = [
-        ":examples",
-    ],
-)
-
-java_binary(
-    name = "auth-client",
-    testonly = 1,
-    main_class = "io.grpc.examples.authentication.AuthClient",
-    runtime_deps = [
-        ":examples",
-    ],
-)
-
-java_binary(
-    name = "auth-server",
-    testonly = 1,
-    main_class = "io.grpc.examples.authentication.AuthServer",
     runtime_deps = [
         ":examples",
     ],

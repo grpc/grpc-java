@@ -80,7 +80,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
     LogEntryRecorder handler = new LogEntryRecorder();
     Logger.getLogger("").addHandler(handler);
     try {
-      doGetHelper(req, resp);
+      doGetHelper(resp);
     } finally {
       Logger.getLogger("").removeHandler(handler);
     }
@@ -89,7 +89,7 @@ public final class NettyClientInteropServlet extends HttpServlet {
         .append(handler.getLogOutput());
   }
 
-  private void doGetHelper(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+  private void doGetHelper(HttpServletResponse resp) throws IOException {
     resp.setContentType("text/plain");
     PrintWriter writer = resp.getWriter();
     writer.println("Test invoked at: ");

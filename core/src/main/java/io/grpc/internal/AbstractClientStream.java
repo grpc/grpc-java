@@ -25,12 +25,15 @@ import static java.lang.Math.max;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.io.ByteStreams;
+import io.grpc.Attributes;
 import io.grpc.CallOptions;
 import io.grpc.Codec;
 import io.grpc.Compressor;
 import io.grpc.Deadline;
 import io.grpc.Decompressor;
 import io.grpc.DecompressorRegistry;
+import io.grpc.Grpc;
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.ClientStreamListener.RpcProgress;
@@ -214,6 +217,12 @@ public abstract class AbstractClientStream extends AbstractStream
   @Override
   public final boolean isReady() {
     return super.isReady() && !cancelled;
+  }
+
+  @Override
+  public final void appendTimeoutInsight(InsightBuilder insight) {
+    Attributes attrs = getAttributes();
+    insight.appendKeyValue("remote_addr", attrs.get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR));
   }
 
   protected TransportTracer getTransportTracer() {
@@ -478,11 +487,12 @@ public abstract class AbstractClientStream extends AbstractStream
       this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     }
 
+    @SuppressWarnings("BetaApi") // ByteStreams is not Beta in v27
     @Override
     public void writePayload(InputStream message) {
       checkState(payload == null, "writePayload should not be called multiple times");
       try {
-        payload = IoUtils.toByteArray(message);
+        payload = ByteStreams.toByteArray(message);
       } catch (java.io.IOException ex) {
         throw new RuntimeException(ex);
       }

@@ -16,14 +16,20 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.Attributes;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.GrpcUtil;
+import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.List;
-import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -40,71 +46,70 @@ import javax.annotation.Nullable;
  *       do not request for endpoints.</li>
  * </ul>
  */
-abstract class XdsLbState {
+class XdsLbState {
 
   final String balancerName;
 
   @Nullable
-  final Map<String, Object> childPolicy;
+  final LbConfig childPolicy;
 
-  @Nullable
-  final Map<String, Object> fallbackPolicy;
+  private final LocalityStore localityStore;
+  private final Helper helper;
+  private final ManagedChannel channel;
+  private final AdsStreamCallback adsStreamCallback;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
 
   @Nullable
   private XdsComms xdsComms;
 
   XdsLbState(
       String balancerName,
-      @Nullable Map<String, Object> childPolicy,
-      @Nullable Map<String, Object> fallbackPolicy,
-      @Nullable XdsComms xdsComms) {
-    this.balancerName = balancerName;
+      @Nullable LbConfig childPolicy,
+      Helper helper,
+      LocalityStore localityStore,
+      ManagedChannel channel,
+      AdsStreamCallback adsStreamCallback,
+      BackoffPolicy.Provider backoffPolicyProvider) {
+    this.balancerName = checkNotNull(balancerName, "balancerName");
     this.childPolicy = childPolicy;
-    this.fallbackPolicy = fallbackPolicy;
-    this.xdsComms = xdsComms;
+    this.helper = checkNotNull(helper, "helper");
+    this.localityStore = checkNotNull(localityStore, "localityStore");
+    this.channel = checkNotNull(channel, "channel");
+    this.adsStreamCallback = checkNotNull(adsStreamCallback, "adsStreamCallback");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
   }
 
-  abstract void handleResolvedAddressGroups(
-      List<EquivalentAddressGroup> servers, Attributes attributes);
+  final void handleResolvedAddressGroups(
+      List<EquivalentAddressGroup> servers, Attributes attributes) {
 
-  abstract void propagateError(Status error);
+    // start XdsComms if not already alive
+    if (xdsComms != null) {
+      xdsComms.refreshAdsStream();
+    } else {
+      // TODO(zdapeng): pass a helper that has the right ChannelLogger for the oobChannel
+      xdsComms = new XdsComms(
+          channel, helper, adsStreamCallback, localityStore, backoffPolicyProvider,
+          GrpcUtil.STOPWATCH_SUPPLIER);
+    }
 
-  abstract void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
-
-  /**
-   * Shuts down subchannels and child loadbalancers, cancels fallback timeer, and cancels retry
-   * timer.
-   */
-  abstract void shutdown();
-
-  @Nullable
-  final XdsComms shutdownAndReleaseXdsComms() {
-    shutdown();
-    XdsComms xdsComms = this.xdsComms;
-    this.xdsComms = null;
-    return xdsComms;
+    // TODO: maybe update picker
   }
 
-  static final class XdsComms {
-    private final ManagedChannel channel;
-    private final AdsStream adsStream;
+  final void handleNameResolutionError(Status error) {
+    // NO-OP?
+  }
 
-    XdsComms(ManagedChannel channel, AdsStream adsStream) {
-      this.channel = channel;
-      this.adsStream = adsStream;
-    }
+  final void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
+    // TODO: maybe update picker
+    localityStore.handleSubchannelState(subchannel, newState);
+  }
 
-    void shutdownChannel() {
-      if (channel != null) {
-        channel.shutdown();
-      }
-      shutdownLbRpc("Loadbalancer client shutdown");
+  ManagedChannel shutdownAndReleaseChannel(String message) {
+    localityStore.reset();
+    if (xdsComms != null) {
+      xdsComms.shutdownLbRpc(message);
+      xdsComms = null;
     }
-
-    void shutdownLbRpc(String message) {
-      if (adsStream != null) {
-        adsStream.cancel(message);
-      }
-    }
+    return channel;
   }
 }

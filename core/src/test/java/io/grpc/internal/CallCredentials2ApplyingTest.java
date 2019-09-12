@@ -19,8 +19,8 @@ package io.grpc.internal;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.same;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -32,6 +32,7 @@ import io.grpc.Attributes;
 import io.grpc.CallCredentials.MetadataApplier;
 import io.grpc.CallCredentials.RequestInfo;
 import io.grpc.CallOptions;
+import io.grpc.ChannelLogger;
 import io.grpc.IntegerMarshaller;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
@@ -41,13 +42,15 @@ import io.grpc.StringMarshaller;
 import java.net.SocketAddress;
 import java.util.concurrent.Executor;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 import org.mockito.stubbing.Answer;
 
 /**
@@ -57,6 +60,9 @@ import org.mockito.stubbing.Answer;
 @SuppressWarnings("deprecation")
 @RunWith(JUnit4.class)
 public class CallCredentials2ApplyingTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
+
   @Mock
   private ClientTransportFactory mockTransportFactory;
 
@@ -74,6 +80,10 @@ public class CallCredentials2ApplyingTest {
 
   @Mock
   private SocketAddress address;
+
+  // Noop logger;
+  @Mock
+  private ChannelLogger channelLogger;
 
   private static final String AUTHORITY = "testauthority";
   private static final String USER_AGENT = "testuseragent";
@@ -104,18 +114,17 @@ public class CallCredentials2ApplyingTest {
           .setAuthority(AUTHORITY)
           .setUserAgent(USER_AGENT);
 
-    MockitoAnnotations.initMocks(this);
     origHeaders.put(ORIG_HEADER_KEY, ORIG_HEADER_VALUE);
-    when(mockTransportFactory.newClientTransport(address, clientTransportOptions))
+    when(mockTransportFactory.newClientTransport(address, clientTransportOptions, channelLogger))
         .thenReturn(mockTransport);
     when(mockTransport.newStream(same(method), any(Metadata.class), any(CallOptions.class)))
         .thenReturn(mockStream);
     ClientTransportFactory transportFactory = new CallCredentialsApplyingTransportFactory(
         mockTransportFactory, mockExecutor);
     transport = (ForwardingConnectionClientTransport)
-        transportFactory.newClientTransport(address, clientTransportOptions);
+        transportFactory.newClientTransport(address, clientTransportOptions, channelLogger);
     callOptions = CallOptions.DEFAULT.withCallCredentials(mockCreds);
-    verify(mockTransportFactory).newClientTransport(address, clientTransportOptions);
+    verify(mockTransportFactory).newClientTransport(address, clientTransportOptions, channelLogger);
     assertSame(mockTransport, transport.delegate());
   }
 

@@ -20,7 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -35,19 +35,23 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 /**
  * Tests for {@link MessageFramer}.
  */
 @RunWith(JUnit4.class)
 public class MessageFramerTest {
+  @Rule
+  public final MockitoRule mocks = MockitoJUnit.rule();
   @Mock
   private MessageFramer.Sink sink;
 
@@ -56,10 +60,6 @@ public class MessageFramerTest {
 
   @Captor
   private ArgumentCaptor<ByteWritableBuffer> frameCaptor;
-  @Captor
-  private ArgumentCaptor<Long> wireSizeCaptor;
-  @Captor
-  private ArgumentCaptor<Long> uncompressedSizeCaptor;
   private BytesWritableBufferAllocator allocator =
       new BytesWritableBufferAllocator(1000, 1000);
   private StatsTraceContext statsTraceCtx;
@@ -67,7 +67,6 @@ public class MessageFramerTest {
   /** Set up for test. */
   @Before
   public void setUp() {
-    MockitoAnnotations.initMocks(this);
     // MessageDeframerTest tests with a client-side StatsTraceContext, so here we test with a
     // server-side StatsTraceContext.
     statsTraceCtx = new StatsTraceContext(new StreamTracer[]{tracer});
@@ -167,7 +166,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void emptyPayloadYieldsFrame() throws Exception {
+  public void emptyPayloadYieldsFrame() {
     writeKnownLength(framer, new byte[0]);
     framer.flush();
     verify(sink).deliverFrame(toWriteBuffer(new byte[] {0, 0, 0, 0, 0}), false, true, 1);
@@ -176,7 +175,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void emptyUnknownLengthPayloadYieldsFrame() throws Exception {
+  public void emptyUnknownLengthPayloadYieldsFrame() {
     writeUnknownLength(framer, new byte[0]);
     verifyZeroInteractions(sink);
     framer.flush();
@@ -198,7 +197,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void largerFrameSize() throws Exception {
+  public void largerFrameSize() {
     allocator = new BytesWritableBufferAllocator(0, 10000);
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
     writeKnownLength(framer, new byte[1000]);
@@ -218,7 +217,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void largerFrameSizeUnknownLength() throws Exception {
+  public void largerFrameSizeUnknownLength() {
     // Force payload to be split into two chunks
     allocator = new BytesWritableBufferAllocator(500, 500);
     framer = new MessageFramer(sink, allocator, statsTraceCtx);
@@ -246,7 +245,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void compressed() throws Exception {
+  public void compressed() {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
     // setMessageCompression should default to true
     framer = new MessageFramer(sink, allocator, statsTraceCtx)
@@ -273,7 +272,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void dontCompressIfNoEncoding() throws Exception {
+  public void dontCompressIfNoEncoding() {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
     framer = new MessageFramer(sink, allocator, statsTraceCtx)
         .setMessageCompression(true);
@@ -298,7 +297,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void dontCompressIfNotRequested() throws Exception {
+  public void dontCompressIfNotRequested() {
     allocator = new BytesWritableBufferAllocator(100, Integer.MAX_VALUE);
     framer = new MessageFramer(sink, allocator, statsTraceCtx)
         .setCompressor(new Codec.Gzip())
@@ -324,7 +323,7 @@ public class MessageFramerTest {
   }
 
   @Test
-  public void closeIsRentrantSafe() throws Exception {
+  public void closeIsRentrantSafe() {
     MessageFramer.Sink reentrant = new MessageFramer.Sink() {
       int count = 0;
       @Override

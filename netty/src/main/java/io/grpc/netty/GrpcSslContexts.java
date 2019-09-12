@@ -18,9 +18,9 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import com.google.common.base.Throwables;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
-import io.grpc.internal.MoreThrowables;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -111,7 +111,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forClient()
    * @see #configure(SslContextBuilder)
@@ -121,7 +121,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File)
    * @see #configure(SslContextBuilder)
@@ -131,7 +131,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File, String)
    * @see #configure(SslContextBuilder)
@@ -142,7 +142,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(InputStream, InputStream)
    * @see #configure(SslContextBuilder)
@@ -152,7 +152,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(InputStream, InputStream, String)
    * @see #configure(SslContextBuilder)
@@ -285,7 +285,7 @@ public class GrpcSslContexts {
       throw new AssertionError(ex);
     } catch (InvocationTargetException ex) {
       if (ex.getCause() != null) {
-        MoreThrowables.throwIfUnchecked(ex.getCause());
+        Throwables.throwIfUnchecked(ex.getCause());
         // If checked, just wrap up everything.
       }
       throw new AssertionError(ex);
