@@ -54,6 +54,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -323,7 +324,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void serviceAccountToJwt() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
+    /**
     ServiceAccountCredentials credentials = new ServiceAccountCredentials(
         null, "email@example.com", pair.getPrivate(), null, null) {
       @Override
@@ -331,6 +332,18 @@ public class GoogleAuthLibraryCallCredentialsTest {
         throw new AssertionError();
       }
     };
+    
+    */
+    
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientId(null)
+            .setClientEmail("email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId(null)
+            .setScopes(null)
+            .build();
+    
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -350,15 +363,19 @@ public class GoogleAuthLibraryCallCredentialsTest {
   public void serviceAccountWithScopeNotToJwt() throws Exception {
     final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, Arrays.asList("somescope")) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        return token;
-      }
-    };
-
+    
+    
+    Collection<String> scopes = Arrays.asList("somescope");
+    
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientId(null)
+            .setClientEmail("email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId(null)
+            .setScopes(scopes)
+            .build();
+    
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
     callCredentials.applyRequestMetadata(new RequestInfoImpl(), executor, applier);
