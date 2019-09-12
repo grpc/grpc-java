@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.fail;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
@@ -29,7 +28,10 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.xds.Bootstrapper.FileBasedBootstrapper;
+import java.io.IOException;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,8 +39,10 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class BootstrapperTest {
 
+  @Rule public ExpectedException thrown = ExpectedException.none();
+
   @Test
-  public void validBootstrap() {
+  public void validBootstrap() throws IOException {
     Bootstrap config =
         Bootstrap.newBuilder()
             .setNode(
@@ -78,7 +82,10 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void unsupportedApiType() {
+  public void unsupportedApiType() throws IOException {
+    thrown.expect(IOException.class);
+    thrown.expectMessage("Unexpected api type: REST");
+
     Bootstrap config =
         Bootstrap.newBuilder()
             .setNode(
@@ -101,17 +108,14 @@ public class BootstrapperTest {
                                 .setTargetUri("trafficdirector.googleapis.com:443").build())))
             .build();
 
-    try {
-      new FileBasedBootstrapper(config);
-      fail("RuntimeException should have been thrown");
-    } catch (RuntimeException e) {
-      // Expected.
-      assertThat(e.getMessage()).isEqualTo("Unexpected api type: REST");
-    }
+    new FileBasedBootstrapper(config);
   }
 
   @Test
-  public void tooManyGrpcServices() {
+  public void tooManyGrpcServices() throws IOException {
+    thrown.expect(IOException.class);
+    thrown.expectMessage("Unexpected number of gRPC services: expected: 1, actual: 2");
+
     Bootstrap config =
         Bootstrap.newBuilder()
             .setNode(
@@ -140,29 +144,21 @@ public class BootstrapperTest {
                 )
             .build();
 
-    try {
-      new FileBasedBootstrapper(config);
-      fail("RuntimeException should have been thrown");
-    } catch (RuntimeException e) {
-      // Expected.
-      assertThat(e.getMessage())
-          .isEqualTo("Unexpected number of gRPC services: expected: 1, actual: 2");
-    }
+    new FileBasedBootstrapper(config);
   }
 
   @Test
-  public void parseBootstrap_emptyData() {
+  public void parseBootstrap_emptyData() throws InvalidProtocolBufferException {
+    thrown.expect(InvalidProtocolBufferException.class);
+
     String rawData = "";
-    try {
-      Bootstrapper.parseConfig(rawData);
-      fail("InvalidProtocolBufferException should have been thrown");
-    } catch (InvalidProtocolBufferException e) {
-      // Expected.
-    }
+    Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_invalidNodeProto() {
+  public void parseBootstrap_invalidNodeProto() throws InvalidProtocolBufferException {
+    thrown.expect(InvalidProtocolBufferException.class);
+
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -181,16 +177,13 @@ public class BootstrapperTest {
         + "} "
         + "}";
 
-    try {
-      Bootstrapper.parseConfig(rawData);
-      fail("InvalidProtocolBufferException should have been thrown");
-    } catch (InvalidProtocolBufferException e) {
-      // Expected.
-    }
+    Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_invalidApiConfigSourceProto() {
+  public void parseBootstrap_invalidApiConfigSourceProto() throws InvalidProtocolBufferException {
+    thrown.expect(InvalidProtocolBufferException.class);
+
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -209,11 +202,6 @@ public class BootstrapperTest {
         + "} "
         + "}";
 
-    try {
-      Bootstrapper.parseConfig(rawData);
-      fail("InvalidProtocolBufferException should have been thrown");
-    } catch (InvalidProtocolBufferException e) {
-      // Expected.
-    }
+    Bootstrapper.parseConfig(rawData);
   }
 }
