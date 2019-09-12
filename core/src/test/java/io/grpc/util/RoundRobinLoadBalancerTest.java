@@ -96,7 +96,8 @@ public class RoundRobinLoadBalancerTest {
 
   private RoundRobinLoadBalancer loadBalancer;
   private final List<EquivalentAddressGroup> servers = Lists.newArrayList();
-  private final Map<List<EquivalentAddressGroup>, Subchannel> subchannels = Maps.newLinkedHashMap();
+  private final Map<Identity<EquivalentAddressGroup>, Subchannel> subchannels =
+      Maps.newLinkedHashMap();
   private final Map<Subchannel, SubchannelStateListener> subchannelStateListeners =
       Maps.newLinkedHashMap();
   private final Attributes affinity =
@@ -124,7 +125,7 @@ public class RoundRobinLoadBalancerTest {
       EquivalentAddressGroup eag = new EquivalentAddressGroup(addr);
       servers.add(eag);
       Subchannel sc = mock(Subchannel.class);
-      subchannels.put(Arrays.asList(eag), sc);
+      subchannels.put(Identity.of(eag), sc);
     }
 
     when(mockHelper.createSubchannel(any(CreateSubchannelArgs.class)))
@@ -132,7 +133,8 @@ public class RoundRobinLoadBalancerTest {
           @Override
           public Subchannel answer(InvocationOnMock invocation) throws Throwable {
             CreateSubchannelArgs args = (CreateSubchannelArgs) invocation.getArguments()[0];
-            final Subchannel subchannel = subchannels.get(args.getAddresses());
+            assertThat(args.getAddresses()).hasSize(1);
+            final Subchannel subchannel = subchannels.get(Identity.of(args.getAddresses().get(0)));
             when(subchannel.getAllAddresses()).thenReturn(args.getAddresses());
             when(subchannel.getAttributes()).thenReturn(args.getAttributes());
             doAnswer(
@@ -167,9 +169,10 @@ public class RoundRobinLoadBalancerTest {
     deliverSubchannelState(readySubchannel, ConnectivityStateInfo.forNonError(READY));
 
     verify(mockHelper, times(3)).createSubchannel(createArgsCaptor.capture());
-    List<List<EquivalentAddressGroup>> capturedAddrs = new ArrayList<>();
+    List<Identity<EquivalentAddressGroup>> capturedAddrs = new ArrayList<>();
     for (CreateSubchannelArgs arg : createArgsCaptor.getAllValues()) {
-      capturedAddrs.add(arg.getAddresses());
+      assertThat(arg.getAddresses()).hasSize(1);
+      capturedAddrs.add(Identity.of(arg.getAddresses().get(0)));
     }
 
     assertThat(capturedAddrs).containsAtLeastElementsIn(subchannels.keySet());
@@ -195,20 +198,33 @@ public class RoundRobinLoadBalancerTest {
     Subchannel oldSubchannel = mock(Subchannel.class);
     Subchannel newSubchannel = mock(Subchannel.class);
 
-    Attributes.Key<String> key = Attributes.Key.create("check-that-it-is-propagated");
+    // Make sure the implementation isn't comparing Attributes, since it is slow.
+    class AttrValue {
+      @Override
+      public boolean equals(Object o) {
+        throw new AssertionError("should not use equals() on attributes");
+      }
+
+      @Override
+      public int hashCode() {
+        throw new AssertionError("should not use hashCode() on attributes");
+      }
+    }
+
+    Attributes.Key<AttrValue> key = Attributes.Key.create("check-that-it-is-propagated");
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
     EquivalentAddressGroup removedEag = new EquivalentAddressGroup(removedAddr);
     FakeSocketAddress oldAddr = new FakeSocketAddress("old");
     EquivalentAddressGroup oldEag1 = new EquivalentAddressGroup(oldAddr);
     EquivalentAddressGroup oldEag2 = new EquivalentAddressGroup(
-        oldAddr, Attributes.newBuilder().set(key, "oldattr").build());
+        oldAddr, Attributes.newBuilder().set(key, new AttrValue()).build());
     FakeSocketAddress newAddr = new FakeSocketAddress("new");
     EquivalentAddressGroup newEag = new EquivalentAddressGroup(
-        newAddr, Attributes.newBuilder().set(key, "newattr").build());
+        newAddr, Attributes.newBuilder().set(key, new AttrValue()).build());
 
-    subchannels.put(Collections.singletonList(removedEag), removedSubchannel);
-    subchannels.put(Collections.singletonList(oldEag1), oldSubchannel);
-    subchannels.put(Collections.singletonList(newEag), newSubchannel);
+    subchannels.put(Identity.of(removedEag), removedSubchannel);
+    subchannels.put(Identity.of(oldEag1), oldSubchannel);
+    subchannels.put(Identity.of(newEag), newSubchannel);
 
     List<EquivalentAddressGroup> currentServers = Lists.newArrayList(removedEag, oldEag1);
 
@@ -811,6 +827,33 @@ public class RoundRobinLoadBalancerTest {
     @Override
     public String toString() {
       return "FakeSocketAddress-" + name;
+    }
+  }
+
+  /**
+   * Wrapper for EAG to use identity equality to avoid Attributes.equals() which purposefully
+   * throws in some tests.
+   */
+  private static class Identity<V> {
+    private final V value;
+
+    public Identity(V value) {
+      this.value = value;
+    }
+
+    @Override public boolean equals(Object o) {
+      if (!(o instanceof Identity)) {
+        return false;
+      }
+      return this.value == ((Identity) o).value;
+    }
+
+    @Override public int hashCode() {
+      return System.identityHashCode(value);
+    }
+
+    public static <V> Identity<V> of(V value) {
+      return new Identity<V>(value);
     }
   }
 }
