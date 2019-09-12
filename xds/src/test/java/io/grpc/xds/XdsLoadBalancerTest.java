@@ -227,7 +227,7 @@ public class XdsLoadBalancerTest {
     lbRegistry.register(lbProvider1);
     lbRegistry.register(lbProvider2);
     lbRegistry.register(roundRobin);
-    lb = new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider, false);
+    lb = new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider);
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();

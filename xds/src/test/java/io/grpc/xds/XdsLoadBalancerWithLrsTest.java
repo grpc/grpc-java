@@ -224,7 +224,7 @@ public class XdsLoadBalancerWithLrsTest {
         any(BackoffPolicy.Provider.class), any(LoadStatsStore.class))).thenReturn(lrsClient);
 
     xdsLoadBalancer =
-        new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider, false, lrsClientFactory,
+        new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory,
             new FallbackManager(helper, lbRegistry), localityStore);
   }
 

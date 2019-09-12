@@ -71,12 +71,6 @@ final class XdsLoadBalancer extends LoadBalancer {
   private LoadReportClient lrsClient;
   @Nullable
   private XdsLbState xdsLbState;
-
-  // TODO(chengyuanzhang): use information populated by bootstrapper in xDS communication after
-  //  xDS load balancer restructure is done. For now, don't integrate it.
-  @SuppressWarnings("unused")
-  @Nullable
-  private Bootstrapper bootstrapper;
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
 
     @Override
@@ -118,27 +112,24 @@ final class XdsLoadBalancer extends LoadBalancer {
   private LbConfig fallbackPolicy;
 
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
-      BackoffPolicy.Provider backoffPolicyProvider, boolean usingBootstrap) {
-    this(helper, lbRegistry, backoffPolicyProvider, usingBootstrap,
-        LoadReportClientFactory.getInstance(), new FallbackManager(helper, lbRegistry));
+      BackoffPolicy.Provider backoffPolicyProvider) {
+    this(helper, lbRegistry, backoffPolicyProvider, LoadReportClientFactory.getInstance(),
+        new FallbackManager(helper, lbRegistry));
   }
 
   private XdsLoadBalancer(Helper helper,
       LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider,
-      boolean usingBootstrap,
       LoadReportClientFactory lrsClientFactory,
       FallbackManager fallbackManager) {
-    this(helper, lbRegistry, backoffPolicyProvider, usingBootstrap, lrsClientFactory,
-        fallbackManager, new LocalityStoreImpl(new LocalityStoreHelper(helper, fallbackManager),
-            lbRegistry));
+    this(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory, fallbackManager,
+        new LocalityStoreImpl(new LocalityStoreHelper(helper, fallbackManager), lbRegistry));
   }
 
   @VisibleForTesting
   XdsLoadBalancer(Helper helper,
       LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider,
-      boolean usingBootstrap,
       LoadReportClientFactory lrsClientFactory,
       FallbackManager fallbackManager,
       LocalityStore localityStore) {
@@ -148,16 +139,6 @@ final class XdsLoadBalancer extends LoadBalancer {
     this.lrsClientFactory = checkNotNull(lrsClientFactory, "lrsClientFactory");
     this.fallbackManager = checkNotNull(fallbackManager, "fallbackManager");
     this.localityStore = checkNotNull(localityStore, "localityStore");
-    if (usingBootstrap) {
-      // TODO(chengyuanzhang): figure out error handling when bootstrap fails. Currently bootstrap
-      //  has not been integrated, but we do need a clear way of handling this case.
-      try {
-        bootstrapper = Bootstrapper.getInstance();
-      } catch (Exception e) {
-        helper.getChannelLogger()
-            .log(ChannelLogLevel.ERROR, "Unable to bootstrap from local bootstrap file.");
-      }
-    }
   }
 
   private static final class LocalityStoreHelper extends ForwardingLoadBalancerHelper {
