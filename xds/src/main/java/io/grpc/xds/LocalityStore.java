@@ -190,7 +190,8 @@ interface LocalityStore {
       for (XdsLocality locality : edsResponsLocalityInfo.keySet()) {
         loadStatsStore.removeLocality(locality);
       }
-      priorityManager.cancelFailOverTimer();
+      priorityManager.reset();
+      edsResponsLocalityInfo = ImmutableMap.of();
     }
 
     // This is triggered by EDS response.
@@ -441,7 +442,7 @@ interface LocalityStore {
       }
     }
 
-    class PriorityManager {
+    private final class PriorityManager {
 
       private final List<List<XdsLocality>> priorityTable = new ArrayList<>();
       private int priorityLevel = -1;
@@ -516,6 +517,12 @@ interface LocalityStore {
         }
       }
 
+      void reset() {
+        cancelFailOverTimer();
+        priorityTable.clear();
+        priorityLevel = -1;
+      }
+
       private void startFailOverTimer() {
         class FailOverTask implements Runnable {
           @Override
@@ -529,7 +536,7 @@ interface LocalityStore {
             new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
       }
 
-      void cancelFailOverTimer() {
+      private void cancelFailOverTimer() {
         if (failOverTimer != null) {
           failOverTimer.cancel();
           failOverTimer = null;
