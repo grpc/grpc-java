@@ -26,6 +26,7 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.CallCredentials;
 import io.grpc.auth.MoreCallCredentials;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import javax.annotation.concurrent.Immutable;
@@ -122,7 +123,7 @@ abstract class Bootstrapper {
     if (filePath == null) {
       throw new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
     }
-    return parseConfig(new String(Files.readAllBytes(Paths.get(filePath)), "UTF-8"));
+    return parseConfig(new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
   }
 
   @VisibleForTesting
