@@ -35,6 +35,13 @@ import java.util.List;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
 public final class EquivalentAddressGroup {
 
+  /**
+   * The authority to be used when constructing Subchannels for this EquivalentAddressGroup.
+   */
+  @Attr
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6138")
+  public static final Attributes.Key<String> ATTR_AUTHORITY_OVERRIDE =
+      Attributes.Key.create("io.grpc.EquivalentAddressGroup.authorityOverride");
   private final List<SocketAddress> addrs;
   private final Attributes attrs;
 
