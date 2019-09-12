@@ -87,13 +87,13 @@ abstract class Bootstrapper {
     }
 
     @VisibleForTesting
-    FileBasedBootstrapper(Bootstrap bootstrapConfig) {
+    FileBasedBootstrapper(Bootstrap bootstrapConfig) throws IOException {
       ApiConfigSource serverConfig = bootstrapConfig.getXdsServer();
       if (!serverConfig.getApiType().equals(ApiType.GRPC)) {
-        throw new RuntimeException("Unexpected api type: " + serverConfig.getApiType().toString());
+        throw new IOException("Unexpected api type: " + serverConfig.getApiType().toString());
       }
       if (serverConfig.getGrpcServicesCount() != 1) {
-        throw new RuntimeException(
+        throw new IOException(
             "Unexpected number of gRPC services: expected: 1, actual: "
                 + serverConfig.getGrpcServicesCount());
       }
@@ -120,8 +120,7 @@ abstract class Bootstrapper {
   private static Bootstrap readConfig() throws IOException {
     String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
     if (filePath == null) {
-      throw new RuntimeException("Environment variable "
-          + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
+      throw new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
     }
     return parseConfig(new String(Files.readAllBytes(Paths.get(filePath)), "UTF-8"));
   }
