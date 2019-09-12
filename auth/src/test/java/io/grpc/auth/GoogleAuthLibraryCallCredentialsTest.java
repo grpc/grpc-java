@@ -28,8 +28,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
 import com.google.auth.oauth2.AccessToken;
@@ -40,6 +38,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimaps;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
@@ -47,6 +46,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.internal.JsonParser;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.net.URI;
@@ -408,13 +408,16 @@ public class GoogleAuthLibraryCallCredentialsTest {
     verify(applier).apply(headersCaptor.capture());
     Metadata headers = headersCaptor.getValue();
     String token =
-        Iterables.getOnlyElement(headers.getAll(AUTHORIZATION)).substring("Bearer".length());
-    DecodedJWT decoded = JWT.decode(token);
-    assertEquals("test-private-key-id", decoded.getKeyId());
-    assertEquals("https://example.com:123/a.service",
-        Iterables.getOnlyElement(decoded.getAudience()));
-    assertEquals("test-email@example.com", decoded.getIssuer());
-    assertEquals("test-email@example.com", decoded.getSubject());
+        Iterables.getOnlyElement(headers.getAll(AUTHORIZATION)).substring("Bearer ".length());
+    String[] parts = token.split("\\.", 3);
+    String jsonHeader = new String(BaseEncoding.base64Url().decode(parts[0]), US_ASCII);
+    String jsonPayload = new String(BaseEncoding.base64Url().decode(parts[1]), US_ASCII);
+    Map<?, ?> header = (Map<?, ?>) JsonParser.parse(jsonHeader);
+    assertEquals("test-private-key-id", header.get("kid"));
+    Map<?, ?> payload = (Map<?, ?>) JsonParser.parse(jsonPayload);
+    assertEquals("https://example.com:123/a.service", payload.get("aud"));
+    assertEquals("test-email@example.com", payload.get("iss"));
+    assertEquals("test-email@example.com", payload.get("sub"));
   }
 
   private int runPendingRunnables() {
