@@ -38,25 +38,12 @@ import javax.annotation.concurrent.Immutable;
 abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
-  private static volatile Exception failToBootstrapException;
-  private static volatile Bootstrapper DEFAULT_INSTANCE;
 
   static Bootstrapper getInstance() throws Exception {
-    if (DEFAULT_INSTANCE == null && failToBootstrapException == null) {
-      synchronized (Bootstrapper.class) {
-        if (DEFAULT_INSTANCE == null && failToBootstrapException == null) {
-          try {
-            DEFAULT_INSTANCE = new FileBasedBootstrapper();
-          } catch (Exception e) {
-            failToBootstrapException = e;
-          }
-        }
-      }
+    if (FileBasedBootstrapper.DEFAULT_INSTANCE == null) {
+      throw FileBasedBootstrapper.FAIL_TO_BOOTSTRAP_EXCEPTION;
     }
-    if (DEFAULT_INSTANCE == null) {
-      throw failToBootstrapException;
-    }
-    return DEFAULT_INSTANCE;
+    return FileBasedBootstrapper.DEFAULT_INSTANCE;
   }
 
   /**
@@ -78,10 +65,25 @@ abstract class Bootstrapper {
   @VisibleForTesting
   static final class FileBasedBootstrapper extends Bootstrapper {
 
+    private static final Exception FAIL_TO_BOOTSTRAP_EXCEPTION;
+    private static final Bootstrapper DEFAULT_INSTANCE;
+
     private final String balancerName;
     private final Node node;
     // TODO(chengyuanzhang): Add configuration for call credentials loaded from bootstrap file.
     //  hard-coded for alpha release.
+
+    static {
+      Bootstrapper instance = null;
+      Exception exception = null;
+      try {
+        instance = new FileBasedBootstrapper();
+      } catch (Exception e) {
+        exception = e;
+      }
+      DEFAULT_INSTANCE = instance;
+      FAIL_TO_BOOTSTRAP_EXCEPTION = exception;
+    }
 
     private FileBasedBootstrapper() throws IOException {
       this(Bootstrapper.readConfig());
