@@ -32,8 +32,8 @@ import "envoy/api/v2/core/config_source.proto";
 // balancing policy only. It should not be used for any other purposes.
 message Bootstrap {
   // Metadata to be added to the Node message in xDS requests.
-  envoy.api.v2.core.Node node = 1;
+  envoy.api.v2.core.Node node = 1 [json_name = "node"];
 
   // Configurations including the name of the xDS server to contact, the credentials to use, etc.
-  envoy.api.v2.core.ApiConfigSource xds_server = 2;
+  envoy.api.v2.core.ApiConfigSource xds_server = 2 [json_name = "xds_server"];
 }
