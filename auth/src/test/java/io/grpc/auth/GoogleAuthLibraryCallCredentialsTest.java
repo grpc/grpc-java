@@ -412,11 +412,9 @@ public class GoogleAuthLibraryCallCredentialsTest {
     String[] parts = token.split("\\.", 3);
     String jsonHeader = new String(BaseEncoding.base64Url().decode(parts[0]), US_ASCII);
     String jsonPayload = new String(BaseEncoding.base64Url().decode(parts[1]), US_ASCII);
-    @SuppressWarnings("unchecked")
-    Map<String, Object> header = (Map<String, Object>) JsonParser.parse(jsonHeader);
+    Map<?, ?> header = (Map<?, ?>) JsonParser.parse(jsonHeader);
     assertEquals("test-private-key-id", header.get("kid"));
-    @SuppressWarnings("unchecked")
-    Map<String, Object> payload = (Map<String, Object>) JsonParser.parse(jsonPayload);
+    Map<?, ?> payload = (Map<?, ?>) JsonParser.parse(jsonPayload);
     assertEquals("https://example.com:123/a.service", payload.get("aud"));
     assertEquals("test-email@example.com", payload.get("iss"));
     assertEquals("test-email@example.com", payload.get("sub"));
