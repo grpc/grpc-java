@@ -10,7 +10,7 @@ BASE_DIR="$(pwd)"
 
 cd "$BASE_DIR/github/grpc-java"
 
-export GRADLE_OPTS=-Xmx512m
+export GRADLE_OPTS=(-Xmx512m -XX:MaxMetaspaceSize=512m)
 export LDFLAGS=-L/tmp/protobuf/lib
 export CXXFLAGS=-I/tmp/protobuf/include
 export LD_LIBRARY_PATH=/tmp/protobuf/lib
