@@ -176,6 +176,22 @@ public class InternalSubchannelTest {
         isA(TransportLogger.class));
   }
 
+  @Test public void eagAuthorityOverride_propagatesToTransport() {
+    SocketAddress addr = new SocketAddress() {};
+    String overriddenAuthority = "authority-override";
+    Attributes attr = Attributes.newBuilder()
+            .set(EquivalentAddressGroup.ATTR_AUTHORITY_OVERRIDE, overriddenAuthority).build();
+    createInternalSubchannel(new EquivalentAddressGroup(Arrays.asList(addr), attr));
+
+    // First attempt
+    assertNull(internalSubchannel.obtainActiveTransport());
+    assertEquals(CONNECTING, internalSubchannel.getState());
+    verify(mockTransportFactory).newClientTransport(
+        eq(addr),
+        eq(createClientTransportOptions().setAuthority(overriddenAuthority).setEagAttributes(attr)),
+        isA(TransportLogger.class));
+  }
+
   @Test public void singleAddressReconnect() {
     SocketAddress addr = mock(SocketAddress.class);
     createInternalSubchannel(addr);

@@ -195,25 +195,22 @@ public class RoundRobinLoadBalancerTest {
     Subchannel oldSubchannel = mock(Subchannel.class);
     Subchannel newSubchannel = mock(Subchannel.class);
 
+    Attributes.Key<String> key = Attributes.Key.create("check-that-it-is-propagated");
     FakeSocketAddress removedAddr = new FakeSocketAddress("removed");
+    EquivalentAddressGroup removedEag = new EquivalentAddressGroup(removedAddr);
     FakeSocketAddress oldAddr = new FakeSocketAddress("old");
+    EquivalentAddressGroup oldEag1 = new EquivalentAddressGroup(oldAddr);
+    EquivalentAddressGroup oldEag2 = new EquivalentAddressGroup(
+        oldAddr, Attributes.newBuilder().set(key, "oldattr").build());
     FakeSocketAddress newAddr = new FakeSocketAddress("new");
+    EquivalentAddressGroup newEag = new EquivalentAddressGroup(
+        newAddr, Attributes.newBuilder().set(key, "newattr").build());
 
-    List<Subchannel> allSubchannels =
-        Lists.newArrayList(removedSubchannel, oldSubchannel, newSubchannel);
-    List<FakeSocketAddress> allAddrs =
-        Lists.newArrayList(removedAddr, oldAddr, newAddr);
-    for (int i = 0; i < allSubchannels.size(); i++) {
-      Subchannel subchannel = allSubchannels.get(i);
-      List<EquivalentAddressGroup> eagList =
-          Arrays.asList(new EquivalentAddressGroup(allAddrs.get(i)));
-      subchannels.put(eagList, subchannel);
-    }
+    subchannels.put(Collections.singletonList(removedEag), removedSubchannel);
+    subchannels.put(Collections.singletonList(oldEag1), oldSubchannel);
+    subchannels.put(Collections.singletonList(newEag), newSubchannel);
 
-    List<EquivalentAddressGroup> currentServers =
-        Lists.newArrayList(
-            new EquivalentAddressGroup(removedAddr),
-            new EquivalentAddressGroup(oldAddr));
+    List<EquivalentAddressGroup> currentServers = Lists.newArrayList(removedEag, oldEag1);
 
     InOrder inOrder = inOrder(mockHelper);
 
@@ -236,15 +233,14 @@ public class RoundRobinLoadBalancerTest {
     assertThat(loadBalancer.getSubchannels()).containsExactly(removedSubchannel,
         oldSubchannel);
 
-    List<EquivalentAddressGroup> latestServers =
-        Lists.newArrayList(
-            new EquivalentAddressGroup(oldAddr),
-            new EquivalentAddressGroup(newAddr));
-;
+    // This time with Attributes
+    List<EquivalentAddressGroup> latestServers = Lists.newArrayList(oldEag2, newEag);
+
     loadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder().setAddresses(latestServers).setAttributes(affinity).build());
 
     verify(newSubchannel, times(1)).requestConnection();
+    verify(oldSubchannel, times(1)).updateAddresses(Arrays.asList(oldEag2));
     verify(removedSubchannel, times(1)).shutdown();
 
     deliverSubchannelState(removedSubchannel, ConnectivityStateInfo.forNonError(SHUTDOWN));
