@@ -68,6 +68,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -253,7 +254,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void oauth2Credential() {
     final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    final OAuth2Credentials credentials = new OAuth2Credentials() {
+    OAuth2Credentials credentials = new OAuth2Credentials() {
       @Override
       public AccessToken refreshAccessToken() throws IOException {
         return token;
@@ -324,26 +325,12 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void serviceAccountToJwt() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    /**
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, null) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        throw new AssertionError();
-      }
-    };
-    
-    */
-    
-    ServiceAccountCredentials credentials =
-        ServiceAccountCredentials.newBuilder()
-            .setClientId(null)
-            .setClientEmail("email@example.com")
-            .setPrivateKey(pair.getPrivate())
-            .setPrivateKeyId(null)
-            .setScopes(null)
-            .build();
-    
+    Collection<String> scopes = Arrays.asList("somescope");
+
+    ServiceAccountCredentials credentials = Mockito.mock(ServiceAccountCredentials.class);
+    Mockito.when(credentials.getClientEmail()).thenReturn("email@example.com");
+    Mockito.when(credentials.getPrivateKey()).thenReturn(pair.getPrivate());
+    Mockito.when(credentials.getAccessToken()).thenThrow(new AssertionError());
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -363,18 +350,16 @@ public class GoogleAuthLibraryCallCredentialsTest {
   public void serviceAccountWithScopeNotToJwt() throws Exception {
     final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    
-    
+
     Collection<String> scopes = Arrays.asList("somescope");
     
-    ServiceAccountCredentials credentials =
-        ServiceAccountCredentials.newBuilder()
-            .setClientId(null)
-            .setClientEmail("email@example.com")
-            .setPrivateKey(pair.getPrivate())
-            .setPrivateKeyId(null)
-            .setScopes(scopes)
-            .build();
+    ServiceAccountCredentials credentials = Mockito.mock(ServiceAccountCredentials.class);
+
+    Mockito.when(credentials.getClientId()).thenReturn(null);
+    Mockito.when(credentials.getClientEmail()).thenReturn("email@example.com");
+    Mockito.when(credentials.getPrivateKey()).thenReturn(pair.getPrivate());
+    Mockito.when(credentials.getScopes()).thenReturn(scopes);
+    Mockito.when(credentials.getAccessToken()).thenReturn(token);
     
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
