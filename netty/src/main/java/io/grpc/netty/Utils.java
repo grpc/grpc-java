@@ -91,10 +91,9 @@ class Utils {
 
   static {
     // Decide default channel types and EventLoopGroup based on Epoll availability
-    Class<? extends ServerChannel> channelType;
     if (isEpollAvailable()) {
-      channelType = epollServerChannelType();
       DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
+      DEFAULT_SERVER_CHANNEL_FACTORY = new ReflectiveChannelFactory<>(epollServerChannelType());
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
         = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
@@ -102,13 +101,12 @@ class Utils {
         = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
     } else {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
-      channelType = NioServerSocketChannel.class;
+      DEFAULT_SERVER_CHANNEL_FACTORY = nioServerChannelFactory();
       DEFAULT_CLIENT_CHANNEL_TYPE = NioSocketChannel.class;
       DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = null;
     }
-    DEFAULT_SERVER_CHANNEL_FACTORY =  new ReflectiveChannelFactory<>(channelType);
   }
 
   public static Metadata convertHeaders(Http2Headers http2Headers) {
@@ -292,6 +290,15 @@ class Utils {
     } catch (Exception e) {
       throw new RuntimeException("Cannot create Epoll EventLoopGroup", e);
     }
+  }
+
+  private static ChannelFactory<ServerChannel> nioServerChannelFactory() {
+    return new ChannelFactory<ServerChannel>() {
+      @Override
+      public ServerChannel newChannel() {
+        return new NioServerSocketChannel();
+      }
+    };
   }
 
   /**
