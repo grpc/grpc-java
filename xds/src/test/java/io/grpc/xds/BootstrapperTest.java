@@ -83,9 +83,6 @@ public class BootstrapperTest {
 
   @Test
   public void unsupportedApiType() throws IOException {
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Unexpected api type: REST");
-
     Bootstrap config =
         Bootstrap.newBuilder()
             .setNode(
@@ -108,14 +105,13 @@ public class BootstrapperTest {
                                 .setTargetUri("trafficdirector.googleapis.com:443").build())))
             .build();
 
+    thrown.expect(IOException.class);
+    thrown.expectMessage("Unexpected api type: REST");
     new FileBasedBootstrapper(config);
   }
 
   @Test
   public void tooManyGrpcServices() throws IOException {
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Unexpected number of gRPC services: expected: 1, actual: 2");
-
     Bootstrap config =
         Bootstrap.newBuilder()
             .setNode(
@@ -144,21 +140,21 @@ public class BootstrapperTest {
                 )
             .build();
 
+    thrown.expect(IOException.class);
+    thrown.expectMessage("Unexpected number of gRPC services: expected: 1, actual: 2");
     new FileBasedBootstrapper(config);
   }
 
   @Test
   public void parseBootstrap_emptyData() throws InvalidProtocolBufferException {
-    thrown.expect(InvalidProtocolBufferException.class);
-
     String rawData = "";
+
+    thrown.expect(InvalidProtocolBufferException.class);
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
   public void parseBootstrap_invalidNodeProto() throws InvalidProtocolBufferException {
-    thrown.expect(InvalidProtocolBufferException.class);
-
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -177,13 +173,12 @@ public class BootstrapperTest {
         + "} "
         + "}";
 
+    thrown.expect(InvalidProtocolBufferException.class);
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
   public void parseBootstrap_invalidApiConfigSourceProto() throws InvalidProtocolBufferException {
-    thrown.expect(InvalidProtocolBufferException.class);
-
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -202,6 +197,7 @@ public class BootstrapperTest {
         + "} "
         + "}";
 
+    thrown.expect(InvalidProtocolBufferException.class);
     Bootstrapper.parseConfig(rawData);
   }
 }
