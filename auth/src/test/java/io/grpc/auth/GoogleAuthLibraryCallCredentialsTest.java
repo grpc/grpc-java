@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
+import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
@@ -327,10 +328,16 @@ public class GoogleAuthLibraryCallCredentialsTest {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
     Collection<String> scopes = Arrays.asList("somescope");
 
-    ServiceAccountCredentials credentials = Mockito.mock(ServiceAccountCredentials.class);
-    Mockito.when(credentials.getClientEmail()).thenReturn("email@example.com");
-    Mockito.when(credentials.getPrivateKey()).thenReturn(pair.getPrivate());
-    Mockito.when(credentials.getAccessToken()).thenThrow(new AssertionError());
+    HttpTransportFactory factory = Mockito.mock(HttpTransportFactory.class);
+    Mockito.when(factory.create()).thenThrow(new AssertionError());
+
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientEmail("test-email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId("test-private-key-id")
+            .setHttpTransportFactory(factory)
+            .build();
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
