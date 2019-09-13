@@ -55,7 +55,6 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -326,7 +325,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void serviceAccountToJwt() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    Collection<String> scopes = Arrays.asList("somescope");
 
     HttpTransportFactory factory = Mockito.mock(HttpTransportFactory.class);
     Mockito.when(factory.create()).thenThrow(new AssertionError());
