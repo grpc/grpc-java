@@ -196,18 +196,18 @@ def com_google_api_grpc_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.9.0",
+        artifact = "com.google.auth:google-auth-library-credentials:0.17.1",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "ac9efdd6a930e4df906fa278576fa825d979f74315f2faf5c91fe7e6aabb2788",
+        artifact_sha256 = "aaeea9333fff9b763715bca0174ec76c4f9551b5731c89a95f263cdc82b4b56e",
         licenses = ["notice"],  # BSD 3-clause
     )
 
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.9.0",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.17.1",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "e55d9722102cc1245c8c43d69acd49d3c9bbfcc1bcf722e971425506b970097e",
+        artifact_sha256 = "fa9a1589c8bc279416988d437c2636967cd5e4eff70fbddc986b9c5a77b0231b",
         licenses = ["notice"],  # BSD 3-clause
     )
 
@@ -241,9 +241,9 @@ def com_google_errorprone_error_prone_annotations():
 def com_google_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:26.0-android",
+        artifact = "com.google.guava:guava:28.1-android",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "1d044ebb866ef08b7d04e998b4260c9b52fab6e6d6b68d207859486bb3686cd5",
+        artifact_sha256 = "e112ce92c0f0733965eede73d94589c59a72128b06b08bba5ebe2f9ea672ef60",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -260,9 +260,9 @@ def com_google_guava_failureaccess():
 def com_google_j2objc_j2objc_annotations():
     jvm_maven_import_external(
         name = "com_google_j2objc_j2objc_annotations",
-        artifact = "com.google.j2objc:j2objc-annotations:1.1",
+        artifact = "com.google.j2objc:j2objc-annotations:1.3",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "2994a7eb78f2710bd3d3bfb639b2c94e219cedac0d4d084d516e78c16dddecf6",
+        artifact_sha256 = "21af30c92267bd6122c0e0b4d20cccb6641a37eaf956c6540ec471d584e64a7b",
         licenses = ["notice"],  # Apache 2.0
     )
 

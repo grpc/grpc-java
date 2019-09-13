@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
+import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
@@ -67,6 +68,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -252,7 +254,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void oauth2Credential() {
     final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    final OAuth2Credentials credentials = new OAuth2Credentials() {
+    OAuth2Credentials credentials = new OAuth2Credentials() {
       @Override
       public AccessToken refreshAccessToken() throws IOException {
         return token;
@@ -323,14 +325,17 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void serviceAccountToJwt() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, null) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        throw new AssertionError();
-      }
-    };
+
+    HttpTransportFactory factory = Mockito.mock(HttpTransportFactory.class);
+    Mockito.when(factory.create()).thenThrow(new AssertionError());
+
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientEmail("test-email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId("test-private-key-id")
+            .setHttpTransportFactory(factory)
+            .build();
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -344,31 +349,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
     assertTrue(authorization[0], authorization[0].startsWith("Bearer "));
     // JWT is reasonably long. Normal tokens aren't.
     assertTrue(authorization[0], authorization[0].length() > 300);
-  }
-
-  @Test
-  public void serviceAccountWithScopeNotToJwt() throws Exception {
-    final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, Arrays.asList("somescope")) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        return token;
-      }
-    };
-
-    GoogleAuthLibraryCallCredentials callCredentials =
-        new GoogleAuthLibraryCallCredentials(credentials);
-    callCredentials.applyRequestMetadata(new RequestInfoImpl(), executor, applier);
-    assertEquals(1, runPendingRunnables());
-
-    verify(applier).apply(headersCaptor.capture());
-    Metadata headers = headersCaptor.getValue();
-    Iterable<String> authorization = headers.getAll(AUTHORIZATION);
-    assertArrayEquals(new String[]{"Bearer allyourbase"},
-        Iterables.toArray(authorization, String.class));
   }
 
   @Test
