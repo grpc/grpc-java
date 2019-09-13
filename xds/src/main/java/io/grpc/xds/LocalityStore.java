@@ -92,7 +92,8 @@ interface LocalityStore {
     private final OrcaOobUtil orcaOobUtil;
     private final PriorityManager priorityManager = new PriorityManager();
     private final Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
-    private Set<XdsLocality> loadStatsStoreLocalities = ImmutableSet.of();
+    // Most current set of localities instructed by traffic director
+    private Set<XdsLocality> localities = ImmutableSet.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -189,10 +190,10 @@ interface LocalityStore {
       }
       localityMap.clear();
 
-      for (XdsLocality locality : loadStatsStoreLocalities) {
+      for (XdsLocality locality : localities) {
         loadStatsStore.removeLocality(locality);
       }
-      loadStatsStoreLocalities = ImmutableSet.of();
+      localities = ImmutableSet.of();
 
       priorityManager.reset();
     }
@@ -201,8 +202,9 @@ interface LocalityStore {
     @Override
     public void updateLocalityStore(final Map<XdsLocality, LocalityInfo> localityInfoMap) {
 
+      Set<XdsLocality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
-      for (XdsLocality locality : localityInfoMap.keySet()) {
+      for (XdsLocality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
           final LocalityLbInfo localityLbInfo = localityMap.get(locality);
           final LocalityInfo localityInfo = localityInfoMap.get(locality);
@@ -219,20 +221,18 @@ interface LocalityStore {
         }
       }
 
-      Set<XdsLocality> newLocalities = localityInfoMap.keySet();
       for (XdsLocality newLocality : newLocalities) {
-        if (!loadStatsStoreLocalities.contains(newLocality)) {
+        if (!localities.contains(newLocality)) {
           loadStatsStore.addLocality(newLocality);
         }
       }
-
       final Set<XdsLocality> toBeRemovedFromStatsStore = new HashSet<>();
       // There is a race between picking a subchannel and updating localities, which leads to
       // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
       // loads will not be recorded. We consider this to be natural. By removing locality counters
       // after updating subchannel pickers, we eliminate the race and conservatively record loads
       // happening in that period.
-      for (XdsLocality oldLocality : loadStatsStoreLocalities) {
+      for (XdsLocality oldLocality : localities) {
         if (!localityInfoMap.containsKey(oldLocality)) {
           toBeRemovedFromStatsStore.add(oldLocality);
         }
@@ -245,7 +245,7 @@ interface LocalityStore {
           }
         }
       });
-      loadStatsStoreLocalities = ImmutableSet.copyOf(localityInfoMap.keySet());
+      localities = ImmutableSet.copyOf(newLocalities);
 
       priorityManager.updateLocalities(localityInfoMap);
 
