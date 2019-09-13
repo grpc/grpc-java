@@ -909,8 +909,7 @@ public class LocalityStoreTest {
     assertThat(loadBalancers.keySet()).containsExactly("sz1");
     LoadBalancer lb1 = loadBalancers.get("sz1");
     InOrder inOrder = inOrder(lb1, helper);
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 = ArgumentCaptor.forClass(null);
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
     inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11, eag12);
@@ -931,8 +930,7 @@ public class LocalityStoreTest {
     LoadBalancer lb2 = loadBalancers.get("sz2");
     inOrder = inOrder(lb1, lb2, helper);
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
     inOrder.verify(lb2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag21, eag22);
 
@@ -956,8 +954,7 @@ public class LocalityStoreTest {
     inOrder = inOrder(lb1, lb2, lb3, helper);
     inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 = ArgumentCaptor.forClass(null);
     inOrder.verify(lb3).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
     assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
 
@@ -1085,8 +1082,7 @@ public class LocalityStoreTest {
     LoadBalancer lb4 = loadBalancers.get("sz4");
     inOrder = inOrder(lb1, lb2, lb3, lb4, helper);
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
-    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor4 =
-        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor4 = ArgumentCaptor.forClass(null);
     inOrder.verify(lb4).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
     assertThat(resolvedAddressesCaptor4.getValue().getAddresses()).containsExactly(eag41, eag42);
 
