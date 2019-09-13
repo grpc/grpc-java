@@ -173,9 +173,10 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    * <p>It's an optional parameter. If the user has not provided an Channel type or ChannelFactory
    * when the channel is built, the builder will use the default one which is static.
    *
-   * <p>You must also provide corresponding {@link EventLoopGroup}. For example,
-   * {@link NioServerSocketChannel} based {@link ChannelFactory} must use {@link
-   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your application won't start.
+   * <p>You must also provide corresponding {@link EventLoopGroup} using {@link
+   * #workerEventLoopGroup(EventLoopGroup)} and {@link #bossEventLoopGroup(EventLoopGroup)}. For
+   * example, if the factory creates {@link NioServerSocketChannel} you must use {@link
+   * io.netty.channel.nio.NioEventLoopGroup}, otherwise your server won't start.
    */
   public NettyServerBuilder channelFactory(ChannelFactory<? extends ServerChannel> channelFactory) {
     this.channelFactory = checkNotNull(channelFactory, "channelFactory");
