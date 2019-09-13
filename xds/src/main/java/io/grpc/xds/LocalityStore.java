@@ -244,7 +244,7 @@ interface LocalityStore {
       });
 
       edsResponsLocalityInfo = ImmutableMap.copyOf(localityInfoMap);
-      priorityManager.updateLocalityStore();
+      priorityManager.updateLocalities(localityInfoMap);
 
       for (XdsLocality oldLocality : localityMap.keySet()) {
         if (!newLocalities.contains(oldLocality)) {
@@ -407,7 +407,7 @@ interface LocalityStore {
 
             // delegate to parent helper
             if (edsResponsLocalityInfo.containsKey(locality)) {
-              priorityManager.onChildStateUpdated(edsResponsLocalityInfo.get(locality).priority);
+              priorityManager.updatePriorityState(edsResponsLocalityInfo.get(locality).priority);
             }
           }
 
@@ -449,10 +449,14 @@ interface LocalityStore {
       private int currentPriority = -1;
       private ScheduledHandle failOverTimer;
 
-      void updateLocalityStore() {
+      /**
+       * Updates the priority ordering of localities with the given collection of localities.
+       * Recomputes the current ready localities to be used.
+       */
+      void updateLocalities(Map<XdsLocality, LocalityInfo> localityInfoMap) {
         priorityTable.clear();
-        for (XdsLocality newLocality : edsResponsLocalityInfo.keySet()) {
-          addLocality(edsResponsLocalityInfo.get(newLocality).priority, newLocality);
+        for (XdsLocality newLocality : localityInfoMap.keySet()) {
+          addLocality(localityInfoMap.get(newLocality).priority, newLocality);
         }
 
         if (currentPriority >= priorityTable.size()) {
@@ -465,7 +469,7 @@ interface LocalityStore {
         }
 
         for (int p = 0; p < priorityTable.size(); p++) {
-          onChildStateUpdated(p);
+          updatePriorityState(p);
         }
       }
 
@@ -477,9 +481,10 @@ interface LocalityStore {
       }
 
       /**
-       * Load balancing state of localities at the given priority has changed.
+       * Refreshes the group of localities with the given priority. Recomputes the current ready
+       * localities to be used.
        */
-      void onChildStateUpdated(int priority) {
+      void updatePriorityState(int priority) {
         if (priority > currentPriority) {
           return;
         }
@@ -563,7 +568,7 @@ interface LocalityStore {
                 new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
           }
 
-          onChildStateUpdated(currentPriority);
+          updatePriorityState(currentPriority);
         }
       }
 
