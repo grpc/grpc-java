@@ -40,10 +40,10 @@ abstract class Bootstrapper {
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
   static Bootstrapper getInstance() throws Exception {
-    if (FileBasedBootstrapper.DEFAULT_INSTANCE == null) {
-      throw FileBasedBootstrapper.FAIL_TO_BOOTSTRAP_EXCEPTION;
+    if (FileBasedBootstrapper.defaultInstance == null) {
+      throw FileBasedBootstrapper.failToBootstrapException;
     }
-    return FileBasedBootstrapper.DEFAULT_INSTANCE;
+    return FileBasedBootstrapper.defaultInstance;
   }
 
   /**
@@ -65,8 +65,8 @@ abstract class Bootstrapper {
   @VisibleForTesting
   static final class FileBasedBootstrapper extends Bootstrapper {
 
-    private static final Exception FAIL_TO_BOOTSTRAP_EXCEPTION;
-    private static final Bootstrapper DEFAULT_INSTANCE;
+    private static final Exception failToBootstrapException;
+    private static final Bootstrapper defaultInstance;
 
     private final String balancerName;
     private final Node node;
@@ -81,8 +81,8 @@ abstract class Bootstrapper {
       } catch (Exception e) {
         exception = e;
       }
-      DEFAULT_INSTANCE = instance;
-      FAIL_TO_BOOTSTRAP_EXCEPTION = exception;
+      defaultInstance = instance;
+      failToBootstrapException = exception;
     }
 
     private FileBasedBootstrapper() throws IOException {
