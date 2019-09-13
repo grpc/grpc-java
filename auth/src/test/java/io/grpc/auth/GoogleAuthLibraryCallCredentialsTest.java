@@ -347,33 +347,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
   }
 
   @Test
-  public void serviceAccountWithScopeNotToJwt() throws Exception {
-    final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-
-    Collection<String> scopes = Arrays.asList("somescope");
-    
-    ServiceAccountCredentials credentials = Mockito.mock(ServiceAccountCredentials.class);
-
-    Mockito.when(credentials.getClientId()).thenReturn(null);
-    Mockito.when(credentials.getClientEmail()).thenReturn("email@example.com");
-    Mockito.when(credentials.getPrivateKey()).thenReturn(pair.getPrivate());
-    Mockito.when(credentials.getScopes()).thenReturn(scopes);
-    Mockito.when(credentials.getAccessToken()).thenReturn(token);
-    
-    GoogleAuthLibraryCallCredentials callCredentials =
-        new GoogleAuthLibraryCallCredentials(credentials);
-    callCredentials.applyRequestMetadata(new RequestInfoImpl(), executor, applier);
-    assertEquals(1, runPendingRunnables());
-
-    verify(applier).apply(headersCaptor.capture());
-    Metadata headers = headersCaptor.getValue();
-    Iterable<String> authorization = headers.getAll(AUTHORIZATION);
-    assertArrayEquals(new String[]{"Bearer allyourbase"},
-        Iterables.toArray(authorization, String.class));
-  }
-
-  @Test
   public void oauthClassesNotInClassPath() throws Exception {
     ListMultimap<String, String> values = LinkedListMultimap.create();
     values.put("Authorization", "token1");
