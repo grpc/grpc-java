@@ -340,6 +340,7 @@ interface LocalityStore {
     /**
      * State of a single Locality.
      */
+    // TODO(zdapeng): rename it to LocalityLbState
     static final class LocalityLbInfo {
 
       final LoadBalancer childBalancer;
@@ -445,7 +446,7 @@ interface LocalityStore {
     private final class PriorityManager {
 
       private final List<List<XdsLocality>> priorityTable = new ArrayList<>();
-      private int priorityLevel = -1;
+      private int currentPriority = -1;
       private ScheduledHandle failOverTimer;
 
       void updateLocalityStore() {
@@ -454,11 +455,11 @@ interface LocalityStore {
           addLocality(edsResponsLocalityInfo.get(newLocality).priority, newLocality);
         }
 
-        if (priorityLevel >= priorityTable.size()) {
-          priorityLevel = priorityTable.size() - 1;
+        if (currentPriority >= priorityTable.size()) {
+          currentPriority = priorityTable.size() - 1;
         }
 
-        if (priorityLevel == -1) {
+        if (currentPriority == -1) {
           failOver();
           return;
         }
@@ -479,7 +480,7 @@ interface LocalityStore {
        * Load balancing state of localities at the given priority has changed.
        */
       void onChildStateUpdated(int priority) {
-        if (priority > priorityLevel) {
+        if (priority > currentPriority) {
           return;
         }
         List<WeightedChildPicker> childPickers = new ArrayList<>();
@@ -502,7 +503,7 @@ interface LocalityStore {
           }
         }
 
-        if (priority == priorityLevel || overallState == READY) {
+        if (priority == currentPriority || overallState == READY) {
           updatePicker(overallState, childPickers);
         }
 
@@ -510,9 +511,9 @@ interface LocalityStore {
           cancelFailOverTimer();
         }
 
-        if (priority == priorityLevel && overallState != READY) {
+        if (priority == currentPriority && overallState != READY) {
           failOver();
-        } else if (priority <= priorityLevel && overallState == READY) {
+        } else if (priority <= currentPriority && overallState == READY) {
           goToPriority(priority);
         }
       }
@@ -520,20 +521,7 @@ interface LocalityStore {
       void reset() {
         cancelFailOverTimer();
         priorityTable.clear();
-        priorityLevel = -1;
-      }
-
-      private void startFailOverTimer() {
-        class FailOverTask implements Runnable {
-          @Override
-          public void run() {
-            failOverTimer = null;
-            failOver();
-          }
-        }
-
-        failOverTimer = helper.getSynchronizationContext().schedule(
-            new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
+        currentPriority = -1;
       }
 
       private void cancelFailOverTimer() {
@@ -548,10 +536,10 @@ interface LocalityStore {
           // still CONNECTING
           return;
         }
-        if (priorityTable.size() > priorityLevel + 1) {
-          priorityLevel++;
+        if (priorityTable.size() > currentPriority + 1) {
+          currentPriority++;
 
-          List<XdsLocality> localities = priorityTable.get(priorityLevel);
+          List<XdsLocality> localities = priorityTable.get(currentPriority);
           boolean initializedBefore = false;
           for (XdsLocality locality : localities) {
             if (localityMap.containsKey(locality)) {
@@ -563,10 +551,19 @@ interface LocalityStore {
           }
 
           if (!initializedBefore) {
-            startFailOverTimer();
+            class FailOverTask implements Runnable {
+              @Override
+              public void run() {
+                failOverTimer = null;
+                failOver();
+              }
+            }
+
+            failOverTimer = helper.getSynchronizationContext().schedule(
+                new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
           }
 
-          onChildStateUpdated(priorityLevel);
+          onChildStateUpdated(currentPriority);
         }
       }
 
@@ -595,7 +592,7 @@ interface LocalityStore {
       }
 
       private void goToPriority(int priority) {
-        priorityLevel = priority;
+        currentPriority = priority;
         for (int p = priority + 1; p < priorityTable.size(); p++) {
           for (XdsLocality xdsLocality : priorityTable.get(p)) {
             deactivate(xdsLocality);

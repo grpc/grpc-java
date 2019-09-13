@@ -76,6 +76,7 @@ final class XdsComms {
   /**
    * Information about the locality from EDS response.
    */
+  // TODO(zdapeng): move this class out.
   static final class LocalityInfo {
     final List<EquivalentAddressGroup> eags;
     final List<Integer> endPointWeights;
