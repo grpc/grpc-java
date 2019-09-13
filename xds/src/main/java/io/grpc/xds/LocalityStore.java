@@ -472,7 +472,7 @@ interface LocalityStore {
           currentPriority = priorityTable.size() - 1;
         }
 
-        if (currentPriority == -1) {
+        if (currentPriority == INVALID_PRIORITY) {
           failOver();
           return;
         }
@@ -536,7 +536,7 @@ interface LocalityStore {
         cancelFailOverTimer();
         priorityTable.clear();
         localityInfoMap = ImmutableMap.of();
-        currentPriority = -1;
+        currentPriority = INVALID_PRIORITY;
       }
 
       private void cancelFailOverTimer() {
