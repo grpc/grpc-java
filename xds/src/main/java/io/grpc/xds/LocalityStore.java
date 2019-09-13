@@ -459,7 +459,11 @@ interface LocalityStore {
         this.localityInfoMap = ImmutableMap.copyOf(localityInfoMap);
         priorityTable.clear();
         for (XdsLocality newLocality : localityInfoMap.keySet()) {
-          addLocality(localityInfoMap.get(newLocality).priority, newLocality);
+          int priority = localityInfoMap.get(newLocality).priority;
+          while (priorityTable.size() <= priority) {
+            priorityTable.add(new ArrayList<XdsLocality>());
+          }
+          priorityTable.get(priority).add(newLocality);
         }
 
         if (currentPriority >= priorityTable.size()) {
@@ -474,13 +478,6 @@ interface LocalityStore {
         for (int p = 0; p < priorityTable.size(); p++) {
           updatePriorityState(p);
         }
-      }
-
-      private void addLocality(int priority, XdsLocality locality) {
-        while (priorityTable.size() <= priority) {
-          priorityTable.add(new ArrayList<XdsLocality>());
-        }
-        priorityTable.get(priority).add(locality);
       }
 
       /**
