@@ -409,7 +409,7 @@ interface LocalityStore {
                         newPicker, orcaPerRequestUtil));
 
             // delegate to parent helper
-            priorityManager.onLocalityStateUpdate(locality);
+            priorityManager.updatePriorityState(priorityManager.getPriority(locality));
           }
 
           @Override
@@ -446,9 +446,11 @@ interface LocalityStore {
 
     private final class PriorityManager {
 
+      private static final int INVALID_PRIORITY = -1;
+
       private final List<List<XdsLocality>> priorityTable = new ArrayList<>();
       private Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of();
-      private int currentPriority = -1;
+      private int currentPriority = INVALID_PRIORITY;
       private ScheduledHandle failOverTimer;
 
       /**
@@ -484,8 +486,8 @@ interface LocalityStore {
        * Refreshes the group of localities with the given priority. Recomputes the current ready
        * localities to be used.
        */
-      private void updatePriorityState(int priority) {
-        if (priority > currentPriority) {
+      void updatePriorityState(int priority) {
+        if (priority == INVALID_PRIORITY || priority > currentPriority) {
           return;
         }
         List<WeightedChildPicker> childPickers = new ArrayList<>();
@@ -523,10 +525,11 @@ interface LocalityStore {
         }
       }
 
-      void onLocalityStateUpdate(XdsLocality locality) {
+      int getPriority(XdsLocality locality) {
         if (localityInfoMap.containsKey(locality)) {
-          updatePriorityState(localityInfoMap.get(locality).priority);
+          return localityInfoMap.get(locality).priority;
         }
+        return INVALID_PRIORITY;
       }
 
       void reset() {
