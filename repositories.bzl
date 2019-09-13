@@ -3,6 +3,40 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("@bazel_tools//tools/build_defs/repo:jvm.bzl", "jvm_maven_import_external")
 
+# For use with maven_install's override_targets.
+# maven_install(
+#     ...
+#     override_targets = IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+# )
+#
+# If you have your own overrides as well, you can use:
+#     override_targets = dict(
+#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS,
+#         "your.target:artifact": "@//third_party/artifact",
+#     )
+#
+# To combine OVERRIDE_TARGETS from multiple libraries:
+#     override_targets = dict(
+#         IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS.items() +
+#         OTHER_OVERRIDE_TARGETS.items(),
+#         "your.target:artifact": "@//third_party/artifact",
+#     )
+IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
+    "io.grpc:grpc-alts": "@io_grpc_grpc_java//alts",
+    "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
+    "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
+    "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
+    "io.grpc:grpc-core": "@io_grpc_grpc_java//core_maven",
+    "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
+    "io.grpc:grpc-netty": "@io_grpc_grpc_java//netty",
+    "io.grpc:grpc-netty-shaded": "@io_grpc_grpc_java//netty:shaded_maven",
+    "io.grpc:grpc-okhttp": "@io_grpc_grpc_java//okhttp",
+    "io.grpc:grpc-protobuf": "@io_grpc_grpc_java//protobuf",
+    "io.grpc:grpc-protobuf-lite": "@io_grpc_grpc_java//protobuf-lite",
+    "io.grpc:grpc-stub": "@io_grpc_grpc_java//stub",
+    "io.grpc:grpc-testing": "@io_grpc_grpc_java//testing",
+}
+
 def grpc_java_repositories(
         omit_bazel_skylib = False,
         omit_com_google_android_annotations = False,
@@ -25,6 +59,7 @@ def grpc_java_repositories(
         omit_io_netty_buffer = False,
         omit_io_netty_common = False,
         omit_io_netty_transport = False,
+        omit_io_netty_transport_native_epoll = False,
         omit_io_netty_codec = False,
         omit_io_netty_codec_socks = False,
         omit_io_netty_codec_http = False,
@@ -84,6 +119,8 @@ def grpc_java_repositories(
         io_netty_common()
     if not omit_io_netty_transport:
         io_netty_transport()
+    if not omit_io_netty_transport_native_epoll:
+        io_netty_transport_native_epoll()
     if not omit_io_netty_codec:
         io_netty_codec()
     if not omit_io_netty_codec_socks:
@@ -159,18 +196,18 @@ def com_google_api_grpc_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.9.0",
+        artifact = "com.google.auth:google-auth-library-credentials:0.17.1",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "ac9efdd6a930e4df906fa278576fa825d979f74315f2faf5c91fe7e6aabb2788",
+        artifact_sha256 = "aaeea9333fff9b763715bca0174ec76c4f9551b5731c89a95f263cdc82b4b56e",
         licenses = ["notice"],  # BSD 3-clause
     )
 
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.9.0",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.17.1",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "e55d9722102cc1245c8c43d69acd49d3c9bbfcc1bcf722e971425506b970097e",
+        artifact_sha256 = "fa9a1589c8bc279416988d437c2636967cd5e4eff70fbddc986b9c5a77b0231b",
         licenses = ["notice"],  # BSD 3-clause
     )
 
@@ -204,9 +241,9 @@ def com_google_errorprone_error_prone_annotations():
 def com_google_guava():
     jvm_maven_import_external(
         name = "com_google_guava_guava",
-        artifact = "com.google.guava:guava:26.0-android",
+        artifact = "com.google.guava:guava:28.1-android",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "1d044ebb866ef08b7d04e998b4260c9b52fab6e6d6b68d207859486bb3686cd5",
+        artifact_sha256 = "e112ce92c0f0733965eede73d94589c59a72128b06b08bba5ebe2f9ea672ef60",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -223,9 +260,9 @@ def com_google_guava_failureaccess():
 def com_google_j2objc_j2objc_annotations():
     jvm_maven_import_external(
         name = "com_google_j2objc_j2objc_annotations",
-        artifact = "com.google.j2objc:j2objc-annotations:1.1",
+        artifact = "com.google.j2objc:j2objc-annotations:1.3",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "2994a7eb78f2710bd3d3bfb639b2c94e219cedac0d4d084d516e78c16dddecf6",
+        artifact_sha256 = "21af30c92267bd6122c0e0b4d20cccb6641a37eaf956c6540ec471d584e64a7b",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -252,9 +289,9 @@ def com_google_protobuf_javalite():
 def com_google_truth_truth():
     jvm_maven_import_external(
         name = "com_google_truth_truth",
-        artifact = "com.google.truth:truth:0.45",
+        artifact = "com.google.truth:truth:1.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "0f7dced2a16e55a77e44fc3ff9c5be98d4bf4bb30abc18d78ffd735df950a69f",
+        artifact_sha256 = "edaa12f3b581fcf1c07311e94af8766919c4f3d904b00d3503147b99bf5b4004",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -380,6 +417,15 @@ def io_netty_transport():
         artifact = "io.netty:netty-transport:4.1.38.Final",
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "5f826976585a49aae9b495290125a60a59dc6887fbe4c70da3182a83fb8bfa88",
+        licenses = ["notice"],  # Apache 2.0
+    )
+
+def io_netty_transport_native_epoll():
+    jvm_maven_import_external(
+        name = "io_netty_netty_transport_native_epoll",
+        artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.38.Final",
+        server_urls = ["http://central.maven.org/maven2"],
+        artifact_sha256 = "7933467e1cfc37bc6fb3f22af471ed69cb66bebaceab73d2041772bb6a38218a",
         licenses = ["notice"],  # Apache 2.0
     )
 

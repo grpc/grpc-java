@@ -1,4 +1,18 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = "gRPC: Netty"
+
+configurations {
+    alpnagent
+}
+
 dependencies {
     compile project(':grpc-core'),
             libraries.netty,
@@ -12,6 +26,7 @@ dependencies {
             libraries.conscrypt,
             libraries.netty_epoll
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    alpnagent libraries.jetty_alpn_agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
