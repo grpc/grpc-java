@@ -52,6 +52,7 @@ public class ErrorHandlingClient {
   }
 
   private ManagedChannel channel;
+  private Status status;
 
   void run() throws Exception {
     // Port 0 means that the operating system will pick an available port to use.
@@ -124,10 +125,7 @@ public class ErrorHandlingClient {
 
           @Override
           public void onFailure(Throwable t) {
-            Status status = Status.fromThrowable(t);
-            Verify.verify(status.getCode() == Status.Code.INTERNAL);
-            Verify.verify(status.getDescription().contains("Crybaby"));
-            // Cause is not transmitted over the wire..
+            status = Status.fromThrowable(t);
             latch.countDown();
           }
         },
@@ -136,6 +134,9 @@ public class ErrorHandlingClient {
     if (!Uninterruptibles.awaitUninterruptibly(latch, 1, TimeUnit.SECONDS)) {
       throw new RuntimeException("timeout!");
     }
+    Verify.verify(status.getCode() == Status.Code.INTERNAL);
+    Verify.verify(status.getDescription().contains("Crybaby"));
+    // Cause is not transmitted over the wire..
   }
 
   void asyncCall() {
@@ -151,10 +152,7 @@ public class ErrorHandlingClient {
 
       @Override
       public void onError(Throwable t) {
-        Status status = Status.fromThrowable(t);
-        Verify.verify(status.getCode() == Status.Code.INTERNAL);
-        Verify.verify(status.getDescription().contains("Overbite"));
-        // Cause is not transmitted over the wire..
+        status = Status.fromThrowable(t);
         latch.countDown();
       }
 
@@ -168,6 +166,9 @@ public class ErrorHandlingClient {
     if (!Uninterruptibles.awaitUninterruptibly(latch, 1, TimeUnit.SECONDS)) {
       throw new RuntimeException("timeout!");
     }
+    Verify.verify(status.getCode() == Status.Code.INTERNAL);
+    Verify.verify(status.getDescription().contains("Overbite"));
+    // Cause is not transmitted over the wire..
   }
 
 
@@ -185,9 +186,7 @@ public class ErrorHandlingClient {
 
       @Override
       public void onClose(Status status, Metadata trailers) {
-        Verify.verify(status.getCode() == Status.Code.INTERNAL);
-        Verify.verify(status.getDescription().contains("Narwhal"));
-        // Cause is not transmitted over the wire.
+        ErrorHandlingClient.this.status = status;
         latch.countDown();
       }
     }, new Metadata());
@@ -198,6 +197,9 @@ public class ErrorHandlingClient {
     if (!Uninterruptibles.awaitUninterruptibly(latch, 1, TimeUnit.SECONDS)) {
       throw new RuntimeException("timeout!");
     }
+    Verify.verify(status.getCode() == Status.Code.INTERNAL);
+    Verify.verify(status.getDescription().contains("Narwhal"));
+    // Cause is not transmitted over the wire.
   }
 }
 
