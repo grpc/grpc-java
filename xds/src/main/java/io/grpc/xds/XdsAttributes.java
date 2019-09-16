@@ -26,7 +26,6 @@ import io.grpc.Grpc;
 final class XdsAttributes {
   /**
    * Attribute key for SdsSecretConfig of a subchannel.
-   * We use String as the value type because SdsSecretConfig is not visible.
    *
    */
   @Grpc.TransportAttr
