@@ -446,11 +446,9 @@ interface LocalityStore {
 
     private final class PriorityManager {
 
-      private static final int INVALID_PRIORITY = -1;
-
       private final List<List<XdsLocality>> priorityTable = new ArrayList<>();
       private Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of();
-      private int currentPriority = INVALID_PRIORITY;
+      private int currentPriority = -1;
       private ScheduledHandle failOverTimer;
 
       /**
@@ -472,7 +470,7 @@ interface LocalityStore {
           currentPriority = priorityTable.size() - 1;
         }
 
-        if (currentPriority == INVALID_PRIORITY) {
+        if (currentPriority == -1) {
           failOver();
           return;
         }
@@ -487,7 +485,7 @@ interface LocalityStore {
        * localities to be used.
        */
       void updatePriorityState(int priority) {
-        if (priority == INVALID_PRIORITY || priority > currentPriority) {
+        if (priority == -1 || priority > currentPriority) {
           return;
         }
         List<WeightedChildPicker> childPickers = new ArrayList<>();
@@ -529,14 +527,14 @@ interface LocalityStore {
         if (localityInfoMap.containsKey(locality)) {
           return localityInfoMap.get(locality).priority;
         }
-        return INVALID_PRIORITY;
+        return -1;
       }
 
       void reset() {
         cancelFailOverTimer();
         priorityTable.clear();
         localityInfoMap = ImmutableMap.of();
-        currentPriority = INVALID_PRIORITY;
+        currentPriority = -1;
       }
 
       private void cancelFailOverTimer() {
