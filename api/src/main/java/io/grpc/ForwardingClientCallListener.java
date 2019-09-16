@@ -35,32 +35,6 @@ public abstract class ForwardingClientCallListener<RespT>
   }
 
   /**
-   * {@inheritDoc}
-   *
-   * <p>It is ensured to call {@code delegate().onClose()} with either the same or different
-   * arguments. Failing to do so, such as spuriously throwing a {@code RuntimeException} or
-   * erroneously returning early, will end up the client call silently hanging forever without an
-   * easy clue to debug. An example of a safe implementation is as follows:
-   * <pre>
-   *   {@literal @}Override
-   *   public void onClose(Status status, Metadata trailers) {
-   *     Status newStatus = status;
-   *     Metadata newTrailers = trailers;
-   *     try {
-   *       // some implementation logic
-   *     } finally {
-   *       delegate().onClose(newStatus, newTrailers);
-   *     }
-   *     // some other implementation logic
-   *   }
-   * </pre>
-   */
-  @Override
-  public void onClose(Status status, Metadata trailers) {
-    delegate().onClose(status, trailers);
-  }
-
-  /**
    * A simplified version of {@link ForwardingClientCallListener} where subclasses can pass in a
    * {@link ClientCall.Listener} as the delegate.
    */

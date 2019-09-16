@@ -105,10 +105,6 @@ public abstract class ClientCall<ReqT, RespT> {
    *
    * <p>Implementations are free to block for extended periods of time. Implementations are not
    * required to be thread-safe.
-   *
-   * <p>If an implementation is used for a {@link ClientInterceptor}, a similar restriction of
-   * {@link ForwardingClientCallListener#onClose(Status, Metadata)} may apply to the {@link
-   * #onClose(Status, Metadata)} method.
    */
   public abstract static class Listener<T> {
 
@@ -141,6 +137,9 @@ public abstract class ClientCall<ReqT, RespT> {
      * <p>If {@code status} returns false for {@link Status#isOk()}, then the call failed.
      * An additional block of trailer metadata may be received at the end of the call from the
      * server. An empty {@link Metadata} object is passed if no trailers are received.
+     *
+     * <p>This method should not throw. Implementations should be extra-careful about exceptions
+     * since throwing an exception here may hang the call.
      *
      * @param status the result of the remote call.
      * @param trailers metadata provided at call completion.
