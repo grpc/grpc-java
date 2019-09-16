@@ -20,12 +20,10 @@ import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 
-import java.util.Map;
-
 /**
  * Special attributes that are only useful to gRPC in the XDS context
  */
-public final class XdsAttributes {
+final class XdsAttributes {
   /**
    * Attribute key for SdsSecretConfig of a subchannel.
    * We use String as the value type because SdsSecretConfig is not visible.
