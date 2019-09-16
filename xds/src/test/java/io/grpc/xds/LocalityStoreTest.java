@@ -885,6 +885,9 @@ public class LocalityStoreTest {
    * EDS update, locality removed: P0 sz1, sz3, - P0 C, P1 N/A, sz4 R&D
    * sz3 gets READY - P0 R, P1 N/A, sz4 R&D
    * EDS update, locality comes back and another removed: P0 sz1, P1 sz4 - P0 C, P1 R, sz3 R&D
+   *
+   * <p>Should also verify that when locality store is updated with new EDS data, state of all
+   * localities should be updated before the child balancer of each locality handles new addresses.
    */
   @Test
   public void multipriority() {
@@ -951,7 +954,9 @@ public class LocalityStoreTest {
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
     LoadBalancer lb3 = loadBalancers.get("sz3");
-    inOrder = inOrder(lb1, lb2, lb3, helper);
+    inOrder = inOrder(lb3, helper);
+    // The order of the following two updateBalancingState() does not matter. We want to verify
+    // lb3.handleResolvedAddresses() is after them.
     inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 = ArgumentCaptor.forClass(null);
@@ -1054,7 +1059,7 @@ public class LocalityStoreTest {
     fakeClock.forwardTime(5, TimeUnit.MINUTES);
     assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
-    inOrder.verify(lb3).shutdown();
+    verify(lb3).shutdown();
 
     // P1 in TRANSIENT_FAILURE - P0 F, P1 F, P2 C, P3 N/A
     helper.getSynchronizationContext().execute(new Runnable() {
@@ -1066,6 +1071,8 @@ public class LocalityStoreTest {
     assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
     failOverTask = Iterables.getOnlyElement(fakeClock.getPendingTasks(failOverTaskFilter));
     assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    // The order of the following two updateBalancingState() does not matter. We only want to verify
+    // these are the latest tow updateBalancingState().
     inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
@@ -1144,6 +1151,8 @@ public class LocalityStoreTest {
             .pickSubchannel(mock(PickSubchannelArgs.class))
             .getSubchannel())
         .isSameInstanceAs(mockSubchannel4);
+    // The order of the following four handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
     inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag12);
     inOrder.verify(lb2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
@@ -1177,6 +1186,8 @@ public class LocalityStoreTest {
       }
     });
     inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    // The order of the following two handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
     inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
     inOrder.verify(lb3).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
@@ -1230,6 +1241,8 @@ public class LocalityStoreTest {
         .pickSubchannel(mock(PickSubchannelArgs.class))
         .getSubchannel())
         .isSameInstanceAs(mockSubchannel4);
+    // The order of the following two handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
     inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
     inOrder.verify(lb4).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
