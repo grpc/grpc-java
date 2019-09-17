@@ -249,7 +249,7 @@ public class FallbackLbTest {
 
 
   @Test
-  public void fallback_handleBackendsEagsOnly() throws Exception {
+  public void handleBackendsEagsOnly() throws Exception {
     EquivalentAddressGroup eag0 = new EquivalentAddressGroup(
         ImmutableList.<SocketAddress>of(new InetSocketAddress(8080)));
     Attributes attributes = Attributes
@@ -285,7 +285,7 @@ public class FallbackLbTest {
   }
 
   @Test
-  public void fallback_onlyGrpclbAddresses_NoBackendAddress() throws Exception {
+  public void resolvingWithOnlyGrpclbAddresses_NoBackendAddress() throws Exception {
 
     Attributes attributes = Attributes
         .newBuilder()
@@ -314,7 +314,7 @@ public class FallbackLbTest {
   }
 
   @Test
-  public void fallback_handleGrpclbAddresses() throws Exception {
+  public void handleGrpclbAddresses() throws Exception {
     final AtomicReference<LoadBalancer> balancer = new AtomicReference<>();
     LoadBalancerProvider grpclbProvider = new LoadBalancerProvider() {
       @Override
