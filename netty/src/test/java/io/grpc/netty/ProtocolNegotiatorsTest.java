@@ -35,7 +35,6 @@ import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -45,6 +44,7 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -815,10 +815,19 @@ public class ProtocolNegotiatorsTest {
     return ByteBufUtil.writeUtf8(c.alloc(), s);
   }
 
-  private static class BufferingHandlerWithoutHandlers extends AbstractBufferingHandler {
+  private static class BufferingHandlerWithoutHandlers extends ChannelDuplexHandler {
+
+    private final ChannelHandler[] handlers;
 
     public BufferingHandlerWithoutHandlers(ChannelHandler... handlers) {
-      super(handlers);
+      this.handlers = handlers;
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      for (ChannelHandler handler : handlers) {
+        ctx.pipeline().addBefore(ctx.name(), null, handler);
+      }
     }
   }
 }
