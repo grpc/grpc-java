@@ -165,6 +165,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @return this
    * @since 1.0.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
   @Deprecated
   public T usePlaintext(boolean skipNegotiation) {
     throw new UnsupportedOperationException();
