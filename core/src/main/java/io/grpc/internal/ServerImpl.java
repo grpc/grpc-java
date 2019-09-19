@@ -131,7 +131,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    * Construct a server.
    *
    * @param builder builder with configuration for server
-   * @param transportServer transport server that will create new incoming transports
+   * @param transportServers transport server that will create new incoming transports
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
@@ -555,14 +555,10 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             }
             listener =
                 startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
+          } catch (Throwable t) {
+            stream.close(Status.fromThrowable(t), new Metadata());
             context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
+            throw t;
           } finally {
             jumpListener.setListener(listener);
           }
@@ -777,12 +773,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().messagesAvailable(producer);
-          } catch (RuntimeException e) {
+          } catch (Throwable t) {
             internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).messagesAvailable", tag);
           }
@@ -812,12 +805,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().halfClosed();
-          } catch (RuntimeException e) {
+          } catch (Throwable t) {
             internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).halfClosed", tag);
           }
@@ -886,12 +876,9 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           PerfMark.linkIn(link);
           try {
             getListener().onReady();
-          } catch (RuntimeException e) {
+          } catch (Throwable t) {
             internalClose();
-            throw e;
-          } catch (Error e) {
-            internalClose();
-            throw e;
+            throw t;
           } finally {
             PerfMark.stopTask("ServerCallListener(app).onReady", tag);
           }
