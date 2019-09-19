@@ -44,7 +44,6 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -604,24 +603,6 @@ public class ProtocolNegotiatorsTest {
     elg.shutdownGracefully();
   }
 
-  @Test(expected = Test.None.class /* no exception expected */)
-  @SuppressWarnings("TestExceptionChecker")
-  public void bufferingHandler_shouldNotThrowForEmptyHandler() throws Exception {
-    LocalAddress addr = new LocalAddress("local");
-    ChannelFuture unused = new Bootstrap()
-        .channel(LocalChannel.class)
-        .handler(new BufferingHandlerWithoutHandlers())
-        .group(group)
-        .register().sync();
-    ChannelFuture sf = new ServerBootstrap()
-        .channel(LocalServerChannel.class)
-        .childHandler(new ChannelHandlerAdapter() {})
-        .group(group)
-        .bind(addr);
-    // sync will trigger client's NoHandlerBufferingHandler which should not throw
-    sf.sync();
-  }
-
   @Test
   public void clientTlsHandler_firesNegotiation() throws Exception {
     SelfSignedCertificate cert = new SelfSignedCertificate("authority");
@@ -813,21 +794,5 @@ public class ProtocolNegotiatorsTest {
 
   private static ByteBuf bb(String s, Channel c) {
     return ByteBufUtil.writeUtf8(c.alloc(), s);
-  }
-
-  private static class BufferingHandlerWithoutHandlers extends ChannelDuplexHandler {
-
-    private final ChannelHandler[] handlers;
-
-    public BufferingHandlerWithoutHandlers(ChannelHandler... handlers) {
-      this.handlers = handlers;
-    }
-
-    @Override
-    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-      for (ChannelHandler handler : handlers) {
-        ctx.pipeline().addBefore(ctx.name(), null, handler);
-      }
-    }
   }
 }
