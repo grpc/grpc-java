@@ -194,8 +194,10 @@ final class ProtocolNegotiators {
     class ProxyNegotiator implements ProtocolNegotiator {
       @Override
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
-        return new ProxyProtocolNegotiationHandler(
-            proxyAddress, proxyUsername, proxyPassword, negotiator.newHandler(http2Handler));
+        ChannelHandler protocolNegotiationHandler = negotiator.newHandler(http2Handler);
+        ChannelHandler ppnh = new ProxyProtocolNegotiationHandler(
+            proxyAddress, proxyUsername, proxyPassword, protocolNegotiationHandler);
+        return ppnh;
       }
 
       @Override
@@ -219,26 +221,25 @@ final class ProtocolNegotiators {
    * connection, this handler will install {@code next} handler which should be a handler from
    * other type of {@link ProtocolNegotiator} to continue negotiating protocol using proxy.
    */
-  static final class ProxyProtocolNegotiationHandler extends ChannelDuplexHandler {
+  static final class ProxyProtocolNegotiationHandler extends ProtocolNegotiationHandler {
 
     private final SocketAddress address;
     @Nullable private final String userName;
     @Nullable private final String password;
-    private final ChannelHandler next;
 
     public ProxyProtocolNegotiationHandler(
         SocketAddress address,
         @Nullable String userName,
         @Nullable String password,
         ChannelHandler next) {
+      super(next);
       this.address = checkNotNull(address, "address");
       this.userName = userName;
       this.password = password;
-      this.next = checkNotNull(next, "next");
     }
 
     @Override
-    public void handlerAdded(ChannelHandlerContext ctx) {
+    protected void protocolNegotiationEventTriggered(ChannelHandlerContext ctx) {
       HttpProxyHandler nettyProxyHandler;
       if (userName == null || password == null) {
         nettyProxyHandler = new HttpProxyHandler(address);
@@ -249,9 +250,9 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    public void userEventTriggered0(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProxyConnectionEvent) {
-        ctx.pipeline().replace(ctx.name(), /* newName= */ null, next);
+        fireProtocolNegotiationEvent(ctx);
       } else {
         super.userEventTriggered(ctx, evt);
       }
