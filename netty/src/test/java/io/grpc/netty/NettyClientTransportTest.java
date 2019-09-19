@@ -67,8 +67,10 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
@@ -915,9 +917,21 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static class NoopHandler extends ProtocolNegotiators.AbstractBufferingHandler {
+  private static class NoopHandler extends ChannelDuplexHandler {
+
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+
     public NoopHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      super(grpcHandler);
+      this.grpcHandler = grpcHandler;
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
+    }
+
+    public void fail(ChannelHandlerContext ctx, Throwable cause) {
+      ctx.fireExceptionCaught(cause);
     }
   }
 
