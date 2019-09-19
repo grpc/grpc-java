@@ -250,7 +250,7 @@ final class ProtocolNegotiators {
     }
 
     @Override
-    public void userEventTriggered0(ChannelHandlerContext ctx, Object evt) throws Exception {
+    protected void userEventTriggered0(ChannelHandlerContext ctx, Object evt) throws Exception {
       if (evt instanceof ProxyConnectionEvent) {
         fireProtocolNegotiationEvent(ctx);
       } else {
