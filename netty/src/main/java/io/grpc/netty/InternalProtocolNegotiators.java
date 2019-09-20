@@ -27,7 +27,6 @@ import io.netty.util.AsciiString;
 
 /**
  * Internal accessor for {@link ProtocolNegotiators}.
- * Travis please run my test
  */
 public final class InternalProtocolNegotiators {
 
