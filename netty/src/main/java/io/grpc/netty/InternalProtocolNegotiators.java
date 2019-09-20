@@ -19,7 +19,6 @@ package io.grpc.netty;
 import io.grpc.ChannelLogger;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsHandler;
 import io.grpc.netty.ProtocolNegotiators.GrpcNegotiationHandler;
-import io.grpc.netty.ProtocolNegotiators.ProtocolNegotiationHandler;
 import io.grpc.netty.ProtocolNegotiators.WaitUntilActiveHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -38,20 +37,6 @@ public final class InternalProtocolNegotiators {
    */
   public static ChannelLogger negotiationLogger(ChannelHandlerContext ctx) {
     return ProtocolNegotiators.negotiationLogger(ctx);
-  }
-
-  /**
-   * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
-   * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
-   * i.e.  before it's active or the TLS Handshake is complete.
-   */
-  public abstract static class AbstractBufferingHandler
-      extends ProtocolNegotiators.AbstractBufferingHandler {
-
-    protected AbstractBufferingHandler(ChannelHandler... handlers) {
-      super(handlers);
-    }
   }
 
   /**
