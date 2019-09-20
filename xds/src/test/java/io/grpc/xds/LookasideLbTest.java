@@ -68,7 +68,8 @@ public class LookasideLbTest {
 
 
   @Test
-  public void handleBalancerNameChanges() throws Exception {
+  public void handleChildPolicyChangeThenBalancerNameChangeThenChildPolicyChange()
+      throws Exception {
     assertThat(helpers).isEmpty();
     assertThat(balancers).isEmpty();
 
@@ -110,7 +111,7 @@ public class LookasideLbTest {
     assertThat(helpers).hasSize(1);
     assertThat(balancers).hasSize(1);
 
-    // change fallback policy to fallback_2
+    // change balancer name policy to balancer2.example.com
     String lbConfigRaw21 = "{\"balancerName\" : \"dns:///balancer2.example.com:8080\"}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig21 = (Map<String, ?>) JsonParser.parse(lbConfigRaw21);
