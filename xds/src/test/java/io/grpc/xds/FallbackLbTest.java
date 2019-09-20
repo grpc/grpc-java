@@ -286,7 +286,6 @@ public class FallbackLbTest {
 
   @Test
   public void resolvingWithOnlyGrpclbAddresses_NoBackendAddress() throws Exception {
-
     Attributes attributes = Attributes
         .newBuilder()
         .set(GrpcAttributes.ATTR_LB_ADDR_AUTHORITY, "this is a balancer address")
