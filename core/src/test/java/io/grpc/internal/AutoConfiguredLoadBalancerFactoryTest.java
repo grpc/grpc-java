@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -851,7 +852,7 @@ public class AutoConfiguredLoadBalancerFactoryTest {
       this.attrs = args.getAttributes();
     }
 
-    final List<EquivalentAddressGroup> addrs;
+    List<EquivalentAddressGroup> addrs;
     final Attributes attrs;
 
     @Override
@@ -874,6 +875,12 @@ public class AutoConfiguredLoadBalancerFactoryTest {
     @Override
     public Attributes getAttributes() {
       return attrs;
+    }
+
+    @Override
+    public void updateAddresses(List<EquivalentAddressGroup> addrs) {
+      Preconditions.checkNotNull(addrs, "addrs");
+      this.addrs = addrs;
     }
   }
 

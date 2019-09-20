@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.testing.EqualsTester;
 import com.google.common.truth.Truth;
 import java.util.Arrays;
 import java.util.concurrent.Future;
@@ -308,6 +309,20 @@ public class DeadlineTest {
   public void toString_before() {
     Deadline d = Deadline.after(12, TimeUnit.MICROSECONDS, ticker);
     assertEquals("0.000012000s from now (ticker=FAKE_TICKER)", d.toString());
+  }
+
+  @Test
+  public void equality() {
+    final Deadline d1 = Deadline.after(12, TimeUnit.MICROSECONDS, ticker);
+    final Deadline d2 = Deadline.after(12, TimeUnit.MICROSECONDS, ticker);
+    final Deadline d3 = Deadline.after(12, TimeUnit.MICROSECONDS, new FakeTicker());
+    final Deadline d4 = Deadline.after(10, TimeUnit.MICROSECONDS, ticker);
+
+    new EqualsTester()
+            .addEqualityGroup(d1, d2)
+            .addEqualityGroup(d3)
+            .addEqualityGroup(d4)
+            .testEquals();
   }
 
   private static class FakeTicker extends Deadline.Ticker {

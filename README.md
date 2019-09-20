@@ -124,15 +124,8 @@ For protobuf-based codegen integrated with the Maven build system, you can use
 For protobuf-based codegen integrated with the Gradle build system, you can use
 [protobuf-gradle-plugin][]:
 ```gradle
-apply plugin: 'com.google.protobuf'
-
-buildscript {
-  repositories {
-    mavenCentral()
-  }
-  dependencies {
-    classpath 'com.google.protobuf:protobuf-gradle-plugin:0.8.8'
-  }
+plugins {
+    id 'com.google.protobuf' version '0.8.8'
 }
 
 protobuf {

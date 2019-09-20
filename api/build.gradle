@@ -1,3 +1,11 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = 'gRPC: API'
 
 dependencies {

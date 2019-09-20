@@ -1099,7 +1099,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     }
 
     /**
-     * Handle a HTTP2 DATA frame.
+     * Handle an HTTP2 DATA frame.
      */
     @Override
     public void data(boolean inFinished, int streamId, BufferedSource in, int length)

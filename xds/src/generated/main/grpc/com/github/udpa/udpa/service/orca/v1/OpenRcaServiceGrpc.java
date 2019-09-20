@@ -1,4 +1,4 @@
-package io.envoyproxy.udpa.service.orca.v1;
+package com.github.udpa.udpa.service.orca.v1;
 
 import static io.grpc.MethodDescriptor.generateFullMethodName;
 import static io.grpc.stub.ClientCalls.asyncBidiStreamingCall;
@@ -37,29 +37,29 @@ public final class OpenRcaServiceGrpc {
   public static final String SERVICE_NAME = "udpa.service.orca.v1.OpenRcaService";
 
   // Static method descriptors that strictly reflect the proto.
-  private static volatile io.grpc.MethodDescriptor<io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest,
-      io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod;
+  private static volatile io.grpc.MethodDescriptor<com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest,
+      com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod;
 
   @io.grpc.stub.annotations.RpcMethod(
       fullMethodName = SERVICE_NAME + '/' + "StreamCoreMetrics",
-      requestType = io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest.class,
-      responseType = io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport.class,
+      requestType = com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest.class,
+      responseType = com.github.udpa.udpa.data.orca.v1.OrcaLoadReport.class,
       methodType = io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-  public static io.grpc.MethodDescriptor<io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest,
-      io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod() {
-    io.grpc.MethodDescriptor<io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest, io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod;
+  public static io.grpc.MethodDescriptor<com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest,
+      com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod() {
+    io.grpc.MethodDescriptor<com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest, com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> getStreamCoreMetricsMethod;
     if ((getStreamCoreMetricsMethod = OpenRcaServiceGrpc.getStreamCoreMetricsMethod) == null) {
       synchronized (OpenRcaServiceGrpc.class) {
         if ((getStreamCoreMetricsMethod = OpenRcaServiceGrpc.getStreamCoreMetricsMethod) == null) {
           OpenRcaServiceGrpc.getStreamCoreMetricsMethod = getStreamCoreMetricsMethod =
-              io.grpc.MethodDescriptor.<io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest, io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport>newBuilder()
+              io.grpc.MethodDescriptor.<com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest, com.github.udpa.udpa.data.orca.v1.OrcaLoadReport>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
               .setFullMethodName(generateFullMethodName(SERVICE_NAME, "StreamCoreMetrics"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest.getDefaultInstance()))
+                  com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
-                  io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport.getDefaultInstance()))
+                  com.github.udpa.udpa.data.orca.v1.OrcaLoadReport.getDefaultInstance()))
               .setSchemaDescriptor(new OpenRcaServiceMethodDescriptorSupplier("StreamCoreMetrics"))
               .build();
         }
@@ -107,8 +107,8 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    public void streamCoreMetrics(io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
+    public void streamCoreMetrics(com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request,
+        io.grpc.stub.StreamObserver<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
       asyncUnimplementedUnaryCall(getStreamCoreMetricsMethod(), responseObserver);
     }
 
@@ -118,8 +118,8 @@ public final class OpenRcaServiceGrpc {
             getStreamCoreMetricsMethod(),
             asyncServerStreamingCall(
               new MethodHandlers<
-                io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest,
-                io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport>(
+                com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest,
+                com.github.udpa.udpa.data.orca.v1.OrcaLoadReport>(
                   this, METHODID_STREAM_CORE_METRICS)))
           .build();
     }
@@ -155,8 +155,8 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    public void streamCoreMetrics(io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest request,
-        io.grpc.stub.StreamObserver<io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
+    public void streamCoreMetrics(com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request,
+        io.grpc.stub.StreamObserver<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> responseObserver) {
       asyncServerStreamingCall(
           getChannel().newCall(getStreamCoreMetricsMethod(), getCallOptions()), request, responseObserver);
     }
@@ -192,8 +192,8 @@ public final class OpenRcaServiceGrpc {
 
     /**
      */
-    public java.util.Iterator<io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport> streamCoreMetrics(
-        io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest request) {
+    public java.util.Iterator<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport> streamCoreMetrics(
+        com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest request) {
       return blockingServerStreamingCall(
           getChannel(), getStreamCoreMetricsMethod(), getCallOptions(), request);
     }
@@ -248,8 +248,8 @@ public final class OpenRcaServiceGrpc {
     public void invoke(Req request, io.grpc.stub.StreamObserver<Resp> responseObserver) {
       switch (methodId) {
         case METHODID_STREAM_CORE_METRICS:
-          serviceImpl.streamCoreMetrics((io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest) request,
-              (io.grpc.stub.StreamObserver<io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport>) responseObserver);
+          serviceImpl.streamCoreMetrics((com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest) request,
+              (io.grpc.stub.StreamObserver<com.github.udpa.udpa.data.orca.v1.OrcaLoadReport>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -273,7 +273,7 @@ public final class OpenRcaServiceGrpc {
 
     @java.lang.Override
     public com.google.protobuf.Descriptors.FileDescriptor getFileDescriptor() {
-      return io.envoyproxy.udpa.service.orca.v1.OrcaProto.getDescriptor();
+      return com.github.udpa.udpa.service.orca.v1.OrcaProto.getDescriptor();
     }
 
     @java.lang.Override

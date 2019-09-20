@@ -36,8 +36,10 @@ import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ReflectiveChannelFactory;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -81,7 +83,7 @@ class Utils {
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
 
-  public static final Class<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_TYPE;
+  public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
 
   @Nullable
@@ -90,8 +92,8 @@ class Utils {
   static {
     // Decide default channel types and EventLoopGroup based on Epoll availability
     if (isEpollAvailable()) {
-      DEFAULT_SERVER_CHANNEL_TYPE = epollServerChannelType();
       DEFAULT_CLIENT_CHANNEL_TYPE = epollChannelType();
+      DEFAULT_SERVER_CHANNEL_FACTORY = new ReflectiveChannelFactory<>(epollServerChannelType());
       EPOLL_EVENT_LOOP_GROUP_CONSTRUCTOR = epollEventLoopGroupConstructor();
       DEFAULT_BOSS_EVENT_LOOP_GROUP
         = new DefaultEventLoopGroupResource(1, "grpc-default-boss-ELG", EventLoopGroupType.EPOLL);
@@ -99,7 +101,7 @@ class Utils {
         = new DefaultEventLoopGroupResource(0,"grpc-default-worker-ELG", EventLoopGroupType.EPOLL);
     } else {
       logger.log(Level.FINE, "Epoll is not available, using Nio.", getEpollUnavailabilityCause());
-      DEFAULT_SERVER_CHANNEL_TYPE = NioServerSocketChannel.class;
+      DEFAULT_SERVER_CHANNEL_FACTORY = nioServerChannelFactory();
       DEFAULT_CLIENT_CHANNEL_TYPE = NioSocketChannel.class;
       DEFAULT_BOSS_EVENT_LOOP_GROUP = NIO_BOSS_EVENT_LOOP_GROUP;
       DEFAULT_WORKER_EVENT_LOOP_GROUP = NIO_WORKER_EVENT_LOOP_GROUP;
@@ -288,6 +290,15 @@ class Utils {
     } catch (Exception e) {
       throw new RuntimeException("Cannot create Epoll EventLoopGroup", e);
     }
+  }
+
+  private static ChannelFactory<ServerChannel> nioServerChannelFactory() {
+    return new ChannelFactory<ServerChannel>() {
+      @Override
+      public ServerChannel newChannel() {
+        return new NioServerSocketChannel();
+      }
+    };
   }
 
   /**

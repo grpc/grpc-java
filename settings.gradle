@@ -1,3 +1,16 @@
+pluginManagement {
+    plugins {
+        id "com.github.johnrengelman.shadow" version "2.0.4"
+        id "com.github.kt3k.coveralls" version "2.0.1"
+        id "com.google.osdetector" version "1.4.0"
+        id "com.google.protobuf" version "0.8.8"
+        id "me.champeau.gradle.japicmp" version "0.2.5"
+        id "me.champeau.gradle.jmh" version "0.4.5"
+        id "net.ltgt.errorprone" version "0.8.1"
+        id "ru.vyarus.animalsniffer" version "1.5.0"
+    }
+}
+
 rootProject.name = "grpc"
 include ":grpc-api"
 include ":grpc-core"

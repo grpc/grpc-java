@@ -4,8 +4,7 @@ package udpa.service.orca.v1;
 
 option java_outer_classname = "OrcaProto";
 option java_multiple_files = true;
-option java_package = "io.envoyproxy.udpa.service.orca.v1";
-option go_package = "v1";
+option java_package = "com.github.udpa.udpa.service.orca.v1";
 
 import "udpa/data/orca/v1/orca_load_report.proto";
 

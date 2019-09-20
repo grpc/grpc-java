@@ -111,7 +111,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forClient()
    * @see #configure(SslContextBuilder)
@@ -121,7 +121,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File)
    * @see #configure(SslContextBuilder)
@@ -131,7 +131,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(File, File, String)
    * @see #configure(SslContextBuilder)
@@ -142,7 +142,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(InputStream, InputStream)
    * @see #configure(SslContextBuilder)
@@ -152,7 +152,7 @@ public class GrpcSslContexts {
   }
 
   /**
-   * Creates a SslContextBuilder with ciphers and APN appropriate for gRPC.
+   * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
    *
    * @see SslContextBuilder#forServer(InputStream, InputStream, String)
    * @see #configure(SslContextBuilder)

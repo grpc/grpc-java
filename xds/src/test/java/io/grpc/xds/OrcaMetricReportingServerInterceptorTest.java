@@ -18,7 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;

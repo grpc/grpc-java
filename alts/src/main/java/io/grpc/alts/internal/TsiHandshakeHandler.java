@@ -40,11 +40,9 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 /**
- * Performs The TSI Handshake. When the handshake is complete, it fires a user event with a {@link
- * TsiHandshakeCompletionEvent} indicating the result of the handshake.
+ * Performs The TSI Handshake.
  */
 public final class TsiHandshakeHandler extends ByteToMessageDecoder {
-
   /**
    * Validates a Tsi Peer object.
    */
@@ -85,8 +83,7 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
   private final HandshakeValidator handshakeValidator;
   private final ChannelHandler next;
 
-  // TODO(carl-mastrangelo): make this null after NettyServerTransport uses WBAEH
-  private ProtocolNegotiationEvent pne = InternalProtocolNegotiationEvent.getDefault();
+  private ProtocolNegotiationEvent pne;
 
   /**
    * Constructs a TsiHandshakeHandler.
@@ -96,13 +93,6 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
     this.handshaker = checkNotNull(handshaker, "handshaker");
     this.handshakeValidator = checkNotNull(handshakeValidator, "handshakeValidator");
     this.next = checkNotNull(next, "next");
-  }
-
-  @Override
-  public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    InternalProtocolNegotiators.negotiationLogger(ctx)
-        .log(ChannelLogLevel.INFO, "TsiHandshake started");
-    sendHandshake(ctx);
   }
 
   @Override
@@ -130,29 +120,30 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       boolean success = false;
       try {
         framer = new TsiFrameHandler(protector);
-        // replace the current handler with the framer (instead of adding before) since there may
-        // be pending data after the handshake frame.  The data will need to be decoded before
-        // being passed to the `next` handler.
-        ctx.pipeline().replace(ctx.name(), null, framer);
-        // Once the framer is in the pipeline, it will be cleaned up when the handler is removed.
+        // adding framer and next handler after this handler before removing Decoder (current
+        // handler). This will prevents any missing read from decoder and/or unframed write from
+        // next handler.
+        ctx.pipeline().addAfter(ctx.name(), null, framer);
+        ctx.pipeline().addAfter(ctx.pipeline().context(framer).name(), null, next);
+        ctx.pipeline().remove(ctx.name());
+        fireProtocolNegotiationEvent(ctx, peer, authContext, details);
         success = true;
       } finally {
         if (!success && protector != null) {
           protector.destroy();
         }
       }
-      // Add the `next` handler as late as possible, as it will issue writes on being added.
-      ctx.pipeline().addAfter(ctx.pipeline().context(framer).name(), null, next);
-      fireProtocolNegotiationEvent(ctx, peer, authContext, details);
     }
   }
 
   @Override
   public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
     if (evt instanceof ProtocolNegotiationEvent) {
-      // TODO(carl-mastrangelo): re-enable after NettyServerTransport uses WBAEH
-      // checkState(pne == null, "negotiation already started");
+      checkState(pne == null, "negotiation already started");
       pne = (ProtocolNegotiationEvent) evt;
+      InternalProtocolNegotiators.negotiationLogger(ctx)
+          .log(ChannelLogLevel.INFO, "TsiHandshake started");
+      sendHandshake(ctx);
     } else {
       super.userEventTriggered(ctx, evt);
     }
@@ -187,6 +178,8 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
         } else {
           break;
         }
+      } catch (GeneralSecurityException e) {
+        throw new GeneralSecurityException("TsiHandshakeHandler encountered exception", e);
       } finally {
         buf.release(written ? 1 : 2);
       }

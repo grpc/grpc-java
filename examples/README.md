@@ -164,9 +164,11 @@ $ bazel-bin/hello-world-client
 
 Examples for unit testing gRPC clients and servers are located in [examples/src/test](src/test).
 
-In general, we DO NOT allow overriding the client stub.
-We encourage users to leverage `InProcessTransport` as demonstrated in the examples to
-write unit tests. `InProcessTransport` is light-weight and runs the server
+In general, we DO NOT allow overriding the client stub and we DO NOT support mocking final methods
+in gRPC-Java library. Users should be cautious that using tools like PowerMock or
+[mockito-inline](https://search.maven.org/search?q=g:org.mockito%20a:mockito-inline) can easily
+break this rule of thumb. We encourage users to leverage `InProcessTransport` as demonstrated in the
+examples to write unit tests. `InProcessTransport` is light-weight and runs the server
 and client in the same process without any socket/TCP connection.
 
 Mocking the client stub provides a false sense of security when writing tests. Mocking stubs and responses
