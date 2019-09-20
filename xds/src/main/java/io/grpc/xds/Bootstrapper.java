@@ -77,16 +77,12 @@ abstract class Bootstrapper {
       Bootstrapper instance = null;
       Exception exception = null;
       try {
-        instance = new FileBasedBootstrapper();
+        instance = new FileBasedBootstrapper(Bootstrapper.readConfig());
       } catch (Exception e) {
         exception = e;
       }
       defaultInstance = instance;
       failToBootstrapException = exception;
-    }
-
-    private FileBasedBootstrapper() throws IOException {
-      this(Bootstrapper.readConfig());
     }
 
     @VisibleForTesting
