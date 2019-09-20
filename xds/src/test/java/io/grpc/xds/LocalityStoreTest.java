@@ -261,24 +261,24 @@ public class LocalityStoreTest {
         .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0));
     localityInfoMap
         .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0));
-    localityStore.updateLocalityStore(localityInfoMap);
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality1);
     verify(loadStatsStore).addLocality(locality2);
 
     localityInfoMap
         .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0));
-    localityStore.updateLocalityStore(localityInfoMap);
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality3);
 
     localityInfoMap = ImmutableMap
         .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0));
-    localityStore.updateLocalityStore(localityInfoMap);
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).removeLocality(locality1);
     verify(loadStatsStore).removeLocality(locality2);
     verify(loadStatsStore).removeLocality(locality3);
     verify(loadStatsStore).addLocality(locality4);
 
-    localityStore.updateLocalityStore(Collections.EMPTY_MAP);
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(Collections.EMPTY_MAP));
     verify(loadStatsStore).removeLocality(locality4);
   }
 
@@ -439,7 +439,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -549,7 +549,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -676,7 +676,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -774,7 +774,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -795,7 +795,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -842,7 +842,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
         new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -900,7 +900,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 2);
     LocalityInfo localityInfo4 =
         new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 3, 3);
-    final Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
     syncContext.execute(new Runnable() {
@@ -1135,7 +1135,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint32), 3, 0);
     localityInfo4 =
         new LocalityInfo(ImmutableList.of(lbEndpoint42), 4, 1);
-    final Map<XdsLocality, LocalityInfo> localityInfoMap2 = ImmutableMap.of(
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap2 = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
     syncContext.execute(new Runnable() {
@@ -1177,7 +1177,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
     localityInfo3 =
         new LocalityInfo(ImmutableList.of(lbEndpoint31), 3, 0);
-    final Map<XdsLocality, LocalityInfo> localityInfoMap3 = ImmutableMap.of(
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap3 = ImmutableMap.of(
         locality1, localityInfo1,locality3, localityInfo3);
     syncContext.execute(new Runnable() {
       @Override
@@ -1227,7 +1227,7 @@ public class LocalityStoreTest {
         new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
     localityInfo4 =
         new LocalityInfo(ImmutableList.of(lbEndpoint41), 4, 1);
-    final Map<XdsLocality, LocalityInfo> localityInfoMap4 = ImmutableMap.of(
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap4 = ImmutableMap.of(
         locality1, localityInfo1,locality4, localityInfo4);
     syncContext.execute(new Runnable() {
       @Override

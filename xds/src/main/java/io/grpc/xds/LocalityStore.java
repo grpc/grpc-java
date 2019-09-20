@@ -69,7 +69,7 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(Map<XdsLocality, LocalityInfo> localityInfoMap);
+  void updateLocalityStore(ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap);
 
   void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
 
@@ -200,7 +200,7 @@ interface LocalityStore {
 
     // This is triggered by EDS response.
     @Override
-    public void updateLocalityStore(final Map<XdsLocality, LocalityInfo> localityInfoMap) {
+    public void updateLocalityStore(final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap) {
 
       Set<XdsLocality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
@@ -456,7 +456,7 @@ interface LocalityStore {
        * Recomputes the current ready localities to be used.
        */
       void updateLocalities(Map<XdsLocality, LocalityInfo> localityInfoMap) {
-        this.localityInfoMap = ImmutableMap.copyOf(localityInfoMap);
+        this.localityInfoMap = localityInfoMap;
         priorityTable.clear();
         for (XdsLocality newLocality : localityInfoMap.keySet()) {
           int priority = localityInfoMap.get(newLocality).priority;

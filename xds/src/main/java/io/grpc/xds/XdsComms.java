@@ -26,6 +26,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -50,9 +51,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
@@ -243,7 +242,8 @@ final class XdsComms {
                   localityStore.updateDropPercentage(dropOverloads);
 
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-                  Map<XdsLocality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
+                  ImmutableMap.Builder<XdsLocality, LocalityInfo> localityEndpointsMapping =
+                      new ImmutableMap.Builder<>();
                   for (LocalityLbEndpoints localityLbEndpoints : localities) {
                     io.envoyproxy.envoy.api.v2.core.Locality localityProto =
                         localityLbEndpoints.getLocality();
@@ -262,9 +262,7 @@ final class XdsComms {
                     }
                   }
 
-                  localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
-
-                  localityStore.updateLocalityStore(localityEndpointsMapping);
+                  localityStore.updateLocalityStore(localityEndpointsMapping.build());
                 }
               }
             }
