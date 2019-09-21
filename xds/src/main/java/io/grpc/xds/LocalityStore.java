@@ -538,35 +538,37 @@ interface LocalityStore {
       }
 
       private void failOver() {
-        if (priorityTable.size() > currentPriority + 1) {
-          currentPriority++;
-
-          List<XdsLocality> localities = priorityTable.get(currentPriority);
-          boolean initializedBefore = false;
-          for (XdsLocality locality : localities) {
-            if (localityMap.containsKey(locality)) {
-              initializedBefore = true;
-              localityMap.get(locality).reactivate();
-            } else {
-              initLocality(locality);
-            }
-          }
-
-          if (!initializedBefore) {
-            class FailOverTask implements Runnable {
-              @Override
-              public void run() {
-                failOverTimer = null;
-                failOver();
-              }
-            }
-
-            failOverTimer = helper.getSynchronizationContext().schedule(
-                new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
-          }
-
-          updatePriorityState(currentPriority);
+        if (currentPriority == priorityTable.size() - 1) {
+          return;
         }
+
+        currentPriority++;
+
+        List<XdsLocality> localities = priorityTable.get(currentPriority);
+        boolean initializedBefore = false;
+        for (XdsLocality locality : localities) {
+          if (localityMap.containsKey(locality)) {
+            initializedBefore = true;
+            localityMap.get(locality).reactivate();
+          } else {
+            initLocality(locality);
+          }
+        }
+
+        if (!initializedBefore) {
+          class FailOverTask implements Runnable {
+            @Override
+            public void run() {
+              failOverTimer = null;
+              failOver();
+            }
+          }
+
+          failOverTimer = helper.getSynchronizationContext().schedule(
+              new FailOverTask(), 10, TimeUnit.SECONDS, helper.getScheduledExecutorService());
+        }
+
+        updatePriorityState(currentPriority);
       }
 
       private void initLocality(final XdsLocality locality) {
