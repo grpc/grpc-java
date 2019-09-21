@@ -466,18 +466,8 @@ interface LocalityStore {
           priorityTable.get(priority).add(newLocality);
         }
 
-        if (currentPriority >= priorityTable.size()) {
-          currentPriority = priorityTable.size() - 1;
-        }
-
-        if (currentPriority == -1) {
-          failOver();
-          return;
-        }
-
-        for (int p = 0; p < priorityTable.size(); p++) {
-          updatePriorityState(p);
-        }
+        currentPriority = -1;
+        failOver();
       }
 
       /**
@@ -508,17 +498,20 @@ interface LocalityStore {
           }
         }
 
-        if (priority == currentPriority || overallState == READY) {
+        if (priority == currentPriority) {
           updatePicker(overallState, childPickers);
-        }
-
-        if (overallState == READY || overallState == TRANSIENT_FAILURE) {
+          if (overallState == READY) {
+            cancelFailOverTimer();
+            goToPriority(priority);
+          } else if (overallState == TRANSIENT_FAILURE) {
+            cancelFailOverTimer();
+            failOver();
+          } else if (failOverTimer == null) {
+            failOver();
+          } // else, still connecting and failOverTimer not expired yet, noop
+        } else if (overallState == READY) {
+          updatePicker(overallState, childPickers);
           cancelFailOverTimer();
-        }
-
-        if (priority == currentPriority && overallState != READY) {
-          failOver();
-        } else if (priority <= currentPriority && overallState == READY) {
           goToPriority(priority);
         }
       }
@@ -545,10 +538,6 @@ interface LocalityStore {
       }
 
       private void failOver() {
-        if (failOverTimer != null) {
-          // still CONNECTING
-          return;
-        }
         if (priorityTable.size() > currentPriority + 1) {
           currentPriority++;
 
