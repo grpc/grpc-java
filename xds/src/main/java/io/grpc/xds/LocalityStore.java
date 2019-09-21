@@ -245,7 +245,7 @@ interface LocalityStore {
           }
         }
       });
-      localities = ImmutableSet.copyOf(newLocalities);
+      localities = newLocalities;
 
       priorityManager.updateLocalities(localityInfoMap);
 
