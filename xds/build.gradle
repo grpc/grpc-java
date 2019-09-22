@@ -20,10 +20,17 @@ dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
-            project(':grpc-services')
+            project(':grpc-services'),
+            project(':grpc-auth')
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'
+    }
+    compile (libraries.google_auth_oauth2_http) {
+        // prefer 26.0-android from libraries instead of 25.1-android
+        exclude group: 'com.google.guava', module: 'guava'
+        // prefer 0.19.2 from libraries instead of 0.18.0
+        exclude group: 'io.opencensus', module: 'opencensus-api'
     }
 
     testCompile project(':grpc-core').sourceSets.test.output
