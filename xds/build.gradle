@@ -23,6 +23,7 @@ dependencies {
             project(':grpc-services'),
             project(':grpc-auth')
     compile (libraries.pgv) {
+        // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf
         exclude group: 'com.google.protobuf'
     }
     compile (libraries.protobuf_util) {
