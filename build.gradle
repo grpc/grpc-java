@@ -246,11 +246,11 @@ subprojects {
         }
 
         checkstyleMain {
-            source = fileTree(dir: "src/main", include: "**/*.java")
+            source = fileTree(dir: "$projectDir/src/main", include: "**/*.java")
         }
 
         checkstyleTest {
-            source = fileTree(dir: "src/test", include: "**/*.java")
+            source = fileTree(dir: "$projectDir/src/test", include: "**/*.java")
         }
 
         // At a test failure, log the stack trace to the console so that we don't
