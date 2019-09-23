@@ -502,7 +502,6 @@ interface LocalityStore {
           updatePicker(overallState, childPickers);
           if (overallState == READY) {
             cancelFailOverTimer();
-            goToPriority(priority);
           } else if (overallState == TRANSIENT_FAILURE) {
             cancelFailOverTimer();
             failOver();
@@ -512,7 +511,15 @@ interface LocalityStore {
         } else if (overallState == READY) {
           updatePicker(overallState, childPickers);
           cancelFailOverTimer();
-          goToPriority(priority);
+          currentPriority = priority;
+        }
+
+        if (overallState == READY) {
+          for (int p = priority + 1; p < priorityTable.size(); p++) {
+            for (XdsLocality xdsLocality : priorityTable.get(p)) {
+              deactivate(xdsLocality);
+            }
+          }
         }
       }
 
@@ -593,15 +600,6 @@ interface LocalityStore {
                     .setAddresses(localityInfo.eags).build());
           }
         });
-      }
-
-      private void goToPriority(int priority) {
-        currentPriority = priority;
-        for (int p = priority + 1; p < priorityTable.size(); p++) {
-          for (XdsLocality xdsLocality : priorityTable.get(p)) {
-            deactivate(xdsLocality);
-          }
-        }
       }
     }
   }
