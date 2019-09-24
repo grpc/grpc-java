@@ -26,6 +26,7 @@ import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -50,9 +51,7 @@ import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
@@ -76,12 +75,14 @@ final class XdsComms {
   /**
    * Information about the locality from EDS response.
    */
+  // TODO(zdapeng): move this class out.
   static final class LocalityInfo {
     final List<EquivalentAddressGroup> eags;
     final List<Integer> endPointWeights;
     final int localityWeight;
+    final int priority;
 
-    LocalityInfo(Collection<LbEndpoint> lbEndPoints, int localityWeight) {
+    LocalityInfo(Collection<LbEndpoint> lbEndPoints, int localityWeight, int priority) {
       List<EquivalentAddressGroup> eags = new ArrayList<>(lbEndPoints.size());
       List<Integer> endPointWeights = new ArrayList<>(lbEndPoints.size());
       for (LbEndpoint lbEndPoint : lbEndPoints) {
@@ -91,6 +92,7 @@ final class XdsComms {
       this.eags = Collections.unmodifiableList(eags);
       this.endPointWeights = Collections.unmodifiableList(new ArrayList<>(endPointWeights));
       this.localityWeight = localityWeight;
+      this.priority = priority;
     }
 
     @Override
@@ -103,13 +105,14 @@ final class XdsComms {
       }
       LocalityInfo that = (LocalityInfo) o;
       return localityWeight == that.localityWeight
+          && priority == that.priority
           && Objects.equal(eags, that.eags)
           && Objects.equal(endPointWeights, that.endPointWeights);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eags, endPointWeights, localityWeight);
+      return Objects.hashCode(eags, endPointWeights, localityWeight, priority);
     }
   }
 
@@ -239,7 +242,8 @@ final class XdsComms {
                   localityStore.updateDropPercentage(dropOverloads);
 
                   List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-                  Map<XdsLocality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
+                  ImmutableMap.Builder<XdsLocality, LocalityInfo> localityEndpointsMapping =
+                      new ImmutableMap.Builder<>();
                   for (LocalityLbEndpoints localityLbEndpoints : localities) {
                     io.envoyproxy.envoy.api.v2.core.Locality localityProto =
                         localityLbEndpoints.getLocality();
@@ -250,16 +254,15 @@ final class XdsComms {
                       lbEndPoints.add(new LbEndpoint(lbEndpoint));
                     }
                     int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
+                    int priority = localityLbEndpoints.getPriority();
 
                     if (localityWeight != 0) {
                       localityEndpointsMapping.put(
-                          locality, new LocalityInfo(lbEndPoints, localityWeight));
+                          locality, new LocalityInfo(lbEndPoints, localityWeight, priority));
                     }
                   }
 
-                  localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
-
-                  localityStore.updateLocalityStore(localityEndpointsMapping);
+                  localityStore.updateLocalityStore(localityEndpointsMapping.build());
                 }
               }
             }

@@ -31,6 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -64,7 +65,6 @@ import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -107,7 +107,7 @@ public class XdsCommsTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Captor
-  private ArgumentCaptor<Map<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<ImmutableMap<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private final FakeClock fakeClock = new FakeClock();
   private final SynchronizationContext syncContext = new SynchronizationContext(
@@ -293,12 +293,14 @@ public class XdsCommsTest {
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint11),
             new XdsComms.LbEndpoint(endpoint12)),
-        1);
+        1,
+        0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint21),
             new XdsComms.LbEndpoint(endpoint22)),
-        2);
+        2,
+        0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
 
     InOrder inOrder = inOrder(localityStore);
@@ -405,9 +407,9 @@ public class XdsCommsTest {
 
     XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
-        ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1);
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint11)), 1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
-        ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2);
+        ImmutableList.of(new XdsComms.LbEndpoint(endpoint21)), 2, 0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality2, localityInfo2, locality1, localityInfo1).inOrder();
