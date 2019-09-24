@@ -345,13 +345,11 @@ final class XdsComms {
               .setNode(Node.newBuilder()
                   .setMetadata(Struct.newBuilder()
                       .putFields(
-                          TRAFFICDIRECTOR_GRPC_HOSTNAME,
-                          Value.newBuilder().setStringValue(helper.getAuthority())
-                              .build())
-                      .putFields(
                           "endpoints_required",
                           Value.newBuilder().setBoolValue(true).build())))
-              .setTypeUrl(EDS_TYPE_URL).build();
+              .setTypeUrl(EDS_TYPE_URL)
+              // In the future, the right resource name can be obtained from CDS response.
+              .addResourceNames(helper.getAuthority()).build();
       helper.getChannelLogger().log(ChannelLogLevel.DEBUG, "Sending EDS request {0}", edsRequest);
       xdsRequestWriter.onNext(edsRequest);
     }
