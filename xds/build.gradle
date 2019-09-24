@@ -71,6 +71,7 @@ shadowJar {
         include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'com.google.protobuf.GoGoProtos', 'io.grpc.xds.shaded.gogoproto.GoGoProtos'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     exclude "**/*.proto"
 }
