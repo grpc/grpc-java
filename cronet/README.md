@@ -32,7 +32,7 @@ implementation 'com.google.android.gms:play-services-cronet:16.0.0'
 
 In cases where Cronet cannot be loaded from Google Play services, there is a less performant 
 implementation of Cronet's API that can be used. Depend on `org.chromium.net:cronet-fallback` 
-to use this fall-back implementation,  
+to use this fall-back implementation.
 
 
 You will also need permission to access the device's network state in your 
