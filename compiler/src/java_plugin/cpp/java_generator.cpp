@@ -468,6 +468,7 @@ static void PrintStub(
   (*vars)["abstract_name"] = service_name + "ImplBase";
   string stub_name = service_name;
   string client_name = service_name;
+  string stub_base_class_name = "AbstractStub";
   CallType call_type;
   bool impl_base = false;
   bool interface = false;
@@ -479,6 +480,7 @@ static void PrintStub(
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
+      stub_base_class_name = "AbstractAsyncStub";
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
@@ -487,6 +489,7 @@ static void PrintStub(
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       client_name += "BlockingClient";
+      stub_base_class_name = "AbstractBlockingStub";
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
@@ -495,16 +498,19 @@ static void PrintStub(
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       client_name += "FutureClient";
+      stub_base_class_name = "AbstractFutureStub";
       break;
     case ASYNC_INTERFACE:
       call_type = ASYNC_CALL;
       interface = true;
+      stub_base_class_name = "AbstractAsyncStub";
       break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
   (*vars)["stub_name"] = stub_name;
   (*vars)["client_name"] = client_name;
+  (*vars)["stub_base_class_name"] = (*vars)[stub_base_class_name];
 
   // Class head
   if (!interface) {
@@ -522,7 +528,7 @@ static void PrintStub(
   } else {
     p->Print(
         *vars,
-        "public static final class $stub_name$ extends $AbstractStub$<$stub_name$> {\n");
+        "public static final class $stub_name$ extends $stub_base_class_name$<$stub_name$> {\n");
   }
   p->Indent();
 
@@ -1149,6 +1155,9 @@ void GenerateService(const ServiceDescriptor* service,
   vars["ProtoMethodDescriptorSupplier"] =
       "io.grpc.protobuf.ProtoMethodDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
+  vars["AbstractAsyncStub"] = "io.grpc.stub.AbstractAsyncStub";
+  vars["AbstractFutureStub"] = "io.grpc.stub.AbstractFutureStub";
+  vars["AbstractBlockingStub"] = "io.grpc.stub.AbstractBlockingStub";
   vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";

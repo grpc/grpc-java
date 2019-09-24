@@ -685,4 +685,14 @@ public final class ClientCalls {
       LockSupport.unpark(waiter); // no-op if null
     }
   }
+
+  enum CallType {
+    BLOCKING, FUTURE, ASYNC
+  }
+
+  /**
+   * Internal {@link CallOptions.Key} to indicate call types.
+   */
+  static final CallOptions.Key<CallType> CALL_TYPE_OPTION =
+      CallOptions.Key.create("internal-call-type");
 }

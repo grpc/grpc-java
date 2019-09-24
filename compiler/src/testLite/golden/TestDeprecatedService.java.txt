@@ -122,7 +122,7 @@ public final class TestDeprecatedServiceGrpc {
    * </pre>
    */
   @java.lang.Deprecated
-  public static final class TestDeprecatedServiceStub extends io.grpc.stub.AbstractStub<TestDeprecatedServiceStub> {
+  public static final class TestDeprecatedServiceStub extends io.grpc.stub.AbstractAsyncStub<TestDeprecatedServiceStub> {
     private TestDeprecatedServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -157,7 +157,7 @@ public final class TestDeprecatedServiceGrpc {
    * </pre>
    */
   @java.lang.Deprecated
-  public static final class TestDeprecatedServiceBlockingStub extends io.grpc.stub.AbstractStub<TestDeprecatedServiceBlockingStub> {
+  public static final class TestDeprecatedServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<TestDeprecatedServiceBlockingStub> {
     private TestDeprecatedServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -191,7 +191,7 @@ public final class TestDeprecatedServiceGrpc {
    * </pre>
    */
   @java.lang.Deprecated
-  public static final class TestDeprecatedServiceFutureStub extends io.grpc.stub.AbstractStub<TestDeprecatedServiceFutureStub> {
+  public static final class TestDeprecatedServiceFutureStub extends io.grpc.stub.AbstractFutureStub<TestDeprecatedServiceFutureStub> {
     private TestDeprecatedServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
