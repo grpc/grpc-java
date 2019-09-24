@@ -36,6 +36,8 @@ final class TlsCertificateSecretVolumeSecretProvider
 
   private static final Logger logger = Logger
       .getLogger(TlsCertificateSecretVolumeSecretProvider.class.getName());
+  public static final String PEM = ".pem";
+  public static final String CRT = ".crt";
 
   private String path;
 
@@ -86,8 +88,8 @@ final class TlsCertificateSecretVolumeSecretProvider
   @Override
   public TlsCertificateStore get() throws InterruptedException, ExecutionException {
     try {
-      return new TlsCertificateStore(getFileInputStream(path + ".pem"),
-          getFileInputStream(path + ".crt"));
+      return new TlsCertificateStore(getFileInputStream(path + PEM),
+          getFileInputStream(path + CRT));
     } catch (FileNotFoundException e) {
       throw new ExecutionException(e);
     }
