@@ -193,6 +193,7 @@ public final class AltsTsiHandshaker implements TsiHandshaker {
     return createFrameProtector(AltsTsiFrameProtector.getMaxAllowedFrameBytes(), alloc);
   }
 
+  @Override
   public void close() {
     handshaker.close();
   }
