@@ -119,6 +119,7 @@ Tagging the Release
    # Bump documented versions. Don't forget protobuf version
    $ ${EDITOR:-nano -w} README.md
    $ ${EDITOR:-nano -w} documentation/android-channel-builder.md
+   $ ${EDITOR:-nano -w} cronet/README.md
    $ git commit -a -m "Update README etc to reference $MAJOR.$MINOR.$PATCH"
    ```
 3. Change root build files to remove "-SNAPSHOT" for the next release version
