@@ -22,6 +22,10 @@ dependencies {
             project(':grpc-core'),
             project(':grpc-services'),
             project(':grpc-auth')
+    compile (libraries.pgv) {
+        // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf
+        exclude group: 'com.google.protobuf'
+    }
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'
@@ -64,10 +68,10 @@ shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
+        include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
-    relocate 'validate', 'io.grpc.xds.shaded.com.lyft.pgv.validate'
     exclude "**/*.proto"
 }
 
