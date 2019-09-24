@@ -106,4 +106,9 @@ public interface TsiHandshaker {
    * @return a new TsiFrameProtector.
    */
   TsiFrameProtector createFrameProtector(ByteBufAllocator alloc);
+
+  /**
+   * Closes resources.
+   */
+  void close();
 }
