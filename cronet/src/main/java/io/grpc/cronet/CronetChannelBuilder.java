@@ -90,12 +90,12 @@ public final class CronetChannelBuilder extends
    * If true, indicates that the transport may use the GET method for RPCs, and may include the
    * request body in the query params.
    */
-  private final boolean useGetForSafeMethods;
+  private final boolean useGetForSafeMethods = false;
 
   /**
    * If true, indicates that the transport may use the PUT method for RPCs.
    */
-  private final boolean usePutForIdempotentMethods;
+  private final boolean usePutForIdempotentMethods = false;
 
   private boolean trafficStatsTagSet;
   private int trafficStatsTag;
