@@ -370,13 +370,6 @@ class NettyServerHandler extends AbstractNettyHandler {
 
   private void onHeadersRead(ChannelHandlerContext ctx, int streamId, Http2Headers headers)
       throws Http2Exception {
-    if (!teWarningLogged && !TE_TRAILERS.contentEquals(headers.get(TE_HEADER))) {
-      logger.warning(String.format("Expected header TE: %s, but %s is received. This means "
-              + "some intermediate proxy may not support trailers",
-          TE_TRAILERS, headers.get(TE_HEADER)));
-      teWarningLogged = true;
-    }
-
     try {
 
       // Remove the leading slash of the path and get the fully qualified method name
@@ -414,6 +407,13 @@ class NettyServerHandler extends AbstractNettyHandler {
         respondWithHttpError(ctx, streamId, 405, Status.Code.INTERNAL,
             String.format("Method '%s' is not supported", headers.method()));
         return;
+      }
+
+      if (!teWarningLogged && !TE_TRAILERS.contentEquals(headers.get(TE_HEADER))) {
+        logger.warning(String.format("Expected header TE: %s, but %s is received. This means "
+                + "some intermediate proxy may not support trailers",
+            TE_TRAILERS, headers.get(TE_HEADER)));
+        teWarningLogged = true;
       }
 
       // The Http2Stream object was put by AbstractHttp2ConnectionHandler before calling this
