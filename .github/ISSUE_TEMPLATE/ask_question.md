@@ -4,8 +4,6 @@ about: Asking a question related gRPC-Java
 labels: question
 ---
 
-Please answer these questions before submitting a bug report.
-
 For questions not directly related to gRPC-Java, please use [stackoverflow](https://stackoverflow.com/questions/tagged/grpc-java).
 Also, if question is not gRPC-Java implementation specific, consider using [grpc.io](https://groups.google.com/forum/#!forum/grpc-io).
 
