@@ -86,6 +86,17 @@ public final class CronetChannelBuilder extends
 
   private int maxMessageSize = DEFAULT_MAX_MESSAGE_SIZE;
 
+  /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods;
+
+  /**
+   * If true, indicates that the transport may use the PUT method for RPCs.
+   */
+  private final boolean usePutForIdempotentMethods;
+
   private boolean trafficStatsTagSet;
   private int trafficStatsTag;
   private boolean trafficStatsUidSet;
@@ -195,8 +206,8 @@ public final class CronetChannelBuilder extends
         maxMessageSize,
         alwaysUsePut,
         transportTracerFactory.create(),
-        useGetForSafeMethods(),
-        usePutForIdempotentMethods());
+        useGetForSafeMethods,
+        usePutForIdempotentMethods);
   }
 
   @VisibleForTesting

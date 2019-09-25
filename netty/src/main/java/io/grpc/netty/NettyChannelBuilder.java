@@ -91,6 +91,12 @@ public final class NettyChannelBuilder
   private LocalSocketPicker localSocketPicker;
 
   /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods = false;
+
+  /**
    * Creates a new builder with the given server address. This factory method is primarily intended
    * for using Netty Channel types other than SocketChannel. {@link #forAddress(String, int)} should
    * generally be preferred over this method, since that API permits delaying DNS lookups and
@@ -415,7 +421,7 @@ public final class NettyChannelBuilder
         negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory, localSocketPicker, useGetForSafeMethods());
+        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
