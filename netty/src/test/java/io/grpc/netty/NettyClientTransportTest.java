@@ -193,7 +193,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
-        new SocketPicker(), new FakeChannelLogger());
+        new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -439,7 +439,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
-        new FakeChannelLogger());
+        new FakeChannelLogger(), false);
     transports.add(transport);
 
     // Should not throw
@@ -709,7 +709,7 @@ public class NettyClientTransportTest {
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger());
+        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     return transport;
   }
