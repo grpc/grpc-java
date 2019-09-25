@@ -223,6 +223,7 @@ public class XdsCommsTest {
     assertThat(
             request.getNode().getMetadata().getFieldsOrThrow("endpoints_required").getBoolValue())
         .isTrue();
+    assertThat(request.getResourceNamesList()).hasSize(1);
 
     Locality localityProto1 = Locality.newBuilder()
         .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
