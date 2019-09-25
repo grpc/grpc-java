@@ -1,6 +1,6 @@
 ---
 name: Request a feature
-about: Suggest an idea for gRPC
+about: Suggest an enhancement for gRPC
 labels: enhancement
 ---
 
