@@ -16,11 +16,11 @@
 
 package io.grpc.xds.sds;
 
+import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.Internal;
-
 import java.io.InputStream;
 
 /**
@@ -34,9 +34,7 @@ public final class TlsCertificateStore {
   private final InputStream certChainStream;
 
   private InputStream getInputStreamFromDataSource(DataSource dataSource) {
-    if (dataSource == null) {
-      throw new IllegalArgumentException("dataSource is null");
-    }
+    Preconditions.checkNotNull(dataSource);
     ByteString dataSourceByteString = null;
     if (dataSource.getSpecifierCase() == DataSource.SpecifierCase.INLINE_BYTES) {
       dataSourceByteString = dataSource.getInlineBytes();
@@ -55,9 +53,7 @@ public final class TlsCertificateStore {
    * @param tlsCertificate  TlsCertificate Object of xDS
    */
   public TlsCertificateStore(TlsCertificate tlsCertificate) {
-    if (tlsCertificate == null) {
-      throw new IllegalArgumentException("tlsCertificate is null");
-    }
+    Preconditions.checkNotNull(tlsCertificate);
     privateKeyStream = getInputStreamFromDataSource(tlsCertificate.getPrivateKey());
     certChainStream = getInputStreamFromDataSource(tlsCertificate.getCertificateChain());
   }

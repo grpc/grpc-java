@@ -53,14 +53,16 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
    * @return  a config source representing the file based secret
    * @throws IOException  represents an IO exception
    */
-  public static File createTestCertFiles(TemporaryFolder temporaryFolder) throws IOException {
+  static File createTestCertFiles(TemporaryFolder temporaryFolder) throws IOException {
     createATestCertFile(temporaryFolder, "mycert.pem", "pemContents");
     createATestCertFile(temporaryFolder, "mycert.crt", "crtContents");
 
     return new File(temporaryFolder.getRoot(), "mycert");
   }
 
-  private static void createATestCertFile(TemporaryFolder temporaryFolder, String s,
+  private static void createATestCertFile(
+      TemporaryFolder temporaryFolder,
+      String s,
       String pemContents) throws IOException {
     File pem = temporaryFolder.newFile(s);
     Writer pemFile = Files.newBufferedWriter(pem.toPath(), UTF_8);

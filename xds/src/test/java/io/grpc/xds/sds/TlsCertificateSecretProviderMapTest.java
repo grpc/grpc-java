@@ -44,12 +44,13 @@ public class TlsCertificateSecretProviderMapTest {
 
   /**
    * Utility function for creation of test files in a temp folder.
+   * Used in other classes
    *
    * @param temporaryFolder   temporary folder to use
    * @return a config source representing the file based secret
    * @throws IOException represents IO exception
    */
-  public static ConfigSource createFileAndConfigSource(TemporaryFolder temporaryFolder)
+  static ConfigSource createFileAndConfigSource(TemporaryFolder temporaryFolder)
       throws IOException {
     File filePath = TlsCertificateSecretVolumeSecretProviderTest
         .createTestCertFiles(temporaryFolder);
