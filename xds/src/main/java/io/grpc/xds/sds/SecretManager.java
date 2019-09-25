@@ -22,6 +22,10 @@ import io.grpc.Internal;
 /**
  * SecretManager to manage secrets. This is used by gRPC-xds to access secrets
  * and not part of the public API of gRPC
+ * TODO: Lifecycle management for this manager and the {@link SecretProvider}s
+ * will be based on  {@link io.grpc.internal.SharedResourcePool} or
+ * {@link io.grpc.internal.SharedResourceHolder}
+ *
  */
 @Internal
 public final class SecretManager {
@@ -44,6 +48,6 @@ public final class SecretManager {
     return secretVolumeCertificateProviders.findOrCreate(configSource, name);
   }
 
-  private TlsCertificateSecretProviderMap secretVolumeCertificateProviders =
+  private final TlsCertificateSecretProviderMap secretVolumeCertificateProviders =
       new TlsCertificateSecretProviderMap();
 }

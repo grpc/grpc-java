@@ -20,7 +20,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -88,8 +87,8 @@ final class TlsCertificateSecretVolumeSecretProvider
   @Override
   public TlsCertificateStore get() throws InterruptedException, ExecutionException {
     try {
-      return new TlsCertificateStore(getFileInputStream(path + PEM),
-          getFileInputStream(path + CRT));
+      return new TlsCertificateStore(new FileInputStream(path + PEM),
+          new FileInputStream(path + CRT));
     } catch (FileNotFoundException e) {
       throw new ExecutionException(e);
     }
@@ -113,7 +112,4 @@ final class TlsCertificateSecretVolumeSecretProvider
     return get();
   }
 
-  private InputStream getFileInputStream(String filePath) throws FileNotFoundException {
-    return new FileInputStream(filePath);
-  }
 }

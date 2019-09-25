@@ -25,7 +25,8 @@ import java.io.InputStream;
 
 /**
  * TlsCertificate's PrivateKey and Certificate are extracted into InputStream's.
- * This is used by the gRPC SSLContext/Protocol Negotiator and is internal
+ * This is used by the gRPC SSLContext/Protocol Negotiator and is internal.
+ * See {@link SecretManager} for a note on lifecycle management.
  */
 @Internal
 public final class TlsCertificateStore {
@@ -33,7 +34,7 @@ public final class TlsCertificateStore {
   private final InputStream privateKeyStream;
   private final InputStream certChainStream;
 
-  private InputStream getInputStreamFromDataSource(DataSource dataSource) {
+  private static InputStream getInputStreamFromDataSource(DataSource dataSource) {
     Preconditions.checkNotNull(dataSource);
     ByteString dataSourceByteString = null;
     if (dataSource.getSpecifierCase() == DataSource.SpecifierCase.INLINE_BYTES) {
@@ -50,12 +51,12 @@ public final class TlsCertificateStore {
   /**
    * Creates the Store out of the TlsCertificate object of xDS.
    *
-   * @param tlsCertificate  TlsCertificate Object of xDS
+   * @param tlsCertificate TlsCertificate Object of xDS
    */
   public TlsCertificateStore(TlsCertificate tlsCertificate) {
-    Preconditions.checkNotNull(tlsCertificate);
-    privateKeyStream = getInputStreamFromDataSource(tlsCertificate.getPrivateKey());
-    certChainStream = getInputStreamFromDataSource(tlsCertificate.getCertificateChain());
+    this(
+        getInputStreamFromDataSource(Preconditions.checkNotNull(tlsCertificate).getPrivateKey()),
+        getInputStreamFromDataSource(tlsCertificate.getCertificateChain()));
   }
 
   /**
@@ -71,6 +72,7 @@ public final class TlsCertificateStore {
 
   /**
    * getter for private key stream.
+   * TODO: Lifecycle management to close streams as discussed in {@link SecretManager}
    *
    * @return inputStream representing private key
    */
@@ -80,6 +82,7 @@ public final class TlsCertificateStore {
 
   /**
    * getter for cert key stream.
+   * TODO: Lifecycle management to close streams as discussed in {@link SecretManager}
    *
    * @return  inputStream representing cert
    */

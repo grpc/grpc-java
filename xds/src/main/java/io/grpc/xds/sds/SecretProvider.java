@@ -23,6 +23,7 @@ import io.grpc.Internal;
  * A SecretProvider is a "container" or provider of a secret.
  * This is used by gRPC-xds to access secrets and not part of the
  * public API of gRPC
+ * See {@link SecretManager} for a note on lifecycle management
  */
 @Internal
 public interface SecretProvider<T> extends ListenableFuture<T> {
