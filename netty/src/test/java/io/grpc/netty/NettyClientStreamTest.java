@@ -420,7 +420,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
         transportTracer,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
     stream().transportState().setId(STREAM_ID);
     verify(listener, never()).onReady();
@@ -450,7 +451,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("good agent"),
         StatsTraceContext.NOOP,
         transportTracer,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
 
     ArgumentCaptor<CreateStreamCommand> cmdCap = ArgumentCaptor.forClass(CreateStreamCommand.class);
@@ -480,7 +482,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
         transportTracer,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        true);
     stream.start(listener);
     stream.transportState().setId(STREAM_ID);
     stream.transportState().setHttp2Stream(http2Stream);
@@ -513,7 +516,8 @@ public class NettyClientStreamTest extends NettyStreamTestBase<NettyClientStream
         AsciiString.of("agent"),
         StatsTraceContext.NOOP,
         transportTracer,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        false);
     stream.start(listener);
     stream.transportState().setHttp2Stream(http2Stream);
     reset(listener);

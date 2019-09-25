@@ -264,7 +264,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     String s = clientTransport.toString();
     assertTrue("Unexpected: " + s, s.contains("OkHttpClientTransport"));
     assertTrue("Unexpected: " + s, s.contains(address.toString()));
@@ -1664,7 +1665,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
 
     String host = clientTransport.getOverridenHost();
     int port = clientTransport.getOverridenPort();
@@ -1690,7 +1692,8 @@ public class OkHttpClientTransportTest {
         NO_PROXY,
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        new TransportTracer());
+        new TransportTracer(),
+        false);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1727,7 +1730,8 @@ public class OkHttpClientTransportTest {
             NO_PROXY,
             tooManyPingsRunnable,
             DEFAULT_MAX_INBOUND_METADATA_SIZE,
-            new TransportTracer());
+            new TransportTracer(),
+            false);
 
     ManagedClientTransport.Listener listener = mock(ManagedClientTransport.Listener.class);
     clientTransport.start(listener);
@@ -1759,7 +1763,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1815,7 +1820,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();
@@ -1870,7 +1876,8 @@ public class OkHttpClientTransportTest {
             .setProxyAddress(serverSocket.getLocalSocketAddress()).build(),
         tooManyPingsRunnable,
         DEFAULT_MAX_INBOUND_METADATA_SIZE,
-        transportTracer);
+        transportTracer,
+        false);
     clientTransport.start(transportListener);
 
     Socket sock = serverSocket.accept();

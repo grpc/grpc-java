@@ -144,6 +144,17 @@ public abstract class AbstractManagedChannelImplBuilder
 
   private int maxInboundMessageSize = GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 
+  /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  boolean useGetForSafeMethods;
+
+  /**
+   * If true, indicates that the transport may use the PUT method for RPCs.
+   */
+  boolean usePutForIdempotentMethods;
+
   @Nullable
   BinaryLog binlog;
 
@@ -557,6 +568,14 @@ public abstract class AbstractManagedChannelImplBuilder
    */
   protected int getDefaultPort() {
     return GrpcUtil.DEFAULT_PORT_SSL;
+  }
+
+  protected final boolean useGetForSafeMethods() {
+    return useGetForSafeMethods;
+  }
+
+  protected final boolean usePutForIdempotentMethods() {
+    return usePutForIdempotentMethods;
   }
 
   /**

@@ -74,14 +74,15 @@ class OkHttpClientStream extends AbstractClientStream {
       String userAgent,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
-      CallOptions callOptions) {
+      CallOptions callOptions,
+      boolean useGetForSafeMethods) {
     super(
         new OkHttpWritableBufferAllocator(),
         statsTraceCtx,
         transportTracer,
         headers,
         callOptions,
-        method.isSafe());
+        useGetForSafeMethods && method.isSafe());
     this.statsTraceCtx = checkNotNull(statsTraceCtx, "statsTraceCtx");
     this.method = method;
     this.authority = authority;

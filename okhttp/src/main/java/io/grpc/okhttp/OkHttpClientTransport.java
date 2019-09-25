@@ -198,6 +198,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   private boolean keepAliveWithoutCalls;
   private final Runnable tooManyPingsRunnable;
   private final int maxInboundMetadataSize;
+  private final boolean useGetForSafeMethods;
   @GuardedBy("lock")
   private final TransportTracer transportTracer;
   @GuardedBy("lock")
@@ -239,7 +240,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       @Nullable HttpConnectProxiedSocketAddress proxiedAddr,
       Runnable tooManyPingsRunnable,
       int maxInboundMetadataSize,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.defaultAuthority = authority;
     this.maxMessageSize = maxMessageSize;
@@ -263,6 +265,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs).build();
+    this.useGetForSafeMethods = useGetForSafeMethods;
     initTransportTracer();
   }
 
@@ -285,6 +288,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
       int initialWindowSize,
       Runnable tooManyPingsRunnable,
       TransportTracer transportTracer) {
+    useGetForSafeMethods = false;
     address = null;
     this.maxMessageSize = maxMessageSize;
     this.initialWindowSize = initialWindowSize;
@@ -397,7 +401,8 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
           userAgent,
           statsTraceCtx,
           transportTracer,
-          callOptions);
+          callOptions,
+          useGetForSafeMethods);
     }
   }
 

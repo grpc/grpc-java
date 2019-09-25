@@ -99,7 +99,8 @@ public class OkHttpClientStreamTest {
         "userAgent",
         StatsTraceContext.NOOP,
         transportTracer,
-        CallOptions.DEFAULT);
+        CallOptions.DEFAULT,
+        false);
   }
 
   @Test
@@ -158,7 +159,7 @@ public class OkHttpClientStreamTest {
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
-        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, false);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
 
@@ -174,7 +175,7 @@ public class OkHttpClientStreamTest {
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
-        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, false);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
 
@@ -203,7 +204,7 @@ public class OkHttpClientStreamTest {
         .build();
     stream = new OkHttpClientStream(getMethod, new Metadata(), frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
-        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, true);
     stream.start(new BaseClientStreamListener());
 
     // GET streams send headers after halfClose is called.

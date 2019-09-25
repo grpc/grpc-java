@@ -194,7 +194,9 @@ public final class CronetChannelBuilder extends
         scheduledExecutorService,
         maxMessageSize,
         alwaysUsePut,
-        transportTracerFactory.create());
+        transportTracerFactory.create(),
+        useGetForSafeMethods(),
+        usePutForIdempotentMethods());
   }
 
   @VisibleForTesting
@@ -206,6 +208,8 @@ public final class CronetChannelBuilder extends
     private final StreamBuilderFactory streamFactory;
     private final TransportTracer transportTracer;
     private final boolean usingSharedScheduler;
+    private final boolean useGetForSafeMethods;
+    private final boolean usePutForIdempotentMethods;
 
     private CronetTransportFactory(
         StreamBuilderFactory streamFactory,
@@ -213,7 +217,9 @@ public final class CronetChannelBuilder extends
         @Nullable ScheduledExecutorService timeoutService,
         int maxMessageSize,
         boolean alwaysUsePut,
-        TransportTracer transportTracer) {
+        TransportTracer transportTracer,
+        boolean useGetForSafeMethods,
+        boolean usePutForIdempotentMethods) {
       usingSharedScheduler = timeoutService == null;
       this.timeoutService = usingSharedScheduler
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
@@ -222,6 +228,8 @@ public final class CronetChannelBuilder extends
       this.streamFactory = streamFactory;
       this.executor = Preconditions.checkNotNull(executor, "executor");
       this.transportTracer = Preconditions.checkNotNull(transportTracer, "transportTracer");
+      this.useGetForSafeMethods = useGetForSafeMethods;
+      this.usePutForIdempotentMethods = usePutForIdempotentMethods;
     }
 
     @Override
@@ -230,7 +238,7 @@ public final class CronetChannelBuilder extends
       InetSocketAddress inetSocketAddr = (InetSocketAddress) addr;
       return new CronetClientTransport(streamFactory, inetSocketAddr, options.getAuthority(),
           options.getUserAgent(), options.getEagAttributes(), executor, maxMessageSize,
-          alwaysUsePut, transportTracer);
+          alwaysUsePut, transportTracer, useGetForSafeMethods, usePutForIdempotentMethods);
     }
 
     @Override
