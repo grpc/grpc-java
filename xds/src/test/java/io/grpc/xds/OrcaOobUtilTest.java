@@ -34,11 +34,11 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.udpa.udpa.service.orca.v1.OpenRcaServiceGrpc;
+import com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
-import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
-import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
 import io.grpc.Attributes;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;

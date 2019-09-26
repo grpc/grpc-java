@@ -100,6 +100,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final Attributes eagAttributes;
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
+  private final boolean useGetForSafeMethods;
 
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
@@ -108,7 +109,8 @@ class NettyClientTransport implements ConnectionClientTransport {
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
       Runnable tooManyPingsRunnable, TransportTracer transportTracer, Attributes eagAttributes,
-      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger) {
+      LocalSocketPicker localSocketPicker, ChannelLogger channelLogger,
+      boolean useGetForSafeMethods) {
     this.negotiator = Preconditions.checkNotNull(negotiator, "negotiator");
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
@@ -131,6 +133,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.localSocketPicker = Preconditions.checkNotNull(localSocketPicker, "localSocketPicker");
     this.logId = InternalLogId.allocate(getClass(), remoteAddress.toString());
     this.channelLogger = Preconditions.checkNotNull(channelLogger, "channelLogger");
+    this.useGetForSafeMethods = useGetForSafeMethods;
   }
 
   @Override
@@ -191,7 +194,8 @@ class NettyClientTransport implements ConnectionClientTransport {
         userAgent,
         statsTraceCtx,
         transportTracer,
-        callOptions);
+        callOptions,
+        useGetForSafeMethods);
   }
 
   @SuppressWarnings("unchecked")

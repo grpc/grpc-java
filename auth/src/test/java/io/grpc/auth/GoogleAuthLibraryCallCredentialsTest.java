@@ -30,6 +30,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.auth.Credentials;
 import com.google.auth.RequestMetadataCallback;
+import com.google.auth.http.HttpTransportFactory;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.OAuth2Credentials;
@@ -38,6 +39,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.LinkedListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Multimaps;
+import com.google.common.io.BaseEncoding;
 import io.grpc.Attributes;
 import io.grpc.CallCredentials;
 import io.grpc.CallCredentials.MetadataApplier;
@@ -45,13 +47,13 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.SecurityLevel;
 import io.grpc.Status;
+import io.grpc.internal.JsonParser;
 import io.grpc.testing.TestMethodDescriptors;
 import java.io.IOException;
 import java.net.URI;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +67,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -250,7 +253,7 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void oauth2Credential() {
     final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    final OAuth2Credentials credentials = new OAuth2Credentials() {
+    OAuth2Credentials credentials = new OAuth2Credentials() {
       @Override
       public AccessToken refreshAccessToken() throws IOException {
         return token;
@@ -321,14 +324,17 @@ public class GoogleAuthLibraryCallCredentialsTest {
   @Test
   public void serviceAccountToJwt() throws Exception {
     KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, null) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        throw new AssertionError();
-      }
-    };
+
+    HttpTransportFactory factory = Mockito.mock(HttpTransportFactory.class);
+    Mockito.when(factory.create()).thenThrow(new AssertionError());
+
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientEmail("test-email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId("test-private-key-id")
+            .setHttpTransportFactory(factory)
+            .build();
 
     GoogleAuthLibraryCallCredentials callCredentials =
         new GoogleAuthLibraryCallCredentials(credentials);
@@ -342,31 +348,6 @@ public class GoogleAuthLibraryCallCredentialsTest {
     assertTrue(authorization[0], authorization[0].startsWith("Bearer "));
     // JWT is reasonably long. Normal tokens aren't.
     assertTrue(authorization[0], authorization[0].length() > 300);
-  }
-
-  @Test
-  public void serviceAccountWithScopeNotToJwt() throws Exception {
-    final AccessToken token = new AccessToken("allyourbase", new Date(Long.MAX_VALUE));
-    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
-    @SuppressWarnings("deprecation")
-    ServiceAccountCredentials credentials = new ServiceAccountCredentials(
-        null, "email@example.com", pair.getPrivate(), null, Arrays.asList("somescope")) {
-      @Override
-      public AccessToken refreshAccessToken() {
-        return token;
-      }
-    };
-
-    GoogleAuthLibraryCallCredentials callCredentials =
-        new GoogleAuthLibraryCallCredentials(credentials);
-    callCredentials.applyRequestMetadata(new RequestInfoImpl(), executor, applier);
-    assertEquals(1, runPendingRunnables());
-
-    verify(applier).apply(headersCaptor.capture());
-    Metadata headers = headersCaptor.getValue();
-    Iterable<String> authorization = headers.getAll(AUTHORIZATION);
-    assertArrayEquals(new String[]{"Bearer allyourbase"},
-        Iterables.toArray(authorization, String.class));
   }
 
   @Test
@@ -386,6 +367,36 @@ public class GoogleAuthLibraryCallCredentialsTest {
     Iterable<String> authorization = headers.getAll(AUTHORIZATION);
     assertArrayEquals(new String[]{"token1"},
         Iterables.toArray(authorization, String.class));
+  }
+
+  @Test
+  public void jwtAccessCredentialsInRequestMetadata() throws Exception {
+    KeyPair pair = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+
+    ServiceAccountCredentials credentials =
+        ServiceAccountCredentials.newBuilder()
+            .setClientId("test-client")
+            .setClientEmail("test-email@example.com")
+            .setPrivateKey(pair.getPrivate())
+            .setPrivateKeyId("test-private-key-id")
+            .build();
+    GoogleAuthLibraryCallCredentials callCredentials =
+        new GoogleAuthLibraryCallCredentials(credentials);
+    callCredentials.applyRequestMetadata(new RequestInfoImpl("example.com:123"), executor, applier);
+
+    verify(applier).apply(headersCaptor.capture());
+    Metadata headers = headersCaptor.getValue();
+    String token =
+        Iterables.getOnlyElement(headers.getAll(AUTHORIZATION)).substring("Bearer ".length());
+    String[] parts = token.split("\\.", 3);
+    String jsonHeader = new String(BaseEncoding.base64Url().decode(parts[0]), US_ASCII);
+    String jsonPayload = new String(BaseEncoding.base64Url().decode(parts[1]), US_ASCII);
+    Map<?, ?> header = (Map<?, ?>) JsonParser.parse(jsonHeader);
+    assertEquals("test-private-key-id", header.get("kid"));
+    Map<?, ?> payload = (Map<?, ?>) JsonParser.parse(jsonPayload);
+    assertEquals("https://example.com:123/a.service", payload.get("aud"));
+    assertEquals("test-email@example.com", payload.get("iss"));
+    assertEquals("test-email@example.com", payload.get("sub"));
   }
 
   private int runPendingRunnables() {

@@ -1,0 +1,39 @@
+// Copyright 2019 The gRPC Authors
+// All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// An integration test service that covers all the method signature permutations
+// of unary/streaming requests/responses.
+
+syntax = "proto3";
+
+package io.grpc.xds;
+
+option java_outer_classname = "BootstrapProto";
+option java_multiple_files = true;
+option java_package = "io.grpc.xds";
+
+import "envoy/api/v2/core/base.proto";
+import "envoy/api/v2/core/config_source.proto";
+
+// Configurations containing the information needed for xDS load balancer to bootstrap its
+// communication with the xDS server.
+// This proto message is defined for the convenience of parsing JSON bootstrap file in xDS load
+// balancing policy only. It should not be used for any other purposes.
+message Bootstrap {
+  // Metadata to be added to the Node message in xDS requests.
+  envoy.api.v2.core.Node node = 1 [json_name = "node"];
+
+  // Configurations including the name of the xDS server to contact, the credentials to use, etc.
+  envoy.api.v2.core.ApiConfigSource xds_server = 2 [json_name = "xds_server"];
+}

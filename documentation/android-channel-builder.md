@@ -36,8 +36,8 @@ In your `build.gradle` file, include a dependency on both `grpc-android` and
 `grpc-okhttp`:
 
 ```
-implementation 'io.grpc:grpc-android:1.23.0'
-implementation 'io.grpc:grpc-okhttp:1.23.0'
+implementation 'io.grpc:grpc-android:1.24.0'
+implementation 'io.grpc:grpc-okhttp:1.24.0'
 ```
 
 You will also need permission to access the device's network state in your
