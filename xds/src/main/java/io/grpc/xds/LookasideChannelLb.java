@@ -21,6 +21,7 @@ import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
@@ -39,10 +40,7 @@ import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Logger;
 
 /**
@@ -236,7 +234,8 @@ final class LookasideChannelLb extends LoadBalancer {
       localityStore.updateDropPercentage(dropOverloads);
 
       List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-      Map<XdsLocality, LocalityInfo> localityEndpointsMapping = new LinkedHashMap<>();
+      ImmutableMap.Builder<XdsLocality, LocalityInfo> localityEndpointsMapping =
+          new ImmutableMap.Builder<>();
       for (LocalityLbEndpoints localityLbEndpoints : localities) {
         io.envoyproxy.envoy.api.v2.core.Locality localityProto =
             localityLbEndpoints.getLocality();
@@ -247,16 +246,15 @@ final class LookasideChannelLb extends LoadBalancer {
           lbEndPoints.add(new LbEndpoint(lbEndpoint));
         }
         int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
+        int priority = localityLbEndpoints.getPriority();
 
         if (localityWeight != 0) {
           localityEndpointsMapping.put(
-              locality, new LocalityInfo(lbEndPoints, localityWeight));
+              locality, new LocalityInfo(lbEndPoints, localityWeight, priority));
         }
       }
 
-      localityEndpointsMapping = Collections.unmodifiableMap(localityEndpointsMapping);
-
-      localityStore.updateLocalityStore(localityEndpointsMapping);
+      localityStore.updateLocalityStore(localityEndpointsMapping.build());
     }
 
     @Override

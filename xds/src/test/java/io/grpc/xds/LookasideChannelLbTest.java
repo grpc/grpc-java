@@ -29,6 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
@@ -53,7 +54,6 @@ import io.grpc.xds.LookasideChannelLb.XdsCommsFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
-import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -100,7 +100,7 @@ public class LookasideChannelLbTest {
   @Mock
   private AbstractXdsComms xdsComms;
   @Captor
-  private ArgumentCaptor<Map<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<ImmutableMap<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private LookasideChannelLb lookasideChannelLb;
 
@@ -290,12 +290,12 @@ public class LookasideChannelLbTest {
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint11),
             new XdsComms.LbEndpoint(endpoint12)),
-        1);
+        1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
             new XdsComms.LbEndpoint(endpoint21),
             new XdsComms.LbEndpoint(endpoint22)),
-        2);
+        2, 0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
 
     InOrder inOrder = inOrder(localityStore);
