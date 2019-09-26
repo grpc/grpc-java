@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
@@ -27,7 +28,6 @@ import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.FileBasedBootstrapper;
 import io.grpc.xds.Bootstrapper.ServerConfig;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,7 +43,8 @@ public class BootstrapperTest {
 
   @Test
   public void validBootstrap() {
-    List<ChannelCreds> channelCredsList = new ArrayList<>();
+    List<ChannelCreds> channelCredsList =
+        ImmutableList.of(new ChannelCreds("TLS"), new ChannelCreds("LOAS"));
     ServerConfig serverConfig =
         new ServerConfig("trafficdirector.googleapis.com:443", channelCredsList);
 
@@ -83,6 +84,11 @@ public class BootstrapperTest {
                             Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
                         .build())
                 .build());
+    assertThat(bootstrapper.getChannelCredentials()).hasSize(2);
+    assertThat(bootstrapper.getChannelCredentials().get(0).getType()).isEqualTo("TLS");
+    assertThat(bootstrapper.getChannelCredentials().get(0).getConfig()).isNull();
+    assertThat(bootstrapper.getChannelCredentials().get(1).getType()).isEqualTo("LOAS");
+    assertThat(bootstrapper.getChannelCredentials().get(1).getConfig()).isNull();
   }
 
   @Test
@@ -109,10 +115,10 @@ public class BootstrapperTest {
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.serverConfig.uri).isEqualTo("trafficdirector.googleapis.com:443");
     assertThat(info.serverConfig.channelCredsList).hasSize(2);
-    assertThat(info.serverConfig.channelCredsList.get(0).type).isEqualTo("TLS");
-    assertThat(info.serverConfig.channelCredsList.get(0).config).isNull();
-    assertThat(info.serverConfig.channelCredsList.get(1).type).isEqualTo("LOAS");
-    assertThat(info.serverConfig.channelCredsList.get(1).config).isNull();
+    assertThat(info.serverConfig.channelCredsList.get(0).getType()).isEqualTo("TLS");
+    assertThat(info.serverConfig.channelCredsList.get(0).getConfig()).isNull();
+    assertThat(info.serverConfig.channelCredsList.get(1).getType()).isEqualTo("LOAS");
+    assertThat(info.serverConfig.channelCredsList.get(1).getConfig()).isNull();
     assertThat(info.node).isEqualTo(
         Node.newBuilder()
             .setId("ENVOY_NODE_ID")

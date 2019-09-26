@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
@@ -24,14 +23,13 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.grpc.CallCredentials;
-import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.JsonParser;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -66,7 +64,7 @@ abstract class Bootstrapper {
   /**
    * Returns the credentials to use when communicating with the xDS server.
    */
-  abstract CallCredentials getCallCredentials();
+  abstract List<ChannelCreds> getChannelCredentials();
 
   @VisibleForTesting
   static final class FileBasedBootstrapper extends Bootstrapper {
@@ -76,8 +74,7 @@ abstract class Bootstrapper {
 
     private final String balancerName;
     private final Node node;
-    // TODO(chengyuanzhang): Add configuration for call credentials loaded from bootstrap file.
-    //  hard-coded for alpha release.
+    private final List<ChannelCreds> channelCredsList;
 
     static {
       Bootstrapper instance = null;
@@ -95,6 +92,7 @@ abstract class Bootstrapper {
     FileBasedBootstrapper(BootstrapInfo bootstrapInfo) {
       this.balancerName = bootstrapInfo.serverConfig.uri;
       this.node = bootstrapInfo.node;
+      this.channelCredsList = bootstrapInfo.serverConfig.channelCredsList;
     }
 
     @Override
@@ -108,8 +106,8 @@ abstract class Bootstrapper {
     }
 
     @Override
-    CallCredentials getCallCredentials() {
-      return MoreCallCredentials.from(ComputeEngineCredentials.create());
+    List<ChannelCreds> getChannelCredentials() {
+      return Collections.unmodifiableList(channelCredsList);
     }
   }
 
@@ -237,11 +235,33 @@ abstract class Bootstrapper {
     return valueBuilder.build();
   }
 
+  // TODO(chengyuanzhang): May need more complex structure for channel creds config representation.
+  static class ChannelCreds {
+    private final String type;
+    @Nullable
+    private Map<String, ?> config;
+
+    @VisibleForTesting
+    ChannelCreds(String type) {
+      this.type = type;
+    }
+
+    String getType() {
+      return type;
+    }
+
+    @Nullable
+    Map<String, ?> getConfig() {
+      return config;
+    }
+  }
+
   @VisibleForTesting
   static class BootstrapInfo {
     final ServerConfig serverConfig;
     final Node node;
 
+    @VisibleForTesting
     BootstrapInfo(ServerConfig serverConfig, Node node) {
       this.serverConfig = serverConfig;
       this.node = node;
@@ -253,20 +273,10 @@ abstract class Bootstrapper {
     final String uri;
     final List<ChannelCreds> channelCredsList;
 
+    @VisibleForTesting
     ServerConfig(String uri, List<ChannelCreds> channelCredsList) {
       this.uri = uri;
       this.channelCredsList = channelCredsList;
-    }
-  }
-
-  @VisibleForTesting
-  static class ChannelCreds {
-    final String type;
-    @Nullable
-    Map<String, ?> config;
-
-    ChannelCreds(String type) {
-      this.type = type;
     }
   }
 }
