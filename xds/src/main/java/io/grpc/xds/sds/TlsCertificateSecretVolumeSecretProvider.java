@@ -38,11 +38,11 @@ final class TlsCertificateSecretVolumeSecretProvider
   public static final String PEM = ".pem";
   public static final String CRT = ".crt";
 
-  private String path;
+  private final String path;
 
   // for now mark it unused
   @SuppressWarnings("unused")
-  private String name;
+  private final String name;
 
   TlsCertificateSecretVolumeSecretProvider(String path, String name) {
     this.path = path;
@@ -81,8 +81,9 @@ final class TlsCertificateSecretVolumeSecretProvider
   }
 
   /**
-   * Gets the current contents of the private key and cert file Assume the key has .pem extension
-   * and cert has .crt extension (needs to match how Citadel mounts secrets)
+   * Gets the current contents of the private key and cert file. Assume the key has
+   * <literal>.pem</literal> extension and cert has <literal>.crt</literal> extension
+   * (needs to match how Citadel mounts secrets).
    */
   @Override
   public TlsCertificateStore get() throws InterruptedException, ExecutionException {
