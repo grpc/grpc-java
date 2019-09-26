@@ -352,7 +352,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * @since 1.0.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public boolean isIdempotent() {
     return idempotent;
   }
@@ -364,7 +363,6 @@ public final class MethodDescriptor<ReqT, RespT> {
    *
    * @since 1.1.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
   public boolean isSafe() {
     return safe;
   }
@@ -540,7 +538,6 @@ public final class MethodDescriptor<ReqT, RespT> {
      *
      * @since 1.1.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setIdempotent(boolean idempotent) {
       this.idempotent = idempotent;
       return this;
@@ -552,7 +549,6 @@ public final class MethodDescriptor<ReqT, RespT> {
      *
      * @since 1.1.0
      */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setSafe(boolean safe) {
       this.safe = safe;
       return this;
