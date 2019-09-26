@@ -18,17 +18,23 @@ package io.grpc.xds;
 
 import com.google.auth.oauth2.ComputeEngineCredentials;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.JsonFormat;
-import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
-import io.envoyproxy.envoy.api.v2.core.ApiConfigSource.ApiType;
+import com.google.protobuf.ListValue;
+import com.google.protobuf.NullValue;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.CallCredentials;
 import io.grpc.auth.MoreCallCredentials;
+import io.grpc.internal.JsonParser;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
@@ -86,18 +92,9 @@ abstract class Bootstrapper {
     }
 
     @VisibleForTesting
-    FileBasedBootstrapper(Bootstrap bootstrapConfig) throws IOException {
-      ApiConfigSource serverConfig = bootstrapConfig.getXdsServer();
-      if (!serverConfig.getApiType().equals(ApiType.GRPC)) {
-        throw new IOException("Unexpected api type: " + serverConfig.getApiType().toString());
-      }
-      if (serverConfig.getGrpcServicesCount() != 1) {
-        throw new IOException(
-            "Unexpected number of gRPC services: expected: 1, actual: "
-                + serverConfig.getGrpcServicesCount());
-      }
-      balancerName = serverConfig.getGrpcServices(0).getGoogleGrpc().getTargetUri();
-      node = bootstrapConfig.getNode();
+    FileBasedBootstrapper(BootstrapInfo bootstrapInfo) {
+      this.balancerName = bootstrapInfo.serverConfig.uri;
+      this.node = bootstrapInfo.node;
     }
 
     @Override
@@ -116,7 +113,7 @@ abstract class Bootstrapper {
     }
   }
 
-  private static Bootstrap readConfig() throws IOException {
+  private static BootstrapInfo readConfig() throws IOException {
     String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
     if (filePath == null) {
       throw new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
@@ -125,9 +122,151 @@ abstract class Bootstrapper {
   }
 
   @VisibleForTesting
-  static Bootstrap parseConfig(String rawData) throws InvalidProtocolBufferException {
-    Bootstrap.Builder bootstrapBuilder = Bootstrap.newBuilder();
-    JsonFormat.parser().merge(rawData, bootstrapBuilder);
-    return bootstrapBuilder.build();
+  @SuppressWarnings("unchecked")
+  static BootstrapInfo parseConfig(String rawData) throws IOException {
+    Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
+
+    Map<String, ?> rawServerConfig = (Map<String, ?>) rawBootstrap.get("xds_server");
+    if (rawServerConfig == null) {
+      throw new IOException("Invalid bootstrap: 'xds_server' does not exist.");
+    }
+    // Field "server_uri" is required.
+    String serverUri = (String) rawServerConfig.get("server_uri");
+    if (serverUri == null) {
+      throw new IOException("Invalid bootstrap: 'xds_server : server_uri' does not exist.");
+    }
+    List<ChannelCreds> channelCredsOptions = new ArrayList<>();
+    List<?> rawChannelCredsList = (List<?>) rawServerConfig.get("channel_creds");
+    // List of channel creds is optional.
+    if (rawChannelCredsList != null) {
+      for (Object channelCreds : rawChannelCredsList) {
+        Map<String, ?> channelCredsItem = (Map<String, ?>) channelCreds;
+        String type = (String) channelCredsItem.get("type");
+        if (type == null) {
+          throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
+        }
+        ChannelCreds creds = new ChannelCreds(type);
+        if (channelCredsItem.containsKey("config")) {
+          creds.config = (Map<String, ?>) channelCredsItem.get("config");
+        }
+        channelCredsOptions.add(creds);
+      }
+    }
+    ServerConfig serverConfig = new ServerConfig(serverUri, channelCredsOptions);
+
+    Map<String, ?> rawNode = (Map<String, ?>) rawBootstrap.get("node");
+    if (rawNode == null) {
+      throw new IOException("Invalid bootstrap: 'node' does not exist.");
+    }
+    // Fields in "node" are not checked.
+    Node.Builder nodeBuilder = Node.newBuilder();
+    String id = (String) rawNode.get("id");
+    if (id != null) {
+      nodeBuilder.setId(id);
+    }
+    String cluster = (String) rawNode.get("cluster");
+    if (cluster != null) {
+      nodeBuilder.setCluster(cluster);
+    }
+    Map<String, ?> metadata = (Map<String, ?>) rawNode.get("metadata");
+    if (metadata != null) {
+      Struct.Builder structBuilder = Struct.newBuilder();
+      for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+      }
+      nodeBuilder.setMetadata(structBuilder);
+    }
+    Map<String, ?> rawLocality = (Map<String, ?>) rawNode.get("locality");
+    if (rawLocality != null) {
+      Locality.Builder localityBuilder = Locality.newBuilder();
+      String region = (String) rawLocality.get("region");
+      if (region == null) {
+        throw new IOException("Invalid bootstrap: malformed 'node : locality'.");
+      }
+      localityBuilder.setRegion((String) rawLocality.get("region"));
+      if (rawLocality.containsKey("zone")) {
+        localityBuilder.setZone((String) rawLocality.get("zone"));
+      }
+      if (rawLocality.containsKey("sub_zone")) {
+        localityBuilder.setSubZone((String) rawLocality.get("sub_zone"));
+      }
+      nodeBuilder.setLocality(localityBuilder);
+    }
+    String buildVersion = (String) rawNode.get("build_version");
+    if (buildVersion != null) {
+      nodeBuilder.setBuildVersion(buildVersion);
+    }
+
+    return new BootstrapInfo(serverConfig, nodeBuilder.build());
+  }
+
+  /**
+   * Converts Java representation of the given JSON value to protobuf's {@link
+   * com.google.protobuf.Value} representation.
+   *
+   * <p>The given {@code rawObject} must be a valid JSON value in Java representation, which is
+   * either a {@code Map<String, ?>}, {@code List<?>}, {@code String}, {@code Double},
+   * {@code Boolean}, or {@code null}.
+   */
+  private static Value convertToValue(Object rawObject) {
+    Value.Builder valueBuilder = Value.newBuilder();
+    if (rawObject == null) {
+      valueBuilder.setNullValue(NullValue.NULL_VALUE);
+    } else if (rawObject instanceof Double) {
+      valueBuilder.setNumberValue((Double) rawObject);
+    } else if (rawObject instanceof String) {
+      valueBuilder.setStringValue((String) rawObject);
+    } else if (rawObject instanceof Boolean) {
+      valueBuilder.setBoolValue((Boolean) rawObject);
+    } else if (rawObject instanceof Map) {
+      Struct.Builder structBuilder = Struct.newBuilder();
+      @SuppressWarnings("unchecked")
+      Map<String, ?> map = (Map<String, ?>) rawObject;
+      for (Map.Entry<String, ?> entry : map.entrySet()) {
+        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+      }
+      valueBuilder.setStructValue(structBuilder);
+    } else if (rawObject instanceof List) {
+      ListValue.Builder listBuilder = ListValue.newBuilder();
+      List<?> list = (List<?>) rawObject;
+      for (Object obj : list) {
+        listBuilder.addValues(convertToValue(obj));
+      }
+      valueBuilder.setListValue(listBuilder);
+    }
+    return valueBuilder.build();
+  }
+
+  @VisibleForTesting
+  static class BootstrapInfo {
+    final ServerConfig serverConfig;
+    final Node node;
+
+    BootstrapInfo(ServerConfig serverConfig, Node node) {
+      this.serverConfig = serverConfig;
+      this.node = node;
+    }
+  }
+
+  @VisibleForTesting
+  static class ServerConfig {
+    final String uri;
+    final List<ChannelCreds> channelCredsList;
+
+    ServerConfig(String uri, List<ChannelCreds> channelCredsList) {
+      this.uri = uri;
+      this.channelCredsList = channelCredsList;
+    }
+  }
+
+  @VisibleForTesting
+  static class ChannelCreds {
+    final String type;
+    @Nullable
+    Map<String, ?> config;
+
+    ChannelCreds(String type) {
+      this.type = type;
+    }
   }
 }
