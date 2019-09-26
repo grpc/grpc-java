@@ -264,7 +264,7 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceStub extends io.grpc.stub.AbstractStub<WorkerServiceStub> {
+  public static final class WorkerServiceStub extends io.grpc.stub.AbstractAsyncStub<WorkerServiceStub> {
     private WorkerServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -337,7 +337,7 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceBlockingStub extends io.grpc.stub.AbstractStub<WorkerServiceBlockingStub> {
+  public static final class WorkerServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<WorkerServiceBlockingStub> {
     private WorkerServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -376,7 +376,7 @@ public final class WorkerServiceGrpc {
 
   /**
    */
-  public static final class WorkerServiceFutureStub extends io.grpc.stub.AbstractStub<WorkerServiceFutureStub> {
+  public static final class WorkerServiceFutureStub extends io.grpc.stub.AbstractFutureStub<WorkerServiceFutureStub> {
     private WorkerServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

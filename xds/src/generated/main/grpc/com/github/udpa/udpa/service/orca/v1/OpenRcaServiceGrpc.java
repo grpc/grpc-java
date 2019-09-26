@@ -137,7 +137,7 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceStub extends io.grpc.stub.AbstractStub<OpenRcaServiceStub> {
+  public static final class OpenRcaServiceStub extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
     private OpenRcaServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -174,7 +174,7 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceBlockingStub extends io.grpc.stub.AbstractStub<OpenRcaServiceBlockingStub> {
+  public static final class OpenRcaServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
     private OpenRcaServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -211,7 +211,7 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceFutureStub extends io.grpc.stub.AbstractStub<OpenRcaServiceFutureStub> {
+  public static final class OpenRcaServiceFutureStub extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
     private OpenRcaServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

@@ -411,7 +411,7 @@ public final class ChannelzGrpc {
    * information.
    * </pre>
    */
-  public static final class ChannelzStub extends io.grpc.stub.AbstractStub<ChannelzStub> {
+  public static final class ChannelzStub extends io.grpc.stub.AbstractAsyncStub<ChannelzStub> {
     private ChannelzStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -512,7 +512,7 @@ public final class ChannelzGrpc {
    * information.
    * </pre>
    */
-  public static final class ChannelzBlockingStub extends io.grpc.stub.AbstractStub<ChannelzBlockingStub> {
+  public static final class ChannelzBlockingStub extends io.grpc.stub.AbstractBlockingStub<ChannelzBlockingStub> {
     private ChannelzBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -606,7 +606,7 @@ public final class ChannelzGrpc {
    * information.
    * </pre>
    */
-  public static final class ChannelzFutureStub extends io.grpc.stub.AbstractStub<ChannelzFutureStub> {
+  public static final class ChannelzFutureStub extends io.grpc.stub.AbstractFutureStub<ChannelzFutureStub> {
     private ChannelzFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

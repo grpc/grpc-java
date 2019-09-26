@@ -159,7 +159,7 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceStub extends io.grpc.stub.AbstractStub<MetricsServiceStub> {
+  public static final class MetricsServiceStub extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
     private MetricsServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -201,7 +201,7 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractStub<MetricsServiceBlockingStub> {
+  public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
     private MetricsServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -242,7 +242,7 @@ public final class MetricsServiceGrpc {
 
   /**
    */
-  public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractStub<MetricsServiceFutureStub> {
+  public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
     private MetricsServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

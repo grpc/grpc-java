@@ -201,7 +201,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceStub> {
+  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
     private EndpointDiscoveryServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -248,7 +248,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceBlockingStub> {
+  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
     private EndpointDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -274,7 +274,7 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceFutureStub> {
+  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
     private EndpointDiscoveryServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

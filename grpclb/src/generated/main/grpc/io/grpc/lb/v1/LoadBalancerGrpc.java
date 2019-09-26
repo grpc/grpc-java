@@ -110,7 +110,7 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerStub extends io.grpc.stub.AbstractStub<LoadBalancerStub> {
+  public static final class LoadBalancerStub extends io.grpc.stub.AbstractAsyncStub<LoadBalancerStub> {
     private LoadBalancerStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -140,7 +140,7 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractStub<LoadBalancerBlockingStub> {
+  public static final class LoadBalancerBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadBalancerBlockingStub> {
     private LoadBalancerBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -159,7 +159,7 @@ public final class LoadBalancerGrpc {
 
   /**
    */
-  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractStub<LoadBalancerFutureStub> {
+  public static final class LoadBalancerFutureStub extends io.grpc.stub.AbstractFutureStub<LoadBalancerFutureStub> {
     private LoadBalancerFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

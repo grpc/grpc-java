@@ -110,7 +110,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceStub> {
+  public static final class ReportQpsScenarioServiceStub extends io.grpc.stub.AbstractAsyncStub<ReportQpsScenarioServiceStub> {
     private ReportQpsScenarioServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -140,7 +140,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceBlockingStub> {
+  public static final class ReportQpsScenarioServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReportQpsScenarioServiceBlockingStub> {
     private ReportQpsScenarioServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -169,7 +169,7 @@ public final class ReportQpsScenarioServiceGrpc {
 
   /**
    */
-  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractStub<ReportQpsScenarioServiceFutureStub> {
+  public static final class ReportQpsScenarioServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReportQpsScenarioServiceFutureStub> {
     private ReportQpsScenarioServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

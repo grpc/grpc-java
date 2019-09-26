@@ -136,7 +136,7 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static final class LoadReportingServiceStub extends io.grpc.stub.AbstractStub<LoadReportingServiceStub> {
+  public static final class LoadReportingServiceStub extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
     private LoadReportingServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -192,7 +192,7 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static final class LoadReportingServiceBlockingStub extends io.grpc.stub.AbstractStub<LoadReportingServiceBlockingStub> {
+  public static final class LoadReportingServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
     private LoadReportingServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -211,7 +211,7 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static final class LoadReportingServiceFutureStub extends io.grpc.stub.AbstractStub<LoadReportingServiceFutureStub> {
+  public static final class LoadReportingServiceFutureStub extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
     private LoadReportingServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

@@ -122,7 +122,7 @@ public final class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceStub extends io.grpc.stub.AbstractStub<UnimplementedServiceStub> {
+  public static final class UnimplementedServiceStub extends io.grpc.stub.AbstractAsyncStub<UnimplementedServiceStub> {
     private UnimplementedServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -156,7 +156,7 @@ public final class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceBlockingStub extends io.grpc.stub.AbstractStub<UnimplementedServiceBlockingStub> {
+  public static final class UnimplementedServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<UnimplementedServiceBlockingStub> {
     private UnimplementedServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -189,7 +189,7 @@ public final class UnimplementedServiceGrpc {
    * that case.
    * </pre>
    */
-  public static final class UnimplementedServiceFutureStub extends io.grpc.stub.AbstractStub<UnimplementedServiceFutureStub> {
+  public static final class UnimplementedServiceFutureStub extends io.grpc.stub.AbstractFutureStub<UnimplementedServiceFutureStub> {
     private UnimplementedServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

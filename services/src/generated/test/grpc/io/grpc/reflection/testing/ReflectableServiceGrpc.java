@@ -107,7 +107,7 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceStub extends io.grpc.stub.AbstractStub<ReflectableServiceStub> {
+  public static final class ReflectableServiceStub extends io.grpc.stub.AbstractAsyncStub<ReflectableServiceStub> {
     private ReflectableServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -134,7 +134,7 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceBlockingStub extends io.grpc.stub.AbstractStub<ReflectableServiceBlockingStub> {
+  public static final class ReflectableServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReflectableServiceBlockingStub> {
     private ReflectableServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -160,7 +160,7 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceFutureStub extends io.grpc.stub.AbstractStub<ReflectableServiceFutureStub> {
+  public static final class ReflectableServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReflectableServiceFutureStub> {
     private ReflectableServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

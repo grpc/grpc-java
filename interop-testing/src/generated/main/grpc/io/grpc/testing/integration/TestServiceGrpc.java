@@ -468,7 +468,7 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceStub extends io.grpc.stub.AbstractStub<TestServiceStub> {
+  public static final class TestServiceStub extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
     private TestServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -589,7 +589,7 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceBlockingStub extends io.grpc.stub.AbstractStub<TestServiceBlockingStub> {
+  public static final class TestServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
     private TestServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -667,7 +667,7 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceFutureStub extends io.grpc.stub.AbstractStub<TestServiceFutureStub> {
+  public static final class TestServiceFutureStub extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
     private TestServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

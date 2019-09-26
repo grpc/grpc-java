@@ -263,7 +263,7 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceStub extends io.grpc.stub.AbstractStub<SimpleServiceStub> {
+  public static final class SimpleServiceStub extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
     private SimpleServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -329,7 +329,7 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractStub<SimpleServiceBlockingStub> {
+  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
     private SimpleServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -372,7 +372,7 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractStub<SimpleServiceFutureStub> {
+  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
     private SimpleServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

@@ -179,7 +179,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceStub extends io.grpc.stub.AbstractStub<AggregatedDiscoveryServiceStub> {
+  public static final class AggregatedDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<AggregatedDiscoveryServiceStub> {
     private AggregatedDiscoveryServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -225,7 +225,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<AggregatedDiscoveryServiceBlockingStub> {
+  public static final class AggregatedDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<AggregatedDiscoveryServiceBlockingStub> {
     private AggregatedDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -252,7 +252,7 @@ public final class AggregatedDiscoveryServiceGrpc {
    * the multiplexed singleton APIs at the Envoy instance and management server.
    * </pre>
    */
-  public static final class AggregatedDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<AggregatedDiscoveryServiceFutureStub> {
+  public static final class AggregatedDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<AggregatedDiscoveryServiceFutureStub> {
     private AggregatedDiscoveryServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

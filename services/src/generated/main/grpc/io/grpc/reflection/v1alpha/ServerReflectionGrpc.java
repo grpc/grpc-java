@@ -111,7 +111,7 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionStub extends io.grpc.stub.AbstractStub<ServerReflectionStub> {
+  public static final class ServerReflectionStub extends io.grpc.stub.AbstractAsyncStub<ServerReflectionStub> {
     private ServerReflectionStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -142,7 +142,7 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractStub<ServerReflectionBlockingStub> {
+  public static final class ServerReflectionBlockingStub extends io.grpc.stub.AbstractBlockingStub<ServerReflectionBlockingStub> {
     private ServerReflectionBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -161,7 +161,7 @@ public final class ServerReflectionGrpc {
 
   /**
    */
-  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractStub<ServerReflectionFutureStub> {
+  public static final class ServerReflectionFutureStub extends io.grpc.stub.AbstractFutureStub<ServerReflectionFutureStub> {
     private ServerReflectionFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

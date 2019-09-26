@@ -119,7 +119,7 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceStub extends io.grpc.stub.AbstractStub<DynamicServiceStub> {
+  public static final class DynamicServiceStub extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub> {
     private DynamicServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -152,7 +152,7 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceBlockingStub extends io.grpc.stub.AbstractStub<DynamicServiceBlockingStub> {
+  public static final class DynamicServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub> {
     private DynamicServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -184,7 +184,7 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceFutureStub extends io.grpc.stub.AbstractStub<DynamicServiceFutureStub> {
+  public static final class DynamicServiceFutureStub extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub> {
     private DynamicServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

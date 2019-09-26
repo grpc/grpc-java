@@ -171,7 +171,7 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthStub extends io.grpc.stub.AbstractStub<HealthStub> {
+  public static final class HealthStub extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
     private HealthStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -225,7 +225,7 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthBlockingStub extends io.grpc.stub.AbstractStub<HealthBlockingStub> {
+  public static final class HealthBlockingStub extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
     private HealthBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -278,7 +278,7 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthFutureStub extends io.grpc.stub.AbstractStub<HealthFutureStub> {
+  public static final class HealthFutureStub extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
     private HealthFutureStub(io.grpc.Channel channel) {
       super(channel);
     }

@@ -115,7 +115,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static final class HandshakerServiceStub extends io.grpc.stub.AbstractStub<HandshakerServiceStub> {
+  public static final class HandshakerServiceStub extends io.grpc.stub.AbstractAsyncStub<HandshakerServiceStub> {
     private HandshakerServiceStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -150,7 +150,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static final class HandshakerServiceBlockingStub extends io.grpc.stub.AbstractStub<HandshakerServiceBlockingStub> {
+  public static final class HandshakerServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<HandshakerServiceBlockingStub> {
     private HandshakerServiceBlockingStub(io.grpc.Channel channel) {
       super(channel);
     }
@@ -169,7 +169,7 @@ public final class HandshakerServiceGrpc {
 
   /**
    */
-  public static final class HandshakerServiceFutureStub extends io.grpc.stub.AbstractStub<HandshakerServiceFutureStub> {
+  public static final class HandshakerServiceFutureStub extends io.grpc.stub.AbstractFutureStub<HandshakerServiceFutureStub> {
     private HandshakerServiceFutureStub(io.grpc.Channel channel) {
       super(channel);
     }
