@@ -210,6 +210,68 @@ public final class TestServiceGrpc {
     return getImportMethod;
   }
 
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      io.grpc.testing.compiler.Test.SimpleResponse> getSafeCallMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "SafeCall",
+      requestType = io.grpc.testing.compiler.Test.SimpleRequest.class,
+      responseType = io.grpc.testing.compiler.Test.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      io.grpc.testing.compiler.Test.SimpleResponse> getSafeCallMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest, io.grpc.testing.compiler.Test.SimpleResponse> getSafeCallMethod;
+    if ((getSafeCallMethod = TestServiceGrpc.getSafeCallMethod) == null) {
+      synchronized (TestServiceGrpc.class) {
+        if ((getSafeCallMethod = TestServiceGrpc.getSafeCallMethod) == null) {
+          TestServiceGrpc.getSafeCallMethod = getSafeCallMethod =
+              io.grpc.MethodDescriptor.<io.grpc.testing.compiler.Test.SimpleRequest, io.grpc.testing.compiler.Test.SimpleResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "SafeCall"))
+              .setSafe(true)
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  io.grpc.testing.compiler.Test.SimpleRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  io.grpc.testing.compiler.Test.SimpleResponse.getDefaultInstance()))
+              .build();
+        }
+      }
+    }
+    return getSafeCallMethod;
+  }
+
+  private static volatile io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      io.grpc.testing.compiler.Test.SimpleResponse> getIdempotentCallMethod;
+
+  @io.grpc.stub.annotations.RpcMethod(
+      fullMethodName = SERVICE_NAME + '/' + "IdempotentCall",
+      requestType = io.grpc.testing.compiler.Test.SimpleRequest.class,
+      responseType = io.grpc.testing.compiler.Test.SimpleResponse.class,
+      methodType = io.grpc.MethodDescriptor.MethodType.UNARY)
+  public static io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest,
+      io.grpc.testing.compiler.Test.SimpleResponse> getIdempotentCallMethod() {
+    io.grpc.MethodDescriptor<io.grpc.testing.compiler.Test.SimpleRequest, io.grpc.testing.compiler.Test.SimpleResponse> getIdempotentCallMethod;
+    if ((getIdempotentCallMethod = TestServiceGrpc.getIdempotentCallMethod) == null) {
+      synchronized (TestServiceGrpc.class) {
+        if ((getIdempotentCallMethod = TestServiceGrpc.getIdempotentCallMethod) == null) {
+          TestServiceGrpc.getIdempotentCallMethod = getIdempotentCallMethod =
+              io.grpc.MethodDescriptor.<io.grpc.testing.compiler.Test.SimpleRequest, io.grpc.testing.compiler.Test.SimpleResponse>newBuilder()
+              .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "IdempotentCall"))
+              .setIdempotent(true)
+              .setSampledToLocalTracing(true)
+              .setRequestMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  io.grpc.testing.compiler.Test.SimpleRequest.getDefaultInstance()))
+              .setResponseMarshaller(io.grpc.protobuf.lite.ProtoLiteUtils.marshaller(
+                  io.grpc.testing.compiler.Test.SimpleResponse.getDefaultInstance()))
+              .build();
+        }
+      }
+    }
+    return getIdempotentCallMethod;
+  }
+
   /**
    * Creates a new async stub that supports all call types for the service
    */
@@ -330,6 +392,26 @@ public final class TestServiceGrpc {
       return asyncUnimplementedStreamingCall(getImportMethod(), responseObserver);
     }
 
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    public void safeCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      asyncUnimplementedUnaryCall(getSafeCallMethod(), responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    public void idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      asyncUnimplementedUnaryCall(getIdempotentCallMethod(), responseObserver);
+    }
+
     @java.lang.Override public final io.grpc.ServerServiceDefinition bindService() {
       return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())
           .addMethod(
@@ -374,6 +456,20 @@ public final class TestServiceGrpc {
                 io.grpc.testing.compiler.Test.StreamingInputCallRequest,
                 io.grpc.testing.compiler.Test.StreamingInputCallResponse>(
                   this, METHODID_IMPORT)))
+          .addMethod(
+            getSafeCallMethod(),
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.testing.compiler.Test.SimpleRequest,
+                io.grpc.testing.compiler.Test.SimpleResponse>(
+                  this, METHODID_SAFE_CALL)))
+          .addMethod(
+            getIdempotentCallMethod(),
+            asyncUnaryCall(
+              new MethodHandlers<
+                io.grpc.testing.compiler.Test.SimpleRequest,
+                io.grpc.testing.compiler.Test.SimpleResponse>(
+                  this, METHODID_IDEMPOTENT_CALL)))
           .build();
     }
   }
@@ -469,6 +565,28 @@ public final class TestServiceGrpc {
       return asyncBidiStreamingCall(
           getChannel().newCall(getImportMethod(), getCallOptions()), responseObserver);
     }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    public void safeCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      asyncUnaryCall(
+          getChannel().newCall(getSafeCallMethod(), getCallOptions()), request, responseObserver);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    public void idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request,
+        io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse> responseObserver) {
+      asyncUnaryCall(
+          getChannel().newCall(getIdempotentCallMethod(), getCallOptions()), request, responseObserver);
+    }
   }
 
   /**
@@ -510,6 +628,26 @@ public final class TestServiceGrpc {
       return blockingServerStreamingCall(
           getChannel(), getStreamingOutputCallMethod(), getCallOptions(), request);
     }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    public io.grpc.testing.compiler.Test.SimpleResponse safeCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return blockingUnaryCall(
+          getChannel(), getSafeCallMethod(), getCallOptions(), request);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    public io.grpc.testing.compiler.Test.SimpleResponse idempotentCall(io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return blockingUnaryCall(
+          getChannel(), getIdempotentCallMethod(), getCallOptions(), request);
+    }
   }
 
   /**
@@ -540,14 +678,38 @@ public final class TestServiceGrpc {
       return futureUnaryCall(
           getChannel().newCall(getUnaryCallMethod(), getCallOptions()), request);
     }
+
+    /**
+     * <pre>
+     * A unary call that is Safe.
+     * </pre>
+     */
+    public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> safeCall(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return futureUnaryCall(
+          getChannel().newCall(getSafeCallMethod(), getCallOptions()), request);
+    }
+
+    /**
+     * <pre>
+     * A unary call that is Idempotent.
+     * </pre>
+     */
+    public com.google.common.util.concurrent.ListenableFuture<io.grpc.testing.compiler.Test.SimpleResponse> idempotentCall(
+        io.grpc.testing.compiler.Test.SimpleRequest request) {
+      return futureUnaryCall(
+          getChannel().newCall(getIdempotentCallMethod(), getCallOptions()), request);
+    }
   }
 
   private static final int METHODID_UNARY_CALL = 0;
   private static final int METHODID_STREAMING_OUTPUT_CALL = 1;
-  private static final int METHODID_STREAMING_INPUT_CALL = 2;
-  private static final int METHODID_FULL_BIDI_CALL = 3;
-  private static final int METHODID_HALF_BIDI_CALL = 4;
-  private static final int METHODID_IMPORT = 5;
+  private static final int METHODID_SAFE_CALL = 2;
+  private static final int METHODID_IDEMPOTENT_CALL = 3;
+  private static final int METHODID_STREAMING_INPUT_CALL = 4;
+  private static final int METHODID_FULL_BIDI_CALL = 5;
+  private static final int METHODID_HALF_BIDI_CALL = 6;
+  private static final int METHODID_IMPORT = 7;
 
   private static final class MethodHandlers<Req, Resp> implements
       io.grpc.stub.ServerCalls.UnaryMethod<Req, Resp>,
@@ -573,6 +735,14 @@ public final class TestServiceGrpc {
         case METHODID_STREAMING_OUTPUT_CALL:
           serviceImpl.streamingOutputCall((io.grpc.testing.compiler.Test.StreamingOutputCallRequest) request,
               (io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.StreamingOutputCallResponse>) responseObserver);
+          break;
+        case METHODID_SAFE_CALL:
+          serviceImpl.safeCall((io.grpc.testing.compiler.Test.SimpleRequest) request,
+              (io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse>) responseObserver);
+          break;
+        case METHODID_IDEMPOTENT_CALL:
+          serviceImpl.idempotentCall((io.grpc.testing.compiler.Test.SimpleRequest) request,
+              (io.grpc.stub.StreamObserver<io.grpc.testing.compiler.Test.SimpleResponse>) responseObserver);
           break;
         default:
           throw new AssertionError();
@@ -617,6 +787,8 @@ public final class TestServiceGrpc {
               .addMethod(getFullBidiCallMethod())
               .addMethod(getHalfBidiCallMethod())
               .addMethod(getImportMethod())
+              .addMethod(getSafeCallMethod())
+              .addMethod(getIdempotentCallMethod())
               .build();
         }
       }

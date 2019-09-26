@@ -133,7 +133,7 @@ public class OkHttpChannelBuilder extends
    * If true, indicates that the transport may use the GET method for RPCs, and may include the
    * request body in the query params.
    */
-  private final boolean useGetForSafeMethods = true;
+  private final boolean useGetForSafeMethods = false;
 
   protected OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));

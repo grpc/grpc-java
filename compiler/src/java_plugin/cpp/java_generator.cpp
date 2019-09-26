@@ -426,7 +426,22 @@ static void PrintMethodFields(
         "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ =\n"
         "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
         "            .setType($MethodType$.$method_type$)\n"
-        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n"
+        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n");
+        
+    bool safe = method->options().idempotency_level()
+        == google::protobuf::MethodOptions_IdempotencyLevel_NO_SIDE_EFFECTS;
+    if (safe) {
+      p->Print(*vars, "            .setSafe(true)\n");
+    } else {
+      bool idempotent = method->options().idempotency_level()
+          == google::protobuf::MethodOptions_IdempotencyLevel_IDEMPOTENT;
+      if (idempotent) {
+        p->Print(*vars, "            .setIdempotent(true)\n");
+      }
+    }
+        
+    p->Print(
+        *vars,
         "            .setSampledToLocalTracing(true)\n"
         "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
         "                $input_type$.getDefaultInstance()))\n"
