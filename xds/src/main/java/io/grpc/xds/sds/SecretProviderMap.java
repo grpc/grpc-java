@@ -16,6 +16,8 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,6 +42,8 @@ abstract class SecretProviderMap<T> {
    */
   SecretProvider<T> findOrCreate(
       ConfigSource configSource, String name) {
+    checkNotNull(configSource, "configSource");
+    checkNotNull(name, "name");
 
     String mapKey = "" + configSource.hashCode() + "." + name;
     SecretProvider<T> provider;

@@ -40,7 +40,8 @@ public final class SecretManager {
    */
   public SecretProvider<TlsCertificateStore> findOrCreateTlsCertificateProvider(
       ConfigSource configSource, String name) {
-    checkNotNull(configSource, "configSource was null.");
+    checkNotNull(configSource, "configSource");
+    checkNotNull(name, "name");
     // for now we support only path/volume based secret provider
     if (configSource.getConfigSourceSpecifierCase()
         != ConfigSource.ConfigSourceSpecifierCase.PATH) {

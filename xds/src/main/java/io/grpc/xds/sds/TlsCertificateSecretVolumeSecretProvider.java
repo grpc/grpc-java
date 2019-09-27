@@ -52,8 +52,8 @@ final class TlsCertificateSecretVolumeSecretProvider
 
   @Override
   public void addListener(Runnable listener, Executor executor) {
-    checkNotNull(listener, "Runnable was null.");
-    checkNotNull(executor, "Executor was null.");
+    checkNotNull(listener, "listener");
+    checkNotNull(executor, "executor");
     try {
       executor.execute(listener);
     } catch (RuntimeException e) {
