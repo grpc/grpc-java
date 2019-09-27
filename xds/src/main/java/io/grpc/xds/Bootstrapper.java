@@ -24,6 +24,7 @@ import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.JsonParser;
+import io.grpc.internal.JsonUtil;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -124,49 +125,49 @@ abstract class Bootstrapper {
   static BootstrapInfo parseConfig(String rawData) throws IOException {
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
 
-    Map<String, ?> rawServerConfig = (Map<String, ?>) rawBootstrap.get("xds_server");
+    Map<String, ?> rawServerConfig = JsonUtil.getObject(rawBootstrap, "xds_server");
     if (rawServerConfig == null) {
       throw new IOException("Invalid bootstrap: 'xds_server' does not exist.");
     }
     // Field "server_uri" is required.
-    String serverUri = (String) rawServerConfig.get("server_uri");
+    String serverUri = JsonUtil.getString(rawServerConfig, "server_uri");
     if (serverUri == null) {
       throw new IOException("Invalid bootstrap: 'xds_server : server_uri' does not exist.");
     }
     List<ChannelCreds> channelCredsOptions = new ArrayList<>();
-    List<?> rawChannelCredsList = (List<?>) rawServerConfig.get("channel_creds");
+    List<?> rawChannelCredsList = JsonUtil.getList(rawServerConfig, "channel_creds");
     // List of channel creds is optional.
     if (rawChannelCredsList != null) {
       for (Object channelCreds : rawChannelCredsList) {
         Map<String, ?> channelCredsItem = (Map<String, ?>) channelCreds;
-        String type = (String) channelCredsItem.get("type");
+        String type = (String) JsonUtil.getString(channelCredsItem, "type");
         if (type == null) {
           throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
         }
         ChannelCreds creds = new ChannelCreds(type);
         if (channelCredsItem.containsKey("config")) {
-          creds.config = (Map<String, ?>) channelCredsItem.get("config");
+          creds.config = JsonUtil.getObject(channelCredsItem, "config");
         }
         channelCredsOptions.add(creds);
       }
     }
     ServerConfig serverConfig = new ServerConfig(serverUri, channelCredsOptions);
 
-    Map<String, ?> rawNode = (Map<String, ?>) rawBootstrap.get("node");
+    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
     if (rawNode == null) {
       throw new IOException("Invalid bootstrap: 'node' does not exist.");
     }
     // Fields in "node" are not checked.
     Node.Builder nodeBuilder = Node.newBuilder();
-    String id = (String) rawNode.get("id");
+    String id = JsonUtil.getString(rawNode, "id");
     if (id != null) {
       nodeBuilder.setId(id);
     }
-    String cluster = (String) rawNode.get("cluster");
+    String cluster = JsonUtil.getString(rawNode, "cluster");
     if (cluster != null) {
       nodeBuilder.setCluster(cluster);
     }
-    Map<String, ?> metadata = (Map<String, ?>) rawNode.get("metadata");
+    Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
     if (metadata != null) {
       Struct.Builder structBuilder = Struct.newBuilder();
       for (Map.Entry<String, ?> entry : metadata.entrySet()) {
@@ -174,23 +175,23 @@ abstract class Bootstrapper {
       }
       nodeBuilder.setMetadata(structBuilder);
     }
-    Map<String, ?> rawLocality = (Map<String, ?>) rawNode.get("locality");
+    Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
     if (rawLocality != null) {
       Locality.Builder localityBuilder = Locality.newBuilder();
-      String region = (String) rawLocality.get("region");
+      String region = JsonUtil.getString(rawLocality, "region");
       if (region == null) {
         throw new IOException("Invalid bootstrap: malformed 'node : locality'.");
       }
-      localityBuilder.setRegion((String) rawLocality.get("region"));
+      localityBuilder.setRegion(region);
       if (rawLocality.containsKey("zone")) {
-        localityBuilder.setZone((String) rawLocality.get("zone"));
+        localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
       }
       if (rawLocality.containsKey("sub_zone")) {
-        localityBuilder.setSubZone((String) rawLocality.get("sub_zone"));
+        localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
       }
       nodeBuilder.setLocality(localityBuilder);
     }
-    String buildVersion = (String) rawNode.get("build_version");
+    String buildVersion = JsonUtil.getString(rawNode, "build_version");
     if (buildVersion != null) {
       nodeBuilder.setBuildVersion(buildVersion);
     }
