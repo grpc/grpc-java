@@ -121,8 +121,8 @@ abstract class Bootstrapper {
   }
 
   @VisibleForTesting
-  @SuppressWarnings("unchecked")
   static BootstrapInfo parseConfig(String rawData) throws IOException {
+    @SuppressWarnings("unchecked")
     Map<String, ?> rawBootstrap = (Map<String, ?>) JsonParser.parse(rawData);
 
     Map<String, ?> rawServerConfig = JsonUtil.getObject(rawBootstrap, "xds_server");
@@ -138,15 +138,15 @@ abstract class Bootstrapper {
     List<?> rawChannelCredsList = JsonUtil.getList(rawServerConfig, "channel_creds");
     // List of channel creds is optional.
     if (rawChannelCredsList != null) {
-      for (Object channelCreds : rawChannelCredsList) {
-        Map<String, ?> channelCredsItem = (Map<String, ?>) channelCreds;
-        String type = (String) JsonUtil.getString(channelCredsItem, "type");
+      List<Map<String, ?>> channelCredsList = JsonUtil.checkObjectList(rawChannelCredsList);
+      for (Map<String, ?> channelCreds : channelCredsList) {
+        String type = JsonUtil.getString(channelCreds, "type");
         if (type == null) {
           throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
         }
         ChannelCreds creds = new ChannelCreds(type);
-        if (channelCredsItem.containsKey("config")) {
-          creds.config = JsonUtil.getObject(channelCredsItem, "config");
+        if (channelCreds.containsKey("config")) {
+          creds.config = JsonUtil.getObject(channelCreds, "config");
         }
         channelCredsOptions.add(creds);
       }
