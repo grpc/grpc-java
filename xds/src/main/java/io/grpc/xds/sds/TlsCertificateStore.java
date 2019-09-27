@@ -21,20 +21,19 @@ import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.Internal;
-import java.io.InputStream;
 
 /**
- * TlsCertificate's PrivateKey and Certificate are extracted into InputStream's.
- * This is used by the gRPC SSLContext/Protocol Negotiator and is internal.
+ * TlsCertificate's PrivateKey and Certificate are extracted into ByteString's.
+ * Used by the gRPC SSLContext/Protocol Negotiator and is internal.
  * See {@link SecretManager} for a note on lifecycle management.
  */
 @Internal
 public final class TlsCertificateStore {
 
-  private final InputStream privateKeyStream;
-  private final InputStream certChainStream;
+  private final ByteString privateKey;
+  private final ByteString certChain;
 
-  private static InputStream getInputStreamFromDataSource(DataSource dataSource) {
+  private static ByteString getByteStringFromDataSource(DataSource dataSource) {
     Preconditions.checkNotNull(dataSource);
     ByteString dataSourceByteString = null;
     if (dataSource.getSpecifierCase() == DataSource.SpecifierCase.INLINE_BYTES) {
@@ -42,10 +41,10 @@ public final class TlsCertificateStore {
     } else if (dataSource.getSpecifierCase() == DataSource.SpecifierCase.INLINE_STRING) {
       dataSourceByteString = dataSource.getInlineStringBytes();
     } else {
-      throw new IllegalArgumentException(
+      throw new UnsupportedOperationException(
           "dataSource of type " + dataSource.getSpecifierCase() + " not supported");
     }
-    return dataSourceByteString.newInput();
+    return dataSourceByteString;
   }
 
   /**
@@ -55,38 +54,36 @@ public final class TlsCertificateStore {
    */
   public TlsCertificateStore(TlsCertificate tlsCertificate) {
     this(
-        getInputStreamFromDataSource(Preconditions.checkNotNull(tlsCertificate).getPrivateKey()),
-        getInputStreamFromDataSource(tlsCertificate.getCertificateChain()));
+        getByteStringFromDataSource(Preconditions.checkNotNull(tlsCertificate).getPrivateKey()),
+        getByteStringFromDataSource(tlsCertificate.getCertificateChain()));
   }
 
   /**
    * Creates the Store out of 2 streams for the 2 certs on disk.
    *
    * @param privateKeySteam  stream representing private key on disk
-   * @param certChainStream  stream representing cert on disk
+   * @param certChain  stream representing cert on disk
    */
-  public TlsCertificateStore(InputStream privateKeySteam, InputStream certChainStream) {
-    this.privateKeyStream = privateKeySteam;
-    this.certChainStream = certChainStream;
+  public TlsCertificateStore(ByteString privateKeySteam, ByteString certChain) {
+    this.privateKey = privateKeySteam;
+    this.certChain = certChain;
   }
 
   /**
    * getter for private key stream.
-   * TODO: Lifecycle management to close streams as discussed in {@link SecretManager}
    *
    * @return inputStream representing private key
    */
-  public InputStream getPrivateKeyStream() {
-    return privateKeyStream;
+  public ByteString getPrivateKey() {
+    return privateKey;
   }
 
   /**
    * getter for cert key stream.
-   * TODO: Lifecycle management to close streams as discussed in {@link SecretManager}
    *
    * @return  inputStream representing cert
    */
-  public InputStream getCertChainStream() {
-    return certChainStream;
+  public ByteString getCertChain() {
+    return certChain;
   }
 }

@@ -16,15 +16,42 @@
 
 package io.grpc.xds.sds;
 
-import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.Internal;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
- * A SecretProvider is a "container" or provider of a secret.
- * This is used by gRPC-xds to access secrets and not part of the
- * public API of gRPC
- * See {@link SecretManager} for a note on lifecycle management
+ * A SecretProvider is a "container" or provider of a secret. This is used by gRPC-xds to access
+ * secrets, so is not part of the public API of gRPC. This "container" may represent a stream that
+ * is receiving the requested secret(s) or it could represent file-system based secret(s) that are
+ * dynamic. Synchronous and Asynchronous methods to access the underlying secret are available. See
+ * {@link SecretManager} for a note on lifecycle management
  */
 @Internal
-public interface SecretProvider<T> extends ListenableFuture<T> {
+public interface SecretProvider<T> {
+
+  /**
+   * Gets the current secret (waits indefinitely if necessary).
+   */
+  T get() throws InterruptedException, ExecutionException;
+
+  /**
+   * Gets the secret (and waits if necessary for the given time and then returns the result, if
+   * available.
+   */
+  T get(long timeout, TimeUnit unit)
+      throws InterruptedException, ExecutionException, TimeoutException;
+
+  /**
+   * Returns {@code true} if secret is available.
+   */
+  boolean isAvailable();
+
+  /**
+   * Registers a listener to be on the given executor. The listener will run when the result is
+   * {@linkplain #isAvailable()} or immediately, if the result is already available.
+   */
+  void addListener(Runnable listener, Executor executor);
 }

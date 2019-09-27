@@ -18,8 +18,9 @@ package io.grpc.xds.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.protobuf.ByteString;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -66,31 +67,23 @@ final class TlsCertificateSecretVolumeSecretProvider
   }
 
   @Override
-  public boolean cancel(boolean mayInterruptIfRunning) {
-    return false;
-  }
-
-  @Override
-  public boolean isCancelled() {
-    return false;
-  }
-
-  @Override
-  public boolean isDone() {
+  public boolean isAvailable() {
     return true;
   }
 
   /**
    * Gets the current contents of the private key and cert file. Assume the key has
    * <literal>.pem</literal> extension and cert has <literal>.crt</literal> extension
-   * (needs to match how Citadel mounts secrets).
+   * (needs to match mounted secrets).
    */
   @Override
-  public TlsCertificateStore get() throws InterruptedException, ExecutionException {
+  public TlsCertificateStore get() throws ExecutionException {
     try {
-      return new TlsCertificateStore(new FileInputStream(path + PEM),
-          new FileInputStream(path + CRT));
-    } catch (FileNotFoundException e) {
+      final FileInputStream pemStream = new FileInputStream(path + PEM);
+      final FileInputStream crtStream = new FileInputStream(path + CRT);
+      return new TlsCertificateStore(ByteString.readFrom(pemStream),
+          ByteString.readFrom(crtStream));
+    } catch (IOException e) {
       throw new ExecutionException(e);
     }
   }
@@ -98,13 +91,6 @@ final class TlsCertificateSecretVolumeSecretProvider
   /**
    * The file based secret provider does not need to wait (reads the current files as per
    * the contract) so we ignore the timeout.
-   *
-   * @param timeout the maximum time to wait
-   * @param unit the time unit of the timeout argument
-   * @return the computed result
-   * @throws InterruptedException if the current thread was interrupted
-   * @throws ExecutionException if computation threw an Exception
-   * @throws TimeoutException if the wait timed out
    */
   @Override
   public TlsCertificateStore get(long timeout, TimeUnit unit)

@@ -17,17 +17,13 @@
 package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.google.common.io.ByteStreams;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import java.io.IOException;
-import java.io.InputStream;
-import org.junit.Rule;
+import org.junit.Assert;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -37,8 +33,17 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class TlsCertificateStoreTest {
 
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
+  static void verifyKeyAndCertsWithStrings(TlsCertificateStore tlsCertificateStore, String s1,
+      String s2) throws IOException {
+    verifyKeyAndCertsWithStrings(tlsCertificateStore.getPrivateKey(), s1);
+    verifyKeyAndCertsWithStrings(tlsCertificateStore.getCertChain(), s2);
+  }
+
+  private static void verifyKeyAndCertsWithStrings(ByteString byteString, String s)
+      throws IOException {
+    assertThat(byteString).isNotNull();
+    assertThat(byteString.toStringUtf8()).isEqualTo(s);
+  }
 
   @Test
   public void convertFromTlsCertificateUsingString() throws IOException {
@@ -59,20 +64,7 @@ public class TlsCertificateStoreTest {
 
     TlsCertificateStore tlsCertificateStore = new TlsCertificateStore(tlsCertificate);
 
-    verifyInputStreamAndString(tlsCertificateStore, "test-privateKey", "test-certChain");
-  }
-
-  public static void verifyInputStreamAndString(TlsCertificateStore tlsCertificateStore, String s1,
-      String s2) throws IOException {
-    verifyInputStreamAndString(tlsCertificateStore.getPrivateKeyStream(), s1);
-    verifyInputStreamAndString(tlsCertificateStore.getCertChainStream(), s2);
-  }
-
-  private static void verifyInputStreamAndString(InputStream privateKeyStream, String s)
-      throws IOException {
-    InputStream privateKeyInputStream = privateKeyStream;
-    assertThat(privateKeyInputStream).isNotNull();
-    assertThat(new String(ByteStreams.toByteArray(privateKeyInputStream), UTF_8)).isEqualTo(s);
+    verifyKeyAndCertsWithStrings(tlsCertificateStore, "test-privateKey", "test-certChain");
   }
 
   @Test
@@ -97,18 +89,17 @@ public class TlsCertificateStoreTest {
 
     TlsCertificateStore tlsCertificateStore = new TlsCertificateStore(tlsCertificate);
 
-    InputStream privateKeyInputStream = tlsCertificateStore.getPrivateKeyStream();
-    assertThat(privateKeyInputStream).isNotNull();
-    assertThat(ByteStreams.toByteArray(privateKeyInputStream)).isEqualTo(privateKeyBytes);
+    ByteString privateKeyByteString = tlsCertificateStore.getPrivateKey();
+    assertThat(privateKeyByteString).isNotNull();
+    assertThat(privateKeyByteString.toByteArray()).isEqualTo(privateKeyBytes);
 
-    InputStream certChainInputStream = tlsCertificateStore.getCertChainStream();
-    assertThat(certChainInputStream).isNotNull();
-    assertThat(ByteStreams.toByteArray(certChainInputStream)).isEqualTo(certChainBytes);
+    ByteString certChainByteString = tlsCertificateStore.getCertChain();
+    assertThat(certChainByteString).isNotNull();
+    assertThat(certChainByteString.toByteArray()).isEqualTo(certChainBytes);
   }
 
   @Test
   public void privateKeyNotSet() {
-    thrown.expect(IllegalArgumentException.class);
     DataSource certChain =
         DataSource.newBuilder()
             .setInlineString("test-certChain")
@@ -118,12 +109,17 @@ public class TlsCertificateStoreTest {
             .setCertificateChain(certChain)
             .build();
 
-    new TlsCertificateStore(tlsCertificate);
+    try {
+      new TlsCertificateStore(tlsCertificate);
+      Assert.fail("no exception thrown");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("dataSource of type SPECIFIER_NOT_SET not supported");
+    }
   }
 
   @Test
   public void certChainNotSet() {
-    thrown.expect(IllegalArgumentException.class);
     DataSource privateKey =
         DataSource.newBuilder()
             .setInlineString("test-privateKey")
@@ -132,8 +128,13 @@ public class TlsCertificateStoreTest {
         TlsCertificate.newBuilder()
             .setPrivateKey(privateKey)
             .build();
-
-    new TlsCertificateStore(tlsCertificate);
+    try {
+      new TlsCertificateStore(tlsCertificate);
+      Assert.fail("no exception thrown");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("dataSource of type SPECIFIER_NOT_SET not supported");
+    }
   }
 
 }

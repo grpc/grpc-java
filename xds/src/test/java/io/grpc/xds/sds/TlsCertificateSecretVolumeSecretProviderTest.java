@@ -18,7 +18,6 @@ package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.hamcrest.CoreMatchers.isA;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import java.io.File;
@@ -27,9 +26,9 @@ import java.io.IOException;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.util.concurrent.ExecutionException;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -42,9 +41,6 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
 
   @Rule
   public TemporaryFolder temporaryFolder = new TemporaryFolder();
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   /**
    * Utility function for creation of test files in a temp folder.
@@ -79,7 +75,7 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
     TlsCertificateStore tlsCertificateStore = provider.get();
     assertThat(tlsCertificateStore).isNotNull();
     TlsCertificateStoreTest
-        .verifyInputStreamAndString(tlsCertificateStore, "pemContents", "crtContents");
+        .verifyKeyAndCertsWithStrings(tlsCertificateStore, "pemContents", "crtContents");
   }
 
   private boolean listenerRun;
@@ -111,9 +107,12 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
     TlsCertificateSecretVolumeSecretProvider provider =
         new TlsCertificateSecretVolumeSecretProvider(filePath.getPath(), "test");
 
-    thrown.expect(ExecutionException.class);
-    thrown.expectCause(isA(FileNotFoundException.class));
-    provider.get();
+    try {
+      provider.get();
+      Assert.fail("no exception thrown");
+    } catch (ExecutionException expected) {
+      assertThat(expected.getCause()).isInstanceOf(FileNotFoundException.class);
+    }
   }
 
 }

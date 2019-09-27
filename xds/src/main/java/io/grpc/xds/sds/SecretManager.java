@@ -16,17 +16,18 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.grpc.Internal;
 
 /**
  * SecretManager to manage secrets. This is used by gRPC-xds to access secrets
  * and not part of the public API of gRPC
- * TODO: Lifecycle management for this manager and the {@link SecretProvider}s
- * will be based on  {@link io.grpc.internal.SharedResourcePool} or
- * {@link io.grpc.internal.SharedResourceHolder}
- *
  */
+//  * TODO(sanjaypujare): Lifecycle management for this manager and the {@link SecretProvider}s
+//  * will be based on  {@link io.grpc.internal.SharedResourcePool} or
+//  * {@link io.grpc.internal.SharedResourceHolder}
 @Internal
 public final class SecretManager {
 
@@ -39,7 +40,7 @@ public final class SecretManager {
    */
   public SecretProvider<TlsCertificateStore> findOrCreateTlsCertificateProvider(
       ConfigSource configSource, String name) {
-
+    checkNotNull(configSource, "configSource was null.");
     // for now we support only path/volume based secret provider
     if (configSource.getConfigSourceSpecifierCase()
         != ConfigSource.ConfigSourceSpecifierCase.PATH) {

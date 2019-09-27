@@ -22,9 +22,9 @@ import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -38,9 +38,6 @@ public class SecretManagerTest {
   @Rule
   public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
-
   @Test
   public void createTest() throws IOException, ExecutionException, InterruptedException {
     ConfigSource configSource = TlsCertificateSecretProviderMapTest
@@ -53,7 +50,7 @@ public class SecretManagerTest {
     TlsCertificateStore tlsCertificateStore = provider.get();
     assertThat(tlsCertificateStore).isNotNull();
     TlsCertificateStoreTest
-        .verifyInputStreamAndString(tlsCertificateStore, "pemContents", "crtContents");
+        .verifyKeyAndCertsWithStrings(tlsCertificateStore, "pemContents", "crtContents");
   }
 
   @Test
@@ -64,10 +61,16 @@ public class SecretManagerTest {
             .setApiConfigSource(ApiConfigSource.newBuilder().build())
             .build();
 
-    thrown.expect(UnsupportedOperationException.class);
+    //thrown.expect(UnsupportedOperationException.class);
     SecretManager secretManager = new SecretManager();
-    SecretProvider<TlsCertificateStore> provider = secretManager
-        .findOrCreateTlsCertificateProvider(configSource, "test");
+    try {
+      SecretProvider<TlsCertificateStore> provider = secretManager
+          .findOrCreateTlsCertificateProvider(configSource, "test");
+      Assert.fail("no exception thrown");
+    } catch (UnsupportedOperationException expected) {
+      assertThat(expected).hasMessageThat()
+          .contains("Only file based secret supported");
+    }
   }
 
 }

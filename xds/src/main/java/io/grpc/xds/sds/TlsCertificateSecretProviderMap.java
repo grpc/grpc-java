@@ -16,12 +16,15 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 
 final class TlsCertificateSecretProviderMap extends SecretProviderMap<TlsCertificateStore> {
 
   @Override
   SecretProvider<TlsCertificateStore> create(ConfigSource configSource, String name) {
+    checkNotNull(configSource, "configSource was null.");
     // for now we support only path/volume based secret provider
     if (configSource.getConfigSourceSpecifierCase()
         != ConfigSource.ConfigSourceSpecifierCase.PATH) {
