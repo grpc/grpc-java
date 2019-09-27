@@ -451,7 +451,7 @@ final class DnsNameResolver extends NameResolver {
         throw new ClassCastException("wrong type " + rawChoices);
       }
       List<?> listChoices = (List<?>) rawChoices;
-      possibleServiceConfigChoices.addAll(ServiceConfigUtil.checkObjectList(listChoices));
+      possibleServiceConfigChoices.addAll(JsonUtil.checkObjectList(listChoices));
     }
     return possibleServiceConfigChoices;
   }
@@ -470,7 +470,7 @@ final class DnsNameResolver extends NameResolver {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY)) {
       return null;
     }
-    return ServiceConfigUtil.checkStringList(
+    return JsonUtil.checkStringList(
         JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY));
   }
 
@@ -479,7 +479,7 @@ final class DnsNameResolver extends NameResolver {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY)) {
       return null;
     }
-    return ServiceConfigUtil.checkStringList(
+    return JsonUtil.checkStringList(
         JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
   }
 

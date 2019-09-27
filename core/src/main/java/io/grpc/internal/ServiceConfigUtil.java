@@ -293,7 +293,7 @@ public final class ServiceConfigUtil {
     if (!methodConfig.containsKey(METHOD_CONFIG_NAME_KEY)) {
       return null;
     }
-    return checkObjectList(JsonUtil.getList(methodConfig, METHOD_CONFIG_NAME_KEY));
+    return JsonUtil.checkObjectList(JsonUtil.getList(methodConfig, METHOD_CONFIG_NAME_KEY));
   }
 
   /**
@@ -345,7 +345,8 @@ public final class ServiceConfigUtil {
     if (!serviceConfig.containsKey(SERVICE_CONFIG_METHOD_CONFIG_KEY)) {
       return null;
     }
-    return checkObjectList(JsonUtil.getList(serviceConfig, SERVICE_CONFIG_METHOD_CONFIG_KEY));
+    return JsonUtil
+        .checkObjectList(JsonUtil.getList(serviceConfig, SERVICE_CONFIG_METHOD_CONFIG_KEY));
   }
 
   /**
@@ -373,7 +374,7 @@ public final class ServiceConfigUtil {
     List<Map<String, ?>> lbConfigs = new ArrayList<>();
     if (serviceConfig.containsKey(SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY)) {
       List<?> configs = JsonUtil.getList(serviceConfig, SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY);
-      for (Map<String, ?> config : checkObjectList(configs)) {
+      for (Map<String, ?> config : JsonUtil.checkObjectList(configs)) {
         lbConfigs.add(config);
       }
     }
@@ -433,7 +434,7 @@ public final class ServiceConfigUtil {
   public static List<LbConfig> getChildPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
     List<?> rawChildPolicies = JsonUtil.getList(rawXdsConfig, XDS_CONFIG_CHILD_POLICY_KEY);
     if (rawChildPolicies != null) {
-      return unwrapLoadBalancingConfigList(checkObjectList(rawChildPolicies));
+      return unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawChildPolicies));
     }
     return null;
   }
@@ -445,7 +446,7 @@ public final class ServiceConfigUtil {
   public static List<LbConfig> getFallbackPolicyFromXdsConfig(Map<String, ?> rawXdsConfig) {
     List<?> rawFallbackPolicies = JsonUtil.getList(rawXdsConfig, XDS_CONFIG_FALLBACK_POLICY_KEY);
     if (rawFallbackPolicies != null) {
-      return unwrapLoadBalancingConfigList(checkObjectList(rawFallbackPolicies));
+      return unwrapLoadBalancingConfigList(JsonUtil.checkObjectList(rawFallbackPolicies));
     }
     return null;
   }
@@ -460,29 +461,6 @@ public final class ServiceConfigUtil {
       return null;
     }
     return JsonUtil.getString(serviceConfig, SERVICE_CONFIG_STICKINESS_METADATA_KEY);
-  }
-
-  @SuppressWarnings("unchecked")
-  static List<Map<String, ?>> checkObjectList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof Map)) {
-        throw new ClassCastException(
-            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<Map<String, ?>>) rawList;
-  }
-
-  @SuppressWarnings("unchecked")
-  static List<String> checkStringList(List<?> rawList) {
-    for (int i = 0; i < rawList.size(); i++) {
-      if (!(rawList.get(i) instanceof String)) {
-        throw new ClassCastException(
-            String.format(
-                "value '%s' for idx %d in '%s' is not string", rawList.get(i), i, rawList));
-      }
-    }
-    return (List<String>) rawList;
   }
 
   /**
