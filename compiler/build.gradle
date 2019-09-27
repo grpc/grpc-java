@@ -147,12 +147,6 @@ compileTestJava {
 
 compileTestLiteJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
-    // Protobuf-generated Lite produces quite a few warnings.
-    options.compilerArgs += [
-        "-Xlint:-rawtypes",
-        "-Xlint:-unchecked",
-        "-Xlint:-fallthrough"
-    ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
@@ -165,13 +159,6 @@ protobuf {
         }
     }
     plugins {
-        javalite {
-            if (project.hasProperty('protoc-gen-javalite')) {
-                path = project['protoc-gen-javalite']
-            } else {
-                artifact = libraries.protoc_lite
-            }
-        }
         grpc { path = javaPluginPath }
     }
     generateProtoTasks {
@@ -181,9 +168,10 @@ protobuf {
         }
         ofSourceSet('test')*.plugins { grpc {} }
         ofSourceSet('testLite')*.each { task ->
-            task.builtins { remove java }
+            task.builtins {
+                java { option 'lite' }
+            }
             task.plugins {
-                javalite {}
                 grpc { option 'lite' }
             }
         }
