@@ -461,7 +461,7 @@ final class DnsNameResolver extends NameResolver {
     if (!serviceConfigChoice.containsKey(SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY)) {
       return null;
     }
-    return ServiceConfigUtil.getDouble(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
+    return JsonUtil.getDouble(serviceConfigChoice, SERVICE_CONFIG_CHOICE_PERCENTAGE_KEY);
   }
 
   @Nullable
@@ -471,7 +471,7 @@ final class DnsNameResolver extends NameResolver {
       return null;
     }
     return ServiceConfigUtil.checkStringList(
-        ServiceConfigUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY));
+        JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_LANGUAGE_KEY));
   }
 
   @Nullable
@@ -480,7 +480,7 @@ final class DnsNameResolver extends NameResolver {
       return null;
     }
     return ServiceConfigUtil.checkStringList(
-        ServiceConfigUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
+        JsonUtil.getList(serviceConfigChoice, SERVICE_CONFIG_CHOICE_CLIENT_HOSTNAME_KEY));
   }
 
   /**
@@ -559,7 +559,7 @@ final class DnsNameResolver extends NameResolver {
       }
     }
     Map<String, ?> sc =
-        ServiceConfigUtil.getObject(choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY);
+        JsonUtil.getObject(choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY);
     if (sc == null) {
       throw new VerifyException(String.format(
           "key '%s' missing in '%s'", choice, SERVICE_CONFIG_CHOICE_SERVICE_CONFIG_KEY));
