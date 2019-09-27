@@ -115,4 +115,35 @@ public class JsonUtil {
     }
     return (Boolean) value;
   }
+
+  /**
+   * Casts a list of unchecked JSON values to a list of checked objects in Java type.
+   * If the given list contains a value that is not a Map, throws an exception.
+   */
+  @SuppressWarnings("unchecked")
+  public static List<Map<String, ?>> checkObjectList(List<?> rawList) {
+    for (int i = 0; i < rawList.size(); i++) {
+      if (!(rawList.get(i) instanceof Map)) {
+        throw new ClassCastException(
+            String.format("value %s for idx %d in %s is not object", rawList.get(i), i, rawList));
+      }
+    }
+    return (List<Map<String, ?>>) rawList;
+  }
+
+  /**
+   * Casts a list of unchecked JSON values to a list of String. If the given list
+   * contains a value that is not a String, throws an exception.
+   */
+  @SuppressWarnings("unchecked")
+  public static List<String> checkStringList(List<?> rawList) {
+    for (int i = 0; i < rawList.size(); i++) {
+      if (!(rawList.get(i) instanceof String)) {
+        throw new ClassCastException(
+            String.format(
+                "value '%s' for idx %d in '%s' is not string", rawList.get(i), i, rawList));
+      }
+    }
+    return (List<String>) rawList;
+  }
 }
