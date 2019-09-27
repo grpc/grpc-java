@@ -29,16 +29,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.TextView;
 import com.google.android.gms.security.ProviderInstaller;
-import io.grpc.CallOptions;
-import io.grpc.Channel;
-import io.grpc.ClientCall;
-import io.grpc.ClientInterceptor;
-import io.grpc.ClientInterceptors.CheckedForwardingClientCall;
 import io.grpc.ManagedChannel;
-import io.grpc.Metadata;
-import io.grpc.MethodDescriptor;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -50,7 +42,6 @@ public class TesterActivity extends AppCompatActivity
   private EditText hostEdit;
   private EditText portEdit;
   private TextView resultText;
-  private CheckBox getCheckBox;
   private CheckBox testCertCheckBox;
 
   @Override
@@ -67,7 +58,6 @@ public class TesterActivity extends AppCompatActivity
     hostEdit = (EditText) findViewById(R.id.host_edit_text);
     portEdit = (EditText) findViewById(R.id.port_edit_text);
     resultText = (TextView) findViewById(R.id.grpc_response_text);
-    getCheckBox = (CheckBox) findViewById(R.id.get_checkbox);
     testCertCheckBox = (CheckBox) findViewById(R.id.test_cert_checkbox);
 
     ProviderInstaller.installIfNeededAsync(this, this);
@@ -129,11 +119,7 @@ public class TesterActivity extends AppCompatActivity
     ManagedChannel channel =
         TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, true, testCert);
 
-    List<ClientInterceptor> interceptors = new ArrayList<>();
-    if (getCheckBox.isChecked()) {
-      interceptors.add(new SafeMethodChannelInterceptor());
-    }
-    new InteropTask(this, channel, interceptors, testCase).execute();
+    new InteropTask(this, channel, testCase).execute();
   }
 
   @Override
@@ -148,19 +134,5 @@ public class TesterActivity extends AppCompatActivity
     // Hope that the system-provided libraries are new enough.
     Log.w(LOG_TAG, "Failed installing security provider, error code: " + errorCode);
     enableButtons(true);
-  }
-
-  private static final class SafeMethodChannelInterceptor implements ClientInterceptor {
-    @Override
-    public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
-        MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-      return new CheckedForwardingClientCall<ReqT, RespT>(
-          next.newCall(method.toBuilder().setSafe(true).build(), callOptions)) {
-        @Override
-        public void checkedStart(Listener<RespT> responseListener, Metadata headers) {
-          delegate().start(responseListener, headers);
-        }
-      };
-    }
   }
 }
