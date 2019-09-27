@@ -52,9 +52,9 @@ abstract class Bootstrapper {
   }
 
   /**
-   * Returns the canonical name of the traffic director to be connected to.
+   * Returns the URI the traffic director to be connected to.
    */
-  abstract String getBalancerName();
+  abstract String getServerUri();
 
   /**
    * Returns a {@link Node} message with project/network metadata in it to be included in
@@ -73,7 +73,7 @@ abstract class Bootstrapper {
     private static final Exception failToBootstrapException;
     private static final Bootstrapper defaultInstance;
 
-    private final String balancerName;
+    private final String serverUri;
     private final Node node;
     private final List<ChannelCreds> channelCredsList;
 
@@ -91,14 +91,14 @@ abstract class Bootstrapper {
 
     @VisibleForTesting
     FileBasedBootstrapper(BootstrapInfo bootstrapInfo) {
-      this.balancerName = bootstrapInfo.serverConfig.uri;
+      this.serverUri = bootstrapInfo.serverConfig.uri;
       this.node = bootstrapInfo.node;
       this.channelCredsList = bootstrapInfo.serverConfig.channelCredsList;
     }
 
     @Override
-    String getBalancerName() {
-      return balancerName;
+    String getServerUri() {
+      return serverUri;
     }
     
     @Override

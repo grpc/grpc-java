@@ -65,7 +65,7 @@ public class BootstrapperTest {
 
     BootstrapInfo config = new BootstrapInfo(serverConfig, node);
     Bootstrapper bootstrapper = new FileBasedBootstrapper(config);
-    assertThat(bootstrapper.getBalancerName()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(bootstrapper.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
     assertThat(bootstrapper.getNode())
         .isEqualTo(
             Node.newBuilder()
