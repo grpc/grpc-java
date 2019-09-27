@@ -26,31 +26,36 @@ import io.grpc.Internal;
 @Internal
 public final class InternalClientCalls {
 
-  /** Internal accessor for {@link ClientCalls#CALL_TYPE_OPTION}. */
-  public static CallOptions.Key<ClientCalls.CallType> getCallTypeOption() {
-    return ClientCalls.CALL_TYPE_OPTION;
+  /** Internal accessor for {@link ClientCalls#STUB_TYPE_OPTION}. */
+  public static CallOptions.Key<ClientCalls.StubType> getStubTypeOption() {
+    return ClientCalls.STUB_TYPE_OPTION;
   }
 
-  /** Companion enum for internal enum {@link ClientCalls.CallType}. */
-  public enum CallType {
-    BLOCKING(ClientCalls.CallType.BLOCKING),
-    ASYNC(ClientCalls.CallType.ASYNC),
-    FUTURE(ClientCalls.CallType.FUTURE);
+  /** Returns {@link StubType} from call options. */
+  public static StubType getStubType(CallOptions callOptions) {
+    return StubType.of(callOptions.getOption(ClientCalls.STUB_TYPE_OPTION));
+  }
 
-    private final ClientCalls.CallType internalType;
+  /** Companion enum for internal enum {@link ClientCalls.StubType}. */
+  public enum StubType {
+    BLOCKING(ClientCalls.StubType.BLOCKING),
+    ASYNC(ClientCalls.StubType.ASYNC),
+    FUTURE(ClientCalls.StubType.FUTURE);
 
-    CallType(ClientCalls.CallType internalType) {
+    private final ClientCalls.StubType internalType;
+
+    StubType(ClientCalls.StubType internalType) {
       this.internalType = internalType;
     }
 
     /** Returns companion enum value of passed internal enum equivalent. */
-    public static CallType of(ClientCalls.CallType internal) {
-      for (CallType value : CallType.values()) {
+    public static StubType of(ClientCalls.StubType internal) {
+      for (StubType value : StubType.values()) {
         if (value.internalType == internal) {
           return value;
         }
       }
-      throw new AssertionError("Unknown CallType: " + internal.name());
+      throw new AssertionError("Unknown StubType: " + internal.name());
     }
   }
 }

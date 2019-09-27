@@ -18,7 +18,7 @@ package io.grpc.stub;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.stub.ClientCalls.CallType;
+import io.grpc.stub.ClientCalls.StubType;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -41,10 +41,19 @@ public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
     extends AbstractStub<S> {
 
   protected AbstractBlockingStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT);
+    this(channel, CallOptions.DEFAULT, new BlockingCallOptionsFactory());
   }
 
-  protected AbstractBlockingStub(Channel channel, CallOptions callOptions) {
-    super(channel, callOptions.withOption(ClientCalls.CALL_TYPE_OPTION, CallType.BLOCKING));
+  protected AbstractBlockingStub(Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+    super(channel, callOptions, factory);
+  }
+
+  /** A BlockingCallOptionsFactory adds default call options for BlockingStub. */
+  protected static final class BlockingCallOptionsFactory implements DefaultCallOptionsFactory {
+
+    @Override
+    public CallOptions create(CallOptions providedCallOptions) {
+      return providedCallOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING);
+    }
   }
 }

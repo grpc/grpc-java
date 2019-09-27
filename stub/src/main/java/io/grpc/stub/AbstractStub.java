@@ -59,7 +59,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param channel the channel that this stub will use to do communications
    */
   protected AbstractStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT);
+    this(channel, CallOptions.DEFAULT, new EmptyCallOptionsFactory());
   }
 
   /**
@@ -68,10 +68,12 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @since 1.0.0
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
+   * @param factory the call options factory to set default call options
    */
-  protected AbstractStub(Channel channel, CallOptions callOptions) {
+  protected AbstractStub(
+      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
     this.channel = checkNotNull(channel, "channel");
-    this.callOptions = checkNotNull(callOptions, "callOptions");
+    this.callOptions = checkNotNull(factory.create(callOptions), "callOptions");
   }
 
   /**
@@ -99,7 +101,20 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
-  protected abstract S build(Channel channel, CallOptions callOptions);
+  protected S build(Channel channel, CallOptions callOptions) {
+    return build(channel, callOptions, new EmptyCallOptionsFactory());
+  }
+
+  /**
+   * Returns a new stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param channel the channel that this stub will use to do communications
+   * @param callOptions the runtime call options to be applied to every call on this stub
+   * @param factory the call options factory to set default call options
+   */
+  protected abstract S build(
+      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory);
 
   /**
    * Returns a new stub with an absolute deadline.
@@ -223,5 +238,19 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public final S withMaxOutboundMessageSize(int maxSize) {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
+  }
+
+  /** A DefaultCallOptionsFactory adds default call options for given stub type. */
+  protected interface DefaultCallOptionsFactory {
+    CallOptions create(CallOptions callOptions);
+  }
+
+  /** An EmptyCallOptionsFactory doesn't provide any options. */
+  protected static final class EmptyCallOptionsFactory implements DefaultCallOptionsFactory {
+
+    @Override
+    public CallOptions create(CallOptions providedCallOptions) {
+      return providedCallOptions;
+    }
   }
 }

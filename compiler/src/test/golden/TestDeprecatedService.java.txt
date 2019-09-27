@@ -128,15 +128,19 @@ public final class TestDeprecatedServiceGrpc {
       super(channel);
     }
 
-    private TestDeprecatedServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private TestDeprecatedServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected TestDeprecatedServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new TestDeprecatedServiceStub(channel, callOptions);
+    protected TestDeprecatedServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new TestDeprecatedServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -163,15 +167,19 @@ public final class TestDeprecatedServiceGrpc {
       super(channel);
     }
 
-    private TestDeprecatedServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private TestDeprecatedServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected TestDeprecatedServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new TestDeprecatedServiceBlockingStub(channel, callOptions);
+    protected TestDeprecatedServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new TestDeprecatedServiceBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -197,15 +205,19 @@ public final class TestDeprecatedServiceGrpc {
       super(channel);
     }
 
-    private TestDeprecatedServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private TestDeprecatedServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected TestDeprecatedServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new TestDeprecatedServiceFutureStub(channel, callOptions);
+    protected TestDeprecatedServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new TestDeprecatedServiceFutureStub(channel, callOptions, factory);
     }
 
     /**

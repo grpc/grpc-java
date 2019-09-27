@@ -18,6 +18,9 @@ package io.grpc.stub;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.stub.AbstractBlockingStub.BlockingCallOptionsFactory;
+import io.grpc.stub.AbstractStub.DefaultCallOptionsFactory;
+import io.grpc.stub.ClientCalls.StubType;
 import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -39,10 +42,19 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extends AbstractStub<S> {
 
   protected AbstractFutureStub(Channel channel) {
-    super(channel);
+    this(channel, CallOptions.DEFAULT, new FutureCallOptionsFactory());
   }
 
-  protected AbstractFutureStub(Channel channel, CallOptions callOptions) {
-    super(channel, callOptions);
+  protected AbstractFutureStub(Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+    super(channel, callOptions, factory);
+  }
+
+  /** A FutureCallOptionsFactory adds default call options for FutureStub. */
+  protected static final class FutureCallOptionsFactory implements DefaultCallOptionsFactory {
+
+    @Override
+    public CallOptions create(CallOptions providedCallOptions) {
+      return providedCallOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.FUTURE);
+    }
   }
 }

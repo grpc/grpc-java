@@ -29,7 +29,7 @@ import io.grpc.MethodDescriptor;
 import io.grpc.Server;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.stub.ClientCalls.CallType;
+import io.grpc.stub.ClientCalls.StubType;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.testing.protobuf.SimpleRequest;
 import io.grpc.testing.protobuf.SimpleResponse;
@@ -46,7 +46,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public class AbstractStubCallTypeTest {
+public class StubTypeTest {
   @Rule
   public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
@@ -63,16 +63,16 @@ public class AbstractStubCallTypeTest {
   }
 
   @Test
-  public void blockingStub_shouldAddCallTypeBlocking() {
+  public void blockingStub_shouldAddStubTypeBlocking() {
     ManagedChannel chan = InProcessChannelBuilder.forName("test")
         .intercept(new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
               MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            CallType callType = callOptions.getOption(ClientCalls.CALL_TYPE_OPTION);
+            StubType callType = callOptions.getOption(ClientCalls.STUB_TYPE_OPTION);
 
             assertThat(callType).isNotNull();
-            assertThat(callType).isEqualTo(CallType.BLOCKING);
+            assertThat(callType).isEqualTo(StubType.BLOCKING);
 
             return next.newCall(method, callOptions);
           }
@@ -85,14 +85,17 @@ public class AbstractStubCallTypeTest {
   }
 
   @Test
-  public void futureStub_shouldNotSetCallType()
+  public void futureStub_shouldAddStubTypeFuture()
       throws ExecutionException, InterruptedException {
     ManagedChannel chan = InProcessChannelBuilder.forName("test")
         .intercept(new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
               MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            assertThat(callOptions.getOption(ClientCalls.CALL_TYPE_OPTION)).isNull();
+            StubType callType = callOptions.getOption(ClientCalls.STUB_TYPE_OPTION);
+
+            assertThat(callType).isNotNull();
+            assertThat(callType).isEqualTo(StubType.FUTURE);
 
             return next.newCall(method, callOptions);
           }
@@ -105,13 +108,16 @@ public class AbstractStubCallTypeTest {
   }
 
   @Test
-  public void asyncStub_shouldNotSetCallType() throws InterruptedException, ExecutionException {
+  public void asyncStub_shouldAddStubTypeAsync() throws InterruptedException, ExecutionException {
     ManagedChannel chan = InProcessChannelBuilder.forName("test")
         .intercept(new ClientInterceptor() {
           @Override
           public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
               MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
-            assertThat(callOptions.getOption(ClientCalls.CALL_TYPE_OPTION)).isNull();
+            StubType callType = callOptions.getOption(ClientCalls.STUB_TYPE_OPTION);
+
+            assertThat(callType).isNotNull();
+            assertThat(callType).isEqualTo(StubType.ASYNC);
 
             return next.newCall(method, callOptions);
           }

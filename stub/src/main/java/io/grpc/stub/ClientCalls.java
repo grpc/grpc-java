@@ -686,13 +686,13 @@ public final class ClientCalls {
     }
   }
 
-  enum CallType {
+  enum StubType {
     BLOCKING, FUTURE, ASYNC
   }
 
   /**
-   * Internal {@link CallOptions.Key} to indicate call types.
+   * Internal {@link CallOptions.Key} to indicate stub types.
    */
-  static final CallOptions.Key<CallType> CALL_TYPE_OPTION =
-      CallOptions.Key.create("internal-call-type");
+  static final CallOptions.Key<StubType> STUB_TYPE_OPTION =
+      CallOptions.Key.create("internal-stub-type");
 }
