@@ -26,10 +26,8 @@ import com.google.android.gms.common.GooglePlayServicesNotAvailableException;
 import com.google.android.gms.common.GooglePlayServicesRepairableException;
 import com.google.android.gms.security.ProviderInstaller;
 import com.google.common.util.concurrent.SettableFuture;
-import io.grpc.ClientInterceptor;
 import io.grpc.android.integrationtest.InteropTask.Listener;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
@@ -127,7 +125,6 @@ public class InteropInstrumentationTest {
     new InteropTask(
             listener,
             TesterOkHttpChannelBuilder.build(host, port, serverHostOverride, useTls, testCa),
-            new ArrayList<ClientInterceptor>(),
             testCase)
         .execute();
     String result = resultFuture.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
