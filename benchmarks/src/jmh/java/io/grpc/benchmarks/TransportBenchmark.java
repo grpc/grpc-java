@@ -123,16 +123,16 @@ public class TransportBenchmark {
         Class<?> groupClass = Class.forName("io.netty.channel.epoll.EpollEventLoopGroup");
         EventLoopGroup group = (EventLoopGroup) groupClass.getConstructor().newInstance();
 
-        @SuppressWarnings("unchecked")
-        Class<? extends ServerChannel> serverChannelClass = (Class<? extends ServerChannel>)
-            Class.forName("io.netty.channel.epoll.EpollServerSocketChannel");
+        Class<? extends ServerChannel> serverChannelClass =
+            Class.forName("io.netty.channel.epoll.EpollServerSocketChannel")
+              .asSubclass(ServerChannel.class);
         serverBuilder = NettyServerBuilder.forAddress(address)
             .bossEventLoopGroup(group)
             .workerEventLoopGroup(group)
             .channelType(serverChannelClass);
-        @SuppressWarnings("unchecked")
-        Class<? extends Channel> channelClass = (Class<? extends Channel>)
-            Class.forName("io.netty.channel.epoll.EpollSocketChannel");
+        Class<? extends Channel> channelClass =
+            Class.forName("io.netty.channel.epoll.EpollSocketChannel")
+              .asSubclass(Channel.class);
         channelBuilder = NettyChannelBuilder.forAddress(address)
             .eventLoopGroup(group)
             .channelType(channelClass)
