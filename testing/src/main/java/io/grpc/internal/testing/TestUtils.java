@@ -16,6 +16,7 @@
 
 package io.grpc.internal.testing;
 
+import com.google.common.base.Throwables;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -156,6 +157,12 @@ public class TestUtils {
     if (conscryptInstallAttempted) {
       return;
     }
+    // Conscrypt-based I/O (like used in OkHttp) breaks on Windows.
+    // https://github.com/google/conscrypt/issues/444
+    if (System.mapLibraryName("test").endsWith(".dll")) {
+      conscryptInstallAttempted = true;
+      return;
+    }
     Class<?> conscrypt;
     try {
       conscrypt = Class.forName("org.conscrypt.Conscrypt");
@@ -175,6 +182,13 @@ public class TestUtils {
     } catch (IllegalAccessException ex) {
       throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
     } catch (InvocationTargetException ex) {
+      Throwable root = Throwables.getRootCause(ex);
+      // Conscrypt uses a newer version of glibc than available on RHEL 6
+      if (root instanceof UnsatisfiedLinkError && root.getMessage() != null
+          && root.getMessage().contains("GLIBC_2.14")) {
+        conscryptInstallAttempted = true;
+        return;
+      }
       throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
     }
     Security.addProvider(provider);

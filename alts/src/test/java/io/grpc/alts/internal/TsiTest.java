@@ -35,7 +35,7 @@ import javax.crypto.AEADBadTagException;
 
 /** Utility class that provides tests for implementations of @{link TsiHandshaker}. */
 public final class TsiTest {
-  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch!";
+  private static final String DECRYPTION_FAILURE_RE = "Tag mismatch!|BAD_DECRYPT";
 
   private TsiTest() {}
 
@@ -282,7 +282,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -321,7 +321,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -360,7 +360,7 @@ public final class TsiTest {
       receiver.unprotect(protect, unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();
@@ -396,7 +396,7 @@ public final class TsiTest {
       sender.unprotect(protect.slice(), unprotectOut, alloc);
       fail("Exception expected");
     } catch (AEADBadTagException ex) {
-      assertThat(ex).hasMessageThat().contains(DECRYPTION_FAILURE_RE);
+      assertThat(ex).hasMessageThat().containsMatch(DECRYPTION_FAILURE_RE);
     }
 
     sender.destroy();

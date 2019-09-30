@@ -19,7 +19,8 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.lang,
-            libraries.protobuf
+            libraries.protobuf,
+            libraries.conscrypt
     compile (libraries.google_auth_oauth2_http) {
         // prefer 26.0-android from libraries instead of 25.1-android
         exclude group: 'com.google.guava', module: 'guava'
@@ -36,8 +37,7 @@ dependencies {
             libraries.mockito,
             libraries.truth
     testRuntime libraries.netty_tcnative,
-            libraries.netty_epoll,
-            libraries.conscrypt
+            libraries.netty_epoll
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
 
