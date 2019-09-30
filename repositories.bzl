@@ -405,9 +405,9 @@ def io_netty_resolver():
 def io_netty_tcnative_boringssl_static():
     jvm_maven_import_external(
         name = "io_netty_netty_tcnative_boringssl_static",
-        artifact = "io.netty:netty-tcnative-boringssl-static:2.0.25.Final",
+        artifact = "io.netty:netty-tcnative-boringssl-static:2.0.26.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "96d9c14ab4c47cbad7fec9bdb083917db971d3754d6c7fa89f958bc719e230ed",
+        artifact_sha256 = "5f074a4b112bf7d087331e33d2da720745c5bda047b34b64bd70aaaae4de24c6",
         licenses = ["notice"],  # Apache 2.0
     )
 
