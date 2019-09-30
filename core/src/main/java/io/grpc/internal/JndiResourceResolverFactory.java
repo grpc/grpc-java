@@ -62,7 +62,6 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
    * may not actually be used to perform the query.  This is believed to be "okay."
    */
   @Nullable
-  @SuppressWarnings("LiteralClassName")
   private static Throwable initJndi() {
     try {
       Class.forName("javax.naming.directory.InitialDirContext");
