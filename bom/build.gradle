@@ -1,36 +1,36 @@
 plugins {
-    id "maven-publish"
+  id "maven-publish"
 }
 
 description = 'gRPC: BOM'
 
 publishing {
-    publications {
-        maven(MavenPublication) {
-            // remove all other artifacts since BOM doesn't generates any Jar
-            artifacts = []
+  publications {
+    maven(MavenPublication) {
+      // remove all other artifacts since BOM doesn't generates any Jar
+      artifacts = []
 
-            pom.withXml {
-                // Generate bom using subprojects
-                def internalProjects = [project.name, 'grpc-xds', 'grpc-gae-interop-testing-jdk8', 'grpc-compiler']
+      pom.withXml {
+        // Generate bom using subprojects
+        def internalProjects = [project.name, 'grpc-xds', 'grpc-gae-interop-testing-jdk8', 'grpc-compiler']
 
-                def dependencyManagement = asNode().appendNode('dependencyManagement')
-                def dependencies = dependencyManagement.appendNode('dependencies')
-                rootProject.subprojects.each { subproject ->
-                    if (internalProjects.contains(subproject.name)) {
-		        return
-		    }
-                    def dependencyNode = dependencies.appendNode('dependency')
-                    dependencyNode.appendNode('groupId', subproject.group)
-                    dependencyNode.appendNode('artifactId', subproject.name)
-                    dependencyNode.appendNode('version', subproject.version)
-                }
-		// add protoc gen (produced by grpc-compiler with different artifact name)
-		def dependencyNode = dependencies.appendNode('dependency')
-	        dependencyNode.appendNode('groupId', project.group)
-	        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
-	        dependencyNode.appendNode('version', project.version)
-	    }
+        def dependencyManagement = asNode().appendNode('dependencyManagement')
+        def dependencies = dependencyManagement.appendNode('dependencies')
+        rootProject.subprojects.each { subproject ->
+          if (internalProjects.contains(subproject.name)) {
+            return
+          }
+          def dependencyNode = dependencies.appendNode('dependency')
+          dependencyNode.appendNode('groupId', subproject.group)
+          dependencyNode.appendNode('artifactId', subproject.name)
+          dependencyNode.appendNode('version', subproject.version)
         }
+        // add protoc gen (produced by grpc-compiler with different artifact name)
+        def dependencyNode = dependencies.appendNode('dependency')
+        dependencyNode.appendNode('groupId', project.group)
+        dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
+        dependencyNode.appendNode('version', project.version)
+      }
     }
+  }
 }
