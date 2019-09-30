@@ -30,6 +30,7 @@ publishing {
         dependencyNode.appendNode('groupId', project.group)
         dependencyNode.appendNode('artifactId', 'protoc-gen-grpc-java')
         dependencyNode.appendNode('version', project.version)
+        dependencyNode.appendNode('type', 'pom')
       }
     }
   }
