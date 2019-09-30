@@ -18,7 +18,6 @@ package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
