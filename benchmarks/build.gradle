@@ -37,7 +37,7 @@ dependencies {
             libraries.netty_epoll,
             libraries.math
     compileOnly libraries.javax_annotation
-    alpnagent libraries.jetty_alpn_agent
+    runtime libraries.conscrypt
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity
@@ -59,9 +59,6 @@ def vmArgs = [
 task qps_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.AsyncClient"
     applicationName = "qps_client"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + project.configurations.runtime
 }
@@ -69,9 +66,6 @@ task qps_client(type: CreateStartScripts) {
 task openloop_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.qps.OpenLoopClient"
     applicationName = "openloop_client"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + project.configurations.runtime
 }
@@ -86,9 +80,6 @@ task qps_server(type: CreateStartScripts) {
 task benchmark_worker(type: CreateStartScripts) {
     mainClassName = "io.grpc.benchmarks.driver.LoadWorker"
     applicationName = "benchmark_worker"
-    defaultJvmOpts = [
-        "-javaagent:" + configurations.alpnagent.asPath
-    ].plus(vmArgs)
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + project.configurations.runtime
 }

@@ -9,10 +9,6 @@ plugins {
 description = "gRPC: Integration Testing"
 startScripts.enabled = false
 
-configurations {
-    alpnagent
-}
-
 dependencies {
     compile project(':grpc-alts'),
             project(':grpc-auth'),
@@ -28,10 +24,10 @@ dependencies {
     compileOnly libraries.javax_annotation
     runtime libraries.opencensus_impl,
             libraries.netty_tcnative,
-            project(':grpc-grpclb')
+            project(':grpc-grpclb'),
+            libraries.conscrypt // for OkHttp
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
-    alpnagent libraries.jetty_alpn_agent
 }
 
 configureProtoCompilation()
@@ -43,27 +39,14 @@ compileJava {
     options.errorprone.check("BetaApi", CheckSeverity.OFF)
 }
 
-test {
-    // For the automated tests, use Jetty ALPN.
-    jvmArgs "-javaagent:" + configurations.alpnagent.asPath
-}
-
 // For the generated scripts, use Netty tcnative (i.e. OpenSSL).
 // Note that OkHttp currently only supports ALPN, so OpenSSL version >= 1.0.2 is required.
 
 task test_client(type: CreateStartScripts) {
     mainClassName = "io.grpc.testing.integration.TestServiceClient"
     applicationName = "test-client"
-    defaultJvmOpts = [
-        "-javaagent:JAVAAGENT_APP_HOME" + configurations.alpnagent.singleFile.name
-    ]
     outputDir = new File(project.buildDir, 'tmp')
     classpath = jar.outputs.files + configurations.runtime
-    dependencies { runtime configurations.alpnagent }
-    doLast {
-        unixScript.text = unixScript.text.replace('JAVAAGENT_APP_HOME', '\$APP_HOME/lib/')
-        windowsScript.text = windowsScript.text.replace('JAVAAGENT_APP_HOME', '%APP_HOME%\\lib\\')
-    }
 }
 
 task test_server(type: CreateStartScripts) {

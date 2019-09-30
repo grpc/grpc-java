@@ -170,7 +170,6 @@ subprojects {
         ]
     }
 
-    // Define a separate configuration for managing the dependency on Jetty ALPN agent.
     configurations {
         compile {
             // Detect Maven Enforcer's dependencyConvergence failures. We only
