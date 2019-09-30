@@ -425,7 +425,7 @@ def io_netty_transport_native_epoll():
         name = "io_netty_netty_transport_native_epoll",
         artifact = "io.netty:netty-transport-native-epoll:jar:linux-x86_64:4.1.42.Final",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "3c7d659b3bd773e0ea9b7517d2d6baffa275a3d2ae8eb4c10cb8f0a7724b11d5",
+        artifact_sha256 = "7bdf3003d5b60b061b494e62d1bafc420caf800efb743b14ec01ceaef1d3fa3e",
         licenses = ["notice"],  # Apache 2.0
     )
 
