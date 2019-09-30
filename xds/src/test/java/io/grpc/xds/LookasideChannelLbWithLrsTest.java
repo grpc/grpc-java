@@ -47,15 +47,13 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
-import io.grpc.xds.LookasideChannelLb.AbstractXdsComms;
-import io.grpc.xds.LookasideChannelLb.AdsStreamCallback2;
 import io.grpc.xds.LookasideChannelLb.LocalityStoreFactory;
-import io.grpc.xds.LookasideChannelLb.XdsCommsFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -82,31 +80,6 @@ public class LookasideChannelLbWithLrsTest {
       });
 
   private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
-
-  // TODO: use the real factory impl used by LookasideChannelLb
-  private final XdsCommsFactory xdsCommsFactory = new XdsCommsFactory() {
-    @Override
-    public AbstractXdsComms newXdsComms(final ManagedChannel lbChannel,
-        AdsStreamCallback2 adsStreamCallback2) {
-      assertThat(lbChannel).isSameInstanceAs(channel);
-
-      return new AbstractXdsComms() {
-        XdsComms xdsComms;
-
-        @Override
-        public void start() {
-          xdsComms = new XdsComms(
-              lbChannel, helper, adsStreamCallback, localityStore,
-              new ExponentialBackoffPolicy.Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
-        }
-
-        @Override
-        public void shutdown() {
-          xdsComms.shutdownLbRpc("balancer shutdown");
-        }
-      };
-    }
-  };
 
   private final LoadReportClientFactory lrsClientFactory = new LoadReportClientFactory() {
     @Override
@@ -200,7 +173,7 @@ public class LookasideChannelLbWithLrsTest {
 
     lookasideChannelLb = new LookasideChannelLb(
         helper, adsStreamCallback, BALANCER_NAME, lrsClientFactory, lbRegistry,
-        localityStoreFactory, xdsCommsFactory);
+        localityStoreFactory);
 
     verify(helper).createResolvingOobChannel(BALANCER_NAME);
     verify(localityStoreFactory).newLocalityStore(helper, lbRegistry);
@@ -236,13 +209,10 @@ public class LookasideChannelLbWithLrsTest {
 
     verify(adsStreamCallback).onWorking();
 
-    /* TODO(zdapeng): once XdsComms consumes AdsStreamCallback2 instead of AdsStreamCallback,
-         verify the following
     ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
     verify(lrsClient).startLoadReporting(lrsCallbackCaptor.capture());
     lrsCallbackCaptor.getValue().onReportResponse(19543);
     verify(localityStore).updateOobMetricsReportInterval(19543);
-    */
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);

@@ -32,7 +32,8 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.ExponentialBackoffPolicy.Provider;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
@@ -52,17 +53,16 @@ final class LookasideChannelLb extends LoadBalancer {
 
   private final ManagedChannel lbChannel;
   private final LoadReportClient lrsClient;
-  private final AbstractXdsComms xdsComms;
+  private final XdsComms2 xdsComms2;
 
   @VisibleForTesting
   LookasideChannelLb(
       Helper helper,
-      final AdsStreamCallback adsCallback,
+      AdsStreamCallback adsCallback,
       String balancerName,
       LoadReportClientFactory lrsClientFactory,
       LoadBalancerRegistry lbRegistry,
-      LocalityStoreFactory localityStoreFactory,
-      XdsCommsFactory xdsCommsFactory) {
+      LocalityStoreFactory localityStoreFactory) {
     lbChannel = initLbChannel(helper, balancerName);
     final LocalityStore localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
     LoadReportCallback lrsCallback =
@@ -73,16 +73,13 @@ final class LookasideChannelLb extends LoadBalancer {
           }
         };
     lrsClient = lrsClientFactory.createLoadReportClient(
-        lbChannel, helper, new ExponentialBackoffPolicy.Provider(),
+        lbChannel, helper, new Provider(),
         localityStore.getLoadStatsStore());
 
     AdsStreamCallback2 adsCallback2 = new AdsStreamCallback2Impl(
         adsCallback, lrsClient, lrsCallback, localityStore) ;
-    xdsComms = xdsCommsFactory.newXdsComms(lbChannel, adsCallback2);
-
-    // TODO(zdapeng): Maybe executeLater xdsComms.start() to prevent receiving EDS response before
-    // everything has been setup/initialized
-    xdsComms.start();
+    xdsComms2 = new XdsComms2(
+        lbChannel, helper, adsCallback2, new Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
   }
 
   private static int rateInMillion(FractionalPercent fractionalPercent) {
@@ -141,7 +138,7 @@ final class LookasideChannelLb extends LoadBalancer {
   @Override
   public void shutdown() {
     lrsClient.stopLoadReporting();
-    xdsComms.shutdown();
+    xdsComms2.shutdownLbRpc();
     lbChannel.shutdown();
   }
 
@@ -159,25 +156,7 @@ final class LookasideChannelLb extends LoadBalancer {
     }
   }
 
-  // TODO(zdapeng): rename the old XdsComms to XdsCommsImpl, and rename this to XdsComms.
-  interface AbstractXdsComms {
 
-    /**
-     * Starts the ADS call and sends the first request.
-     */
-    void start();
-
-    /**
-     * Cancels ADS RPC and cleans up retry timer.
-     */
-    void shutdown();
-  }
-
-  // TODO(zdapeng): XdsComms constructor will not consume localityStore.
-  @VisibleForTesting
-  interface XdsCommsFactory {
-    AbstractXdsComms newXdsComms(ManagedChannel lbChannel, AdsStreamCallback2 adsStreamCallback2);
-  }
 
   // TODO(zdapeng): The old AdsStreamCallback will be renamed to LookasideChannelCallback,
   // and AdsStreamCallback2 will be renamed to AdsStreamCallback

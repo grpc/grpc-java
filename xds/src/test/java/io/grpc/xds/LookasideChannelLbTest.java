@@ -24,33 +24,42 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
+import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
+import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
+import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
+import io.grpc.ChannelLogger;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.SynchronizationContext;
+import io.grpc.inprocess.InProcessChannelBuilder;
+import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
+import io.grpc.internal.testing.StreamRecorder;
+import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
-import io.grpc.xds.LookasideChannelLb.AbstractXdsComms;
-import io.grpc.xds.LookasideChannelLb.AdsStreamCallback2;
 import io.grpc.xds.LookasideChannelLb.LocalityStoreFactory;
-import io.grpc.xds.LookasideChannelLb.XdsCommsFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -74,9 +83,27 @@ import org.mockito.junit.MockitoRule;
 public class LookasideChannelLbTest {
 
   private static final String BALANCER_NAME = "fakeBalancerName";
+  private static final String SERVICE_AUTHORITY = "test authority";
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
+  @Rule
+  public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+  private final StreamRecorder<DiscoveryRequest> streamRecorder = StreamRecorder.create();
+
+  private final DiscoveryResponse edsResponse =
+      DiscoveryResponse.newBuilder()
+          .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
+          .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+          .build();
 
   @Mock
   private Helper helper;
@@ -92,43 +119,77 @@ public class LookasideChannelLbTest {
   private LocalityStore localityStore;
   @Mock
   private LoadStatsStore loadStatsStore;
-  @Mock
-  private XdsCommsFactory xdsCommsFactory;
-  private AdsStreamCallback2 adsStreamCallback2;
-  @Mock
+
   private ManagedChannel channel;
-  @Mock
-  private AbstractXdsComms xdsComms;
+  private StreamObserver<DiscoveryResponse> serverResponseWriter;
+
   @Captor
   private ArgumentCaptor<ImmutableMap<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private LookasideChannelLb lookasideChannelLb;
 
   @Before
-  public void setUp() {
+  public void setUp() throws Exception {
     LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
 
+    AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
+      @Override
+      public StreamObserver<DiscoveryRequest> streamAggregatedResources(
+          final StreamObserver<DiscoveryResponse> responseObserver) {
+        serverResponseWriter = responseObserver;
+
+        return new StreamObserver<DiscoveryRequest>() {
+
+          @Override
+          public void onNext(DiscoveryRequest value) {
+            streamRecorder.onNext(value);
+          }
+
+          @Override
+          public void onError(Throwable t) {
+            streamRecorder.onError(t);
+          }
+
+          @Override
+          public void onCompleted() {
+            streamRecorder.onCompleted();
+            responseObserver.onCompleted();
+          }
+        };
+      }
+    };
+
+    String serverName = InProcessServerBuilder.generateName();
+    cleanupRule.register(
+        InProcessServerBuilder
+            .forName(serverName)
+            .directExecutor()
+            .addService(serviceImpl)
+            .build()
+            .start());
+    channel = cleanupRule.register(
+        InProcessChannelBuilder
+            .forName(serverName)
+            .directExecutor()
+            .build());
+
     doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
+    doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
+    doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(localityStore).when(localityStoreFactory).newLocalityStore(helper, lbRegistry);
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
     doReturn(loadReportClient).when(loadReportClientFactory).createLoadReportClient(
         same(channel), same(helper), any(BackoffPolicy.Provider.class), same(loadStatsStore));
-    doReturn(xdsComms).when(xdsCommsFactory).newXdsComms(
-        same(channel), any(AdsStreamCallback2.class));
 
     lookasideChannelLb = new LookasideChannelLb(
         helper, adsStreamCallback, BALANCER_NAME, loadReportClientFactory, lbRegistry,
-        localityStoreFactory, xdsCommsFactory);
+        localityStoreFactory);
 
     verify(helper).createResolvingOobChannel(BALANCER_NAME);
     verify(localityStoreFactory).newLocalityStore(helper, lbRegistry);
     verify(loadReportClientFactory).createLoadReportClient(
         same(channel), same(helper), isA(BackoffPolicy.Provider.class), same(loadStatsStore));
-    ArgumentCaptor<AdsStreamCallback2> adsStreamCallback2Captor =
-        ArgumentCaptor.forClass(AdsStreamCallback2.class);
-    verify(xdsCommsFactory).newXdsComms(same(channel), adsStreamCallback2Captor.capture());
-    adsStreamCallback2 = adsStreamCallback2Captor.getValue();
-    verify(xdsComms).start();
   }
 
   @Test
@@ -137,7 +198,7 @@ public class LookasideChannelLbTest {
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // first EDS response
-    adsStreamCallback2.onEdsResponse(ClusterLoadAssignment.newBuilder().build());
+    serverResponseWriter.onNext(edsResponse);
     verify(adsStreamCallback).onWorking();
     ArgumentCaptor<LoadReportCallback> loadReportCallbackCaptor =
         ArgumentCaptor.forClass(LoadReportCallback.class);
@@ -145,7 +206,7 @@ public class LookasideChannelLbTest {
     LoadReportCallback loadReportCallback = loadReportCallbackCaptor.getValue();
 
     // second EDS response
-    adsStreamCallback2.onEdsResponse(ClusterLoadAssignment.newBuilder().build());
+    serverResponseWriter.onNext(edsResponse);
     verify(adsStreamCallback, times(1)).onWorking();
     verify(loadReportClient, times(1)).startLoadReporting(any(LoadReportCallback.class));
 
@@ -154,6 +215,8 @@ public class LookasideChannelLbTest {
     verify(localityStore).updateOobMetricsReportInterval(1234);
 
     verify(adsStreamCallback, never()).onError();
+
+    lookasideChannelLb.shutdown();
   }
 
   @Test
@@ -161,10 +224,10 @@ public class LookasideChannelLbTest {
     verify(localityStore, never()).updateDropPercentage(
         ArgumentMatchers.<ImmutableList<DropOverload>>any());
 
-    adsStreamCallback2.onEdsResponse(ClusterLoadAssignment.newBuilder().build());
+    serverResponseWriter.onNext(edsResponse);
     verify(localityStore).updateDropPercentage(eq(ImmutableList.<DropOverload>of()));
 
-    adsStreamCallback2.onEdsResponse(ClusterLoadAssignment.newBuilder()
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
         .setPolicy(Policy.newBuilder()
             .addDropOverloads(Policy.DropOverload.newBuilder()
                 .setCategory("cat_1").setDropPercentage(FractionalPercent.newBuilder()
@@ -186,7 +249,13 @@ public class LookasideChannelLbTest {
                     .build())
                 .build())
             .build())
-        .build());
+        .build();
+    serverResponseWriter.onNext(
+        DiscoveryResponse.newBuilder()
+            .addResources(Any.pack(clusterLoadAssignment))
+            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+            .build());
+
     verify(adsStreamCallback, never()).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
@@ -194,7 +263,7 @@ public class LookasideChannelLbTest {
         new DropOverload("cat_3", 6789)));
 
 
-    adsStreamCallback2.onEdsResponse(ClusterLoadAssignment.newBuilder()
+    clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
         .setPolicy(Policy.newBuilder()
             .addDropOverloads(Policy.DropOverload.newBuilder()
                 .setCategory("cat_1").setDropPercentage(FractionalPercent.newBuilder()
@@ -215,13 +284,21 @@ public class LookasideChannelLbTest {
                     .build())
                 .build())
             .build())
-        .build());
+        .build();
+    serverResponseWriter.onNext(
+        DiscoveryResponse.newBuilder()
+            .addResources(Any.pack(clusterLoadAssignment))
+            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+            .build());
+
     verify(adsStreamCallback).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
         new DropOverload("cat_2", 100_00_00)));
 
     verify(adsStreamCallback, never()).onError();
+
+    lookasideChannelLb.shutdown();
   }
 
   @Test
@@ -283,7 +360,11 @@ public class LookasideChannelLbTest {
                 .addLbEndpoints(endpoint3)
                 .setLoadBalancingWeight(UInt32Value.of(0)))
             .build();
-    adsStreamCallback2.onEdsResponse(clusterLoadAssignment);
+    serverResponseWriter.onNext(
+        DiscoveryResponse.newBuilder()
+            .addResources(Any.pack(clusterLoadAssignment))
+            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+            .build());
 
     XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
@@ -305,25 +386,25 @@ public class LookasideChannelLbTest {
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
 
     verify(adsStreamCallback, never()).onError();
+
+    lookasideChannelLb.shutdown();
   }
 
   @Test
   public void onAdsStreamError() {
     verify(adsStreamCallback, never()).onError();
-    adsStreamCallback2.onError();
+    serverResponseWriter.onError(new RuntimeException());
     verify(adsStreamCallback).onError();
   }
 
   @Test
   public void shutdown() {
     verify(loadReportClient, never()).stopLoadReporting();
-    verify(xdsComms, never()).shutdown();
-    verify(channel, never()).shutdown();
+    assertThat(channel.isShutdown()).isFalse();
 
     lookasideChannelLb.shutdown();
 
     verify(loadReportClient).stopLoadReporting();
-    verify(xdsComms).shutdown();
-    verify(channel).shutdown();
+    assertThat(channel.isShutdown()).isTrue();
   }
 }
