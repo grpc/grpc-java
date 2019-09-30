@@ -20,8 +20,13 @@ dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
+            project(':grpc-netty'),
             project(':grpc-services'),
             project(':grpc-auth')
+    compile (libraries.pgv) {
+        // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf
+        exclude group: 'com.google.protobuf'
+    }
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'
@@ -64,10 +69,13 @@ shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
+        include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'com.google.protobuf.GoGoProtos', 'io.grpc.xds.shaded.gogoproto.GoGoProtos'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
-    relocate 'validate', 'io.grpc.xds.shaded.com.lyft.pgv.validate'
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     exclude "**/*.proto"
 }
 
@@ -76,6 +84,17 @@ publishing {
         maven(MavenPublication) {
             artifact shadowJar
             artifacts.removeAll { it.classifier == 'original' }
+
+            pom.withXml {
+                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
+                // project(':grpc-xds') will still be using the non-shaded form.
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-netty'
+                }.each() { netty ->
+                    netty.artifactId*.value = 'grpc-netty-shaded'
+                    netty.version*.value = "[" + netty.version.text() + "]"
+                }
+            }
         }
     }
 }

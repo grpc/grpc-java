@@ -479,6 +479,11 @@ public class AltsProtocolNegotiatorTest {
       protectors.add(protector);
       return protector;
     }
+
+    @Override
+    public void close() {
+      delegate.close();
+    }
   }
 
   private static class InterceptingProtector implements TsiFrameProtector {

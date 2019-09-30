@@ -20,12 +20,15 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.Status.UNAVAILABLE;
 import static io.grpc.xds.XdsSubchannelPickers.BUFFER_PICKER;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
@@ -38,6 +41,7 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
@@ -54,6 +58,8 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FakeClock.ScheduledTask;
+import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingStreamTracerFactory;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
@@ -66,7 +72,9 @@ import io.grpc.xds.OrcaPerRequestUtil.OrcaPerRequestReportListener;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.net.InetSocketAddress;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -129,6 +137,20 @@ public class LocalityStoreTest {
   private final Map<String, Helper> childHelpers = new HashMap<>();
   private final Map<String, FakeOrcaReportingHelperWrapper> childHelperWrappers = new HashMap<>();
   private final FakeClock fakeClock = new FakeClock();
+
+  private final TaskFilter deactivationTaskFilter = new TaskFilter() {
+    @Override
+    public boolean shouldAccept(Runnable runnable) {
+      return runnable.toString().contains("DeletionTask");
+    }
+  };
+
+  private final TaskFilter failOverTaskFilter = new TaskFilter() {
+    @Override
+    public boolean shouldAccept(Runnable runnable) {
+      return runnable.toString().contains("FailOverTask");
+    }
+  };
 
   private final LoadBalancerProvider lbProvider = new LoadBalancerProvider() {
 
@@ -236,27 +258,27 @@ public class LocalityStoreTest {
   public void updateLocalityStore_updateStatsStoreLocalityTracking() {
     Map<XdsLocality, LocalityInfo> localityInfoMap = new HashMap<>();
     localityInfoMap
-        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1));
+        .put(locality1, new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0));
     localityInfoMap
-        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2));
-    localityStore.updateLocalityStore(localityInfoMap);
+        .put(locality2, new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0));
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality1);
     verify(loadStatsStore).addLocality(locality2);
 
     localityInfoMap
-        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3));
-    localityStore.updateLocalityStore(localityInfoMap);
+        .put(locality3, new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0));
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).addLocality(locality3);
 
     localityInfoMap = ImmutableMap
-        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4));
-    localityStore.updateLocalityStore(localityInfoMap);
+        .of(locality4, new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0));
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(localityInfoMap));
     verify(loadStatsStore).removeLocality(locality1);
     verify(loadStatsStore).removeLocality(locality2);
     verify(loadStatsStore).removeLocality(locality3);
     verify(loadStatsStore).addLocality(locality4);
 
-    localityStore.updateLocalityStore(Collections.EMPTY_MAP);
+    localityStore.updateLocalityStore(ImmutableMap.copyOf(Collections.EMPTY_MAP));
     verify(loadStatsStore).removeLocality(locality4);
   }
 
@@ -264,9 +286,9 @@ public class LocalityStoreTest {
   public void updateLocalityStore_pickResultInterceptedForLoadRecordingWhenSubchannelReady() {
     // Simulate receiving two localities.
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -335,9 +357,9 @@ public class LocalityStoreTest {
   public void childLbPerformOobBackendMetricsAggregation() {
     // Simulate receiving two localities.
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -393,9 +415,9 @@ public class LocalityStoreTest {
 
     // Simulate receiving two localities.
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     localityStore.updateLocalityStore(ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2));
 
@@ -412,12 +434,12 @@ public class LocalityStoreTest {
   public void updateLoaclityStore_withEmptyDropList() {
     localityStore.updateDropPercentage(ImmutableList.<DropOverload>of());
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -491,9 +513,9 @@ public class LocalityStoreTest {
 
     // update with new addresses
     localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
     LocalityInfo localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4);
+        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
     localityInfoMap = ImmutableMap.of(
         locality2, localityInfo2, locality4, localityInfo4, locality1, localityInfo1);
     localityStore.updateLocalityStore(localityInfoMap);
@@ -522,12 +544,12 @@ public class LocalityStoreTest {
   @Test
   public void updateLoaclityStore_deactivateAndReactivate() {
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -556,7 +578,7 @@ public class LocalityStoreTest {
 
     // update localities, removing sz1, sz2, keeping sz3, and adding sz4
     LocalityInfo localityInfo4 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4);
+        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
     localityInfoMap = ImmutableMap.of(locality3, localityInfo3, locality4, localityInfo4);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -622,7 +644,8 @@ public class LocalityStoreTest {
     pickerFactory.nextIndex = 0;
     assertThat(subchannelPickerCaptor.getValue().pickSubchannel(pickSubchannelArgs).getSubchannel())
         .isEqualTo(subchannel1);
-    assertThat(fakeClock.getPendingTasks()).hasSize(2); // sz3, sz4 pending removal
+    // sz3, sz4 pending removal
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(2);
 
     // verify lb1, lb3, and lb4 never shutdown and never changed since created
     verify(lb1, never()).shutdown();
@@ -635,7 +658,7 @@ public class LocalityStoreTest {
     assertThat(loadBalancers.get("sz4")).isSameInstanceAs(lb4);
 
     localityStore.reset();
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
     verify(lb1).shutdown();
     verify(newLb2).shutdown();
     verify(lb3).shutdown();
@@ -648,12 +671,12 @@ public class LocalityStoreTest {
         new DropOverload("throttle", 365),
         new DropOverload("lb", 1234)));
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -746,12 +769,12 @@ public class LocalityStoreTest {
         new DropOverload("throttle", 365),
         new DropOverload("lb", 1000_000)));
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -767,12 +790,12 @@ public class LocalityStoreTest {
   @Test
   public void updateLocalityStore_OnlyUpdatingWeightsStillUpdatesPicker() {
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     LocalityInfo localityInfo3 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -781,9 +804,9 @@ public class LocalityStoreTest {
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
     // Update locality weights before any subchannel becomes READY.
-    localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4);
-    localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5);
-    localityInfo3 = new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6);
+    localityInfo1 = new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 4, 0);
+    localityInfo2 = new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 5, 0);
+    localityInfo3 = new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6, 0);
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
     localityStore.updateLocalityStore(localityInfoMap);
@@ -816,10 +839,10 @@ public class LocalityStoreTest {
   @Test
   public void reset() {
     LocalityInfo localityInfo1 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1);
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
     LocalityInfo localityInfo2 =
-        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2);
-    Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
     localityStore.updateLocalityStore(localityInfoMap);
 
@@ -840,6 +863,402 @@ public class LocalityStoreTest {
     verify(loadBalancers.get("sz2")).shutdown();
     verify(loadStatsStore, times(2)).removeLocality(locality1);
     verify(loadStatsStore, times(2)).removeLocality(locality2);
+  }
+
+  /**
+   * Tests the scenario of the following sequence of events.
+   * (In the format of "event detail - expected state", with abbreviations C for CONNECTING,
+   * F for TRANSIENT_FAILURE, R for READ, and D for deactivated etc.)
+   * EDS update: P0 sz1; P1 sz2; P2 sz3; P3 sz4 - P0 C, P1 N/A, P2 N/A, P3 N/A
+   * 10 secs passes P0 still CONNECTING - P0 C, P1 C, P2 N/A, P3 N/A
+   * 5 secs passes P1 in TRANSIENT_FAILURE - P0 C, P1 F, P2 C, P3 N/A
+   * 4 secs passes P2 READY - P0 C, P1 F, P2 R, P3 N/A
+   * P0 gets READY - P0 R, P1 F&D, P2 R&D, P3 N/A
+   * P1 gets READY - P0 R, P1 R&D, P2 R&D, P3 N/A
+   * 10 min passes P0 in TRANSIENT_FAILURE - P0 F, P1 R, P2 R&D, P3 N/A
+   * 5 min passes - P0 F, P1 R, P2 N/A, P3 N/A
+   * P1 in TRANSIENT_FAILURE - P0 F, P1 F, P2 C, P3 N/A
+   * 10 secs passes - P0 F, P1 F, P2 C, P3 C
+   * P1, P3 gets READY - P0 F, P1 R, P2 C&D, P3 R&D
+   * EDS update, localities moved: P0 sz1, sz3; P1 sz4; P2 sz2 - P0 C, P1 R, P2 R&D
+   * 15 min passes - P0 C, P1 R, P2 N/A
+   * EDS update, locality removed: P0 sz1, sz3, - P0 C, P1 N/A, sz4 R&D
+   * sz3 gets READY - P0 R, P1 N/A, sz4 R&D
+   * EDS update, locality comes back and another removed: P0 sz1, P1 sz4 - P0 C, P1 R, sz3 R&D
+   *
+   * <p>Should also verify that when locality store is updated with new EDS data, state of all
+   * localities should be updated before the child balancer of each locality handles new addresses.
+   */
+  @Test
+  public void multipriority() {
+    // EDS update: P0 sz1; P1 sz2; P2 sz3; P3 sz4 - P0 C, P1 N/A, P2 N/A, P3 N/A
+    LocalityInfo localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityInfo localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 1);
+    LocalityInfo localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 2);
+    LocalityInfo localityInfo4 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint41, lbEndpoint42), 3, 3);
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
+        localityInfo4);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        localityStore.updateLocalityStore(localityInfoMap);
+      }
+    });
+    assertThat(loadBalancers.keySet()).containsExactly("sz1");
+    LoadBalancer lb1 = loadBalancers.get("sz1");
+    InOrder inOrder = inOrder(lb1, helper);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 = ArgumentCaptor.forClass(null);
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11, eag12);
+
+    // 10 sec passes P0 still CONNECTING - P0 C, P1 C, P2 N/A, P3 N/A
+    fakeClock.forwardTime(9, TimeUnit.SECONDS);
+    assertThat(loadBalancers.keySet()).containsExactly("sz1");
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
+    ScheduledTask failOverTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(failOverTaskFilter));
+    fakeClock.forwardTime(1, TimeUnit.SECONDS);
+    assertThat(failOverTask.isCancelled()).isFalse();
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).doesNotContain(failOverTask);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
+    failOverTask = Iterables.getOnlyElement(fakeClock.getPendingTasks(failOverTaskFilter));
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2");
+    LoadBalancer lb2 = loadBalancers.get("sz2");
+    inOrder = inOrder(lb1, lb2, helper);
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
+    inOrder.verify(lb2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag21, eag22);
+
+    // 5 secs passes P1 in TRANSIENT_FAILURE - P0 C, P1 F, P2 C, P3 N/A
+    fakeClock.forwardTime(5, TimeUnit.SECONDS);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).containsExactly(failOverTask);
+    final Helper helper2 = childHelpers.get("sz2");
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper2.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(UNAVAILABLE));
+      }
+    });
+    assertThat(failOverTask.isCancelled()).isTrue();
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).doesNotContain(failOverTask);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
+    failOverTask = Iterables.getOnlyElement(fakeClock.getPendingTasks(failOverTaskFilter));
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
+    LoadBalancer lb3 = loadBalancers.get("sz3");
+    inOrder = inOrder(lb3, helper);
+    // The order of the following two updateBalancingState() does not matter. We want to verify
+    // lb3.handleResolvedAddresses() is after them.
+    inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor3 = ArgumentCaptor.forClass(null);
+    inOrder.verify(lb3).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
+    assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31, eag32);
+
+    // 5 secs passes P2 READY - P0 C, P1 F, P2 R, P3 N/A
+    fakeClock.forwardTime(4, TimeUnit.SECONDS);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).containsExactly(failOverTask);
+    final Helper helper3 = childHelpers.get("sz3");
+    final Subchannel mockSubchannel3 = mock(Subchannel.class);
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper3.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(mockSubchannel3);
+              }
+            });
+      }
+    });
+    assertThat(failOverTask.isCancelled()).isTrue();
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor = ArgumentCaptor.forClass(null);
+    inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+            .pickSubchannel(mock(PickSubchannelArgs.class))
+            .getSubchannel())
+        .isSameInstanceAs(mockSubchannel3);
+
+    // P0 gets READY - P0 R, P1 F&D, P2 R&D, P3 N/A
+    final Helper helper1 = childHelpers.get("sz1");
+    final Subchannel mockSubchannel1 = mock(Subchannel.class);
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper1.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(mockSubchannel1);
+              }
+            });
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    Collection<ScheduledTask> deactivationTasks = fakeClock.getPendingTasks(deactivationTaskFilter);
+    assertThat(deactivationTasks).hasSize(2);
+    inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+            .pickSubchannel(mock(PickSubchannelArgs.class))
+            .getSubchannel())
+        .isSameInstanceAs(mockSubchannel1);
+
+    // P1 gets READY - P0 R, P1 R&D, P2 R&D, P3 N/A
+    final Subchannel mockSubchannel2 = mock(Subchannel.class);
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper2.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(mockSubchannel2);
+              }
+            });
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(2);
+    inOrder.verify(helper, never())
+        .updateBalancingState(any(ConnectivityState.class), any(SubchannelPicker.class));
+
+    // 10 min passes P0 in TRANSIENT_FAILURE - P0 F, P1 R, P2 R&D, P3 N/A
+    fakeClock.forwardTime(10, TimeUnit.MINUTES);
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper1.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(UNAVAILABLE));
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
+    ScheduledTask deactivationTask =
+        Iterables.getOnlyElement(fakeClock.getPendingTasks(deactivationTaskFilter));
+    assertThat(deactivationTask).isSameInstanceAs(Iterables.get(deactivationTasks, 1));
+    assertThat(Iterables.get(deactivationTasks, 0).isCancelled()).isTrue();
+    inOrder.verify(helper, never())
+        .updateBalancingState(CONNECTING, BUFFER_PICKER);
+
+
+    // 5 min passes - P0 F, P1 R, P2 N/A, P3 N/A
+    verify(lb3, never()).shutdown();
+    fakeClock.forwardTime(5, TimeUnit.MINUTES);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    verify(lb3).shutdown();
+
+    // P1 in TRANSIENT_FAILURE - P0 F, P1 F, P2 C, P3 N/A
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper2.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(UNAVAILABLE));
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
+    failOverTask = Iterables.getOnlyElement(fakeClock.getPendingTasks(failOverTaskFilter));
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    // The order of the following two updateBalancingState() does not matter. We only want to verify
+    // these are the latest tow updateBalancingState().
+    inOrder.verify(helper).updateBalancingState(same(TRANSIENT_FAILURE), isA(ErrorPicker.class));
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
+    assertThat(loadBalancers.get("sz3")).isNotSameInstanceAs(lb3);
+    lb3 = loadBalancers.get("sz3");
+    assertThat(childHelpers.get("sz3")).isNotSameInstanceAs(helper3);
+
+    // 10 secs passes - P0 F, P1 F, P2 C, P3 C
+    fakeClock.forwardTime(10, TimeUnit.SECONDS);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).doesNotContain(failOverTask);
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3", "sz4");
+    LoadBalancer lb4 = loadBalancers.get("sz4");
+    inOrder = inOrder(lb1, lb2, lb3, lb4, helper);
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor4 = ArgumentCaptor.forClass(null);
+    inOrder.verify(lb4).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
+    assertThat(resolvedAddressesCaptor4.getValue().getAddresses()).containsExactly(eag41, eag42);
+
+    // P1, P3 gets READY - P0 F, P1 R, P2 C&D, P3 R&D
+    final Subchannel mockSubchannel22 = mock(Subchannel.class);
+    final Subchannel mockSubchannel4 = mock(Subchannel.class);
+    final Helper helper4 = childHelpers.get("sz4");
+    helper.getSynchronizationContext().execute(new Runnable() {
+      @Override
+      public void run() {
+        helper2.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(mockSubchannel22);
+              }
+            });
+        helper4.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(mockSubchannel4);
+              }
+            });
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(2);
+    inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+            .pickSubchannel(mock(PickSubchannelArgs.class))
+            .getSubchannel())
+        .isSameInstanceAs(mockSubchannel22);
+
+    // EDS update, localities moved: P0 sz1, sz3; P1 sz4; P2 sz2 - P0 C, P1 R, P2 R&D
+    localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint12), 1, 0);
+    localityInfo2 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint22), 2, 2);
+    localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint32), 3, 0);
+    localityInfo4 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint42), 4, 1);
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap2 = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
+        localityInfo4);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        localityStore.updateLocalityStore(localityInfoMap2);
+      }
+    });
+    assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3", "sz4");
+    assertThat(loadBalancers.values()).containsExactly(lb1, lb2, lb3, lb4);
+    inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+            .pickSubchannel(mock(PickSubchannelArgs.class))
+            .getSubchannel())
+        .isSameInstanceAs(mockSubchannel4);
+    // The order of the following four handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
+    inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag12);
+    inOrder.verify(lb2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    assertThat(resolvedAddressesCaptor2.getValue().getAddresses()).containsExactly(eag22);
+    inOrder.verify(lb3).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
+    assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag32);
+    inOrder.verify(lb4).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
+    assertThat(resolvedAddressesCaptor4.getValue().getAddresses()).containsExactly(eag42);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
+
+    // 15 min passes - P0 C, P1 R, P2 N/A
+    verify(lb2, never()).shutdown();
+    fakeClock.forwardTime(15, TimeUnit.MINUTES);
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    inOrder.verify(lb2).shutdown();
+    inOrder.verifyNoMoreInteractions();
+
+    // EDS update, locality removed: P0 sz1, sz3, - P0 C, P1 N/A, sz4 R&D
+    localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
+    localityInfo3 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint31), 3, 0);
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap3 = ImmutableMap.of(
+        locality1, localityInfo1,locality3, localityInfo3);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        localityStore.updateLocalityStore(localityInfoMap3);
+      }
+    });
+    inOrder.verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    // The order of the following two handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
+    inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
+    inOrder.verify(lb3).handleResolvedAddresses(resolvedAddressesCaptor3.capture());
+    assertThat(resolvedAddressesCaptor3.getValue().getAddresses()).containsExactly(eag31);
+    inOrder.verifyNoMoreInteractions();
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
+
+    // sz3 gets READY - P0 R, P1 N/A, sz4 R&D
+    final Helper newHelper3 = childHelpers.get("sz3");
+    final Subchannel newMockSubchannel3 = mock(Subchannel.class);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        newHelper3.updateBalancingState(
+            READY,
+            new SubchannelPicker() {
+              @Override
+              public PickResult pickSubchannel(PickSubchannelArgs args) {
+                return PickResult.withSubchannel(newMockSubchannel3);
+              }
+            }
+        );
+      }
+    });
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
+    inOrder.verify(helper).updateBalancingState(same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+            .pickSubchannel(mock(PickSubchannelArgs.class))
+            .getSubchannel())
+        .isSameInstanceAs(newMockSubchannel3);
+    inOrder.verifyNoMoreInteractions();
+
+    // EDS update, locality comes back and another removed: P0 sz1, P1 sz4 - P0 C, P1 R, sz3 R&D
+    localityInfo1 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint11), 1, 0);
+    localityInfo4 =
+        new LocalityInfo(ImmutableList.of(lbEndpoint41), 4, 1);
+    final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap4 = ImmutableMap.of(
+        locality1, localityInfo1,locality4, localityInfo4);
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        localityStore.updateLocalityStore(localityInfoMap4);
+      }
+    });
+    inOrder.verify(helper, atLeastOnce()).updateBalancingState(
+        same(READY), subchannelPickerCaptor.capture());
+    assertThat(subchannelPickerCaptor.getValue()
+        .pickSubchannel(mock(PickSubchannelArgs.class))
+        .getSubchannel())
+        .isSameInstanceAs(mockSubchannel4);
+    // The order of the following two handleResolvedAddresses() does not matter. We want to verify
+    // they are after helper.updateBalancingState()
+    inOrder.verify(lb1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
+    assertThat(resolvedAddressesCaptor1.getValue().getAddresses()).containsExactly(eag11);
+    inOrder.verify(lb4).handleResolvedAddresses(resolvedAddressesCaptor4.capture());
+    assertThat(resolvedAddressesCaptor4.getValue().getAddresses()).containsExactly(eag41);
+    inOrder.verifyNoMoreInteractions();
+    assertThat(fakeClock.getPendingTasks(failOverTaskFilter)).isEmpty();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).hasSize(1);
+
+    verify(lb1, never()).shutdown();
+    verify(lb3, never()).shutdown();
+    verify(lb4, never()).shutdown();
+    localityStore.reset();
+    assertThat(fakeClock.getPendingTasks(deactivationTaskFilter)).isEmpty();
+    verify(lb1).shutdown();
+    verify(lb3).shutdown();
+    verify(lb4).shutdown();
   }
 
   private static final class FakeLoadStatsStore implements LoadStatsStore {

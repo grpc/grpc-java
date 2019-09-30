@@ -129,6 +129,12 @@ public class OkHttpChannelBuilder extends
   private boolean keepAliveWithoutCalls;
   private int maxInboundMetadataSize = Integer.MAX_VALUE;
 
+  /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods = true;
+
   protected OkHttpChannelBuilder(String host, int port) {
     this(GrpcUtil.authorityFromHostAndPort(host, port));
   }
@@ -391,7 +397,8 @@ public class OkHttpChannelBuilder extends
         flowControlWindow,
         keepAliveWithoutCalls,
         maxInboundMetadataSize,
-        transportTracerFactory);
+        transportTracerFactory,
+        useGetForSafeMethods);
   }
 
   @Override
@@ -449,6 +456,7 @@ public class OkHttpChannelBuilder extends
     private final boolean keepAliveWithoutCalls;
     private final int maxInboundMetadataSize;
     private final ScheduledExecutorService timeoutService;
+    private final boolean useGetForSafeMethods;
     private boolean closed;
 
     private OkHttpTransportFactory(
@@ -465,7 +473,8 @@ public class OkHttpChannelBuilder extends
         int flowControlWindow,
         boolean keepAliveWithoutCalls,
         int maxInboundMetadataSize,
-        TransportTracer.Factory transportTracerFactory) {
+        TransportTracer.Factory transportTracerFactory,
+        boolean useGetForSafeMethods) {
       usingSharedScheduler = timeoutService == null;
       this.timeoutService = usingSharedScheduler
           ? SharedResourceHolder.get(GrpcUtil.TIMER_SERVICE) : timeoutService;
@@ -480,6 +489,7 @@ public class OkHttpChannelBuilder extends
       this.flowControlWindow = flowControlWindow;
       this.keepAliveWithoutCalls = keepAliveWithoutCalls;
       this.maxInboundMetadataSize = maxInboundMetadataSize;
+      this.useGetForSafeMethods = useGetForSafeMethods;
 
       usingSharedExecutor = executor == null;
       this.transportTracerFactory =
@@ -522,7 +532,8 @@ public class OkHttpChannelBuilder extends
           options.getHttpConnectProxiedSocketAddress(),
           tooManyPingsRunnable,
           maxInboundMetadataSize,
-          transportTracerFactory.create());
+          transportTracerFactory.create(),
+          useGetForSafeMethods);
       if (enableKeepAlive) {
         transport.enableKeepAlive(
             true, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos, keepAliveWithoutCalls);

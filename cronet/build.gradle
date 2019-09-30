@@ -79,6 +79,7 @@ task javadocs(type: Javadoc) {
             addStringOption('Xdoclint:none', '-quiet')
         }
     }
+    exclude 'io/grpc/cronet/Internal*'
 }
 
 task javadocJar(type: Jar, dependsOn: javadocs) {

@@ -185,4 +185,9 @@ public final class TsiHandshakeHandler extends ByteToMessageDecoder {
       }
     }
   }
+
+  @Override
+  protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception {
+    handshaker.close();
+  }
 }

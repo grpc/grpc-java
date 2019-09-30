@@ -75,14 +75,15 @@ class NettyClientStream extends AbstractClientStream {
       AsciiString userAgent,
       StatsTraceContext statsTraceCtx,
       TransportTracer transportTracer,
-      CallOptions callOptions) {
+      CallOptions callOptions,
+      boolean useGetForSafeMethods) {
     super(
         new NettyWritableBufferAllocator(channel.alloc()),
         statsTraceCtx,
         transportTracer,
         headers,
         callOptions,
-        useGet(method));
+        useGetForSafeMethods && method.isSafe());
     this.state = checkNotNull(state, "transportState");
     this.writeQueue = state.handler.getWriteQueue();
     this.method = checkNotNull(method, "method");
@@ -110,10 +111,6 @@ class NettyClientStream extends AbstractClientStream {
   @Override
   public Attributes getAttributes() {
     return state.handler.getAttributes();
-  }
-
-  private static boolean useGet(MethodDescriptor<?, ?> method) {
-    return method.isSafe();
   }
 
   private class Sink implements AbstractClientStream.Sink {

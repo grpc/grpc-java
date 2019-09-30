@@ -1,9 +1,8 @@
 gRPC Cronet Transport
 ========================
 
-**EXPERIMENTAL:**  *gRPC's Cronet transport is an experimental API, and is not
-yet integrated with our build system. Using Cronet with gRPC requires manually
-integrating the gRPC code in this directory into your Android application.*
+**EXPERIMENTAL:**  *gRPC's Cronet transport is an experimental API, its stability
+depends on upstream Cronet's implementation, which involves some experimental features.*
 
 This code enables using the [Chromium networking stack
 (Cronet)](https://chromium.googlesource.com/chromium/src/+/master/components/cronet)
@@ -17,13 +16,26 @@ Some advantages of using Cronet with gRPC:
 * Robust to Android network connectivity changes
 * Support for [QUIC](https://www.chromium.org/quic)
 
-Cronet jars are available on Google's Maven repository. See the example app at
-https://github.com/GoogleChrome/cronet-sample/blob/master/README.md. To use
-Cronet with gRPC, you will need to copy the gRPC source files contained in this
-directory into your application's code, as we do not currently provide a
-`grpc-cronet` dependency.
+Since gRPC's 1.24 release, the `grpc-cronet` package provides access to the 
+`CronetChannelBuilder` class. Cronet jars are available on Google's Maven repository. 
+See the example app at https://github.com/GoogleChrome/cronet-sample/blob/master/README.md.
 
-To use Cronet, you must have the `ACCESS_NETWORK_STATE` permission set in
+## Example usage:
+
+In your app module's `build.gradle` file, include a dependency on both `grpc-cronet` and the 
+Google Play Services Client Library for Cronet
+
+```
+implementation 'io.grpc:grpc-cronet:1.24.0'
+implementation 'com.google.android.gms:play-services-cronet:16.0.0'
+```
+
+In cases where Cronet cannot be loaded from Google Play services, there is a less performant 
+implementation of Cronet's API that can be used. Depend on `org.chromium.net:cronet-fallback` 
+to use this fall-back implementation.
+
+
+You will also need permission to access the device's network state in your 
 `AndroidManifest.xml`:
 
 ```
