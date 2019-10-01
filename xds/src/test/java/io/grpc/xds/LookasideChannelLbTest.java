@@ -28,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -50,6 +51,7 @@ import io.grpc.ChannelLogger;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
+import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -406,5 +408,44 @@ public class LookasideChannelLbTest {
 
     verify(loadReportClient).stopLoadReporting();
     assertThat(channel.isShutdown()).isTrue();
+  }
+
+  /**
+   * Tests load reporting is initiated after receiving the first valid EDS response from the traffic
+   * director, then its operation is independent of load balancing until xDS load balancer is
+   * shutdown.
+   */
+  @Test
+  public void reportLoadAfterReceivingFirstEdsResponseUntilShutdown() {
+    // Simulates a syntactically incorrect EDS response.
+    serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
+    verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
+    verify(adsStreamCallback, never()).onWorking();
+    verify(adsStreamCallback, never()).onError();
+
+    // Simulate a syntactically correct EDS response.
+    DiscoveryResponse edsResponse =
+        DiscoveryResponse.newBuilder()
+            .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
+            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
+            .build();
+    serverResponseWriter.onNext(edsResponse);
+
+    verify(adsStreamCallback).onWorking();
+
+    ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
+    verify(loadReportClient).startLoadReporting(lrsCallbackCaptor.capture());
+    lrsCallbackCaptor.getValue().onReportResponse(19543);
+    verify(localityStore).updateOobMetricsReportInterval(19543);
+
+    // Simulate another EDS response from the same remote balancer.
+    serverResponseWriter.onNext(edsResponse);
+    verifyNoMoreInteractions(localityStoreFactory, adsStreamCallback, loadReportClient);
+
+    // Simulate an EDS error response.
+    serverResponseWriter.onError(Status.ABORTED.asException());
+    verify(adsStreamCallback).onError();
+
+    verifyNoMoreInteractions(localityStoreFactory, adsStreamCallback, loadReportClient);
   }
 }
