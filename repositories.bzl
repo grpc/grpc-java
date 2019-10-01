@@ -26,7 +26,7 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
     "io.grpc:grpc-api": "@io_grpc_grpc_java//api",
     "io.grpc:grpc-auth": "@io_grpc_grpc_java//auth",
     "io.grpc:grpc-context": "@io_grpc_grpc_java//context",
-    "io.grpc:grpc-core": "@io_grpc_grpc_java//core_maven",
+    "io.grpc:grpc-core": "@io_grpc_grpc_java//core:core_maven",
     "io.grpc:grpc-grpclb": "@io_grpc_grpc_java//grpclb",
     "io.grpc:grpc-netty": "@io_grpc_grpc_java//netty",
     "io.grpc:grpc-netty-shaded": "@io_grpc_grpc_java//netty:shaded_maven",
