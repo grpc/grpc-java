@@ -203,7 +203,7 @@ public class LookasideChannelLbTest {
   }
 
   @Test
-  public void verfiyDropOverload() {
+  public void handleDropUpdates() {
     verify(localityStore, never()).updateDropPercentage(
         ArgumentMatchers.<ImmutableList<DropOverload>>any());
 
@@ -285,7 +285,7 @@ public class LookasideChannelLbTest {
   }
 
   @Test
-  public void verifyUpdateLocalityStore() {
+  public void handleLocalityAssignmentUpdates() {
     Locality localityProto1 = Locality.newBuilder()
         .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
     LbEndpoint endpoint11 = LbEndpoint.newBuilder()
@@ -374,7 +374,7 @@ public class LookasideChannelLbTest {
   }
 
   @Test
-  public void onAdsStreamError() {
+  public void verifyRpcErrorPropagation() {
     verify(adsStreamCallback, never()).onError();
     serverResponseWriter.onError(new RuntimeException());
     verify(adsStreamCallback).onError();
