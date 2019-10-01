@@ -44,7 +44,7 @@ public class BootstrapperTest {
   @Test
   public void validBootstrap() {
     List<ChannelCreds> channelCredsList =
-        ImmutableList.of(new ChannelCreds("TLS"), new ChannelCreds("LOAS"));
+        ImmutableList.of(new ChannelCreds("TLS", null), new ChannelCreds("LOAS", null));
     ServerConfig serverConfig =
         new ServerConfig("trafficdirector.googleapis.com:443", channelCredsList);
 

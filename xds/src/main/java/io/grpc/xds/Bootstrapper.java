@@ -144,10 +144,7 @@ abstract class Bootstrapper {
         if (type == null) {
           throw new IOException("Invalid bootstrap: 'channel_creds' contains unknown type.");
         }
-        ChannelCreds creds = new ChannelCreds(type);
-        if (channelCreds.containsKey("config")) {
-          creds.config = JsonUtil.getObject(channelCreds, "config");
-        }
+        ChannelCreds creds = new ChannelCreds(type, JsonUtil.getObject(channelCreds, "config"));
         channelCredsOptions.add(creds);
       }
     }
@@ -240,11 +237,12 @@ abstract class Bootstrapper {
   static class ChannelCreds {
     private final String type;
     @Nullable
-    private Map<String, ?> config;
+    private final Map<String, ?> config;
 
     @VisibleForTesting
-    ChannelCreds(String type) {
+    ChannelCreds(String type, @Nullable Map<String, ?> config) {
       this.type = type;
+      this.config = config;
     }
 
     String getType() {
