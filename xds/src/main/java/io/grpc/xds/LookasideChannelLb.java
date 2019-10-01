@@ -32,7 +32,7 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy.Provider;
+import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
@@ -73,13 +73,14 @@ final class LookasideChannelLb extends LoadBalancer {
           }
         };
     lrsClient = lrsClientFactory.createLoadReportClient(
-        lbChannel, helper, new Provider(),
+        lbChannel, helper, new ExponentialBackoffPolicy.Provider(),
         localityStore.getLoadStatsStore());
 
     AdsStreamCallback2 adsCallback2 = new AdsStreamCallback2Impl(
         adsCallback, lrsClient, lrsCallback, localityStore) ;
     xdsComms2 = new XdsComms2(
-        lbChannel, helper, adsCallback2, new Provider(), GrpcUtil.STOPWATCH_SUPPLIER);
+        lbChannel, helper, adsCallback2, new ExponentialBackoffPolicy.Provider(),
+        GrpcUtil.STOPWATCH_SUPPLIER);
   }
 
   private static int rateInMillion(FractionalPercent fractionalPercent) {
