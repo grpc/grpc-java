@@ -28,15 +28,12 @@ import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -60,11 +57,9 @@ final class LookasideChannelLb extends LoadBalancer {
       Helper helper,
       AdsStreamCallback adsCallback,
       String balancerName,
-      LoadReportClientFactory lrsClientFactory,
-      LoadBalancerRegistry lbRegistry,
-      LocalityStoreFactory localityStoreFactory) {
+      LoadReportClient lrsClient,
+      final LocalityStore localityStore) {
     lbChannel = initLbChannel(helper, balancerName);
-    final LocalityStore localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
     LoadReportCallback lrsCallback =
         new LoadReportCallback() {
           @Override
@@ -72,9 +67,7 @@ final class LookasideChannelLb extends LoadBalancer {
             localityStore.updateOobMetricsReportInterval(reportIntervalNano);
           }
         };
-    lrsClient = lrsClientFactory.createLoadReportClient(
-        lbChannel, helper, new ExponentialBackoffPolicy.Provider(),
-        localityStore.getLoadStatsStore());
+    this.lrsClient = lrsClient;
 
     AdsStreamCallback2 adsCallback2 = new AdsStreamCallback2Impl(
         adsCallback, lrsClient, lrsCallback, localityStore) ;
@@ -142,22 +135,6 @@ final class LookasideChannelLb extends LoadBalancer {
     xdsComms2.shutdownLbRpc();
     lbChannel.shutdown();
   }
-
-  @VisibleForTesting
-  interface LocalityStoreFactory {
-    LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
-  }
-
-  @VisibleForTesting
-  static final class LocalityStoreFactoryImpl implements LocalityStoreFactory {
-
-    @Override
-    public LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
-      return new LocalityStoreImpl(helper, lbRegistry);
-    }
-  }
-
-
 
   // TODO(zdapeng): The old AdsStreamCallback will be renamed to LookasideChannelCallback,
   // and AdsStreamCallback2 will be renamed to AdsStreamCallback

@@ -20,8 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -49,19 +47,15 @@ import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.ChannelLogger;
 import io.grpc.LoadBalancer.Helper;
-import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
-import io.grpc.xds.LookasideChannelLb.LocalityStoreFactory;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsComms.DropOverload;
 import io.grpc.xds.XdsComms.LocalityInfo;
@@ -112,11 +106,7 @@ public class LookasideChannelLbTest {
   @Mock
   private AdsStreamCallback adsStreamCallback;
   @Mock
-  private LoadReportClientFactory loadReportClientFactory;
-  @Mock
   private LoadReportClient loadReportClient;
-  @Mock
-  private LocalityStoreFactory localityStoreFactory;
   @Mock
   private LocalityStore localityStore;
   @Mock
@@ -132,8 +122,6 @@ public class LookasideChannelLbTest {
 
   @Before
   public void setUp() throws Exception {
-    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
@@ -179,19 +167,12 @@ public class LookasideChannelLbTest {
     doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(localityStore).when(localityStoreFactory).newLocalityStore(helper, lbRegistry);
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
-    doReturn(loadReportClient).when(loadReportClientFactory).createLoadReportClient(
-        same(channel), same(helper), any(BackoffPolicy.Provider.class), same(loadStatsStore));
 
     lookasideChannelLb = new LookasideChannelLb(
-        helper, adsStreamCallback, BALANCER_NAME, loadReportClientFactory, lbRegistry,
-        localityStoreFactory);
+        helper, adsStreamCallback, BALANCER_NAME, loadReportClient, localityStore);
 
     verify(helper).createResolvingOobChannel(BALANCER_NAME);
-    verify(localityStoreFactory).newLocalityStore(helper, lbRegistry);
-    verify(loadReportClientFactory).createLoadReportClient(
-        same(channel), same(helper), isA(BackoffPolicy.Provider.class), same(loadStatsStore));
   }
 
   @Test
@@ -440,12 +421,13 @@ public class LookasideChannelLbTest {
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);
-    verifyNoMoreInteractions(localityStoreFactory, adsStreamCallback, loadReportClient);
+    verifyNoMoreInteractions(adsStreamCallback, loadReportClient);
 
     // Simulate an EDS error response.
     serverResponseWriter.onError(Status.ABORTED.asException());
     verify(adsStreamCallback).onError();
 
-    verifyNoMoreInteractions(localityStoreFactory, adsStreamCallback, loadReportClient);
+    verifyNoMoreInteractions(adsStreamCallback, loadReportClient);
+    verify(localityStore, times(1)).updateOobMetricsReportInterval(anyLong()); // only once
   }
 }
