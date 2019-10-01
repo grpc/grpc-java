@@ -16,7 +16,8 @@
 
 package io.grpc.xds.sds;
 
-import com.google.common.base.Preconditions;
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
@@ -34,7 +35,7 @@ public final class TlsCertificateStore {
   private final ByteString certChain;
 
   private static ByteString getByteStringFromDataSource(DataSource dataSource) {
-    Preconditions.checkNotNull(dataSource);
+    checkNotNull(dataSource);
     ByteString dataSourceByteString = null;
     if (dataSource.getSpecifierCase() == DataSource.SpecifierCase.INLINE_BYTES) {
       dataSourceByteString = dataSource.getInlineBytes();
@@ -54,7 +55,7 @@ public final class TlsCertificateStore {
    */
   public TlsCertificateStore(TlsCertificate tlsCertificate) {
     this(
-        getByteStringFromDataSource(Preconditions.checkNotNull(tlsCertificate).getPrivateKey()),
+        getByteStringFromDataSource(checkNotNull(tlsCertificate).getPrivateKey()),
         getByteStringFromDataSource(tlsCertificate.getCertificateChain()));
   }
 
@@ -65,6 +66,8 @@ public final class TlsCertificateStore {
    * @param certChain  stream representing cert on disk
    */
   public TlsCertificateStore(ByteString privateKeySteam, ByteString certChain) {
+    checkNotNull(privateKeySteam);
+    checkNotNull(certChain);
     this.privateKey = privateKeySteam;
     this.certChain = certChain;
   }

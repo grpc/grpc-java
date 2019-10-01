@@ -47,7 +47,8 @@ public class SecretManagerTest {
     SecretProvider<TlsCertificateStore> provider = secretManager
         .findOrCreateTlsCertificateProvider(configSource, "test");
     assertThat(provider).isNotNull();
-    TlsCertificateStore tlsCertificateStore = provider.get();
+    TlsCertificateStore tlsCertificateStore =
+        TlsCertificateSecretProviderMapTest.getValueThruCallback(provider);
     assertThat(tlsCertificateStore).isNotNull();
     TlsCertificateStoreTest
         .verifyKeyAndCertsWithStrings(tlsCertificateStore, "pemContents", "crtContents");

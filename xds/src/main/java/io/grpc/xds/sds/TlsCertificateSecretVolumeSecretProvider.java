@@ -18,27 +18,25 @@ package io.grpc.xds.sds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- *  Implementation of a file based secret provider.
+ * Implementation of a file based secret provider.
  */
 final class TlsCertificateSecretVolumeSecretProvider
     implements SecretProvider<TlsCertificateStore> {
 
-  private static final Logger logger = Logger
-      .getLogger(TlsCertificateSecretVolumeSecretProvider.class.getName());
   public static final String PEM = ".pem";
   public static final String CRT = ".crt";
-
+  private static final Logger logger = Logger
+      .getLogger(TlsCertificateSecretVolumeSecretProvider.class.getName());
   private final String path;
 
   // for now mark it unused
@@ -46,29 +44,32 @@ final class TlsCertificateSecretVolumeSecretProvider
   private final String name;
 
   TlsCertificateSecretVolumeSecretProvider(String path, String name) {
+    checkNotNull(path, "path");
+    checkNotNull(name, "name");
     this.path = path;
     this.name = name;
   }
 
   @Override
-  public void addListener(Runnable listener, Executor executor) {
-    checkNotNull(listener, "listener");
+  public void addCallback(final Callback<TlsCertificateStore> callback, Executor executor) {
+    checkNotNull(callback, "callback");
     checkNotNull(executor, "executor");
-    try {
-      executor.execute(listener);
-    } catch (RuntimeException e) {
-      // ListenableFuture's contract is that it will not throw unchecked exceptions, so log the bad
-      // runnable and/or executor and swallow it.
-      logger.log(
-          Level.SEVERE,
-          "RuntimeException while executing runnable " + listener + " with executor " + executor,
-          e);
-    }
-  }
-
-  @Override
-  public boolean isAvailable() {
-    return true;
+    executor.execute(new Runnable() {
+      @Override
+      public void run() {
+        // as per the contract of this provider we will get the current on-disk
+        // contents of the files
+        try {
+          TlsCertificateStore tlsCert = get();
+          callback.updateSecret(tlsCert);
+        } catch (ExecutionException e) {
+          logger.log(
+              Level.SEVERE,
+              "RuntimeException from get()",
+              e);
+        }
+      }
+    });
   }
 
   /**
@@ -76,8 +77,8 @@ final class TlsCertificateSecretVolumeSecretProvider
    * <literal>.pem</literal> extension and cert has <literal>.crt</literal> extension
    * (needs to match mounted secrets).
    */
-  @Override
-  public TlsCertificateStore get() throws ExecutionException {
+  @VisibleForTesting
+  TlsCertificateStore get() throws ExecutionException {
     try {
       final FileInputStream pemStream = new FileInputStream(path + PEM);
       final FileInputStream crtStream = new FileInputStream(path + CRT);
@@ -87,16 +88,4 @@ final class TlsCertificateSecretVolumeSecretProvider
       throw new ExecutionException(e);
     }
   }
-
-  /**
-   * The file based secret provider does not need to wait (reads the current files as per
-   * the contract) so we ignore the timeout.
-   */
-  @Override
-  public TlsCertificateStore get(long timeout, TimeUnit unit)
-      throws InterruptedException, ExecutionException, TimeoutException {
-    checkNotNull(unit);
-    return get();
-  }
-
 }

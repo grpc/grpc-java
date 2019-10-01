@@ -19,7 +19,6 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -29,10 +28,6 @@ import java.util.Map;
  */
 abstract class SecretProviderMap<T> {
 
-  protected SecretProviderMap() {
-    providers = new HashMap<>();
-  }
-
   /**
    * Finds an existing SecretProvider or creates it if it doesn't exist.
    *
@@ -40,24 +35,23 @@ abstract class SecretProviderMap<T> {
    * @param name name of the SdsSecretConfig
    * @return SecrerProvider
    */
-  SecretProvider<T> findOrCreate(
+  final synchronized SecretProvider<T> findOrCreate(
       ConfigSource configSource, String name) {
     checkNotNull(configSource, "configSource");
     checkNotNull(name, "name");
 
     String mapKey = "" + configSource.hashCode() + "." + name;
     SecretProvider<T> provider;
-    synchronized (providers) {
-      provider = providers.get(mapKey);
-      if (provider == null) {
-        provider = create(configSource, name);
-        providers.put(mapKey, provider);
-      }
+    Map<String, SecretProvider<T>> providers = getProviders();
+    provider = providers.get(mapKey);
+    if (provider == null) {
+      provider = create(configSource, name);
+      providers.put(mapKey, provider);
     }
     return provider;
   }
 
   abstract SecretProvider<T> create(ConfigSource configSource, String name);
 
-  protected final Map<String, SecretProvider<T>> providers;
+  protected abstract Map<String, SecretProvider<T>> getProviders();
 }

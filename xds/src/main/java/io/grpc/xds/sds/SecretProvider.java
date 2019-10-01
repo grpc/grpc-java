@@ -17,10 +17,7 @@
 package io.grpc.xds.sds;
 
 import io.grpc.Internal;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * A SecretProvider is a "container" or provider of a secret. This is used by gRPC-xds to access
@@ -32,26 +29,13 @@ import java.util.concurrent.TimeoutException;
 @Internal
 public interface SecretProvider<T> {
 
-  /**
-   * Gets the current secret (waits indefinitely if necessary).
-   */
-  T get() throws InterruptedException, ExecutionException;
+  interface Callback<T> {
+    void updateSecret(T secret);
+  }
 
   /**
-   * Gets the secret (and waits if necessary for the given time and then returns the result, if
-   * available.
+   * Registers a callback on the given executor. The callback will run when secret becomes
+   * available or immediately if the result is already available.
    */
-  T get(long timeout, TimeUnit unit)
-      throws InterruptedException, ExecutionException, TimeoutException;
-
-  /**
-   * Returns {@code true} if secret is available.
-   */
-  boolean isAvailable();
-
-  /**
-   * Registers a listener to be on the given executor. The listener will run when the result is
-   * {@linkplain #isAvailable()} or immediately, if the result is already available.
-   */
-  void addListener(Runnable listener, Executor executor);
+  void addCallback(Callback<T> callback, Executor executor);
 }

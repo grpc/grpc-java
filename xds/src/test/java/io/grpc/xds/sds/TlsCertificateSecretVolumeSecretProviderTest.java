@@ -81,17 +81,18 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
   private boolean listenerRun;
 
   @Test
-  public void verifyListenerExecuted()
+  public void verifyCallbackExecuted()
       throws IOException, ExecutionException, InterruptedException {
-    // use junk value for path since it is not used
+    // with a valid file we should get a callback
+    File filePath = createTestCertFiles(temporaryFolder);
     TlsCertificateSecretVolumeSecretProvider provider =
-        new TlsCertificateSecretVolumeSecretProvider("/a/b/test", "test");
+        new TlsCertificateSecretVolumeSecretProvider(filePath.getPath(), "test");
 
     listenerRun = false;
-    provider.addListener(new Runnable() {
+    provider.addCallback(new SecretProvider.Callback<TlsCertificateStore>() {
 
       @Override
-      public void run() {
+      public void updateSecret(TlsCertificateStore secret) {
         listenerRun = true;
       }
     }, MoreExecutors.directExecutor());
@@ -115,4 +116,22 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
     }
   }
 
+  @Test
+  public void verifyCallbackNotExecuted()
+      throws IOException, ExecutionException, InterruptedException {
+    // with an invalid file we should NOT get a callback
+
+    TlsCertificateSecretVolumeSecretProvider provider =
+        new TlsCertificateSecretVolumeSecretProvider("/a/b/test", "test");
+
+    listenerRun = false;
+    provider.addCallback(new SecretProvider.Callback<TlsCertificateStore>() {
+
+      @Override
+      public void updateSecret(TlsCertificateStore secret) {
+        listenerRun = true;
+      }
+    }, MoreExecutors.directExecutor());
+    assertThat(listenerRun).isFalse();
+  }
 }

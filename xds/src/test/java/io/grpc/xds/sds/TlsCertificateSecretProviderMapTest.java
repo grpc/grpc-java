@@ -18,6 +18,7 @@ package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import java.io.File;
@@ -57,13 +58,34 @@ public class TlsCertificateSecretProviderMapTest {
         .build();
   }
 
+  static class TestCallback implements
+      SecretProvider.Callback<TlsCertificateStore> {
+
+    TlsCertificateStore updatedSecret;
+
+    @Override
+    public void updateSecret(TlsCertificateStore secret) {
+      updatedSecret = secret;
+    }
+  }
+
+  /**
+   * Helper method to get the value thru directExecutore callback. Used by other classes.
+   */
+  static TlsCertificateStore getValueThruCallback(SecretProvider<TlsCertificateStore> provider) {
+    TestCallback testCallback = new TestCallback();
+    provider.addCallback(testCallback, MoreExecutors.directExecutor());
+    return testCallback.updatedSecret;
+  }
+
+
   @Test
   public void createTest() throws IOException, ExecutionException, InterruptedException {
     ConfigSource configSource = createFileAndConfigSource(temporaryFolder);
     TlsCertificateSecretProviderMap map = new TlsCertificateSecretProviderMap();
     SecretProvider<TlsCertificateStore> provider = map.findOrCreate(configSource, "test");
     assertThat(provider).isNotNull();
-    TlsCertificateStore tlsCertificateStore = provider.get();
+    TlsCertificateStore tlsCertificateStore = getValueThruCallback(provider);
     assertThat(tlsCertificateStore).isNotNull();
     TlsCertificateStoreTest
         .verifyKeyAndCertsWithStrings(tlsCertificateStore, "pemContents", "crtContents");

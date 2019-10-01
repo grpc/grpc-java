@@ -25,9 +25,8 @@ import io.grpc.Internal;
  * SecretManager to manage secrets. This is used by gRPC-xds to access secrets
  * and not part of the public API of gRPC
  */
-//  * TODO(sanjaypujare): Lifecycle management for this manager and the {@link SecretProvider}s
-//  * will be based on  {@link io.grpc.internal.SharedResourcePool} or
-//  * {@link io.grpc.internal.SharedResourceHolder}
+//  TODO(sanjaypujare): Lifecycle management for this manager and the {@link SecretProvider}s
+//  to be implemented using an object-pool mechanism
 @Internal
 public final class SecretManager {
 

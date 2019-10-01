@@ -19,8 +19,14 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
+import java.util.HashMap;
+import java.util.Map;
 
 final class TlsCertificateSecretProviderMap extends SecretProviderMap<TlsCertificateStore> {
+
+  protected TlsCertificateSecretProviderMap() {
+    providers = new HashMap<>();
+  }
 
   @Override
   SecretProvider<TlsCertificateStore> create(ConfigSource configSource, String name) {
@@ -32,5 +38,12 @@ final class TlsCertificateSecretProviderMap extends SecretProviderMap<TlsCertifi
       throw new UnsupportedOperationException("Only file based secret supported");
     }
     return new TlsCertificateSecretVolumeSecretProvider(configSource.getPath(), name);
+  }
+
+  private final Map<String, SecretProvider<TlsCertificateStore>> providers;
+
+  @Override
+  protected Map<String, SecretProvider<TlsCertificateStore>> getProviders() {
+    return providers;
   }
 }
