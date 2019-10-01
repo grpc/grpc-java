@@ -18,7 +18,6 @@ package io.grpc.stub;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.stub.AbstractBlockingStub.BlockingCallOptionsFactory;
 import io.grpc.stub.AbstractStub.DefaultCallOptionsFactory;
 import io.grpc.stub.ClientCalls.StubType;
 import javax.annotation.CheckReturnValue;
@@ -45,7 +44,8 @@ public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extend
     this(channel, CallOptions.DEFAULT, new FutureCallOptionsFactory());
   }
 
-  protected AbstractFutureStub(Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+  protected AbstractFutureStub(
+      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
     super(channel, callOptions, factory);
   }
 

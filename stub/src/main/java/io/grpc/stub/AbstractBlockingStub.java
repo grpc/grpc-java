@@ -44,7 +44,8 @@ public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
     this(channel, CallOptions.DEFAULT, new BlockingCallOptionsFactory());
   }
 
-  protected AbstractBlockingStub(Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+  protected AbstractBlockingStub(
+      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
     super(channel, callOptions, factory);
   }
 
