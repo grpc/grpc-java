@@ -86,7 +86,8 @@ public class AbstractStubTest {
     }
 
     @Override
-    protected NoopStub build(Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+    protected NoopStub build(
+        Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
       return new NoopStub(channel, callOptions, factory);
     }
   }
