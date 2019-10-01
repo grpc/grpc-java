@@ -416,15 +416,19 @@ public final class ChannelzGrpc {
       super(channel);
     }
 
-    private ChannelzStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ChannelzStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ChannelzStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ChannelzStub(channel, callOptions);
+    protected ChannelzStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ChannelzStub(channel, callOptions, factory);
     }
 
     /**
@@ -517,15 +521,19 @@ public final class ChannelzGrpc {
       super(channel);
     }
 
-    private ChannelzBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ChannelzBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ChannelzBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ChannelzBlockingStub(channel, callOptions);
+    protected ChannelzBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ChannelzBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -611,15 +619,19 @@ public final class ChannelzGrpc {
       super(channel);
     }
 
-    private ChannelzFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ChannelzFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ChannelzFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ChannelzFutureStub(channel, callOptions);
+    protected ChannelzFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ChannelzFutureStub(channel, callOptions, factory);
     }
 
     /**

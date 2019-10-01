@@ -120,15 +120,19 @@ public final class HandshakerServiceGrpc {
       super(channel);
     }
 
-    private HandshakerServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private HandshakerServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected HandshakerServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new HandshakerServiceStub(channel, callOptions);
+    protected HandshakerServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new HandshakerServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -155,15 +159,19 @@ public final class HandshakerServiceGrpc {
       super(channel);
     }
 
-    private HandshakerServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private HandshakerServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected HandshakerServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new HandshakerServiceBlockingStub(channel, callOptions);
+    protected HandshakerServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new HandshakerServiceBlockingStub(channel, callOptions, factory);
     }
   }
 
@@ -174,15 +182,19 @@ public final class HandshakerServiceGrpc {
       super(channel);
     }
 
-    private HandshakerServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private HandshakerServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected HandshakerServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new HandshakerServiceFutureStub(channel, callOptions);
+    protected HandshakerServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new HandshakerServiceFutureStub(channel, callOptions, factory);
     }
   }
 

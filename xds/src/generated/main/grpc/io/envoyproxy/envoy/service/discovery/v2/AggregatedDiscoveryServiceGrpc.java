@@ -184,15 +184,19 @@ public final class AggregatedDiscoveryServiceGrpc {
       super(channel);
     }
 
-    private AggregatedDiscoveryServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private AggregatedDiscoveryServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected AggregatedDiscoveryServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new AggregatedDiscoveryServiceStub(channel, callOptions);
+    protected AggregatedDiscoveryServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new AggregatedDiscoveryServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -230,15 +234,19 @@ public final class AggregatedDiscoveryServiceGrpc {
       super(channel);
     }
 
-    private AggregatedDiscoveryServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private AggregatedDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected AggregatedDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
+    protected AggregatedDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions, factory);
     }
   }
 
@@ -257,15 +265,19 @@ public final class AggregatedDiscoveryServiceGrpc {
       super(channel);
     }
 
-    private AggregatedDiscoveryServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private AggregatedDiscoveryServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected AggregatedDiscoveryServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new AggregatedDiscoveryServiceFutureStub(channel, callOptions);
+    protected AggregatedDiscoveryServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new AggregatedDiscoveryServiceFutureStub(channel, callOptions, factory);
     }
   }
 

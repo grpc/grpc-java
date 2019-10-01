@@ -127,15 +127,19 @@ public final class UnimplementedServiceGrpc {
       super(channel);
     }
 
-    private UnimplementedServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private UnimplementedServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected UnimplementedServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new UnimplementedServiceStub(channel, callOptions);
+    protected UnimplementedServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new UnimplementedServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -161,15 +165,19 @@ public final class UnimplementedServiceGrpc {
       super(channel);
     }
 
-    private UnimplementedServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private UnimplementedServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected UnimplementedServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new UnimplementedServiceBlockingStub(channel, callOptions);
+    protected UnimplementedServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new UnimplementedServiceBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -194,15 +202,19 @@ public final class UnimplementedServiceGrpc {
       super(channel);
     }
 
-    private UnimplementedServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private UnimplementedServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected UnimplementedServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new UnimplementedServiceFutureStub(channel, callOptions);
+    protected UnimplementedServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new UnimplementedServiceFutureStub(channel, callOptions, factory);
     }
 
     /**

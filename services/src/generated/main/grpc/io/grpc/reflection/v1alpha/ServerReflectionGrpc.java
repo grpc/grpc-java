@@ -116,15 +116,19 @@ public final class ServerReflectionGrpc {
       super(channel);
     }
 
-    private ServerReflectionStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ServerReflectionStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ServerReflectionStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ServerReflectionStub(channel, callOptions);
+    protected ServerReflectionStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ServerReflectionStub(channel, callOptions, factory);
     }
 
     /**
@@ -147,15 +151,19 @@ public final class ServerReflectionGrpc {
       super(channel);
     }
 
-    private ServerReflectionBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ServerReflectionBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ServerReflectionBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ServerReflectionBlockingStub(channel, callOptions);
+    protected ServerReflectionBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ServerReflectionBlockingStub(channel, callOptions, factory);
     }
   }
 
@@ -166,15 +174,19 @@ public final class ServerReflectionGrpc {
       super(channel);
     }
 
-    private ServerReflectionFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ServerReflectionFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ServerReflectionFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ServerReflectionFutureStub(channel, callOptions);
+    protected ServerReflectionFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ServerReflectionFutureStub(channel, callOptions, factory);
     }
   }
 

@@ -142,15 +142,19 @@ public final class OpenRcaServiceGrpc {
       super(channel);
     }
 
-    private OpenRcaServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private OpenRcaServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new OpenRcaServiceStub(channel, callOptions);
+    protected OpenRcaServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new OpenRcaServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -179,15 +183,19 @@ public final class OpenRcaServiceGrpc {
       super(channel);
     }
 
-    private OpenRcaServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private OpenRcaServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new OpenRcaServiceBlockingStub(channel, callOptions);
+    protected OpenRcaServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new OpenRcaServiceBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -216,15 +224,19 @@ public final class OpenRcaServiceGrpc {
       super(channel);
     }
 
-    private OpenRcaServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private OpenRcaServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new OpenRcaServiceFutureStub(channel, callOptions);
+    protected OpenRcaServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new OpenRcaServiceFutureStub(channel, callOptions, factory);
     }
   }
 

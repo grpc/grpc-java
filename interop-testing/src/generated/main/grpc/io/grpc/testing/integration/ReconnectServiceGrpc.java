@@ -166,15 +166,19 @@ public final class ReconnectServiceGrpc {
       super(channel);
     }
 
-    private ReconnectServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ReconnectServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ReconnectServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ReconnectServiceStub(channel, callOptions);
+    protected ReconnectServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ReconnectServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -204,15 +208,19 @@ public final class ReconnectServiceGrpc {
       super(channel);
     }
 
-    private ReconnectServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ReconnectServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ReconnectServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ReconnectServiceBlockingStub(channel, callOptions);
+    protected ReconnectServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ReconnectServiceBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -240,15 +248,19 @@ public final class ReconnectServiceGrpc {
       super(channel);
     }
 
-    private ReconnectServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private ReconnectServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected ReconnectServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new ReconnectServiceFutureStub(channel, callOptions);
+    protected ReconnectServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new ReconnectServiceFutureStub(channel, callOptions, factory);
     }
 
     /**

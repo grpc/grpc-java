@@ -269,15 +269,19 @@ public final class WorkerServiceGrpc {
       super(channel);
     }
 
-    private WorkerServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private WorkerServiceStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected WorkerServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new WorkerServiceStub(channel, callOptions);
+    protected WorkerServiceStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new WorkerServiceStub(channel, callOptions, factory);
     }
 
     /**
@@ -342,15 +346,19 @@ public final class WorkerServiceGrpc {
       super(channel);
     }
 
-    private WorkerServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private WorkerServiceBlockingStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected WorkerServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new WorkerServiceBlockingStub(channel, callOptions);
+    protected WorkerServiceBlockingStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new WorkerServiceBlockingStub(channel, callOptions, factory);
     }
 
     /**
@@ -381,15 +389,19 @@ public final class WorkerServiceGrpc {
       super(channel);
     }
 
-    private WorkerServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      super(channel, callOptions);
+    private WorkerServiceFutureStub(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      super(channel, callOptions, factory);
     }
 
     @java.lang.Override
-    protected WorkerServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
-      return new WorkerServiceFutureStub(channel, callOptions);
+    protected WorkerServiceFutureStub build(
+        io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions,
+        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
+      return new WorkerServiceFutureStub(channel, callOptions, factory);
     }
 
     /**
