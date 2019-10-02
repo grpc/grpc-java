@@ -17,18 +17,23 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.grpc.Attributes;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /** Lookaside load balancer that handles balancer name changes. */
 final class LookasideLb extends ForwardingLoadBalancer {
@@ -40,7 +45,12 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
   private String balancerName;
 
-  // TODO(zdapeng): Add LookasideLb(Helper helper, AdsCallback adsCallback) with default factory
+  LookasideLb(Helper lookasideLbHelper, AdsStreamCallback adsCallback) {
+    this(
+        lookasideLbHelper, adsCallback, new LookasideChannelLbFactoryImpl(),
+        LoadBalancerRegistry.getDefaultRegistry());
+  }
+
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
@@ -111,5 +121,39 @@ final class LookasideLb extends ForwardingLoadBalancer {
   @VisibleForTesting
   interface LookasideChannelLbFactory {
     LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback, String balancerName);
+  }
+
+  private static final class LookasideChannelLbFactoryImpl implements LookasideChannelLbFactory {
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback,
+        String balancerName) {
+      return new LookasideChannelLb(
+          helper, adsCallback, initLbChannel(helper, balancerName),
+          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()));
+    }
+
+    private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
+      ManagedChannel channel;
+      try {
+        channel = helper.createResolvingOobChannel(balancerName);
+      } catch (UnsupportedOperationException uoe) {
+        // Temporary solution until createResolvingOobChannel is implemented
+        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
+        Logger logger = Logger.getLogger(LookasideChannelLb.class.getName());
+        if (logger.isLoggable(FINEST)) {
+          logger.log(
+              FINEST,
+              "createResolvingOobChannel() not supported by the helper: " + helper,
+              uoe);
+          logger.log(
+              FINEST,
+              "creating oob channel for target {0} using default ManagedChannelBuilder",
+              balancerName);
+        }
+        channel = ManagedChannelBuilder.forTarget(balancerName).build();
+      }
+      return channel;
+    }
   }
 }
