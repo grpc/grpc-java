@@ -78,7 +78,6 @@ import org.mockito.junit.MockitoRule;
 @RunWith(JUnit4.class)
 public class LookasideChannelLbTest {
 
-  private static final String BALANCER_NAME = "fakeBalancerName";
   private static final String SERVICE_AUTHORITY = "test authority";
 
   @Rule
@@ -163,16 +162,13 @@ public class LookasideChannelLbTest {
             .directExecutor()
             .build());
 
-    doReturn(channel).when(helper).createResolvingOobChannel(BALANCER_NAME);
     doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
 
     lookasideChannelLb = new LookasideChannelLb(
-        helper, adsStreamCallback, BALANCER_NAME, loadReportClient, localityStore);
-
-    verify(helper).createResolvingOobChannel(BALANCER_NAME);
+        helper, adsStreamCallback, channel, loadReportClient, localityStore);
   }
 
   @Test

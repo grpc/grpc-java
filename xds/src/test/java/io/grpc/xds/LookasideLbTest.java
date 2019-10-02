@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -156,5 +157,28 @@ public class LookasideLbTest {
     verify(balancer2, never()).shutdown();
     lookasideLb.shutdown();
     verify(balancer2).shutdown();
+  }
+
+  @Test
+  public void handleResolvedAddress_createLbChannel()
+      throws Exception {
+    // Test balancer created with the default real LookasideChannelLbFactory
+    lookasideLb = new LookasideLb(helper, mock(AdsStreamCallback.class));
+    String lbConfigRaw11 = "{'balancerName' : 'dns:///balancer1.example.com:8080'}"
+        .replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig11 = (Map<String, ?>) JsonParser.parse(lbConfigRaw11);
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig11).build())
+        .build();
+
+    verify(helper, never()).createResolvingOobChannel(anyString());
+    try {
+      lookasideLb.handleResolvedAddresses(resolvedAddresses);
+    } catch (RuntimeException e) {
+      // Expected because helper is a mock and helper.createResolvingOobChannel() returns null.
+    }
+    verify(helper).createResolvingOobChannel("dns:///balancer1.example.com:8080");
   }
 }

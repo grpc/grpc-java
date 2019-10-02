@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -29,7 +28,6 @@ import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
@@ -39,7 +37,6 @@ import io.grpc.xds.XdsComms.LbEndpoint;
 import io.grpc.xds.XdsComms.LocalityInfo;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
  * A load balancer that has a lookaside channel. This layer of load balancer creates a channel to
@@ -52,14 +49,27 @@ final class LookasideChannelLb extends LoadBalancer {
   private final LoadReportClient lrsClient;
   private final XdsComms2 xdsComms2;
 
+  LookasideChannelLb(
+      Helper helper, AdsStreamCallback adsCallback, ManagedChannel lbChannel,
+      LocalityStore localityStore) {
+    this(
+        helper,
+        adsCallback,
+        lbChannel,
+        new LoadReportClientImpl(
+            lbChannel, helper, GrpcUtil.STOPWATCH_SUPPLIER, new ExponentialBackoffPolicy.Provider(),
+            localityStore.getLoadStatsStore()),
+        localityStore);
+  }
+
   @VisibleForTesting
   LookasideChannelLb(
       Helper helper,
       AdsStreamCallback adsCallback,
-      String balancerName,
+      ManagedChannel lbChannel,
       LoadReportClient lrsClient,
       final LocalityStore localityStore) {
-    lbChannel = initLbChannel(helper, balancerName);
+    this.lbChannel = lbChannel;
     LoadReportCallback lrsCallback =
         new LoadReportCallback() {
           @Override
@@ -99,29 +109,6 @@ final class LookasideChannelLb extends LoadBalancer {
     }
 
     return numerator;
-  }
-
-  private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
-    ManagedChannel channel;
-    try {
-      channel = helper.createResolvingOobChannel(balancerName);
-    } catch (UnsupportedOperationException uoe) {
-      // Temporary solution until createResolvingOobChannel is implemented
-      // FIXME (https://github.com/grpc/grpc-java/issues/5495)
-      Logger logger = Logger.getLogger(LookasideChannelLb.class.getName());
-      if (logger.isLoggable(FINEST)) {
-        logger.log(
-            FINEST,
-            "createResolvingOobChannel() not supported by the helper: " + helper,
-            uoe);
-        logger.log(
-            FINEST,
-            "creating oob channel for target {0} using default ManagedChannelBuilder",
-            balancerName);
-      }
-      channel = ManagedChannelBuilder.forTarget(balancerName).build();
-    }
-    return channel;
   }
 
   @Override

@@ -83,7 +83,10 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private boolean adsWorked;
   private boolean childPolicyHasBeenReady;
 
-  // TODO(zdapeng): Add XdsLoadBalancer2(Helper helper) with default factories
+  XdsLoadBalancer2(Helper helper) {
+    this(helper, new LookasideLbFactoryImpl(), new FallbackLbFactory());
+  }
+
   @VisibleForTesting
   XdsLoadBalancer2(
       Helper helper,
@@ -244,5 +247,19 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   @VisibleForTesting
   interface LookasideLbFactory {
     LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback);
+  }
+
+  private static final class LookasideLbFactoryImpl implements LookasideLbFactory {
+    @Override
+    public LoadBalancer newLoadBalancer(Helper lookasideLbHelper, AdsStreamCallback adsCallback) {
+      return new LookasideLb(lookasideLbHelper, adsCallback);
+    }
+  }
+
+  private static final class FallbackLbFactory extends LoadBalancer.Factory {
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      return new FallbackLb(helper);
+    }
   }
 }
