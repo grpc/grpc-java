@@ -23,8 +23,7 @@ import java.util.concurrent.Executor;
  * A SecretProvider is a "container" or provider of a secret. This is used by gRPC-xds to access
  * secrets, so is not part of the public API of gRPC. This "container" may represent a stream that
  * is receiving the requested secret(s) or it could represent file-system based secret(s) that are
- * dynamic. Synchronous and Asynchronous methods to access the underlying secret are available. See
- * {@link SecretManager} for a note on lifecycle management
+ * dynamic.
  */
 @Internal
 public interface SecretProvider<T> {
