@@ -19,6 +19,8 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
+
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -27,6 +29,12 @@ import java.util.Map;
  * @param <T> Type of secret stored in this Map
  */
 abstract class SecretProviderMap<T> {
+
+  private final Map<String, SecretProvider<T>> providers;
+
+  protected SecretProviderMap() {
+    providers = new HashMap<>();
+  }
 
   /**
    * Finds an existing SecretProvider or creates it if it doesn't exist.
@@ -41,9 +49,7 @@ abstract class SecretProviderMap<T> {
     checkNotNull(name, "name");
 
     String mapKey = "" + configSource.hashCode() + "." + name;
-    SecretProvider<T> provider;
-    Map<String, SecretProvider<T>> providers = getProviders();
-    provider = providers.get(mapKey);
+    SecretProvider<T> provider = providers.get(mapKey);
     if (provider == null) {
       provider = create(configSource, name);
       providers.put(mapKey, provider);
@@ -52,6 +58,4 @@ abstract class SecretProviderMap<T> {
   }
 
   abstract SecretProvider<T> create(ConfigSource configSource, String name);
-
-  protected abstract Map<String, SecretProvider<T>> getProviders();
 }

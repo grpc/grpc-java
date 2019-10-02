@@ -44,10 +44,8 @@ final class TlsCertificateSecretVolumeSecretProvider
   private final String name;
 
   TlsCertificateSecretVolumeSecretProvider(String path, String name) {
-    checkNotNull(path, "path");
-    checkNotNull(name, "name");
-    this.path = path;
-    this.name = name;
+    this.path = checkNotNull(path, "path");
+    this.name = checkNotNull(name, "name");
   }
 
   @Override
