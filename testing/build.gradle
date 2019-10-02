@@ -7,6 +7,8 @@ plugins {
 
 description = "gRPC: Testing"
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-core'),
             project(':grpc-stub'),

@@ -16,6 +16,8 @@ description = "gRPC: Services"
     ]
 }
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),

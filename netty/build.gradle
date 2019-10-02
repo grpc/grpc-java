@@ -13,6 +13,8 @@ configurations {
     alpnagent
 }
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-core'),
             libraries.netty,
