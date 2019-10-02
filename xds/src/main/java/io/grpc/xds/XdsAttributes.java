@@ -16,7 +16,9 @@
 
 package io.grpc.xds;
 
+import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
+import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
 
@@ -26,11 +28,24 @@ import io.grpc.Grpc;
 final class XdsAttributes {
   /**
    * Attribute key for SdsSecretConfig of a subchannel.
-   *
    */
   @Grpc.TransportAttr
   public static final Attributes.Key<SdsSecretConfig> ATTR_SDS_CONFIG =
           Attributes.Key.create("io.grpc.xds.XdsAttributes.sdsSecretConfig");
+
+  /**
+   * Attribute key for TlsCertificate of a subchannel.
+   */
+  @Grpc.TransportAttr
+  public static final Attributes.Key<TlsCertificate> ATTR_TLS_CERTIFICATE =
+          Attributes.Key.create("io.grpc.xds.XdsAttributes.tlsCertificate");
+
+  /**
+   * Attribute key for CertificateValidationContext of a subchannel.
+   */
+  @Grpc.TransportAttr
+  public static final Attributes.Key<CertificateValidationContext> ATTR_CERT_VALIDATION_CONTEXT =
+          Attributes.Key.create("io.grpc.xds.XdsAttributes.certificateValidationContext");
 
   private XdsAttributes() {}
 }
