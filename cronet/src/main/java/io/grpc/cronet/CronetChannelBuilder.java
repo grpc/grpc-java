@@ -128,14 +128,6 @@ public final class CronetChannelBuilder extends
   }
 
   /**
-   * Not supported for building cronet channel.
-   */
-  @Override
-  public final CronetChannelBuilder usePlaintext(boolean skipNegotiation) {
-    throw new IllegalArgumentException("Plaintext not currently supported");
-  }
-
-  /**
    * Sets {@link android.net.TrafficStats} tag to use when accounting socket traffic caused by this
    * channel. See {@link android.net.TrafficStats} for more information. If no tag is set (e.g. this
    * method isn't called), then Android accounts for the socket traffic caused by this channel as if
