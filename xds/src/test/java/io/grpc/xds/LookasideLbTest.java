@@ -160,7 +160,7 @@ public class LookasideLbTest {
   }
 
   @Test
-  public void handleAddress_verifyTryToCreateLbChannelToBalancerName()
+  public void handleResolvedAddress_createLbChannel()
       throws Exception {
     // Test balancer created with the default real LookasideChannelLbFactory
     lookasideLb = new LookasideLb(helper, mock(AdsStreamCallback.class));
