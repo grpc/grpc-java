@@ -8,6 +8,8 @@ plugins {
 
 description = "gRPC: OkHttp"
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-core'),
             libraries.okio
