@@ -186,7 +186,14 @@ public final class BenchmarkServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static BenchmarkServiceStub newStub(io.grpc.Channel channel) {
-    return new BenchmarkServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceStub>() {
+        @java.lang.Override
+        public BenchmarkServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -194,7 +201,14 @@ public final class BenchmarkServiceGrpc {
    */
   public static BenchmarkServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new BenchmarkServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceBlockingStub>() {
+        @java.lang.Override
+        public BenchmarkServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
   }
 
   /**
@@ -202,7 +216,14 @@ public final class BenchmarkServiceGrpc {
    */
   public static BenchmarkServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new BenchmarkServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<BenchmarkServiceFutureStub>() {
+        @java.lang.Override
+        public BenchmarkServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new BenchmarkServiceFutureStub(channel, callOptions);
+        }
+      };
+    return BenchmarkServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
   }
 
   /**
@@ -309,23 +330,15 @@ public final class BenchmarkServiceGrpc {
   /**
    */
   public static final class BenchmarkServiceStub extends io.grpc.stub.AbstractAsyncStub<BenchmarkServiceStub> {
-    private BenchmarkServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private BenchmarkServiceStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected BenchmarkServiceStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new BenchmarkServiceStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new BenchmarkServiceStub(channel, callOptions);
     }
 
     /**
@@ -393,23 +406,15 @@ public final class BenchmarkServiceGrpc {
   /**
    */
   public static final class BenchmarkServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<BenchmarkServiceBlockingStub> {
-    private BenchmarkServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private BenchmarkServiceBlockingStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected BenchmarkServiceBlockingStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new BenchmarkServiceBlockingStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new BenchmarkServiceBlockingStub(channel, callOptions);
     }
 
     /**
@@ -439,23 +444,15 @@ public final class BenchmarkServiceGrpc {
   /**
    */
   public static final class BenchmarkServiceFutureStub extends io.grpc.stub.AbstractFutureStub<BenchmarkServiceFutureStub> {
-    private BenchmarkServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private BenchmarkServiceFutureStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected BenchmarkServiceFutureStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new BenchmarkServiceFutureStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new BenchmarkServiceFutureStub(channel, callOptions);
     }
 
     /**

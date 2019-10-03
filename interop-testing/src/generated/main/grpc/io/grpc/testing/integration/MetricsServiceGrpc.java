@@ -93,7 +93,14 @@ public final class MetricsServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static MetricsServiceStub newStub(io.grpc.Channel channel) {
-    return new MetricsServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceStub>() {
+        @java.lang.Override
+        public MetricsServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -101,7 +108,14 @@ public final class MetricsServiceGrpc {
    */
   public static MetricsServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new MetricsServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceBlockingStub>() {
+        @java.lang.Override
+        public MetricsServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
   }
 
   /**
@@ -109,7 +123,14 @@ public final class MetricsServiceGrpc {
    */
   public static MetricsServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new MetricsServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<MetricsServiceFutureStub>() {
+        @java.lang.Override
+        public MetricsServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new MetricsServiceFutureStub(channel, callOptions);
+        }
+      };
+    return MetricsServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
   }
 
   /**
@@ -160,23 +181,15 @@ public final class MetricsServiceGrpc {
   /**
    */
   public static final class MetricsServiceStub extends io.grpc.stub.AbstractAsyncStub<MetricsServiceStub> {
-    private MetricsServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private MetricsServiceStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected MetricsServiceStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new MetricsServiceStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new MetricsServiceStub(channel, callOptions);
     }
 
     /**
@@ -206,23 +219,15 @@ public final class MetricsServiceGrpc {
   /**
    */
   public static final class MetricsServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<MetricsServiceBlockingStub> {
-    private MetricsServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private MetricsServiceBlockingStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected MetricsServiceBlockingStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new MetricsServiceBlockingStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new MetricsServiceBlockingStub(channel, callOptions);
     }
 
     /**
@@ -251,23 +256,15 @@ public final class MetricsServiceGrpc {
   /**
    */
   public static final class MetricsServiceFutureStub extends io.grpc.stub.AbstractFutureStub<MetricsServiceFutureStub> {
-    private MetricsServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
     private MetricsServiceFutureStub(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @java.lang.Override
     protected MetricsServiceFutureStub build(
-        io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions,
-        io.grpc.stub.AbstractStub.DefaultCallOptionsFactory factory) {
-      return new MetricsServiceFutureStub(channel, callOptions, factory);
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+      return new MetricsServiceFutureStub(channel, callOptions);
     }
 
     /**

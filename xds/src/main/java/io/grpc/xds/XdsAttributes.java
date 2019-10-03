@@ -21,7 +21,7 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 
 /**
- * Special attributes that are only useful to gRPC in the XDS context
+ * Special attributes that are only useful to gRPC in the XDS context.
  */
 final class XdsAttributes {
   /**
