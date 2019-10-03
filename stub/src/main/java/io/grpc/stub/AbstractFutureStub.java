@@ -39,7 +39,7 @@ public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extend
   }
 
   /**
-   * Returns a new blocking stub with the given channel for the provided method configurations.
+   * Returns a new future stub with the given channel for the provided method configurations.
    *
    * @since 1.25.0
    * @param factory the factory to create a future stub
@@ -51,7 +51,7 @@ public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extend
   }
 
   /**
-   * Returns a new blocking stub with the given channel for the provided method configurations.
+   * Returns a new future stub with the given channel for the provided method configurations.
    *
    * @since 1.25.0
    * @param factory the factory to create a future stub
