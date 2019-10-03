@@ -87,7 +87,7 @@ public final class DynamicServiceGrpc {
           return new DynamicServiceBlockingStub(channel, callOptions);
         }
       };
-    return DynamicServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return DynamicServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -102,7 +102,7 @@ public final class DynamicServiceGrpc {
           return new DynamicServiceFutureStub(channel, callOptions);
         }
       };
-    return DynamicServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return DynamicServiceFutureStub.newStub(factory, channel);
   }
 
   /**

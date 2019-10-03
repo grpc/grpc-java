@@ -84,7 +84,7 @@ public final class ServerReflectionGrpc {
           return new ServerReflectionBlockingStub(channel, callOptions);
         }
       };
-    return ServerReflectionBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ServerReflectionBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class ServerReflectionGrpc {
           return new ServerReflectionFutureStub(channel, callOptions);
         }
       };
-    return ServerReflectionFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ServerReflectionFutureStub.newStub(factory, channel);
   }
 
   /**

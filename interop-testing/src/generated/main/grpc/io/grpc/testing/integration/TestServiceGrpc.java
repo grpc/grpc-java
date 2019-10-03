@@ -305,7 +305,7 @@ public final class TestServiceGrpc {
           return new TestServiceBlockingStub(channel, callOptions);
         }
       };
-    return TestServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return TestServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -320,7 +320,7 @@ public final class TestServiceGrpc {
           return new TestServiceFutureStub(channel, callOptions);
         }
       };
-    return TestServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return TestServiceFutureStub.newStub(factory, channel);
   }
 
   /**

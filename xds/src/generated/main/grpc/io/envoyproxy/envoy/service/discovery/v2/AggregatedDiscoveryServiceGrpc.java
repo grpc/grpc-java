@@ -123,7 +123,7 @@ public final class AggregatedDiscoveryServiceGrpc {
           return new AggregatedDiscoveryServiceBlockingStub(channel, callOptions);
         }
       };
-    return AggregatedDiscoveryServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return AggregatedDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -138,7 +138,7 @@ public final class AggregatedDiscoveryServiceGrpc {
           return new AggregatedDiscoveryServiceFutureStub(channel, callOptions);
         }
       };
-    return AggregatedDiscoveryServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return AggregatedDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**

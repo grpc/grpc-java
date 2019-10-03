@@ -84,7 +84,7 @@ public final class HandshakerServiceGrpc {
           return new HandshakerServiceBlockingStub(channel, callOptions);
         }
       };
-    return HandshakerServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return HandshakerServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class HandshakerServiceGrpc {
           return new HandshakerServiceFutureStub(channel, callOptions);
         }
       };
-    return HandshakerServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return HandshakerServiceFutureStub.newStub(factory, channel);
   }
 
   /**

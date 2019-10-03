@@ -115,7 +115,7 @@ public final class MetricsServiceGrpc {
           return new MetricsServiceBlockingStub(channel, callOptions);
         }
       };
-    return MetricsServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return MetricsServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -130,7 +130,7 @@ public final class MetricsServiceGrpc {
           return new MetricsServiceFutureStub(channel, callOptions);
         }
       };
-    return MetricsServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return MetricsServiceFutureStub.newStub(factory, channel);
   }
 
   /**

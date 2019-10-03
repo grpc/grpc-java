@@ -84,7 +84,7 @@ public final class ReportQpsScenarioServiceGrpc {
           return new ReportQpsScenarioServiceBlockingStub(channel, callOptions);
         }
       };
-    return ReportQpsScenarioServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReportQpsScenarioServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class ReportQpsScenarioServiceGrpc {
           return new ReportQpsScenarioServiceFutureStub(channel, callOptions);
         }
       };
-    return ReportQpsScenarioServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReportQpsScenarioServiceFutureStub.newStub(factory, channel);
   }
 
   /**

@@ -84,7 +84,7 @@ public final class LoadReportingServiceGrpc {
           return new LoadReportingServiceBlockingStub(channel, callOptions);
         }
       };
-    return LoadReportingServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return LoadReportingServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class LoadReportingServiceGrpc {
           return new LoadReportingServiceFutureStub(channel, callOptions);
         }
       };
-    return LoadReportingServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return LoadReportingServiceFutureStub.newStub(factory, channel);
   }
 
   /**

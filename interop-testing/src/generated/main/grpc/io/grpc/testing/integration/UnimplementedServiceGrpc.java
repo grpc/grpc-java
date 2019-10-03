@@ -88,7 +88,7 @@ public final class UnimplementedServiceGrpc {
           return new UnimplementedServiceBlockingStub(channel, callOptions);
         }
       };
-    return UnimplementedServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return UnimplementedServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -103,7 +103,7 @@ public final class UnimplementedServiceGrpc {
           return new UnimplementedServiceFutureStub(channel, callOptions);
         }
       };
-    return UnimplementedServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return UnimplementedServiceFutureStub.newStub(factory, channel);
   }
 
   /**

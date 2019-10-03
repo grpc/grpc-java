@@ -177,7 +177,7 @@ public final class WorkerServiceGrpc {
           return new WorkerServiceBlockingStub(channel, callOptions);
         }
       };
-    return WorkerServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return WorkerServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -192,7 +192,7 @@ public final class WorkerServiceGrpc {
           return new WorkerServiceFutureStub(channel, callOptions);
         }
       };
-    return WorkerServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return WorkerServiceFutureStub.newStub(factory, channel);
   }
 
   /**

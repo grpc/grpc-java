@@ -115,7 +115,7 @@ public final class HealthGrpc {
           return new HealthBlockingStub(channel, callOptions);
         }
       };
-    return HealthBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return HealthBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -130,7 +130,7 @@ public final class HealthGrpc {
           return new HealthFutureStub(channel, callOptions);
         }
       };
-    return HealthFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return HealthFutureStub.newStub(factory, channel);
   }
 
   /**

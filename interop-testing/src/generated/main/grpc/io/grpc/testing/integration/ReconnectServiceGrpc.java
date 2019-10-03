@@ -118,7 +118,7 @@ public final class ReconnectServiceGrpc {
           return new ReconnectServiceBlockingStub(channel, callOptions);
         }
       };
-    return ReconnectServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReconnectServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -133,7 +133,7 @@ public final class ReconnectServiceGrpc {
           return new ReconnectServiceFutureStub(channel, callOptions);
         }
       };
-    return ReconnectServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReconnectServiceFutureStub.newStub(factory, channel);
   }
 
   /**

@@ -274,7 +274,7 @@ public final class ChannelzGrpc {
           return new ChannelzBlockingStub(channel, callOptions);
         }
       };
-    return ChannelzBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ChannelzBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -289,7 +289,7 @@ public final class ChannelzGrpc {
           return new ChannelzFutureStub(channel, callOptions);
         }
       };
-    return ChannelzFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ChannelzFutureStub.newStub(factory, channel);
   }
 
   /**

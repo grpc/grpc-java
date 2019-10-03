@@ -208,7 +208,7 @@ public final class BenchmarkServiceGrpc {
           return new BenchmarkServiceBlockingStub(channel, callOptions);
         }
       };
-    return BenchmarkServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return BenchmarkServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -223,7 +223,7 @@ public final class BenchmarkServiceGrpc {
           return new BenchmarkServiceFutureStub(channel, callOptions);
         }
       };
-    return BenchmarkServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return BenchmarkServiceFutureStub.newStub(factory, channel);
   }
 
   /**

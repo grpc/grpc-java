@@ -180,7 +180,7 @@ public final class SimpleServiceGrpc {
           return new SimpleServiceBlockingStub(channel, callOptions);
         }
       };
-    return SimpleServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return SimpleServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -195,7 +195,7 @@ public final class SimpleServiceGrpc {
           return new SimpleServiceFutureStub(channel, callOptions);
         }
       };
-    return SimpleServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return SimpleServiceFutureStub.newStub(factory, channel);
   }
 
   /**

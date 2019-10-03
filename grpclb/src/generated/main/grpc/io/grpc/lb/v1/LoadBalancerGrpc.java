@@ -84,7 +84,7 @@ public final class LoadBalancerGrpc {
           return new LoadBalancerBlockingStub(channel, callOptions);
         }
       };
-    return LoadBalancerBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return LoadBalancerBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class LoadBalancerGrpc {
           return new LoadBalancerFutureStub(channel, callOptions);
         }
       };
-    return LoadBalancerFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return LoadBalancerFutureStub.newStub(factory, channel);
   }
 
   /**

@@ -94,7 +94,7 @@ public final class OpenRcaServiceGrpc {
           return new OpenRcaServiceBlockingStub(channel, callOptions);
         }
       };
-    return OpenRcaServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return OpenRcaServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -109,7 +109,7 @@ public final class OpenRcaServiceGrpc {
           return new OpenRcaServiceFutureStub(channel, callOptions);
         }
       };
-    return OpenRcaServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return OpenRcaServiceFutureStub.newStub(factory, channel);
   }
 
   /**

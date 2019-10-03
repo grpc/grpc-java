@@ -146,7 +146,7 @@ public final class EndpointDiscoveryServiceGrpc {
           return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
         }
       };
-    return EndpointDiscoveryServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return EndpointDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -161,7 +161,7 @@ public final class EndpointDiscoveryServiceGrpc {
           return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
         }
       };
-    return EndpointDiscoveryServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return EndpointDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**

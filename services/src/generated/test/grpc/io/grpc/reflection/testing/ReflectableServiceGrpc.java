@@ -84,7 +84,7 @@ public final class ReflectableServiceGrpc {
           return new ReflectableServiceBlockingStub(channel, callOptions);
         }
       };
-    return ReflectableServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReflectableServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -99,7 +99,7 @@ public final class ReflectableServiceGrpc {
           return new ReflectableServiceFutureStub(channel, callOptions);
         }
       };
-    return ReflectableServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return ReflectableServiceFutureStub.newStub(factory, channel);
   }
 
   /**
