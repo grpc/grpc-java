@@ -1096,7 +1096,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStubFactory(service, vars, p, BLOCKING_CLIENT_IMPL);
   p->Print(
       *vars,
-      "return $service_name$BlockingStub.newStub(factory, channel, $CallOptions$.DEFAULT);\n");
+      "return $service_name$BlockingStub.newStub(factory, channel);\n");
   p->Outdent();
   p->Print("}\n\n");
 
@@ -1111,7 +1111,7 @@ static void PrintService(const ServiceDescriptor* service,
   PrintStubFactory(service, vars, p, FUTURE_CLIENT_IMPL);
   p->Print(
       *vars,
-      "return $service_name$FutureStub.newStub(factory, channel, $CallOptions$.DEFAULT);\n");
+      "return $service_name$FutureStub.newStub(factory, channel);\n");
   p->Outdent();
   p->Print("}\n\n");
 

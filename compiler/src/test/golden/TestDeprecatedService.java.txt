@@ -88,7 +88,7 @@ public final class TestDeprecatedServiceGrpc {
           return new TestDeprecatedServiceBlockingStub(channel, callOptions);
         }
       };
-    return TestDeprecatedServiceBlockingStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return TestDeprecatedServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -103,7 +103,7 @@ public final class TestDeprecatedServiceGrpc {
           return new TestDeprecatedServiceFutureStub(channel, callOptions);
         }
       };
-    return TestDeprecatedServiceFutureStub.newStub(factory, channel, io.grpc.CallOptions.DEFAULT);
+    return TestDeprecatedServiceFutureStub.newStub(factory, channel);
   }
 
   /**
