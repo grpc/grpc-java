@@ -36,7 +36,6 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.LookasideChannelLb.AdsStreamCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
@@ -244,5 +243,16 @@ final class XdsComms2 {
       adsRpcRetryTimer.cancel();
       adsRpcRetryTimer = null;
     }
+  }
+
+
+  /**
+   * Callback on ADS stream events. The callback methods should be called in a proper {@link
+   * io.grpc.SynchronizationContext}.
+   */
+  interface AdsStreamCallback {
+    void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment);
+
+    void onError();
   }
 }

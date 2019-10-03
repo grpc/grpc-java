@@ -110,7 +110,6 @@ final class ClusterLoadAssignmentData {
   /**
    * Information about the locality from EDS response.
    */
-  // TODO(zdapeng): move this class out.
   static final class LocalityInfo {
     final List<EquivalentAddressGroup> eags;
     final List<Integer> endPointWeights;
@@ -156,7 +155,6 @@ final class ClusterLoadAssignmentData {
     final int endPointWeight;
 
     LbEndpoint(io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpointProto) {
-
       this(
           new EquivalentAddressGroup(ImmutableList.of(fromEnvoyProtoAddress(lbEndpointProto))),
           lbEndpointProto.getLoadBalancingWeight().getValue());

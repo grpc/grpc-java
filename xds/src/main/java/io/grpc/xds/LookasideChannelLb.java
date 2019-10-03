@@ -35,6 +35,7 @@ import io.grpc.xds.ClusterLoadAssignmentData.LbEndpoint;
 import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
 import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.XdsComms2.AdsStreamCallback;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -121,16 +122,6 @@ final class LookasideChannelLb extends LoadBalancer {
     lrsClient.stopLoadReporting();
     xdsComms2.shutdownLbRpc();
     lbChannel.shutdown();
-  }
-
-  /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
-   */
-  interface AdsStreamCallback {
-    void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment);
-
-    void onError();
   }
 
   private static final class AdsStreamCallbackImpl implements AdsStreamCallback {

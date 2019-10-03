@@ -26,13 +26,13 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link ClusterLoadAssignmentData.XdsLocality}.
+ * Unit tests for {@link ClusterLoadAssignmentData}.
  */
 @RunWith(JUnit4.class)
-public class XdsLocalityTest {
+public class ClusterLoadAssignmentDataTest {
 
   @Test
-  public void convertToAndFromLocalityProto() {
+  public void xdsLocality_convertToAndFromLocalityProto() {
     Locality locality =
         Locality.newBuilder()
             .setRegion("test_region")
@@ -51,7 +51,7 @@ public class XdsLocalityTest {
   }
 
   @Test
-  public void equal() {
+  public void xdsLocality_equal() {
     new EqualsTester()
         .addEqualityGroup(
             new XdsLocality("region-a", "zone-a", "subzone-a"),
@@ -66,7 +66,7 @@ public class XdsLocalityTest {
   }
 
   @Test
-  public void hash() {
+  public void xdsLocality_hash() {
     assertThat(new XdsLocality("region", "zone", "subzone").hashCode())
         .isEqualTo(new XdsLocality("region", "zone","subzone").hashCode());
   }

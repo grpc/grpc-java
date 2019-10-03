@@ -57,7 +57,7 @@ import io.grpc.internal.FakeClock;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.LookasideChannelLb.AdsStreamCallback;
+import io.grpc.xds.XdsComms2.AdsStreamCallback;
 import java.util.concurrent.TimeUnit;
 import org.junit.Before;
 import org.junit.Rule;
