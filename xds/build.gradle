@@ -22,6 +22,7 @@ dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
+            project(':grpc-netty'),
             project(':grpc-services')
     
     compile (libraries.pgv) {
