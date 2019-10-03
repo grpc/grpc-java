@@ -245,7 +245,6 @@ final class XdsComms2 {
     }
   }
 
-
   /**
    * Callback on ADS stream events. The callback methods should be called in a proper {@link
    * io.grpc.SynchronizationContext}.
