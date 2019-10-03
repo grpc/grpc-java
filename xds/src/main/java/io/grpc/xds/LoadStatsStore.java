@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import javax.annotation.Nullable;
 
 /**
