@@ -40,20 +40,22 @@ import javax.annotation.concurrent.ThreadSafe;
 public abstract class AbstractAsyncStub<S extends AbstractAsyncStub<S>> extends AbstractStub<S> {
 
   protected AbstractAsyncStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT, new AsyncCallOptionsFactory());
+    this(channel, CallOptions.DEFAULT);
   }
 
-  protected AbstractAsyncStub(
-      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
-    super(channel, callOptions, factory);
+  protected AbstractAsyncStub(Channel channel, CallOptions callOptions) {
+      super(channel, callOptions);
   }
 
-  /** An AsyncCallOptionsFactory adds default call options for AsyncStub. */
-  protected static final class AsyncCallOptionsFactory implements DefaultCallOptionsFactory {
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(StubFactory<T> factory, Channel channel) {
+    return newStub(factory, channel, CallOptions.DEFAULT);
+  }
 
-    @Override
-    public CallOptions create(CallOptions providedCallOptions) {
-      return providedCallOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.ASYNC);
-    }
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
+    return factory.newStub(
+        channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.ASYNC));
   }
 }

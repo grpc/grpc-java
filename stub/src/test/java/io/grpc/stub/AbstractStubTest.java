@@ -24,7 +24,6 @@ import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.stub.AbstractStub.EmptyCallOptionsFactory;
 import java.util.concurrent.Executor;
 import org.junit.Before;
 import org.junit.Test;
@@ -51,17 +50,12 @@ public class AbstractStubTest {
 
   @Test(expected = NullPointerException.class)
   public void callOptionsMustNotBeNull() {
-    new NoopStub(channel, null, new EmptyCallOptionsFactory());
+    new NoopStub(channel, null);
   }
 
   @Test(expected = NullPointerException.class)
   public void channelMustNotBeNull2() {
-    new NoopStub(null, CallOptions.DEFAULT, new EmptyCallOptionsFactory());
-  }
-
-  @Test(expected = NullPointerException.class)
-  public void factoryMustNotBeNull() {
-    new NoopStub(channel, CallOptions.DEFAULT, null);
+    new NoopStub(null, CallOptions.DEFAULT);
   }
 
   @Test()
@@ -81,14 +75,13 @@ public class AbstractStubTest {
       super(channel);
     }
 
-    NoopStub(Channel channel, CallOptions options, DefaultCallOptionsFactory factory) {
-      super(channel, options, factory);
+    NoopStub(Channel channel, CallOptions options) {
+      super(channel, options);
     }
 
     @Override
-    protected NoopStub build(
-        Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
-      return new NoopStub(channel, callOptions, factory);
+    protected NoopStub build(Channel channel, CallOptions callOptions) {
+      return new NoopStub(channel, callOptions);
     }
   }
 

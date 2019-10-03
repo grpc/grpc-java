@@ -41,20 +41,22 @@ public abstract class AbstractBlockingStub<S extends AbstractBlockingStub<S>>
     extends AbstractStub<S> {
 
   protected AbstractBlockingStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT, new BlockingCallOptionsFactory());
+    this(channel, CallOptions.DEFAULT);
   }
 
-  protected AbstractBlockingStub(
-      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
-    super(channel, callOptions, factory);
+  protected AbstractBlockingStub(Channel channel, CallOptions callOptions) {
+    super(channel, callOptions);
   }
 
-  /** A BlockingCallOptionsFactory adds default call options for BlockingStub. */
-  protected static final class BlockingCallOptionsFactory implements DefaultCallOptionsFactory {
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(StubFactory<T> factory, Channel channel) {
+    return newStub(factory, channel, CallOptions.DEFAULT);
+  }
 
-    @Override
-    public CallOptions create(CallOptions providedCallOptions) {
-      return providedCallOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING);
-    }
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
+    return factory.newStub(
+        channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.BLOCKING));
   }
 }

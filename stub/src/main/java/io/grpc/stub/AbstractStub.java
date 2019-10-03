@@ -59,7 +59,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param channel the channel that this stub will use to do communications
    */
   protected AbstractStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT, new EmptyCallOptionsFactory());
+    this(channel, CallOptions.DEFAULT);
   }
 
   /**
@@ -68,12 +68,10 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @since 1.0.0
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
-   * @param factory the call options factory to set default call options
    */
-  protected AbstractStub(
-      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
+  protected AbstractStub(Channel channel, CallOptions callOptions) {
     this.channel = checkNotNull(channel, "channel");
-    this.callOptions = checkNotNull(factory.create(callOptions), "callOptions");
+    this.callOptions = checkNotNull(callOptions, "callOptions");
   }
 
   /**
@@ -101,20 +99,18 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
-  protected S build(Channel channel, CallOptions callOptions) {
-    return build(channel, callOptions, new EmptyCallOptionsFactory());
+  protected abstract S build(Channel channel, CallOptions callOptions);
+
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(StubFactory<T> factory, Channel channel) {
+    return newStub(factory, channel, CallOptions.DEFAULT);
   }
 
-  /**
-   * Returns a new stub with the given channel for the provided method configurations.
-   *
-   * @since 1.25.0
-   * @param channel the channel that this stub will use to do communications
-   * @param callOptions the runtime call options to be applied to every call on this stub
-   * @param factory the call options factory to set default call options
-   */
-  protected abstract S build(
-      Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory);
+  // TODO(jihuncho) javadoc
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
+    return factory.newStub(channel, callOptions);
+  }
 
   /**
    * Returns a new stub with an absolute deadline.
@@ -240,17 +236,8 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
   }
 
-  /** A DefaultCallOptionsFactory adds default call options for given stub type. */
-  protected interface DefaultCallOptionsFactory {
-    CallOptions create(CallOptions callOptions);
-  }
-
-  /** An EmptyCallOptionsFactory doesn't provide any options. */
-  protected static final class EmptyCallOptionsFactory implements DefaultCallOptionsFactory {
-
-    @Override
-    public CallOptions create(CallOptions providedCallOptions) {
-      return providedCallOptions;
-    }
+  // TODO(jihuncho) javadoc
+  public interface StubFactory<T extends AbstractStub<T>> {
+    T newStub(Channel channel, CallOptions callOptions);
   }
 }
