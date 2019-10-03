@@ -104,15 +104,13 @@ public final class HelloJsonClient {
       super(channel);
     }
 
-    protected HelloJsonStub(
-        Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
-      super(channel, callOptions, factory);
+    protected HelloJsonStub(Channel channel, CallOptions callOptions) {
+      super(channel, callOptions);
     }
 
     @Override
-    protected HelloJsonStub build(
-        Channel channel, CallOptions callOptions, DefaultCallOptionsFactory factory) {
-      return new HelloJsonStub(channel, callOptions, factory);
+    protected HelloJsonStub build(Channel channel, CallOptions callOptions) {
+      return new HelloJsonStub(channel, callOptions);
     }
 
     public HelloReply sayHello(HelloRequest request) {
