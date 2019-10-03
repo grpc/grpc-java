@@ -57,16 +57,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    *
    * @since 1.0.0
    * @param channel the channel that this stub will use to do communications
-   */
-  protected AbstractStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT);
-  }
-
-  /**
-   * Constructor for use by subclasses, with the default {@code CallOptions}.
-   *
-   * @since 1.0.0
-   * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected AbstractStub(Channel channel, CallOptions callOptions) {
@@ -100,17 +90,6 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected abstract S build(Channel channel, CallOptions callOptions);
-
-  // TODO(jihuncho) javadoc
-  public static <T extends AbstractStub<T>> T newStub(StubFactory<T> factory, Channel channel) {
-    return newStub(factory, channel, CallOptions.DEFAULT);
-  }
-
-  // TODO(jihuncho) javadoc
-  public static <T extends AbstractStub<T>> T newStub(
-      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
-    return factory.newStub(channel, callOptions);
-  }
 
   /**
    * Returns a new stub with an absolute deadline.
@@ -236,7 +215,11 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
   }
 
-  // TODO(jihuncho) javadoc
+  /**
+   * A factory class for stub.
+   *
+   * @since 1.25.0
+   */
   public interface StubFactory<T extends AbstractStub<T>> {
     T newStub(Channel channel, CallOptions callOptions);
   }

@@ -23,12 +23,7 @@ import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Stub implementations for async stubs. Stub configuration is immutable; changing the
- * configuration returns a new stub with updated configuration. Changing the configuration is cheap
- * and may be done before every RPC, such as would be common when using {@link #withDeadlineAfter}.
- *
- * <p>Configuration is stored in {@link CallOptions} and is passed to the {@link Channel} when
- * performing an RPC.
+ * Stub implementations for async stubs.
  *
  * <p>DO NOT MOCK: Customizing options doesn't work properly in mocks. Use InProcessChannelBuilder
  * to create a real channel suitable for testing. It is also possible to mock Channel instead.
@@ -39,21 +34,31 @@ import javax.annotation.concurrent.ThreadSafe;
 @CheckReturnValue
 public abstract class AbstractAsyncStub<S extends AbstractAsyncStub<S>> extends AbstractStub<S> {
 
-  protected AbstractAsyncStub(Channel channel) {
-    this(channel, CallOptions.DEFAULT);
-  }
-
   protected AbstractAsyncStub(Channel channel, CallOptions callOptions) {
       super(channel, callOptions);
   }
 
-  // TODO(jihuncho) javadoc
-  public static <T extends AbstractStub<T>> T newStub(StubFactory<T> factory, Channel channel) {
+  /**
+   * Returns a new async stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create an async stub
+   * @param channel the channel that this stub will use to do communications
+   */
+  public static <T extends AbstractAsyncStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel) {
     return newStub(factory, channel, CallOptions.DEFAULT);
   }
 
-  // TODO(jihuncho) javadoc
-  public static <T extends AbstractStub<T>> T newStub(
+  /**
+   * Returns a new async stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create an async stub
+   * @param channel the channel that this stub will use to do communications
+   * @param callOptions the runtime call options to be applied to every call on this stub
+   */
+  public static <T extends AbstractAsyncStub<T>> T newStub(
       StubFactory<T> factory, Channel channel, CallOptions callOptions) {
     return factory.newStub(
         channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.ASYNC));
