@@ -1,10 +1,9 @@
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
 }
 
 description = "gRPC: Services"
@@ -16,6 +15,8 @@ description = "gRPC: Services"
         "-Xlint:-deprecation",
     ]
 }
+
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     compile project(':grpc-protobuf'),

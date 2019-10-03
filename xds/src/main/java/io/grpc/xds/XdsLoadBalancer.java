@@ -24,7 +24,6 @@ import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import io.grpc.Attributes;
@@ -43,9 +42,11 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancerHelper;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
+import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
 import java.util.Map;
@@ -64,10 +65,10 @@ final class XdsLoadBalancer extends LoadBalancer {
   private final LoadBalancerRegistry lbRegistry;
   private final FallbackManager fallbackManager;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final XdsLoadReportClientFactory lrsClientFactory;
+  private final LoadReportClientFactory lrsClientFactory;
 
   @Nullable
-  private XdsLoadReportClient lrsClient;
+  private LoadReportClient lrsClient;
   @Nullable
   private XdsLbState xdsLbState;
   private final AdsStreamCallback adsStreamCallback = new AdsStreamCallback() {
@@ -80,7 +81,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       }
 
       fallbackManager.childBalancerWorked = true;
-      lrsClient.startLoadReporting();
+      lrsClient.startLoadReporting(lrsCallback);
     }
 
     @Override
@@ -99,18 +100,27 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
   };
 
+  private final LoadReportCallback lrsCallback =
+      new LoadReportCallback() {
+
+        @Override
+        public void onReportResponse(long reportIntervalNano) {
+          localityStore.updateOobMetricsReportInterval(reportIntervalNano);
+        }
+      };
+
   private LbConfig fallbackPolicy;
 
   XdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider) {
-    this(helper, lbRegistry, backoffPolicyProvider, XdsLoadReportClientFactory.getInstance(),
+    this(helper, lbRegistry, backoffPolicyProvider, LoadReportClientFactory.getInstance(),
         new FallbackManager(helper, lbRegistry));
   }
 
   private XdsLoadBalancer(Helper helper,
       LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadReportClientFactory lrsClientFactory,
+      LoadReportClientFactory lrsClientFactory,
       FallbackManager fallbackManager) {
     this(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory, fallbackManager,
         new LocalityStoreImpl(new LocalityStoreHelper(helper, fallbackManager), lbRegistry));
@@ -120,7 +130,7 @@ final class XdsLoadBalancer extends LoadBalancer {
   XdsLoadBalancer(Helper helper,
       LoadBalancerRegistry lbRegistry,
       BackoffPolicy.Provider backoffPolicyProvider,
-      XdsLoadReportClientFactory lrsClientFactory,
+      LoadReportClientFactory lrsClientFactory,
       FallbackManager fallbackManager,
       LocalityStore localityStore) {
     this.helper = checkNotNull(helper, "helper");
@@ -186,14 +196,14 @@ final class XdsLoadBalancer extends LoadBalancer {
   }
 
   private void handleNewConfig(XdsConfig xdsConfig) {
-    String newBalancerName = xdsConfig.newBalancerName;
+    String newBalancerName = xdsConfig.balancerName;
     LbConfig childPolicy = xdsConfig.childPolicy;
     ManagedChannel lbChannel;
     if (xdsLbState == null) {
       lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
-              localityStore.getStatsStore());
+              localityStore.getLoadStatsStore());
     } else if (!newBalancerName.equals(xdsLbState.balancerName)) {
       lrsClient.stopLoadReporting();
       ManagedChannel oldChannel =
@@ -204,7 +214,7 @@ final class XdsLoadBalancer extends LoadBalancer {
       lbChannel = initLbChannel(helper, newBalancerName);
       lrsClient =
           lrsClientFactory.createLoadReportClient(lbChannel, helper, backoffPolicyProvider,
-              localityStore.getStatsStore());
+              localityStore.getLoadStatsStore());
     } else if (!Objects.equal(
         getPolicyNameOrNull(childPolicy),
         getPolicyNameOrNull(xdsLbState.childPolicy))) {
@@ -218,7 +228,7 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
     xdsLbState =
         new XdsLbState(newBalancerName, childPolicy, helper, localityStore, lbChannel,
-            adsStreamCallback);
+            adsStreamCallback, backoffPolicyProvider);
   }
 
   private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
@@ -466,47 +476,4 @@ final class XdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  /**
-   * Represents a successfully parsed and validated LoadBalancingConfig for XDS.
-   */
-  static final class XdsConfig {
-    private final String newBalancerName;
-    // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
-    @Nullable
-    private final LbConfig childPolicy;
-    @Nullable
-    private final LbConfig fallbackPolicy;
-
-    XdsConfig(
-        String newBalancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy) {
-      this.newBalancerName = checkNotNull(newBalancerName, "newBalancerName");
-      this.childPolicy = childPolicy;
-      this.fallbackPolicy = fallbackPolicy;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("newBalancerName", newBalancerName)
-          .add("childPolicy", childPolicy)
-          .add("fallbackPolicy", fallbackPolicy)
-          .toString();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof XdsConfig)) {
-        return false;
-      }
-      XdsConfig that = (XdsConfig) obj;
-      return Objects.equal(this.newBalancerName, that.newBalancerName)
-          && Objects.equal(this.childPolicy, that.childPolicy)
-          && Objects.equal(this.fallbackPolicy, that.fallbackPolicy);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(newBalancerName, childPolicy, fallbackPolicy);
-    }
-  }
 }

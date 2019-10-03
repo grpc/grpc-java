@@ -40,20 +40,6 @@ public final class InternalProtocolNegotiators {
   }
 
   /**
-   * Buffers all writes until either {@link #writeBufferedAndRemove(ChannelHandlerContext)} or
-   * {@link #fail(ChannelHandlerContext, Throwable)} is called. This handler allows us to
-   * write to a {@link io.netty.channel.Channel} before we are allowed to write to it officially
-   * i.e.  before it's active or the TLS Handshake is complete.
-   */
-  public abstract static class AbstractBufferingHandler
-      extends ProtocolNegotiators.AbstractBufferingHandler {
-
-    protected AbstractBufferingHandler(ChannelHandler... handlers) {
-      super(handlers);
-    }
-  }
-
-  /**
    * Returns a {@link ProtocolNegotiator} that ensures the pipeline is set up so that TLS will
    * be negotiated, the {@code handler} is added and writes to the {@link io.netty.channel.Channel}
    * may happen immediately, even before the TLS Handshake is complete.
@@ -98,5 +84,17 @@ public final class InternalProtocolNegotiators {
   public static ChannelHandler clientTlsHandler(
       ChannelHandler next, SslContext sslContext, String authority) {
     return new ClientTlsHandler(next, sslContext, authority);
+  }
+
+  public static class ProtocolNegotiationHandler
+      extends ProtocolNegotiators.ProtocolNegotiationHandler {
+
+    protected ProtocolNegotiationHandler(ChannelHandler next, String negotiatorName) {
+      super(next, negotiatorName);
+    }
+
+    protected ProtocolNegotiationHandler(ChannelHandler next) {
+      super(next);
+    }
   }
 }

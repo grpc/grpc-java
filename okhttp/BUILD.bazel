@@ -16,5 +16,6 @@ java_library(
         "@com_google_j2objc_j2objc_annotations//jar",
         "@com_squareup_okhttp_okhttp//jar",
         "@com_squareup_okio_okio//jar",
+        "@io_perfmark_perfmark_api//jar",
     ],
 )

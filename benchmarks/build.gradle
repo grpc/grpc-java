@@ -1,12 +1,11 @@
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
+plugins {
+    id "application"
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'application'
+    id "com.google.protobuf"
+    id "me.champeau.gradle.jmh"
+}
 
 description = "grpc Benchmarks"
 
@@ -18,6 +17,10 @@ jmh {
     // Workaround
     // https://github.com/melix/jmh-gradle-plugin/issues/97#issuecomment-316664026
     includeTests = true
+}
+
+configurations {
+    alpnagent
 }
 
 dependencies {
@@ -34,6 +37,7 @@ dependencies {
             libraries.netty_epoll,
             libraries.math
     compileOnly libraries.javax_annotation
+    alpnagent libraries.jetty_alpn_agent
 }
 
 import net.ltgt.gradle.errorprone.CheckSeverity

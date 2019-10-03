@@ -29,9 +29,11 @@ import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.internal.GrpcUtil;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
 import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
@@ -204,13 +206,13 @@ public class UtilsTest {
   }
 
   @Test
-  public void defaultServerChannelType_whenEpollIsAvailable() {
+  public void defaultServerChannelFactory_whenEpollIsAvailable() {
     assume().that(Utils.isEpollAvailable()).isTrue();
 
-    Class<? extends Channel> clientChannelType = Utils.DEFAULT_SERVER_CHANNEL_TYPE;
+    ChannelFactory<? extends ServerChannel> channelFactory = Utils.DEFAULT_SERVER_CHANNEL_FACTORY;
 
-    assertThat(clientChannelType.getName())
-        .isEqualTo("io.netty.channel.epoll.EpollServerSocketChannel");
+    assertThat(channelFactory.toString())
+        .isEqualTo("ReflectiveChannelFactory(EpollServerSocketChannel.class)");
   }
 
   @Test

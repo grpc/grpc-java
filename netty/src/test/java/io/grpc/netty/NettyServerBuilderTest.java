@@ -16,8 +16,6 @@
 
 package io.grpc.netty;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -134,50 +132,57 @@ public class NettyServerBuilderTest {
   }
 
   @Test
-  public void shouldFallBackToNio_onlyBossGroupProvided() {
+  public void assertEventLoopsAndChannelType_onlyBossGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.bossEventLoopGroup(mockEventLoopGroup);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyWorkerGroupProvided() {
+    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
+    builder.workerEventLoopGroup(mockEventLoopGroup);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_onlyTypeProvided() {
+    builder.channelType(LocalServerChannel.class);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage(
+        "All of BossEventLoopGroup, WorkerEventLoopGroup and ChannelType should be provided");
+
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_usingDefault() {
+    builder.assertEventLoopsAndChannelType();
+  }
+
+  @Test
+  public void assertEventLoopsAndChannelType_allProvided() {
     EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
 
     builder.bossEventLoopGroup(mockEventLoopGroup);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_onlyWorkerGroupProvided() {
-    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
-
-    builder.workerEventLoopGroup(mockEventLoopGroup);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_onlyTypeProvided() {
-    builder.channelType(LocalServerChannel.class);
-
-    assertTrue(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_usingDefault() {
-    assertFalse(builder.shouldFallBackToNio());
-  }
-
-  @Test
-  public void shouldFallBackToNio_allProvided() {
-    EventLoopGroup mockEventLoopGroup = mock(EventLoopGroup.class);
-
-    builder.bossEventLoopGroup(mockEventLoopGroup);
     builder.workerEventLoopGroup(mockEventLoopGroup);
     builder.channelType(LocalServerChannel.class);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopsAndChannelType();
   }
 
   @Test
-  public void useNioTransport_shouldNotFallBack() {
+  public void useNioTransport_shouldNotThrow() {
     InternalNettyServerBuilder.useNioTransport(builder);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopsAndChannelType();
   }
 }

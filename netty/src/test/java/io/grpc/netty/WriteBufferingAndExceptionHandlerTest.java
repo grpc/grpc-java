@@ -27,6 +27,7 @@ import io.grpc.Status;
 import io.grpc.Status.Code;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
@@ -344,5 +345,39 @@ public class WriteBufferingAndExceptionHandlerTest {
     assertThat(write.get().getClass()).isSameInstanceAs(Object.class);
     assertTrue(flush.get());
     assertThat(chan.pipeline()).doesNotContain(handler);
+  }
+
+  @Test
+  public void uncaughtReadFails() throws Exception {
+    WriteBufferingAndExceptionHandler handler =
+        new WriteBufferingAndExceptionHandler(new ChannelHandlerAdapter() {});
+    LocalAddress addr = new LocalAddress("local");
+    ChannelFuture cf = new Bootstrap()
+        .channel(LocalChannel.class)
+        .handler(handler)
+        .group(group)
+        .register();
+    chan = cf.channel();
+    cf.sync();
+    ChannelFuture sf = new ServerBootstrap()
+        .channel(LocalServerChannel.class)
+        .childHandler(new ChannelHandlerAdapter() {})
+        .group(group)
+        .bind(addr);
+    server = sf.channel();
+    sf.sync();
+
+    ChannelFuture wf = chan.writeAndFlush(new Object());
+    chan.connect(addr);
+    chan.pipeline().fireChannelRead(Unpooled.copiedBuffer(new byte[] {'a'}));
+
+    try {
+      wf.sync();
+      fail();
+    } catch (Exception e) {
+      Status status = Status.fromThrowable(e);
+      assertThat(status.getCode()).isEqualTo(Code.INTERNAL);
+      assertThat(status.getDescription()).contains("channelRead() missed");
+    }
   }
 }

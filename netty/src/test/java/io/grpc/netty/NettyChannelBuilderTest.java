@@ -17,7 +17,6 @@
 package io.grpc.netty;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -201,60 +200,61 @@ public class NettyChannelBuilderTest {
   }
 
   @Test
-  public void shouldFallBackToNio_onlyGroupProvided() {
+  public void assertEventLoopAndChannelType_onlyGroupProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
     builder.eventLoopGroup(mock(EventLoopGroup.class));
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    assertTrue(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 
   @Test
-  public void shouldFallBackToNio_onlyTypeProvided() {
+  public void assertEventLoopAndChannelType_onlyTypeProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
     builder.channelType(LocalChannel.class);
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    assertTrue(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 
   @Test
-  public void shouldFallBackToNio_onlyFactoryProvided() {
+  public void assertEventLoopAndChannelType_onlyFactoryProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
     builder.channelFactory(new ChannelFactory<Channel>() {
       @Override
       public Channel newChannel() {
         return null;
       }
     });
+    thrown.expect(IllegalStateException.class);
+    thrown.expectMessage("Both EventLoopGroup and ChannelType should be provided");
 
-    assertTrue(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 
   @Test
-  public void shouldFallBackToNio_usingDefault() {
+  public void assertEventLoopAndChannelType_usingDefault() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 
   @Test
-  public void shouldFallBackToNio_bothProvided() {
+  public void assertEventLoopAndChannelType_bothProvided() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
     builder.eventLoopGroup(mock(EventLoopGroup.class));
     builder.channelType(LocalChannel.class);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 
   @Test
   public void useNioTransport_shouldNotFallBack() {
     NettyChannelBuilder builder = NettyChannelBuilder.forTarget("fakeTarget");
-
     InternalNettyChannelBuilder.useNioTransport(builder);
 
-    assertFalse(builder.shouldFallBackToNio());
+    builder.assertEventLoopAndChannelType();
   }
 }

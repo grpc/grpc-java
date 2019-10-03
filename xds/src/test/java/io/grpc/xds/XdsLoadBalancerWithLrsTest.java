@@ -54,8 +54,9 @@ import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
+import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.XdsLoadBalancer.FallbackManager;
-import io.grpc.xds.XdsLoadReportClientImpl.XdsLoadReportClientFactory;
 import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -65,13 +66,14 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for {@link XdsLoadBalancer}, especially for interactions between
- * {@link XdsLoadBalancer} and {@link XdsLoadReportClient}.
+ * {@link XdsLoadBalancer} and {@link LoadReportClient}.
  */
 @RunWith(JUnit4.class)
 public class XdsLoadBalancerWithLrsTest {
@@ -95,11 +97,11 @@ public class XdsLoadBalancerWithLrsTest {
   @Mock
   private LocalityStore localityStore;
   @Mock
-  private XdsLoadReportClientFactory lrsClientFactory;
+  private LoadReportClientFactory lrsClientFactory;
   @Mock
-  private XdsLoadReportClient lrsClient;
+  private LoadReportClient lrsClient;
   @Mock
-  private StatsStore statsStore;
+  private LoadStatsStore loadStatsStore;
   @Mock
   private LoadBalancer fallbackBalancer;
   @Mock
@@ -217,9 +219,9 @@ public class XdsLoadBalancerWithLrsTest {
     when(helper.getChannelLogger()).thenReturn(mock(ChannelLogger.class));
     when(helper.createResolvingOobChannel(anyString()))
         .thenReturn(oobChannel1, oobChannel2, oobChannel3);
-    when(localityStore.getStatsStore()).thenReturn(statsStore);
+    when(localityStore.getLoadStatsStore()).thenReturn(loadStatsStore);
     when(lrsClientFactory.createLoadReportClient(any(ManagedChannel.class), any(Helper.class),
-        any(BackoffPolicy.Provider.class), any(StatsStore.class))).thenReturn(lrsClient);
+        any(BackoffPolicy.Provider.class), any(LoadStatsStore.class))).thenReturn(lrsClient);
 
     xdsLoadBalancer =
         new XdsLoadBalancer(helper, lbRegistry, backoffPolicyProvider, lrsClientFactory,
@@ -245,7 +247,7 @@ public class XdsLoadBalancerWithLrsTest {
 
     verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
-            same(statsStore));
+            same(loadStatsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
 
     // Let fallback timer elapse and xDS load balancer enters fallback mode on startup.
@@ -254,11 +256,13 @@ public class XdsLoadBalancerWithLrsTest {
     fakeClock.forwardTime(10, TimeUnit.SECONDS);
     assertThat(fallBackLbHelper).isNotNull();
 
-    verify(lrsClient, never()).startLoadReporting();
+    verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulates a syntactically incorrect EDS response.
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    verify(lrsClient, never()).startLoadReporting();
+    verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
+
+    ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -267,7 +271,9 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    verify(lrsClient).startLoadReporting();
+    verify(lrsClient).startLoadReporting(lrsCallbackCaptor.capture());
+    lrsCallbackCaptor.getValue().onReportResponse(19543);
+    verify(localityStore).updateOobMetricsReportInterval(19543);
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);
@@ -297,9 +303,9 @@ public class XdsLoadBalancerWithLrsTest {
 
     inOrder.verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
-            same(statsStore));
+            same(loadStatsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
-    inOrder.verify(lrsClient, never()).startLoadReporting();
+    inOrder.verify(lrsClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed before xDS protocol is
     // established.
@@ -317,7 +323,7 @@ public class XdsLoadBalancerWithLrsTest {
     assertThat(streamRecorder.getValues()).hasSize(2);
     inOrder.verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel2), same(helper), same(backoffPolicyProvider),
-            same(statsStore));
+            same(loadStatsStore));
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -326,7 +332,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting();
+    inOrder.verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with balancer name changed.
     newLbConfig = (Map<String, ?>) JsonParser.parse(
@@ -343,10 +349,10 @@ public class XdsLoadBalancerWithLrsTest {
     inOrder.verify(lrsClient).stopLoadReporting();
     inOrder.verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel3), same(helper), same(backoffPolicyProvider),
-            same(statsStore));
+            same(loadStatsStore));
 
     serverResponseWriter.onNext(edsResponse);
-    inOrder.verify(lrsClient).startLoadReporting();
+    inOrder.verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     inOrder.verifyNoMoreInteractions();
   }
@@ -364,7 +370,7 @@ public class XdsLoadBalancerWithLrsTest {
 
     verify(lrsClientFactory)
         .createLoadReportClient(same(oobChannel1), same(helper), same(backoffPolicyProvider),
-            same(statsStore));
+            same(loadStatsStore));
     assertThat(streamRecorder.getValues()).hasSize(1);
 
     // Simulate a syntactically correct EDS response.
@@ -374,7 +380,7 @@ public class XdsLoadBalancerWithLrsTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build();
     serverResponseWriter.onNext(edsResponse);
-    verify(lrsClient).startLoadReporting();
+    verify(lrsClient).startLoadReporting(any(LoadReportCallback.class));
 
     // Simulate receiving a new service config with child policy changed.
     @SuppressWarnings("unchecked")

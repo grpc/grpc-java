@@ -1,4 +1,13 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.japicmp"
+}
+
 description = "gRPC: Testing"
+
+evaluationDependsOn(project(':grpc-core').path)
 
 dependencies {
     compile project(':grpc-core'),

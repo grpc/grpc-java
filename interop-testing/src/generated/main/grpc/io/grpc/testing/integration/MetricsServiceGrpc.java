@@ -41,22 +41,21 @@ public final class MetricsServiceGrpc {
     if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
       synchronized (MetricsServiceGrpc.class) {
         if ((getGetAllGaugesMethod = MetricsServiceGrpc.getGetAllGaugesMethod) == null) {
-          MetricsServiceGrpc.getGetAllGaugesMethod = getGetAllGaugesMethod = 
+          MetricsServiceGrpc.getGetAllGaugesMethod = getGetAllGaugesMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.EmptyMessage, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.SERVER_STREAMING)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.MetricsService", "GetAllGauges"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetAllGauges"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.EmptyMessage.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
-                  .build();
-          }
+              .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetAllGauges"))
+              .build();
         }
-     }
-     return getGetAllGaugesMethod;
+      }
+    }
+    return getGetAllGaugesMethod;
   }
 
   private static volatile io.grpc.MethodDescriptor<io.grpc.testing.integration.Metrics.GaugeRequest,
@@ -73,22 +72,21 @@ public final class MetricsServiceGrpc {
     if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
       synchronized (MetricsServiceGrpc.class) {
         if ((getGetGaugeMethod = MetricsServiceGrpc.getGetGaugeMethod) == null) {
-          MetricsServiceGrpc.getGetGaugeMethod = getGetGaugeMethod = 
+          MetricsServiceGrpc.getGetGaugeMethod = getGetGaugeMethod =
               io.grpc.MethodDescriptor.<io.grpc.testing.integration.Metrics.GaugeRequest, io.grpc.testing.integration.Metrics.GaugeResponse>newBuilder()
               .setType(io.grpc.MethodDescriptor.MethodType.UNARY)
-              .setFullMethodName(generateFullMethodName(
-                  "grpc.testing.MetricsService", "GetGauge"))
+              .setFullMethodName(generateFullMethodName(SERVICE_NAME, "GetGauge"))
               .setSampledToLocalTracing(true)
               .setRequestMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeRequest.getDefaultInstance()))
               .setResponseMarshaller(io.grpc.protobuf.ProtoUtils.marshaller(
                   io.grpc.testing.integration.Metrics.GaugeResponse.getDefaultInstance()))
-                  .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
-                  .build();
-          }
+              .setSchemaDescriptor(new MetricsServiceMethodDescriptorSupplier("GetGauge"))
+              .build();
         }
-     }
-     return getGetGaugeMethod;
+      }
+    }
+    return getGetGaugeMethod;
   }
 
   /**

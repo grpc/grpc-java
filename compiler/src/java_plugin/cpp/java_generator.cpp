@@ -1,3 +1,19 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "java_generator.h"
 
 #include <algorithm>
@@ -407,11 +423,10 @@ static void PrintMethodFields(
         "  if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
         "    synchronized ($service_class_name$.class) {\n"
         "      if (($method_new_field_name$ = $service_class_name$.$method_new_field_name$) == null) {\n"
-        "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ = \n"
+        "        $service_class_name$.$method_new_field_name$ = $method_new_field_name$ =\n"
         "            $MethodDescriptor$.<$input_type$, $output_type$>newBuilder()\n"
         "            .setType($MethodType$.$method_type$)\n"
-        "            .setFullMethodName(generateFullMethodName(\n"
-        "                \"$Package$$service_name$\", \"$method_name$\"))\n"
+        "            .setFullMethodName(generateFullMethodName(SERVICE_NAME, \"$method_name$\"))\n"
         "            .setSampledToLocalTracing(true)\n"
         "            .setRequestMarshaller($ProtoUtils$.marshaller(\n"
         "                $input_type$.getDefaultInstance()))\n"
@@ -422,17 +437,17 @@ static void PrintMethodFields(
     if (flavor == ProtoFlavor::NORMAL) {
       p->Print(
           *vars,
-        "                .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
+        "            .setSchemaDescriptor(new $proto_method_descriptor_supplier$(\"$method_name$\"))\n");
     }
 
     p->Print(
         *vars,
-        "                .build();\n");
+        "            .build();\n");
     p->Print(*vars,
-        "        }\n"
         "      }\n"
-        "   }\n"
-        "   return $method_new_field_name$;\n"
+        "    }\n"
+        "  }\n"
+        "  return $method_new_field_name$;\n"
         "}\n"
         "\n");
   }

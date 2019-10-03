@@ -22,15 +22,15 @@ import static io.grpc.ConnectivityState.IDLE;
 import static io.grpc.ConnectivityState.READY;
 import static io.grpc.ConnectivityState.SHUTDOWN;
 
+import com.github.udpa.udpa.data.orca.v1.OrcaLoadReport;
+import com.github.udpa.udpa.service.orca.v1.OpenRcaServiceGrpc;
+import com.github.udpa.udpa.service.orca.v1.OrcaLoadReportRequest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.util.Durations;
-import io.envoyproxy.udpa.data.orca.v1.OrcaLoadReport;
-import io.envoyproxy.udpa.service.orca.v1.OpenRcaServiceGrpc;
-import io.envoyproxy.udpa.service.orca.v1.OrcaLoadReportRequest;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ChannelLogger;

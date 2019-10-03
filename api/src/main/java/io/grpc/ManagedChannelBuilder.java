@@ -181,15 +181,12 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
    * not perform HTTP/1.1 upgrades.
    *
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @return this
+   * @throws UnsupportedOperationException if plaintext mode is not supported.
    * @since 1.11.0
    */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @SuppressWarnings("deprecation")
   public T usePlaintext() {
-    return usePlaintext(true);
+    throw new UnsupportedOperationException();
   }
 
   /**

@@ -521,8 +521,10 @@ public class ManagedChannelImplTest {
     MockClientTransportInfo transportInfo = transports.poll();
     assertNotNull(transportInfo);
     assertTrue(channelz.containsClientSocket(transportInfo.transport.getLogId()));
+    transportInfo.listener.transportReady();
 
     // terminate transport
+    transportInfo.listener.transportShutdown(Status.CANCELLED);
     transportInfo.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
@@ -564,6 +566,7 @@ public class ManagedChannelImplTest {
     assertTrue(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
     // terminate transport
+    transportInfo.listener.transportShutdown(Status.INTERNAL);
     transportInfo.listener.transportTerminated();
     assertFalse(channelz.containsClientSocket(transportInfo.transport.getLogId()));
 
@@ -3270,6 +3273,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).shutdown();
     // simulating the shutdown of load balancer triggers the shutdown of subchannel
     shutdownSafely(helper, subchannel);
+    transportInfo.listener.transportShutdown(Status.INTERNAL);
     transportInfo.listener.transportTerminated(); // simulating transport terminated
     assertTrue(
         "channel.isTerminated() is expected to be true but was false",
@@ -3369,7 +3373,9 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).shutdown();
     // simulating the shutdown of load balancer triggers the shutdown of subchannel
     shutdownSafely(helper, subchannel);
-    transportInfo.listener.transportTerminated(); // simulating transport terminated
+    // simulating transport shutdown & terminated
+    transportInfo.listener.transportShutdown(Status.INTERNAL);
+    transportInfo.listener.transportTerminated();
     assertTrue(
         "channel.isTerminated() is expected to be true but was false",
         channel.isTerminated());
