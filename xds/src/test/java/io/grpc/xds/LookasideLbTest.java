@@ -33,8 +33,8 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.internal.JsonParser;
+import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import io.grpc.xds.LookasideLb.LookasideChannelLbFactory;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -55,7 +55,7 @@ public class LookasideLbTest {
       new LookasideChannelLbFactory() {
         @Override
         public LoadBalancer newLoadBalancer(
-            Helper helper, AdsStreamCallback adsCallback, String balancerName) {
+            Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName) {
           // just return a mock and record helper and balancer.
           helpers.add(helper);
           LoadBalancer balancer = mock(LoadBalancer.class);
@@ -65,7 +65,8 @@ public class LookasideLbTest {
       };
 
   private LoadBalancer lookasideLb = new LookasideLb(
-      helper, mock(AdsStreamCallback.class), lookasideChannelLbFactory, new LoadBalancerRegistry());
+      helper, mock(LookasideChannelCallback.class), lookasideChannelLbFactory,
+      new LoadBalancerRegistry());
 
 
   @Test
@@ -163,7 +164,7 @@ public class LookasideLbTest {
   public void handleResolvedAddress_createLbChannel()
       throws Exception {
     // Test balancer created with the default real LookasideChannelLbFactory
-    lookasideLb = new LookasideLb(helper, mock(AdsStreamCallback.class));
+    lookasideLb = new LookasideLb(helper, mock(LookasideChannelCallback.class));
     String lbConfigRaw11 = "{'balancerName' : 'dns:///balancer1.example.com:8080'}"
         .replace("'", "\"");
     @SuppressWarnings("unchecked")

@@ -30,7 +30,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -38,26 +38,26 @@ import java.util.logging.Logger;
 /** Lookaside load balancer that handles balancer name changes. */
 final class LookasideLb extends ForwardingLoadBalancer {
 
-  private final AdsStreamCallback adsCallback;
+  private final LookasideChannelCallback lookasideChannelCallback;
   private final LookasideChannelLbFactory lookasideChannelLbFactory;
   private final GracefulSwitchLoadBalancer lookasideChannelLb;
   private final LoadBalancerRegistry lbRegistry;
 
   private String balancerName;
 
-  LookasideLb(Helper lookasideLbHelper, AdsStreamCallback adsCallback) {
+  LookasideLb(Helper lookasideLbHelper, LookasideChannelCallback lookasideChannelCallback) {
     this(
-        lookasideLbHelper, adsCallback, new LookasideChannelLbFactoryImpl(),
+        lookasideLbHelper, lookasideChannelCallback, new LookasideChannelLbFactoryImpl(),
         LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
-      AdsStreamCallback adsCallback,
+      LookasideChannelCallback lookasideChannelCallback,
       LookasideChannelLbFactory lookasideChannelLbFactory,
       LoadBalancerRegistry lbRegistry) {
-    this.adsCallback = adsCallback;
+    this.lookasideChannelCallback = lookasideChannelCallback;
     this.lookasideChannelLbFactory = lookasideChannelLbFactory;
     this.lbRegistry = lbRegistry;
     this.lookasideChannelLb = new GracefulSwitchLoadBalancer(lookasideLbHelper);
@@ -113,23 +113,25 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
       @Override
       public LoadBalancer newLoadBalancer(Helper helper) {
-        return lookasideChannelLbFactory.newLoadBalancer(helper, adsCallback, balancerName);
+        return lookasideChannelLbFactory.newLoadBalancer(
+            helper, lookasideChannelCallback, balancerName);
       }
     };
   }
 
   @VisibleForTesting
   interface LookasideChannelLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback, String balancerName);
+    LoadBalancer newLoadBalancer(
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName);
   }
 
   private static final class LookasideChannelLbFactoryImpl implements LookasideChannelLbFactory {
 
     @Override
-    public LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback,
-        String balancerName) {
+    public LoadBalancer newLoadBalancer(
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName) {
       return new LookasideChannelLb(
-          helper, adsCallback, initLbChannel(helper, balancerName),
+          helper, lookasideChannelCallback, initLbChannel(helper, balancerName),
           new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()));
     }
 

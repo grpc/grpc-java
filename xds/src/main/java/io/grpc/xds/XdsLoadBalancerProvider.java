@@ -29,7 +29,6 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.ServiceConfigUtil;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import java.util.List;
@@ -66,8 +65,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
 
   @Override
   public LoadBalancer newLoadBalancer(Helper helper) {
-    return new XdsLoadBalancer(helper, LoadBalancerRegistry.getDefaultRegistry(),
-        new ExponentialBackoffPolicy.Provider());
+    return new XdsLoadBalancer2(helper);
   }
 
   @Override

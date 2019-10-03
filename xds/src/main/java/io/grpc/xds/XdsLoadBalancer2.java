@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -46,7 +46,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancer lookasideLb;
   private final LoadBalancer.Factory fallbackLbFactory;
-  private final AdsStreamCallback adsCallback = new AdsStreamCallback() {
+  private final LookasideChannelCallback lookasideChannelCallback = new LookasideChannelCallback() {
     @Override
     public void onWorking() {
       if (childPolicyHasBeenReady) {
@@ -93,7 +93,8 @@ final class XdsLoadBalancer2 extends LoadBalancer {
       LookasideLbFactory lookasideLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {
     this.helper = helper;
-    this.lookasideLb = lookasideLbFactory.newLoadBalancer(new LookasideLbHelper(), adsCallback);
+    this.lookasideLb = lookasideLbFactory.newLoadBalancer(new LookasideLbHelper(),
+        lookasideChannelCallback);
     this.fallbackLbFactory = fallbackLbFactory;
   }
 
@@ -246,13 +247,14 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   /** Factory of a look-aside load balancer. The interface itself is for convenience in test. */
   @VisibleForTesting
   interface LookasideLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback);
+    LoadBalancer newLoadBalancer(Helper helper, LookasideChannelCallback lookasideChannelCallback);
   }
 
   private static final class LookasideLbFactoryImpl implements LookasideLbFactory {
     @Override
-    public LoadBalancer newLoadBalancer(Helper lookasideLbHelper, AdsStreamCallback adsCallback) {
-      return new LookasideLb(lookasideLbHelper, adsCallback);
+    public LoadBalancer newLoadBalancer(
+        Helper lookasideLbHelper, LookasideChannelCallback lookasideChannelCallback) {
+      return new LookasideLb(lookasideLbHelper, lookasideChannelCallback);
     }
   }
 
