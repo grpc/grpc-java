@@ -17,9 +17,13 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.XdsNameResolver.XDS_NODE;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -85,12 +89,22 @@ final class LookasideLb extends ForwardingLoadBalancer {
     String newBalancerName = xdsConfig.balancerName;
     if (!newBalancerName.equals(balancerName)) {
       balancerName = newBalancerName; // cache the name and check next time for optimization
-      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(newBalancerName));
+      Node node = resolvedAddresses.getAttributes().get(XDS_NODE);
+      if (node == null) {
+        node = Node.newBuilder()
+            .setMetadata(Struct.newBuilder()
+                .putFields(
+                    "endpoints_required",
+                    Value.newBuilder().setBoolValue(true).build()))
+            .build();
+      }
+      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(newBalancerName, node));
     }
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
   }
 
-  private LoadBalancerProvider newLookasideChannelLbProvider(final String balancerName) {
+  private LoadBalancerProvider newLookasideChannelLbProvider(
+      final String balancerName, final Node node) {
     return new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
@@ -114,7 +128,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
       @Override
       public LoadBalancer newLoadBalancer(Helper helper) {
         return lookasideChannelLbFactory.newLoadBalancer(
-            helper, lookasideChannelCallback, balancerName);
+            helper, lookasideChannelCallback, balancerName, node);
       }
     };
   }
@@ -122,17 +136,20 @@ final class LookasideLb extends ForwardingLoadBalancer {
   @VisibleForTesting
   interface LookasideChannelLbFactory {
     LoadBalancer newLoadBalancer(
-        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName);
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
+        Node node);
   }
 
   private static final class LookasideChannelLbFactoryImpl implements LookasideChannelLbFactory {
 
     @Override
     public LoadBalancer newLoadBalancer(
-        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName) {
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
+        Node node) {
       return new LookasideChannelLb(
           helper, lookasideChannelCallback, initLbChannel(helper, balancerName),
-          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()));
+          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()),
+          node);
     }
 
     private static ManagedChannel initLbChannel(Helper helper, String balancerName) {

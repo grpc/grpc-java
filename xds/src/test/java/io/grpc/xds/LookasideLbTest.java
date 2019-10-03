@@ -25,6 +25,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
@@ -55,11 +56,13 @@ public class LookasideLbTest {
       new LookasideChannelLbFactory() {
         @Override
         public LoadBalancer newLoadBalancer(
-            Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName) {
+            Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
+            Node node) {
           // just return a mock and record helper and balancer.
           helpers.add(helper);
           LoadBalancer balancer = mock(LoadBalancer.class);
           balancers.add(balancer);
+          assertThat(node).isNotNull();
           return balancer;
         }
       };

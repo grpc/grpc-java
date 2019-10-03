@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Locality;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
@@ -169,7 +170,8 @@ public class LookasideChannelLbTest {
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
 
     lookasideChannelLb = new LookasideChannelLb(
-        helper, lookasideChannelCallback, channel, loadReportClient, localityStore);
+        helper, lookasideChannelCallback, channel, loadReportClient, localityStore,
+        Node.getDefaultInstance());
   }
 
   @Test
