@@ -38,7 +38,7 @@ import javax.annotation.Nullable;
  * <p>This class manages fallback handling. The logic for child policy handling and fallback policy
  * handling is provided by LookasideLb and FallbackLb.
  */
-final class XdsLoadBalancer extends LoadBalancer {
+final class XdsLoadBalancer2 extends LoadBalancer {
 
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
 
@@ -82,12 +82,12 @@ final class XdsLoadBalancer extends LoadBalancer {
   private boolean adsWorked;
   private boolean childPolicyHasBeenReady;
 
-  XdsLoadBalancer(Helper helper) {
+  XdsLoadBalancer2(Helper helper) {
     this(helper, new LookasideLbFactoryImpl(), new FallbackLbFactory());
   }
 
   @VisibleForTesting
-  XdsLoadBalancer(
+  XdsLoadBalancer2(
       Helper helper,
       LookasideLbFactory lookasideLbFactory,
       LoadBalancer.Factory fallbackLbFactory) {

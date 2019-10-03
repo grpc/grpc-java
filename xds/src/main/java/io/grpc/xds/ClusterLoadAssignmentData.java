@@ -36,7 +36,7 @@ final class ClusterLoadAssignmentData {
   /**
    * An {@code XdsLocality} object is simply a POJO representation for {@link
    * io.envoyproxy.envoy.api.v2.core.Locality}, with only details needed for {@link
-   * XdsLoadBalancer}.
+   * XdsLoadBalancer2}.
    */
   static final class XdsLocality {
     private final String region;

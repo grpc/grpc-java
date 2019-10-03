@@ -41,7 +41,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
-import io.grpc.xds.XdsLoadBalancer.LookasideLbFactory;
+import io.grpc.xds.XdsLoadBalancer2.LookasideLbFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -55,9 +55,9 @@ import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
-/** Unit tests for {@link XdsLoadBalancer}. */
+/** Unit tests for {@link XdsLoadBalancer2}. */
 @RunWith(JUnit4.class)
-public class XdsLoadBalancerTest {
+public class XdsLoadBalancer2Test {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
   @Rule
@@ -93,7 +93,7 @@ public class XdsLoadBalancerTest {
           Helper helper, LookasideChannelCallback lookasideChannelCallback) {
         // just return a mock and record the input and output
         lookasideLbHelper = helper;
-        XdsLoadBalancerTest.this.lookasideChannelCallback = lookasideChannelCallback;
+        XdsLoadBalancer2Test.this.lookasideChannelCallback = lookasideChannelCallback;
         LoadBalancer lookasideLb = mock(LoadBalancer.class);
         lookasideLbs.add(lookasideLb);
         return lookasideLb;
@@ -114,7 +114,7 @@ public class XdsLoadBalancerTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
 
     xdsLoadBalancer =
-        new XdsLoadBalancer(helper, lookasideLbFactory, fallbackLbFactory);
+        new XdsLoadBalancer2(helper, lookasideLbFactory, fallbackLbFactory);
     xdsLoadBalancer.handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(ImmutableList.<EquivalentAddressGroup>of()).build());
