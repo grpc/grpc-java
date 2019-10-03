@@ -18,7 +18,7 @@ package io.grpc.alts.internal;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import java.lang.reflect.Method;
+import io.grpc.internal.ConscryptLoader;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.Provider;
@@ -111,8 +111,9 @@ final class AesGcmAeadCrypter implements AeadCrypter {
   }
 
   private static Provider getConscrypt() {
-    // This is equivalent to if (Conscrypt.isAvailable()) return Conscrypt.newProvider();
-
+    if (!ConscryptLoader.isPresent()) {
+      return null;
+    }
     // Conscrypt 2.1.0 or later is required. If an older version is used, it will fail with these
     // sorts of errors:
     //     "The underlying Cipher implementation does not support this method"
@@ -120,42 +121,11 @@ final class AesGcmAeadCrypter implements AeadCrypter {
     //
     // While we could use Conscrypt.version() to check compatibility, that is _very_ verbose via
     // reflection. In practice, old conscrypts are probably not much of a problem.
-    Class<?> conscryptClass;
     try {
-      conscryptClass = Class.forName("org.conscrypt.Conscrypt");
-    } catch (ClassNotFoundException ex) {
-      logger.log(Level.FINE, "Could not find Conscrypt", ex);
+      return ConscryptLoader.newProvider();
+    } catch (Throwable t) {
+      logger.log(Level.INFO, "Could not load Conscrypt. Will use slower JDK implementation", t);
       return null;
     }
-    Method method;
-    try {
-      method = conscryptClass.getMethod("newProvider");
-    } catch (SecurityException ex) {
-      logger.log(Level.FINE, "Could not find Conscrypt factory method", ex);
-      return null;
-    } catch (NoSuchMethodException ex) {
-      logger.log(Level.WARNING, "Could not find Conscrypt factory method", ex);
-      return null;
-    }
-    Object provider;
-    try {
-      provider = method.invoke(null);
-    } catch (IllegalAccessException ex) {
-      logger.log(Level.WARNING, "Could not call Conscrypt factory method", ex);
-      return null;
-    } catch (Throwable ex) {
-      // This is probably an InvocationTargetException, which means something's wrong with the JNI
-      // loading. Maybe the platform is not supported. We could have used Conscrypt.isAvailable(),
-      // but it just catches Throwable as well
-      logger.log(Level.WARNING, "Failed calling Conscrypt factory method", ex);
-      return null;
-    }
-    if (!(provider instanceof Provider)) {
-      logger.log(
-          Level.WARNING, "Could not load Conscrypt. Returned provider was not a Provider: {0}",
-          provider.getClass().getName());
-      return null;
-    }
-    return (Provider) provider;
   }
 }
