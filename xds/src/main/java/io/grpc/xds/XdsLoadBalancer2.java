@@ -38,6 +38,7 @@ import javax.annotation.Nullable;
  * <p>This class manages fallback handling. The logic for child policy handling and fallback policy
  * handling is provided by LookasideLb and FallbackLb.
  */
+// TODO(zdapeng): migrate name to XdsLoadBlancer
 final class XdsLoadBalancer2 extends LoadBalancer {
 
   private static final long FALLBACK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10); // same as grpclb
