@@ -112,8 +112,8 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
    * down the executor when it's desired.
    *
-   * @throws UnsupportedOperationException if unsupported
    * @return this
+   * @throws UnsupportedOperationException if unsupported
    * @since 1.25.0
    */
   public T nameResolverExecutor(Executor executor) {
