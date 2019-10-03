@@ -426,5 +426,7 @@ public class LookasideChannelLbTest {
 
     verifyNoMoreInteractions(lookasideChannelCallback, loadReportClient);
     verify(localityStore, times(1)).updateOobMetricsReportInterval(anyLong()); // only once
+
+    lookasideChannelLb.shutdown();
   }
 }

@@ -98,6 +98,7 @@ final class XdsComms2 {
                   helper.getChannelLogger().log(
                       ChannelLogLevel.DEBUG,
                       "Received an EDS response: {0}", clusterLoadAssignment);
+                  firstEdsResponseReceived = true;
                   adsStreamCallback.onEdsResponse(clusterLoadAssignment);
                 }
               }
