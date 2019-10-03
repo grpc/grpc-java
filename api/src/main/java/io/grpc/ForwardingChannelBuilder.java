@@ -72,6 +72,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
+  public T nameResolverExecutor(Executor executor) {
+    delegate().nameResolverExecutor(executor);
+    return thisT();
+  }
+
+  @Override
   public T intercept(List<ClientInterceptor> interceptors) {
     delegate().intercept(interceptors);
     return thisT();

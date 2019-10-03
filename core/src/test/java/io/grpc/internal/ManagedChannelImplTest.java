@@ -265,6 +265,8 @@ public class ManagedChannelImplTest {
   private ObjectPool<Executor> balancerRpcExecutorPool;
   @Mock
   private CallCredentials creds;
+  @Mock
+  private Executor nameResolverExecutor;
   private ChannelBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
@@ -319,11 +321,14 @@ public class ManagedChannelImplTest {
     when(balancerRpcExecutorPool.getObject())
         .thenReturn(balancerRpcExecutor.getScheduledExecutorService());
 
-    channelBuilder = new ChannelBuilder()
-        .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
-        .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
-        .userAgent(USER_AGENT)
-        .idleTimeout(AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS);
+    channelBuilder =
+        new ChannelBuilder()
+            .nameResolverFactory(new FakeNameResolverFactory.Builder(expectedUri).build())
+            .defaultLoadBalancingPolicy(MOCK_POLICY_NAME)
+            .userAgent(USER_AGENT)
+            .idleTimeout(
+                AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
+            .nameResolverExecutor(nameResolverExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -3582,6 +3587,7 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
+    assertThat(args.getExecutor()).isSameInstanceAs(nameResolverExecutor);
   }
 
   @Test
