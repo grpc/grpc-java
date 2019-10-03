@@ -17,6 +17,7 @@
 package io.grpc.internal.testing;
 
 import com.google.common.base.Throwables;
+import io.grpc.internal.ConscryptLoader;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -25,8 +26,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -163,33 +162,22 @@ public class TestUtils {
       conscryptInstallAttempted = true;
       return;
     }
-    Class<?> conscrypt;
-    try {
-      conscrypt = Class.forName("org.conscrypt.Conscrypt");
-    } catch (ClassNotFoundException ex) {
+    if (!ConscryptLoader.isPresent()) {
       conscryptInstallAttempted = true;
       return;
     }
-    Method newProvider;
-    try {
-      newProvider = conscrypt.getMethod("newProvider");
-    } catch (NoSuchMethodException ex) {
-      throw new RuntimeException("Could not find newProvider method on Conscrypt", ex);
-    }
     Provider provider;
     try {
-      provider = (Provider) newProvider.invoke(null);
-    } catch (IllegalAccessException ex) {
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
-    } catch (InvocationTargetException ex) {
-      Throwable root = Throwables.getRootCause(ex);
+      provider = ConscryptLoader.newProvider();
+    } catch (Throwable t) {
+      Throwable root = Throwables.getRootCause(t);
       // Conscrypt uses a newer version of glibc than available on RHEL 6
       if (root instanceof UnsatisfiedLinkError && root.getMessage() != null
           && root.getMessage().contains("GLIBC_2.14")) {
         conscryptInstallAttempted = true;
         return;
       }
-      throw new RuntimeException("Could not invoke Conscrypt.newProvider", ex);
+      throw new RuntimeException("Could not create Conscrypt provider", t);
     }
     Security.addProvider(provider);
     conscryptInstallAttempted = true;
