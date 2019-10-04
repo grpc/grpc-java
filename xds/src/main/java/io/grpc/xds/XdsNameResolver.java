@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -60,45 +61,24 @@ final class XdsNameResolver extends NameResolver {
           + "]}";
 
   private final String authority;
-
-  @Nullable
-  private Bootstrapper bootstrapper;
+  private final String serviceConfig;
+  private final Node node;
 
   XdsNameResolver(String name) {
+    this(name, createBootstrapper());
+  }
+
+  @VisibleForTesting
+  XdsNameResolver(String name, @Nullable Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         Preconditions.checkNotNull(
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-  }
 
-  void setBootstrapperForTest(Bootstrapper bootstrapper) {
-    this.bootstrapper = bootstrapper;
-  }
-
-  @Override
-  public String getServiceAuthority() {
-    return authority;
-  }
-
-  @SuppressWarnings("unchecked")
-  @Override
-  public void start(final Listener2 listener) {
     String serviceConfig = SERVICE_CONFIG_HARDCODED;
-    Node node = Node.newBuilder()
-        .setMetadata(Struct.newBuilder()
-            .putFields(
-                "endpoints_required",
-                Value.newBuilder().setBoolValue(true).build()))
-        .build();
+    Node node = Node.getDefaultInstance();
 
-    if (bootstrapper == null) {
-      try {
-        bootstrapper = Bootstrapper.getInstance();
-      } catch (Exception e) {
-        logger.log(Level.FINE, "Unable to load XDS bootstrap config", e);
-      }
-    }
     if (bootstrapper != null) {
       String serverUri = bootstrapper.getServerUri();
       node = bootstrapper.getNode();
@@ -110,6 +90,29 @@ final class XdsNameResolver extends NameResolver {
           + "}}"
           + "]}";
     }
+
+    this.serviceConfig = serviceConfig;
+    this.node = node;
+  }
+
+  @Nullable
+  private static Bootstrapper createBootstrapper() {
+    try {
+      return Bootstrapper.getInstance();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Unable to load XDS bootstrap config", e);
+    }
+    return null;
+  }
+
+  @Override
+  public String getServiceAuthority() {
+    return authority;
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public void start(final Listener2 listener) {
 
     Map<String, ?> config;
     try {

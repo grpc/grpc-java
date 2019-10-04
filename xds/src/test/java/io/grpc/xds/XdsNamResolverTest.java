@@ -119,12 +119,12 @@ public class XdsNamResolverTest {
 
   @Test
   public void resolve_hardcodedResult() {
-    XdsNameResolver resolver = newResolver("foo.googleapis.com");
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", null);
     resolver.start(mockListener);
     verify(mockListener).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
 
-    resolver = newResolver("bar.googleapis.com");
+    resolver = new XdsNameResolver("bar.googleapis.com", null);
     resolver.start(mockListener);
     verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
@@ -132,14 +132,12 @@ public class XdsNamResolverTest {
 
   @Test
   public void resolve_bootstrapResult() {
-    XdsNameResolver resolver = newResolver("foo.googleapis.com");
-    resolver.setBootstrapperForTest(bootstrapper);
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
     resolver.start(mockListener);
     verify(mockListener).onResult(resultCaptor.capture());
     assertBootstrapServiceConfig(resultCaptor.getValue());
 
-    resolver = newResolver("bar.googleapis.com");
-    resolver.setBootstrapperForTest(bootstrapper);
+    resolver = new XdsNameResolver("bar.googleapis.com", bootstrapper);
     resolver.start(mockListener);
     verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertBootstrapServiceConfig(resultCaptor.getValue());
@@ -179,9 +177,5 @@ public class XdsNamResolverTest {
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
     assertThat(actualResult.getAttributes().get(XDS_NODE)).isSameInstanceAs(bootstrapNode);
-  }
-
-  private XdsNameResolver newResolver(String name) {
-    return new XdsNameResolver(name);
   }
 }
