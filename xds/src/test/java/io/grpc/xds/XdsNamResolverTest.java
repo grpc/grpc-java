@@ -69,7 +69,7 @@ public class XdsNamResolverTest {
           .build();
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
-  private static final Node bootstrapNode = Node.newBuilder().build();
+  private static final Node bootstrapNode = Node.newBuilder().setBuildVersion("fakeVer").build();
   private static final Bootstrapper bootstrapper = new Bootstrapper() {
     @Override
     String getServerUri() {
