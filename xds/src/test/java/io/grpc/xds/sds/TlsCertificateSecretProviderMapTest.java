@@ -64,7 +64,7 @@ public class TlsCertificateSecretProviderMapTest {
     TlsCertificateStore updatedSecret;
 
     @Override
-    public void updateSecret(TlsCertificateStore secret) {
+    public void updateSecret(TlsCertificateStore secret, Throwable throwable) {
       updatedSecret = secret;
     }
   }

@@ -29,7 +29,7 @@ import java.util.concurrent.Executor;
 public interface SecretProvider<T> {
 
   interface Callback<T> {
-    void updateSecret(T secret);
+    void updateSecret(T secret, Throwable throwable);
   }
 
   /**
