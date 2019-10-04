@@ -37,6 +37,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Locality;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
@@ -184,7 +185,7 @@ public class XdsCommsTest {
     doReturn(20L, 200L).when(backoffPolicy2).nextBackoffNanos();
     xdsComms = new XdsComms2(
         channel, helper, adsStreamCallback, backoffPolicyProvider,
-        fakeClock.getStopwatchSupplier());
+        fakeClock.getStopwatchSupplier(), Node.getDefaultInstance());
   }
 
   @Test
@@ -207,9 +208,6 @@ public class XdsCommsTest {
     assertThat(streamRecorder.getValues()).hasSize(1);
     DiscoveryRequest request = streamRecorder.getValues().get(0);
     assertThat(request.getTypeUrl()).isEqualTo(EDS_TYPE_URL);
-    assertThat(
-            request.getNode().getMetadata().getFieldsOrThrow("endpoints_required").getBoolValue())
-        .isTrue();
     assertThat(request.getResourceNamesList()).hasSize(1);
 
     Locality localityProto1 = Locality.newBuilder()

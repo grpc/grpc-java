@@ -18,7 +18,9 @@ package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.NameResolver;
@@ -29,6 +31,9 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
@@ -41,6 +46,11 @@ import java.util.Map;
  */
 final class XdsNameResolver extends NameResolver {
 
+  private static final Logger logger = Logger.getLogger(XdsNameResolver.class.getName());
+
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<Node> XDS_NODE = Attributes.Key.create("xds-node");
+
   private static final String SERVICE_CONFIG_HARDCODED = "{"
           + "\"loadBalancingConfig\": ["
           + "{\"xds_experimental\" : {"
@@ -49,13 +59,48 @@ final class XdsNameResolver extends NameResolver {
           + "]}";
 
   private final String authority;
+  private final String serviceConfig;
+  private final Node node;
 
   XdsNameResolver(String name) {
+    this(name, createBootstrapper());
+  }
+
+  @VisibleForTesting
+  XdsNameResolver(String name, @Nullable Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         Preconditions.checkNotNull(
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
+
+    String serviceConfig = SERVICE_CONFIG_HARDCODED;
+    Node node = Node.getDefaultInstance();
+
+    if (bootstrapper != null) {
+      String serverUri = bootstrapper.getServerUri();
+      node = bootstrapper.getNode();
+      serviceConfig = "{"
+          + "\"loadBalancingConfig\": ["
+          + "{\"xds_experimental\" : {"
+          + "\"balancer_name\" : \"" + serverUri + "\","
+          + "\"childPolicy\" : [{\"round_robin\" : {}}]"
+          + "}}"
+          + "]}";
+    }
+
+    this.serviceConfig = serviceConfig;
+    this.node = node;
+  }
+
+  @Nullable
+  private static Bootstrapper createBootstrapper() {
+    try {
+      return Bootstrapper.getInstance();
+    } catch (Exception e) {
+      logger.log(Level.FINE, "Unable to load XDS bootstrap config", e);
+    }
+    return null;
   }
 
   @Override
@@ -66,9 +111,10 @@ final class XdsNameResolver extends NameResolver {
   @SuppressWarnings("unchecked")
   @Override
   public void start(final Listener2 listener) {
+
     Map<String, ?> config;
     try {
-      config = (Map<String, ?>) JsonParser.parse(SERVICE_CONFIG_HARDCODED);
+      config = (Map<String, ?>) JsonParser.parse(serviceConfig);
     } catch (IOException e) {
       listener.onError(
           Status.UNKNOWN.withDescription("Invalid service config").withCause(e));
@@ -77,6 +123,7 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
+            .set(XDS_NODE, node)
             .build();
     ResolutionResult result =
         ResolutionResult.newBuilder()

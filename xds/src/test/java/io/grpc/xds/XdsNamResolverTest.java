@@ -17,12 +17,15 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsNameResolver.XDS_NODE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -46,6 +49,8 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
 public class XdsNamResolverTest {
+  private static final Node FAKE_BOOTSTRAP_NODE =
+      Node.newBuilder().setBuildVersion("fakeVer").build();
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   
@@ -99,15 +104,45 @@ public class XdsNamResolverTest {
 
   @Test
   public void resolve_hardcodedResult() {
-    XdsNameResolver resolver = newResolver("foo.googleapis.com");
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", null);
     resolver.start(mockListener);
     verify(mockListener).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
 
-    resolver = newResolver("bar.googleapis.com");
+    resolver = new XdsNameResolver("bar.googleapis.com", null);
     resolver.start(mockListener);
     verify(mockListener, times(2)).onResult(resultCaptor.capture());
     assertHardCodedServiceConfig(resultCaptor.getValue());
+  }
+
+  @Test
+  public void resolve_bootstrapResult() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      String getServerUri() {
+        return "fake_server_uri";
+      }
+
+      @Override
+      Node getNode() {
+        return FAKE_BOOTSTRAP_NODE;
+      }
+
+      @Override
+      List<ChannelCreds> getChannelCredentials() {
+        return ImmutableList.of();
+      }
+    };
+
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    verify(mockListener).onResult(resultCaptor.capture());
+    assertBootstrapServiceConfig(resultCaptor.getValue());
+
+    resolver = new XdsNameResolver("bar.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    verify(mockListener, times(2)).onResult(resultCaptor.capture());
+    assertBootstrapServiceConfig(resultCaptor.getValue());
   }
 
   @SuppressWarnings("unchecked")
@@ -126,7 +161,23 @@ public class XdsNamResolverTest {
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
   }
 
-  private XdsNameResolver newResolver(String name) {
-    return new XdsNameResolver(name);
+  @SuppressWarnings("unchecked")
+  private static void assertBootstrapServiceConfig(ResolutionResult actualResult) {
+    assertThat(actualResult.getAddresses()).isEmpty();
+    Map<String, ?> serviceConfig =
+        actualResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    List<Map<String, ?>> rawLbConfigs =
+        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
+    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
+    Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
+    assertThat(rawConfigValues)
+        .containsExactly(
+            "balancer_name",
+            "fake_server_uri",
+            "childPolicy",
+            Collections.singletonList(
+                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
+    assertThat(actualResult.getAttributes().get(XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
   }
 }
