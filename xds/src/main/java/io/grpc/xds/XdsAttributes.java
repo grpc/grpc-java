@@ -24,10 +24,12 @@ import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.Grpc;
+import io.grpc.Internal;
 
 /**
  * Special attributes that are only useful to gRPC in the XDS context.
  */
+@Internal
 public final class XdsAttributes {
   /**
    * Attribute key for SdsSecretConfig of a subchannel.
