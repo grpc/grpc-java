@@ -42,13 +42,12 @@ The codegen plugin is C++ code and requires protobuf 3.0.0 or later.
 
 For Linux, Mac and MinGW:
 ```
-$ git clone https://github.com/google/protobuf.git
-$ cd protobuf
-$ git checkout v3.9.0
-$ ./autogen.sh
+$ PROTOBUF_VERSION=3.9.0
+$ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOBUF_VERSION/protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ tar xzf protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ cd protobuf-$PROTOBUF_VERSION
 $ ./configure --disable-shared
-$ make
-$ make check
+$ make   # You may want to pass -j to make this run faster; see make --help
 $ sudo make install
 ```
 
