@@ -69,7 +69,7 @@ final class XdsNameResolver extends NameResolver {
   @VisibleForTesting
   XdsNameResolver(String name, @Nullable Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
+    // Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         Preconditions.checkNotNull(
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);

@@ -41,6 +41,15 @@ public class HelloWorldClient {
         .build());
   }
 
+  /** Construct client connecting to HelloWorld server at the given {@code target}. */
+  public HelloWorldClient(String target) {
+    this(ManagedChannelBuilder.forTarget(target)
+        // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
+        // needing certificates.
+        .usePlaintext()
+        .build());
+  }
+
   /** Construct client for accessing HelloWorld server using the existing channel. */
   HelloWorldClient(ManagedChannel channel) {
     this.channel = channel;
@@ -70,14 +79,13 @@ public class HelloWorldClient {
    * greeting.
    */
   public static void main(String[] args) throws Exception {
-    HelloWorldClient client = new HelloWorldClient("localhost", 50051);
+    String target = "localhost:50051";
+    if (args.length > 0) {
+      target = args[0];
+    }
+    HelloWorldClient client = new HelloWorldClient(target);
     try {
-      /* Access a service running on the local machine on port 50051 */
-      String user = "world";
-      if (args.length > 0) {
-        user = args[0]; /* Use the arg as the name to greet if provided */
-      }
-      client.greet(user);
+      client.greet("world");
     } finally {
       client.shutdown();
     }
