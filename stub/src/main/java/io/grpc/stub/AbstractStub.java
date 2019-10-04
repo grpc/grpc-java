@@ -57,6 +57,16 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    *
    * @since 1.0.0
    * @param channel the channel that this stub will use to do communications
+   */
+  protected AbstractStub(Channel channel) {
+    this(channel, CallOptions.DEFAULT);
+  }
+
+  /**
+   * Constructor for use by subclasses, with the default {@code CallOptions}.
+   *
+   * @since 1.0.0
+   * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected AbstractStub(Channel channel, CallOptions callOptions) {
