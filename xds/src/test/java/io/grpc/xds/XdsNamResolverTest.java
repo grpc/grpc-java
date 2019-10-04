@@ -49,6 +49,8 @@ import org.mockito.junit.MockitoRule;
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
 public class XdsNamResolverTest {
+  private static final Node FAKE_BOOTSTRAP_NODE =
+      Node.newBuilder().setBuildVersion("fakeVer").build();
 
   @Rule public final MockitoRule mocks = MockitoJUnit.rule();
   
@@ -69,7 +71,6 @@ public class XdsNamResolverTest {
           .build();
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
-  private static final Node bootstrapNode = Node.newBuilder().setBuildVersion("fakeVer").build();
 
   @Mock private NameResolver.Listener2 mockListener;
   @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
@@ -124,7 +125,7 @@ public class XdsNamResolverTest {
 
       @Override
       Node getNode() {
-        return bootstrapNode;
+        return FAKE_BOOTSTRAP_NODE;
       }
 
       @Override
@@ -177,6 +178,6 @@ public class XdsNamResolverTest {
             "childPolicy",
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
-    assertThat(actualResult.getAttributes().get(XDS_NODE)).isEqualTo(bootstrapNode);
+    assertThat(actualResult.getAttributes().get(XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
   }
 }
