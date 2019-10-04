@@ -101,7 +101,7 @@ public final class HelloJsonClient {
             .build();
 
     protected HelloJsonStub(Channel channel) {
-      this(channel, CallOptions.DEFAULT);
+      super(channel);
     }
 
     protected HelloJsonStub(Channel channel, CallOptions callOptions) {
