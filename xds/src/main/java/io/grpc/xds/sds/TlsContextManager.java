@@ -25,22 +25,27 @@ import io.netty.handler.ssl.SslContext;
  * Class to manage secrets used to create SSL contexts - this effectively manages SSL contexts
  * (aka TlsContexts) based on inputs we get from xDS. This is used by gRPC-xds to access the
  * SSL contexts/secrets and is not public API.
- * TODO(sanjaypujare): flesh out the implementation and remove the old {@link SecretManager}
- * once done.
  */
 @Internal
-public class TlsContextManager {
+public final class TlsContextManager {
 
+  /**
+   * Finds an existing SecretProvider or creates it if it doesn't exist.
+   * Used for retrieving a server-side SslContext
+   */
   public SecretProvider<SslContext> findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
-    // TODO(sanjaypujare): implement required SecrerProvider
+    // TODO(sanjaypujare): implementation of SecretProvider<SslContext>
     return null;
   }
 
+  /**
+   * Finds an existing SecretProvider or creates it if it doesn't exist.
+   * Used for retrieving a client-side SslContext
+   */
   public SecretProvider<SslContext> findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
-    // TODO(sanjaypujare): implement required SecrerProvider
+    // TODO(sanjaypujare): implementation of SecretProvider<SslContext>
     return null;
   }
-
 }
