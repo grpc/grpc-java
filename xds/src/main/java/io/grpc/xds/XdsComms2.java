@@ -47,6 +47,7 @@ final class XdsComms2 {
   private final Helper helper;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
+  // Metadata to be included in every xDS request.
   private final Node node;
 
   @CheckForNull

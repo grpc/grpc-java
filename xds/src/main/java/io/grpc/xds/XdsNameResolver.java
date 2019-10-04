@@ -49,7 +49,6 @@ final class XdsNameResolver extends NameResolver {
 
   private static final Logger logger = Logger.getLogger(XdsNameResolver.class.getName());
 
-  // This is temporary and is for demo purpose only.
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<Node> XDS_NODE = Attributes.Key.create("xds-node");
 
@@ -73,8 +72,6 @@ final class XdsNameResolver extends NameResolver {
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
   }
 
-  // It's hard to make bootstrapper a final field and pass Bootstrapper.getInstance() to the
-  // constructor argument because Bootstrapper.getInstance() throws.
   void setBootstrapperForTest(Bootstrapper bootstrapper) {
     this.bootstrapper = bootstrapper;
   }
@@ -105,9 +102,6 @@ final class XdsNameResolver extends NameResolver {
     if (bootstrapper != null) {
       String serverUri = bootstrapper.getServerUri();
       node = bootstrapper.getNode();
-      // This is temporary and is for demo purpose only.
-      // The balancer_name is actually not needed in the future, serverUri will be used to create
-      // XdsClient directly.
       serviceConfig = "{"
           + "\"loadBalancingConfig\": ["
           + "{\"xds_experimental\" : {"
@@ -128,7 +122,6 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-            // This is temporary and is for demo purpose only.
             .set(XDS_NODE, node)
             .build();
     ResolutionResult result =
