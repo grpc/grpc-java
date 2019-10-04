@@ -70,22 +70,6 @@ public class XdsNamResolverTest {
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
   private static final Node bootstrapNode = Node.newBuilder().setBuildVersion("fakeVer").build();
-  private static final Bootstrapper bootstrapper = new Bootstrapper() {
-    @Override
-    String getServerUri() {
-      return "fake_server_uri";
-    }
-
-    @Override
-    Node getNode() {
-      return bootstrapNode;
-    }
-
-    @Override
-    List<ChannelCreds> getChannelCredentials() {
-      return ImmutableList.of();
-    }
-  };
 
   @Mock private NameResolver.Listener2 mockListener;
   @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
@@ -132,6 +116,23 @@ public class XdsNamResolverTest {
 
   @Test
   public void resolve_bootstrapResult() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      String getServerUri() {
+        return "fake_server_uri";
+      }
+
+      @Override
+      Node getNode() {
+        return bootstrapNode;
+      }
+
+      @Override
+      List<ChannelCreds> getChannelCredentials() {
+        return ImmutableList.of();
+      }
+    };
+
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
     resolver.start(mockListener);
     verify(mockListener).onResult(resultCaptor.capture());
