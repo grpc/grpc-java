@@ -176,6 +176,6 @@ public class XdsNamResolverTest {
             "childPolicy",
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
-    assertThat(actualResult.getAttributes().get(XDS_NODE)).isSameInstanceAs(bootstrapNode);
+    assertThat(actualResult.getAttributes().get(XDS_NODE)).isEqualTo(bootstrapNode);
   }
 }
