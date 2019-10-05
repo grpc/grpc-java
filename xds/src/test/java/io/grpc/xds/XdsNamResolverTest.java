@@ -173,7 +173,7 @@ public class XdsNamResolverTest {
     Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
     assertThat(rawConfigValues)
         .containsExactly(
-            "balancer_name",
+            "balancerName",
             "fake_server_uri",
             "childPolicy",
             Collections.singletonList(
