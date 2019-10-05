@@ -48,7 +48,7 @@ import org.mockito.junit.MockitoRule;
 
 /** Unit tests for {@link XdsNameResolver}. */
 @RunWith(JUnit4.class)
-public class XdsNamResolverTest {
+public class XdsNameResolverTest {
   private static final Node FAKE_BOOTSTRAP_NODE =
       Node.newBuilder().setBuildVersion("fakeVer").build();
 
