@@ -83,7 +83,7 @@ final class XdsNameResolver extends NameResolver {
       serviceConfig = "{"
           + "\"loadBalancingConfig\": ["
           + "{\"xds_experimental\" : {"
-          + "\"balancer_name\" : \"" + serverUri + "\","
+          + "\"balancerName\" : \"" + serverUri + "\","
           + "\"childPolicy\" : [{\"round_robin\" : {}}]"
           + "}}"
           + "]}";
