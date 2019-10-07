@@ -38,6 +38,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.Locality;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
@@ -55,10 +56,11 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
+import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
+import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsComms.DropOverload;
-import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -103,7 +105,7 @@ public class LookasideChannelLbTest {
   @Mock
   private Helper helper;
   @Mock
-  private AdsStreamCallback adsStreamCallback;
+  private LookasideChannelCallback lookasideChannelCallback;
   @Mock
   private LoadReportClient loadReportClient;
   @Mock
@@ -168,17 +170,18 @@ public class LookasideChannelLbTest {
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
 
     lookasideChannelLb = new LookasideChannelLb(
-        helper, adsStreamCallback, channel, loadReportClient, localityStore);
+        helper, lookasideChannelCallback, channel, loadReportClient, localityStore,
+        Node.getDefaultInstance());
   }
 
   @Test
   public void firstAndSecondEdsResponseReceived() {
-    verify(adsStreamCallback, never()).onWorking();
+    verify(lookasideChannelCallback, never()).onWorking();
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // first EDS response
     serverResponseWriter.onNext(edsResponse);
-    verify(adsStreamCallback).onWorking();
+    verify(lookasideChannelCallback).onWorking();
     ArgumentCaptor<LoadReportCallback> loadReportCallbackCaptor =
         ArgumentCaptor.forClass(LoadReportCallback.class);
     verify(loadReportClient).startLoadReporting(loadReportCallbackCaptor.capture());
@@ -186,14 +189,14 @@ public class LookasideChannelLbTest {
 
     // second EDS response
     serverResponseWriter.onNext(edsResponse);
-    verify(adsStreamCallback, times(1)).onWorking();
+    verify(lookasideChannelCallback, times(1)).onWorking();
     verify(loadReportClient, times(1)).startLoadReporting(any(LoadReportCallback.class));
 
     verify(localityStore, never()).updateOobMetricsReportInterval(anyLong());
     loadReportCallback.onReportResponse(1234);
     verify(localityStore).updateOobMetricsReportInterval(1234);
 
-    verify(adsStreamCallback, never()).onError();
+    verify(lookasideChannelCallback, never()).onError();
 
     lookasideChannelLb.shutdown();
   }
@@ -235,7 +238,7 @@ public class LookasideChannelLbTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build());
 
-    verify(adsStreamCallback, never()).onAllDrop();
+    verify(lookasideChannelCallback, never()).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
         new DropOverload("cat_2", 45_00),
@@ -270,12 +273,12 @@ public class LookasideChannelLbTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build());
 
-    verify(adsStreamCallback).onAllDrop();
+    verify(lookasideChannelCallback).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
         new DropOverload("cat_2", 100_00_00)));
 
-    verify(adsStreamCallback, never()).onError();
+    verify(lookasideChannelCallback, never()).onError();
 
     lookasideChannelLb.shutdown();
   }
@@ -348,13 +351,13 @@ public class LookasideChannelLbTest {
     XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
-            new XdsComms.LbEndpoint(endpoint11),
-            new XdsComms.LbEndpoint(endpoint12)),
+            new ClusterLoadAssignmentData.LbEndpoint(endpoint11),
+            new ClusterLoadAssignmentData.LbEndpoint(endpoint12)),
         1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
-            new XdsComms.LbEndpoint(endpoint21),
-            new XdsComms.LbEndpoint(endpoint22)),
+            new ClusterLoadAssignmentData.LbEndpoint(endpoint21),
+            new ClusterLoadAssignmentData.LbEndpoint(endpoint22)),
         2, 0);
     XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
 
@@ -364,16 +367,16 @@ public class LookasideChannelLbTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
 
-    verify(adsStreamCallback, never()).onError();
+    verify(lookasideChannelCallback, never()).onError();
 
     lookasideChannelLb.shutdown();
   }
 
   @Test
   public void verifyRpcErrorPropagation() {
-    verify(adsStreamCallback, never()).onError();
+    verify(lookasideChannelCallback, never()).onError();
     serverResponseWriter.onError(new RuntimeException());
-    verify(adsStreamCallback).onError();
+    verify(lookasideChannelCallback).onError();
   }
 
   @Test
@@ -397,8 +400,8 @@ public class LookasideChannelLbTest {
     // Simulates a syntactically incorrect EDS response.
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
-    verify(adsStreamCallback, never()).onWorking();
-    verify(adsStreamCallback, never()).onError();
+    verify(lookasideChannelCallback, never()).onWorking();
+    verify(lookasideChannelCallback, never()).onError();
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -408,7 +411,7 @@ public class LookasideChannelLbTest {
             .build();
     serverResponseWriter.onNext(edsResponse);
 
-    verify(adsStreamCallback).onWorking();
+    verify(lookasideChannelCallback).onWorking();
 
     ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
     verify(loadReportClient).startLoadReporting(lrsCallbackCaptor.capture());
@@ -417,13 +420,15 @@ public class LookasideChannelLbTest {
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);
-    verifyNoMoreInteractions(adsStreamCallback, loadReportClient);
+    verifyNoMoreInteractions(lookasideChannelCallback, loadReportClient);
 
     // Simulate an EDS error response.
     serverResponseWriter.onError(Status.ABORTED.asException());
-    verify(adsStreamCallback).onError();
+    verify(lookasideChannelCallback).onError();
 
-    verifyNoMoreInteractions(adsStreamCallback, loadReportClient);
+    verifyNoMoreInteractions(lookasideChannelCallback, loadReportClient);
     verify(localityStore, times(1)).updateOobMetricsReportInterval(anyLong()); // only once
+
+    lookasideChannelLb.shutdown();
   }
 }

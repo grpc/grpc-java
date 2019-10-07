@@ -22,7 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -31,10 +31,12 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
+import io.grpc.xds.ClusterLoadAssignmentData.LbEndpoint;
+import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
+import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
-import io.grpc.xds.XdsComms.LbEndpoint;
-import io.grpc.xds.XdsComms.LocalityInfo;
+import io.grpc.xds.XdsComms2.AdsStreamCallback;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,25 +52,27 @@ final class LookasideChannelLb extends LoadBalancer {
   private final XdsComms2 xdsComms2;
 
   LookasideChannelLb(
-      Helper helper, AdsStreamCallback adsCallback, ManagedChannel lbChannel,
-      LocalityStore localityStore) {
+      Helper helper, LookasideChannelCallback lookasideChannelCallback, ManagedChannel lbChannel,
+      LocalityStore localityStore, Node node) {
     this(
         helper,
-        adsCallback,
+        lookasideChannelCallback,
         lbChannel,
         new LoadReportClientImpl(
             lbChannel, helper, GrpcUtil.STOPWATCH_SUPPLIER, new ExponentialBackoffPolicy.Provider(),
             localityStore.getLoadStatsStore()),
-        localityStore);
+        localityStore,
+        node);
   }
 
   @VisibleForTesting
   LookasideChannelLb(
       Helper helper,
-      AdsStreamCallback adsCallback,
+      LookasideChannelCallback lookasideChannelCallback,
       ManagedChannel lbChannel,
       LoadReportClient lrsClient,
-      final LocalityStore localityStore) {
+      final LocalityStore localityStore,
+      Node node) {
     this.lbChannel = lbChannel;
     LoadReportCallback lrsCallback =
         new LoadReportCallback() {
@@ -79,11 +83,11 @@ final class LookasideChannelLb extends LoadBalancer {
         };
     this.lrsClient = lrsClient;
 
-    AdsStreamCallback2 adsCallback2 = new AdsStreamCallback2Impl(
-        adsCallback, lrsClient, lrsCallback, localityStore) ;
+    AdsStreamCallback adsCallback = new AdsStreamCallbackImpl(
+        lookasideChannelCallback, lrsClient, lrsCallback, localityStore) ;
     xdsComms2 = new XdsComms2(
-        lbChannel, helper, adsCallback2, new ExponentialBackoffPolicy.Provider(),
-        GrpcUtil.STOPWATCH_SUPPLIER);
+        lbChannel, helper, adsCallback, new ExponentialBackoffPolicy.Provider(),
+        GrpcUtil.STOPWATCH_SUPPLIER, node);
   }
 
   private static int rateInMillion(FractionalPercent fractionalPercent) {
@@ -123,30 +127,18 @@ final class LookasideChannelLb extends LoadBalancer {
     lbChannel.shutdown();
   }
 
-  // TODO(zdapeng): The old AdsStreamCallback will be renamed to LookasideChannelCallback,
-  // and AdsStreamCallback2 will be renamed to AdsStreamCallback
-  /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
-   */
-  interface AdsStreamCallback2 {
-    void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment);
+  private static final class AdsStreamCallbackImpl implements AdsStreamCallback {
 
-    void onError();
-  }
-
-  private static final class AdsStreamCallback2Impl implements AdsStreamCallback2 {
-
-    final AdsStreamCallback adsCallback;
+    final LookasideChannelCallback lookasideChannelCallback;
     final LoadReportClient lrsClient;
     final LoadReportCallback lrsCallback;
     final LocalityStore localityStore;
     boolean firstEdsResponseReceived;
 
-    AdsStreamCallback2Impl(
-        AdsStreamCallback adsCallback, LoadReportClient lrsClient, LoadReportCallback lrsCallback,
-        LocalityStore localityStore) {
-      this.adsCallback = adsCallback;
+    AdsStreamCallbackImpl(
+        LookasideChannelCallback lookasideChannelCallback, LoadReportClient lrsClient,
+        LoadReportCallback lrsCallback, LocalityStore localityStore) {
+      this.lookasideChannelCallback = lookasideChannelCallback;
       this.lrsClient = lrsClient;
       this.lrsCallback = lrsCallback;
       this.localityStore = localityStore;
@@ -156,25 +148,22 @@ final class LookasideChannelLb extends LoadBalancer {
     public void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment) {
       if (!firstEdsResponseReceived) {
         firstEdsResponseReceived = true;
-        adsCallback.onWorking();
+        lookasideChannelCallback.onWorking();
         lrsClient.startLoadReporting(lrsCallback);
       }
 
-      List<DropOverload> dropOverloadsProto =
+      List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
           clusterLoadAssignment.getPolicy().getDropOverloadsList();
-      ImmutableList.Builder<XdsComms.DropOverload> dropOverloadsBuilder
-          = ImmutableList.builder();
-      for (ClusterLoadAssignment.Policy.DropOverload dropOverload
-          : dropOverloadsProto) {
+      ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
+      for (ClusterLoadAssignment.Policy.DropOverload dropOverload : dropOverloadsProto) {
         int rateInMillion = rateInMillion(dropOverload.getDropPercentage());
-        dropOverloadsBuilder.add(new XdsComms.DropOverload(
-            dropOverload.getCategory(), rateInMillion));
+        dropOverloadsBuilder.add(new DropOverload(dropOverload.getCategory(), rateInMillion));
         if (rateInMillion == 1000_000) {
-          adsCallback.onAllDrop();
+          lookasideChannelCallback.onAllDrop();
           break;
         }
       }
-      ImmutableList<XdsComms.DropOverload> dropOverloads = dropOverloadsBuilder.build();
+      ImmutableList<DropOverload> dropOverloads = dropOverloadsBuilder.build();
       localityStore.updateDropPercentage(dropOverloads);
 
       List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
@@ -203,7 +192,30 @@ final class LookasideChannelLb extends LoadBalancer {
 
     @Override
     public void onError() {
-      adsCallback.onError();
+      lookasideChannelCallback.onError();
     }
+  }
+
+
+  /**
+   * Callback on ADS stream events. The callback methods should be called in a proper {@link
+   * io.grpc.SynchronizationContext}.
+   */
+  interface LookasideChannelCallback {
+
+    /**
+     * Once the response observer receives the first response.
+     */
+    void onWorking();
+
+    /**
+     * Once an error occurs in ADS stream.
+     */
+    void onError();
+
+    /**
+     * Once receives a response indicating that 100% of calls should be dropped.
+     */
+    void onAllDrop();
   }
 }

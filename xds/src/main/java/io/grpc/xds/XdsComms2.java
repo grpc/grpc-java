@@ -22,8 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -36,7 +34,6 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.LookasideChannelLb.AdsStreamCallback2;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
@@ -50,6 +47,8 @@ final class XdsComms2 {
   private final Helper helper;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
+  // Metadata to be included in every xDS request.
+  private final Node node;
 
   @CheckForNull
   private ScheduledHandle adsRpcRetryTimer;
@@ -63,7 +62,7 @@ final class XdsComms2 {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-    final AdsStreamCallback2 adsStreamCallback2;
+    final AdsStreamCallback adsStreamCallback;
     final StreamObserver<DiscoveryRequest> xdsRequestWriter;
     final Stopwatch retryStopwatch = stopwatchSupplier.get().start();
 
@@ -90,7 +89,7 @@ final class XdsComms2 {
                         value.getResources(0).unpack(ClusterLoadAssignment.class);
                   } catch (InvalidProtocolBufferException | RuntimeException e) {
                     cancelRpc("Received invalid EDS response", e);
-                    adsStreamCallback2.onError();
+                    adsStreamCallback.onError();
                     scheduleRetry();
                     return;
                   }
@@ -98,7 +97,8 @@ final class XdsComms2 {
                   helper.getChannelLogger().log(
                       ChannelLogLevel.DEBUG,
                       "Received an EDS response: {0}", clusterLoadAssignment);
-                  adsStreamCallback2.onEdsResponse(clusterLoadAssignment);
+                  firstEdsResponseReceived = true;
+                  adsStreamCallback.onEdsResponse(clusterLoadAssignment);
                 }
               }
             }
@@ -116,7 +116,7 @@ final class XdsComms2 {
                     if (cancelled) {
                       return;
                     }
-                    adsStreamCallback2.onError();
+                    adsStreamCallback.onError();
                     scheduleRetry();
                   }
                 });
@@ -168,8 +168,8 @@ final class XdsComms2 {
     boolean cancelled;
     boolean closed;
 
-    AdsStream(AdsStreamCallback2 adsStreamCallback2) {
-      this.adsStreamCallback2 = adsStreamCallback2;
+    AdsStream(AdsStreamCallback adsStreamCallback) {
+      this.adsStreamCallback = adsStreamCallback;
       this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
           .streamAggregatedResources(xdsResponseReader);
 
@@ -177,11 +177,7 @@ final class XdsComms2 {
       // Assuming standard mode, and send EDS request only
       DiscoveryRequest edsRequest =
           DiscoveryRequest.newBuilder()
-              .setNode(Node.newBuilder()
-                  .setMetadata(Struct.newBuilder()
-                      .putFields(
-                          "endpoints_required",
-                          Value.newBuilder().setBoolValue(true).build())))
+              .setNode(node)
               .setTypeUrl(EDS_TYPE_URL)
               // In the future, the right resource name can be obtained from CDS response.
               .addResourceNames(helper.getAuthority()).build();
@@ -190,7 +186,7 @@ final class XdsComms2 {
     }
 
     AdsStream(AdsStream adsStream) {
-      this(adsStream.adsStreamCallback2);
+      this(adsStream.adsStreamCallback);
     }
 
     // run in SynchronizationContext
@@ -208,13 +204,15 @@ final class XdsComms2 {
    * Starts a new ADS streaming RPC.
    */
   XdsComms2(
-      ManagedChannel channel, Helper helper, AdsStreamCallback2 adsStreamCallback2,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
+      ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
+      Node node) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
+    this.node = node;
     this.adsStream = new AdsStream(
-        checkNotNull(adsStreamCallback2, "adsStreamCallback2"));
+        checkNotNull(adsStreamCallback, "adsStreamCallback"));
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.adsRpcRetryPolicy = backoffPolicyProvider.get();
   }
@@ -243,5 +241,15 @@ final class XdsComms2 {
       adsRpcRetryTimer.cancel();
       adsRpcRetryTimer = null;
     }
+  }
+
+  /**
+   * Callback on ADS stream events. The callback methods should be called in a proper {@link
+   * io.grpc.SynchronizationContext}.
+   */
+  interface AdsStreamCallback {
+    void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment);
+
+    void onError();
   }
 }
