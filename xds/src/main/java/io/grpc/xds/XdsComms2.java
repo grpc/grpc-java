@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -32,8 +33,11 @@ import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.auth.MoreCallCredentials;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 
@@ -170,8 +174,23 @@ final class XdsComms2 {
 
     AdsStream(AdsStreamCallback adsStreamCallback) {
       this.adsStreamCallback = adsStreamCallback;
-      this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
-          .streamAggregatedResources(xdsResponseReader);
+      GoogleCredentials credentials = null;
+      try {
+        credentials = GoogleCredentials.getApplicationDefault();
+        credentials = credentials.createScoped(
+            Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+        credentials.refreshAccessToken();
+      } catch (IOException ioe) {
+        helper.getChannelLogger().log(
+            ChannelLogLevel.INFO, "unable to get default Google credentials " + ioe);
+      }
+      AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
+          AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady();
+      if (credentials != null) {
+        stub = stub.withCallCredentials(MoreCallCredentials.from(credentials));
+      }
+
+      this.xdsRequestWriter = stub.streamAggregatedResources(xdsResponseReader);
 
       checkState(adsRpcRetryTimer == null, "Creating AdsStream while retry is pending");
       // Assuming standard mode, and send EDS request only
