@@ -18,7 +18,6 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.xds.XdsNameResolver.XDS_NODE;
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -90,16 +89,6 @@ public class XdsNameResolverTest {
         provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
     assertThat(resolver).isNotNull();
     assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
-  }
-
-  @Test
-  public void invalidName_hostnameContainsUnderscore() {
-    try {
-      provider.newNameResolver(URI.create("xds-experimental:///foo_bar.googleapis.com"), args);
-      fail("Expected IllegalArgumentException");
-    } catch (IllegalArgumentException e) {
-      // Expected
-    }
   }
 
   @Test
