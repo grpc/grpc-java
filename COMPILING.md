@@ -61,13 +61,6 @@ Protobuf installs to ``/usr/local`` by default.
 For Visual C++, please refer to the [Protobuf README](https://github.com/google/protobuf/blob/master/cmake/README.md)
 for how to compile Protobuf. gRPC-java assumes a Release build.
 
-#### Linux and MinGW
-If ``/usr/local/lib`` is not in your library search path, you can add it by running:
-```
-$ sudo sh -c 'echo /usr/local/lib >> /etc/ld.so.conf'
-$ sudo ldconfig
-```
-
 #### Mac
 Some versions of Mac OS X (e.g., 10.10) doesn't have ``/usr/local`` in the
 default search paths for header files and libraries. It will fail the build of
