@@ -83,9 +83,41 @@ public class HelloWorldClient {
     if (args.length > 0) {
       target = args[0];
     }
-    HelloWorldClient client = new HelloWorldClient(target);
+    final HelloWorldClient client = new HelloWorldClient(target);
+
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      @Override
+      public void run() {
+        // Use stderr here since the logger may have been reset by its JVM shutdown hook.
+        System.err.println("*** shutting down gRPC client since JVM is shutting down");
+        try {
+          client.shutdown();
+          System.err.println("*** client shut down");
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          throw new RuntimeException(e);
+        }
+      }
+    });
+
     try {
+      // jvm warm up
       client.greet("world");
+
+      long i = 1;
+      long totalLatency = 0;
+      while (true) {
+        Thread.sleep(1000);
+
+        long currentNano = System.nanoTime();
+        client.greet("request_" + i);
+        long latency = System.nanoTime() - currentNano;
+        totalLatency += latency;
+        logger.log(
+            Level.INFO,
+            "Last latency: {0}ns. Average latency: {1}ns", new Object[]{latency, totalLatency/i});
+        i++;
+      }
     } finally {
       client.shutdown();
     }
