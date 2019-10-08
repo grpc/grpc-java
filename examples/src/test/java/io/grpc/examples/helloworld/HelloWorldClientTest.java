@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.grpc.ManagedChannel;
+import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -94,9 +95,11 @@ public class HelloWorldClientTest {
   @Test
   public void greet_messageDeliveredToServer() {
     ArgumentCaptor<HelloRequest> requestCaptor = ArgumentCaptor.forClass(HelloRequest.class);
-
-    client.greet("test name");
-
+    try {
+      client.greet("test name");
+    } catch (StatusRuntimeException e) {
+      // ignore
+    }
     verify(serviceImpl)
         .sayHello(requestCaptor.capture(), ArgumentMatchers.<StreamObserver<HelloReply>>any());
     assertEquals("test name", requestCaptor.getValue().getName());

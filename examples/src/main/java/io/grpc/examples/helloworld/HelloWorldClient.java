@@ -69,7 +69,7 @@ public class HelloWorldClient {
       response = blockingStub.sayHello(request);
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return;
+      throw e;
     }
     logger.info("Greeting: " + response.getMessage());
   }
@@ -102,20 +102,36 @@ public class HelloWorldClient {
 
     try {
       // jvm warm up
-      client.greet("world");
+      for (int i = 0; i < 1000; i++) {
+        client.greet("world");
+      }
 
-      long i = 1;
       long totalLatency = 0;
-      while (true) {
-        Thread.sleep(1000);
 
+      // compute average latency
+      for (long i = 1; i <= 1000; i++) {
         long currentNano = System.nanoTime();
-        client.greet("request_" + i);
+        client.greet("world");
         long latency = System.nanoTime() - currentNano;
         totalLatency += latency;
         logger.log(
             Level.INFO,
             "Last latency: {0}ns. Average latency: {1}ns", new Object[]{latency, totalLatency/i});
+      }
+
+      logger.log(
+          Level.INFO,
+          "\n\n\n"
+              + "============================================================\n"
+              + "Average latency for the first 1000 RPCs: {0}ns.\n"
+              + "============================================================\n\n\n",
+          totalLatency/1000);
+
+      // infinite loop, send 1 rpc every second
+      int i = 0;
+      while (true) {
+        Thread.sleep(1000);
+        client.greet("request_" + i);
         i++;
       }
     } finally {
