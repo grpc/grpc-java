@@ -412,8 +412,9 @@ final class Hpack {
     private int nextDynamicTableIndex = dynamicTable.length - 1;
     private int dynamicTableByteCount;
 
+    // Disable Huffman encoding as for the CPU vs bandwidth trade-off.
     Writer(Buffer out) {
-      this(SETTINGS_HEADER_TABLE_SIZE, true, out);
+      this(SETTINGS_HEADER_TABLE_SIZE, false, out);
     }
 
     // Visible for testing.
