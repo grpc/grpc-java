@@ -16,6 +16,8 @@
 
 package io.grpc.xds.sds.trust;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import java.net.Socket;
@@ -26,6 +28,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -44,18 +47,18 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private static final int ALT_DNS_NAME = 2;
   private static final int ALT_URI_NAME = 6;
   private static final int ALT_IPA_NAME = 7;
-  @VisibleForTesting
-  final X509ExtendedTrustManager delegate;
-  @SuppressWarnings("unused")
+
+  private final X509ExtendedTrustManager delegate;
   private final CertificateValidationContext certContext;
 
-  SdsX509TrustManager(CertificateValidationContext certContext, X509ExtendedTrustManager delegate) {
+  SdsX509TrustManager(@Nullable CertificateValidationContext certContext,
+      X509ExtendedTrustManager delegate) {
+    checkNotNull(delegate, "delegate");
     this.certContext = certContext;
     this.delegate = delegate;
   }
 
-  @VisibleForTesting
-  static boolean verifyOneSanInList(List<?> entry, List<String> verifySanList)
+  private static boolean verifyOneSanInList(List<?> entry, List<String> verifySanList)
       throws CertificateParsingException {
     // from OkHostnameVerifier.getSubjectAltNames
     if (entry == null || entry.size() < 2) {
@@ -85,7 +88,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
    * @param verifySanList list of SANs from certificate context
    * @return true if there is a match
    */
-  static boolean verifyStringInSanList(String stringFromCert, List<String> verifySanList) {
+  private static boolean verifyStringInSanList(String stringFromCert, List<String> verifySanList) {
     for (String sanToVerify : verifySanList) {
       if (sanToVerify.equalsIgnoreCase(stringFromCert)) {
         return true;
@@ -95,13 +98,13 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   /**
-   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}
+   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}.
    *
    * @param altNameFromCert this name can be a pattern (can have * etc)
    * @param verifySanList list of strings from Validation context
    */
-  @VisibleForTesting
-  static boolean verifyDnsNameInSanList(String altNameFromCert, List<String> verifySanList) {
+  private static boolean verifyDnsNameInSanList(String altNameFromCert,
+      List<String> verifySanList) {
     for (String verifySan : verifySanList) {
       if (verifyDnsNameInPattern(altNameFromCert, verifySan)) {
         return true;
@@ -111,13 +114,12 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   /**
-   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}
+   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}.
    *
    * @param pattern pattern (string value from the cert)
    * @param sanToVerify a SAN string from Validation context
    */
-  @VisibleForTesting
-  static boolean verifyDnsNameInPattern(String pattern, String sanToVerify) {
+  private static boolean verifyDnsNameInPattern(String pattern, String sanToVerify) {
     // Basic sanity checks
     // Check length == 0 instead of .isEmpty() to support Java 5.
     if (sanToVerify == null
@@ -209,9 +211,8 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   // logic from Envoy::Extensions::TransportSockets::Tls::ContextImpl::verifySubjectAltName
-  @VisibleForTesting
-  static void verifySubjectAltNameInLeaf(X509Certificate cert, List<String> verifyList)
-      throws CertificateException {
+  private static void verifySubjectAltNameInLeaf(X509Certificate cert, List<String> verifyList)
+    throws CertificateException {
     Collection<List<?>> names = cert.getSubjectAlternativeNames();
     if (names == null || names.size() == 0) {
       throw new CertificateException("Peer certificate SAN check failed");
