@@ -157,27 +157,6 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * <p>Should only be used for testing or for APIs where the use of such API or the data
    * exchanged is not sensitive.
    *
-   * @param skipNegotiation @{code true} if there is a priori knowledge that the endpoint supports
-   *                        plaintext, {@code false} if plaintext use must be negotiated.
-   * @deprecated Use {@link #usePlaintext()} instead.
-   *
-   * @throws UnsupportedOperationException if plaintext mode is not supported.
-   * @return this
-   * @since 1.0.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
-  @Deprecated
-  public T usePlaintext(boolean skipNegotiation) {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Use of a plaintext connection to the server. By default a secure connection mechanism
-   * such as TLS will be used.
-   *
-   * <p>Should only be used for testing or for APIs where the use of such API or the data
-   * exchanged is not sensitive.
-   *
    * <p>This assumes prior knowledge that the target of this channel is using plaintext.  It will
    * not perform HTTP/1.1 upgrades.
    *
