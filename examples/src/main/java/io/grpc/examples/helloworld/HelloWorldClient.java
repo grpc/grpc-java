@@ -47,13 +47,14 @@ public class HelloWorldClient {
         // Channels are secure by default (via SSL/TLS). For the example we disable TLS to avoid
         // needing certificates.
         .usePlaintext()
+        .enableRetry()
         .build());
   }
 
   /** Construct client for accessing HelloWorld server using the existing channel. */
   HelloWorldClient(ManagedChannel channel) {
     this.channel = channel;
-    blockingStub = GreeterGrpc.newBlockingStub(channel);
+    blockingStub = GreeterGrpc.newBlockingStub(channel).withWaitForReady();
   }
 
   public void shutdown() throws InterruptedException {
@@ -69,7 +70,7 @@ public class HelloWorldClient {
       response = blockingStub.sayHello(request);
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      throw e;
+      return;
     }
     logger.info("Greeting: " + response.getMessage());
   }
