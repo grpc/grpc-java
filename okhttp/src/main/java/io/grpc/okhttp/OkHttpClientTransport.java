@@ -316,7 +316,7 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
   }
 
   // sslSocketFactory is set to null when use plaintext.
-  boolean usePlaintext() {
+  boolean isUsingPlaintext() {
     return sslSocketFactory == null;
   }
 

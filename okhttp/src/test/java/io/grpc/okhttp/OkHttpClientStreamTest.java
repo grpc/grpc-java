@@ -197,7 +197,7 @@ public class OkHttpClientStreamTest {
   public void start_headerPlaintext() throws IOException {
     Metadata metaData = new Metadata();
     metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
-    when(transport.usePlaintext()).thenReturn(true);
+    when(transport.isUsingPlaintext()).thenReturn(true);
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
         "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, false);
