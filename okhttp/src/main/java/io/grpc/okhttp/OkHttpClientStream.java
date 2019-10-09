@@ -415,7 +415,7 @@ class OkHttpClientStream extends AbstractClientStream {
               authority,
               userAgent,
               useGet,
-              transport.usePlaintext());
+              transport.isUsingPlaintext());
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
 
