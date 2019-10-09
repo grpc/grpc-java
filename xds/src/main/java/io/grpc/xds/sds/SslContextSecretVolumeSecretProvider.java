@@ -31,6 +31,7 @@ import java.io.File;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLException;
 
 /**
@@ -44,78 +45,103 @@ final class SslContextSecretVolumeSecretProvider
       .getLogger(SslContextSecretVolumeSecretProvider.class.getName());
 
   @VisibleForTesting
-  boolean server;
+  final boolean server;
   @VisibleForTesting
-  String privateKey;
-  @VisibleForTesting
-  String privateKeyPassword;
-  @VisibleForTesting
-  String certificateChain;
-  @VisibleForTesting
-  String trustedCa;
+  final String privateKey;
 
-  SslContextSecretVolumeSecretProvider(TlsCertificate tlsCertificate,
-      CertificateValidationContext certContext, boolean server) {
-    // first validate
-    if (server) {
-      validateTlsCertificate(tlsCertificate, false);
-      // certContext exists in case of mTLS, else null for a server
-      if (certContext != null) {
-        certContext = validateCertificateContext(certContext, true);
-      }
-    } else {
-      validateCertificateContext(certContext, false);
-      // tlsCertificate exists in case of mTLS, else null for a client
-      if (tlsCertificate != null) {
-        tlsCertificate = validateTlsCertificate(tlsCertificate, true);
-      }
-    }
-    if (tlsCertificate != null) {
-      this.privateKey = tlsCertificate.getPrivateKey().getFilename();
-      if (tlsCertificate.hasPassword()) {
-        this.privateKeyPassword = tlsCertificate.getPassword().getInlineString();
-      }
-      this.certificateChain = tlsCertificate.getCertificateChain().getFilename();
-    }
-    if (certContext != null) {
-      this.trustedCa = certContext.getTrustedCa().getFilename();
-    }
+  private final String privateKeyPassword;
+  @VisibleForTesting
+  final String certificateChain;
+  @VisibleForTesting
+  final String trustedCa;
+
+  private SslContextSecretVolumeSecretProvider(String privateKey, String privateKeyPassword,
+                                               String certificateChain, String trustedCa,
+                                               boolean server) {
+    this.privateKey = privateKey;
+    this.privateKeyPassword = privateKeyPassword;
+    this.certificateChain = certificateChain;
+    this.trustedCa = trustedCa;
     this.server = server;
   }
 
   @VisibleForTesting
+  @Nullable
   static CertificateValidationContext validateCertificateContext(
-      CertificateValidationContext certContext, boolean optional) {
+          @Nullable CertificateValidationContext certContext, boolean optional) {
     if (certContext == null || !certContext.hasTrustedCa()) {
       checkArgument(optional, "certContext is required");
       return null;
     }
     checkArgument(certContext.getTrustedCa().getSpecifierCase()
-            == SpecifierCase.FILENAME,
-        "filename expected");
+                    == SpecifierCase.FILENAME,
+            "filename expected");
     return certContext;
   }
 
   @VisibleForTesting
-  static TlsCertificate validateTlsCertificate(TlsCertificate tlsCertificate,
-      boolean optional) {
+  @Nullable
+  static TlsCertificate validateTlsCertificate(@Nullable TlsCertificate tlsCertificate,
+                                               boolean optional) {
     if (tlsCertificate == null) {
       checkArgument(optional, "tlsCertificate is required");
       return null;
     }
     if (optional && (tlsCertificate.getPrivateKey().getSpecifierCase()
-        == SpecifierCase.SPECIFIER_NOT_SET)
+            == SpecifierCase.SPECIFIER_NOT_SET)
             && (tlsCertificate.getCertificateChain().getSpecifierCase()
             == SpecifierCase.SPECIFIER_NOT_SET)) {
       return null;
     }
     checkArgument(
-        tlsCertificate.getPrivateKey().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
+            tlsCertificate.getPrivateKey().getSpecifierCase() == SpecifierCase.FILENAME,
+            "filename expected");
     checkArgument(
-        tlsCertificate.getCertificateChain().getSpecifierCase() == SpecifierCase.FILENAME,
-        "filename expected");
+            tlsCertificate.getCertificateChain().getSpecifierCase() == SpecifierCase.FILENAME,
+            "filename expected");
     return tlsCertificate;
+  }
+
+  @VisibleForTesting
+  static SslContextSecretVolumeSecretProvider getProviderForServer(TlsCertificate tlsCertificate,
+      @Nullable CertificateValidationContext certContext) {
+    // first validate
+    validateTlsCertificate(tlsCertificate, /* optional= */ false);
+    // certContext exists in case of mTLS, else null for a server
+    if (certContext != null) {
+      certContext = validateCertificateContext(certContext, /* optional= */true);
+    }
+    String privateKeyPassword = tlsCertificate.hasPassword()
+        ? tlsCertificate.getPassword().getInlineString() : null;
+    String trustedCa = certContext != null ? certContext.getTrustedCa().getFilename() : null;
+    return new SslContextSecretVolumeSecretProvider(tlsCertificate.getPrivateKey().getFilename(),
+        privateKeyPassword, tlsCertificate.getCertificateChain().getFilename(),
+        trustedCa, /* server= */ true);
+  }
+
+  @VisibleForTesting
+  static SslContextSecretVolumeSecretProvider getProviderForClient(
+      @Nullable TlsCertificate tlsCertificate,
+      CertificateValidationContext certContext) {
+    // first validate
+    validateCertificateContext(certContext, /* optional= */false);
+    // tlsCertificate exists in case of mTLS, else null for a client
+    if (tlsCertificate != null) {
+      tlsCertificate = validateTlsCertificate(tlsCertificate, /* optional= */true);
+    }
+    String privateKey = null;
+    String privateKeyPassword = null;
+    String certificateChain = null;
+    if (tlsCertificate != null) {
+      privateKey = tlsCertificate.getPrivateKey().getFilename();
+      if (tlsCertificate.hasPassword()) {
+        privateKeyPassword = tlsCertificate.getPassword().getInlineString();
+      }
+      certificateChain = tlsCertificate.getCertificateChain().getFilename();
+    }
+    return new SslContextSecretVolumeSecretProvider(privateKey,
+        privateKeyPassword, certificateChain,
+        certContext.getTrustedCa().getFilename(), /* server= */ false);
   }
 
   @Override
@@ -126,18 +152,26 @@ final class SslContextSecretVolumeSecretProvider
       @Override
       public void run() {
         // as per the contract we will read the current secrets on disk
+        // this involves I/O which can potentially block the executor or event loop
         SslContext sslContext = null;
-        Throwable throwable = null;
         try {
           sslContext = buildSslContextFromSecrets();
+          try {
+            callback.updateSecret(sslContext);
+          } catch (Throwable t) {
+            logger.log(
+                    Level.SEVERE,
+                    "Exception from callback.updateSecret",
+                    t);
+          }
         } catch (Throwable e) {
           logger.log(
                   Level.SEVERE,
                   "Exception from buildSslContextFromSecrets",
                   e);
-          throwable = e;
+          callback.onException(e);
         }
-        callback.updateSecret(sslContext, throwable);
+
       }
     });
   }

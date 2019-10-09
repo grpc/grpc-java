@@ -59,7 +59,7 @@ final class TlsCertificateSecretVolumeSecretProvider
         // contents of the files
         try {
           TlsCertificateStore tlsCert = get();
-          callback.updateSecret(tlsCert, null);
+          callback.updateSecret(tlsCert);
         } catch (ExecutionException e) {
           logger.log(
               Level.SEVERE,

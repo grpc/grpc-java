@@ -29,7 +29,15 @@ import java.util.concurrent.Executor;
 public interface SecretProvider<T> {
 
   interface Callback<T> {
-    void updateSecret(T secret, Throwable throwable);
+    /**
+     * Informs callee of new/updated secret.
+     */
+    void updateSecret(T secret);
+
+    /**
+     * Informs callee of an exception that was generated.
+     */
+    void onException(Throwable throwable);
   }
 
   /**

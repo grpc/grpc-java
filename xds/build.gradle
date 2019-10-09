@@ -17,7 +17,6 @@ description = "gRPC: XDS plugin"
 }
 
 evaluationDependsOn(project(':grpc-core').path)
-def nettyTcNativeVersion = '2.0.25.Final'
 
 dependencies {
     compile project(':grpc-protobuf'),
@@ -43,7 +42,7 @@ dependencies {
             project(':grpc-testing-proto'),
             libraries.guava_testlib
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
-    testRuntime "io.netty:netty-tcnative-boringssl-static:${nettyTcNativeVersion}"
+    testRuntime libraries.netty_tcnative
 }
 
 sourceSets {

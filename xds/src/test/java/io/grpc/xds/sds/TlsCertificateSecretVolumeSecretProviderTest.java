@@ -92,8 +92,13 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
     provider.addCallback(new SecretProvider.Callback<TlsCertificateStore>() {
 
       @Override
-      public void updateSecret(TlsCertificateStore secret, Throwable throwable) {
+      public void updateSecret(TlsCertificateStore secret) {
         listenerRun = true;
+      }
+
+      @Override
+      public void onException(Throwable throwable) {
+
       }
     }, MoreExecutors.directExecutor());
     assertThat(listenerRun).isTrue();
@@ -128,8 +133,13 @@ public class TlsCertificateSecretVolumeSecretProviderTest {
     provider.addCallback(new SecretProvider.Callback<TlsCertificateStore>() {
 
       @Override
-      public void updateSecret(TlsCertificateStore secret, Throwable throwable) {
+      public void updateSecret(TlsCertificateStore secret) {
         listenerRun = true;
+      }
+
+      @Override
+      public void onException(Throwable throwable) {
+
       }
     }, MoreExecutors.directExecutor());
     assertThat(listenerRun).isFalse();
