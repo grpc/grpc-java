@@ -229,8 +229,14 @@ class AltsHandshakerClient {
     return resp.getOutFrames().asReadOnlyByteBuffer();
   }
 
+  private boolean closed = false;
+
   /** Closes the connection. */
   public void close() {
+    if (closed) {
+      return;
+    }
+    closed = true;
     handshakerStub.close();
   }
 }

@@ -149,4 +149,8 @@ public final class NettyTsiHandshaker {
     unwrapper = null;
     return internalHandshaker.createFrameProtector(alloc);
   }
+
+  void close() {
+    internalHandshaker.close();
+  }
 }

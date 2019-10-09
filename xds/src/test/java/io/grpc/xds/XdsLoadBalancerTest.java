@@ -72,6 +72,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
+import io.grpc.internal.FakeClock.TaskFilter;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
@@ -213,6 +214,13 @@ public class XdsLoadBalancerTest {
           throw new AssertionError(e);
         }
       });
+
+  private final TaskFilter fallbackTaskFilter = new TaskFilter() {
+    @Override
+    public boolean shouldAccept(Runnable runnable) {
+      return runnable.toString().contains("FallbackTask");
+    }
+  };
 
   private ManagedChannel oobChannel1;
   private ManagedChannel oobChannel2;
@@ -579,7 +587,7 @@ public class XdsLoadBalancerTest {
 
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
 
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).isEmpty();
     assertNull(childHelper);
     assertNotNull(fallbackHelper1);
     ArgumentCaptor<ResolvedAddresses> captor = ArgumentCaptor.forClass(ResolvedAddresses.class);
@@ -617,7 +625,7 @@ public class XdsLoadBalancerTest {
         .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
         .build();
     serverResponseWriter.onNext(edsResponse);
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).isEmpty();
     assertNotNull(childHelper);
     assertNull(fallbackHelper1);
     verify(fallbackBalancer1, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
@@ -634,7 +642,7 @@ public class XdsLoadBalancerTest {
 
     // let the fallback timer expire
     assertThat(fakeClock.forwardTime(10, TimeUnit.SECONDS)).isEqualTo(1);
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).isEmpty();
     assertNull(childHelper);
     assertNotNull(fallbackHelper1);
 
@@ -677,12 +685,12 @@ public class XdsLoadBalancerTest {
 
     assertNull(childHelper);
     assertNull(fallbackHelper1);
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).hasSize(1);
 
     serverResponseWriter.onError(new Exception("fake error"));
 
     // goes to fallback-at-startup mode immediately
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).isEmpty();
     assertNull(childHelper);
     assertNotNull(fallbackHelper1);
     // verify fallback balancer is working
@@ -709,7 +717,7 @@ public class XdsLoadBalancerTest {
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
 
     serverResponseWriter.onError(new Exception("fake error"));
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).hasSize(1);
     // verify fallback balancer is not started
     assertNull(fallbackHelper1);
     verify(fallbackBalancer1, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
@@ -753,13 +761,13 @@ public class XdsLoadBalancerTest {
             .build());
     serverResponseWriter.onNext(edsResponse);
     assertNotNull(childHelper);
-    assertThat(fakeClock.getPendingTasks()).hasSize(1);
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).hasSize(1);
     assertNull(fallbackHelper1);
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
 
     childHelper.updateBalancingState(READY, mock(SubchannelPicker.class));
     verify(helper).updateBalancingState(same(READY), isA(InterLocalityPicker.class));
-    assertThat(fakeClock.getPendingTasks()).isEmpty();
+    assertThat(fakeClock.getPendingTasks(fallbackTaskFilter)).isEmpty();
 
     serverResponseWriter.onError(new Exception("fake error"));
     assertNull(fallbackHelper1);
