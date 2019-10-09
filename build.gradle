@@ -47,7 +47,7 @@ subprojects {
         nettyVersion = '4.1.42.Final'
         guavaVersion = '28.1-android'
         googleauthVersion = '0.17.1'
-        protobufVersion = '3.9.0'
+        protobufVersion = '3.10.0'
         protocVersion = protobufVersion
         opencensusVersion = '0.21.0'
 
@@ -119,7 +119,7 @@ subprojects {
             android_annotations: "com.google.android:annotations:4.1.1.4",
             animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.17",
             errorprone: "com.google.errorprone:error_prone_annotations:2.3.2",
-            gson: "com.google.code.gson:gson:2.7",
+            gson: "com.google.code.gson:gson:2.8.5",
             guava: "com.google.guava:guava:${guavaVersion}",
             hpack: 'com.twitter:hpack:0.10.1',
             javax_annotation: 'javax.annotation:javax.annotation-api:1.2',
