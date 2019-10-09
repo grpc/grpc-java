@@ -183,6 +183,7 @@ final class XdsComms2 {
       } catch (IOException ioe) {
         helper.getChannelLogger().log(
             ChannelLogLevel.INFO, "unable to get default Google credentials " + ioe);
+        credentials = null;
       }
       AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
           AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady();
