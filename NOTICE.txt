@@ -49,17 +49,6 @@ which can be obtained at:
   * LOCATION_IN_GRPC:
     * xds/third_party/gogoproto
 
-This product contains a modified portion of 'protoc-gen-validate (PGV)',
-an open source protoc plugin to generate polyglot message validators,
-which can be obtained at:
-
-  * LICENSE:
-    * xds/third_party/protoc-gen-validate/LICENSE (Apache License 2.0)
-  * HOMEPAGE:
-    * https://github.com/lyft/protoc-gen-validate
-  * LOCATION_IN_GRPC:
-    * xds/third_party/protoc-gen-validate
-
 This product contains a modified portion of 'udpa',
 an open source universal data plane API, which can be obtained at:
 

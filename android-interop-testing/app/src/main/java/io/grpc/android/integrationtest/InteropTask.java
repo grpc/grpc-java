@@ -18,13 +18,11 @@ package io.grpc.android.integrationtest;
 
 import android.os.AsyncTask;
 import android.util.Log;
-import io.grpc.ClientInterceptor;
 import io.grpc.ManagedChannel;
 import io.grpc.testing.integration.AbstractInteropTest;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.ref.WeakReference;
-import java.util.List;
 import org.junit.AssumptionViolatedException;
 
 /** AsyncTask for interop test cases. */
@@ -44,11 +42,10 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
   InteropTask(
       Listener listener,
       ManagedChannel channel,
-      List<ClientInterceptor> interceptors,
       String testCase) {
     this.listenerReference = new WeakReference<Listener>(listener);
     this.testCase = testCase;
-    this.tester = new Tester(channel, interceptors);
+    this.tester = new Tester(channel);
   }
 
   @Override
@@ -149,21 +146,14 @@ final class InteropTask extends AsyncTask<Void, Void, String> {
 
   private static class Tester extends AbstractInteropTest {
     private final ManagedChannel channel;
-    private final List<ClientInterceptor> interceptors;
 
-    private Tester(ManagedChannel channel, List<ClientInterceptor> interceptors) {
+    private Tester(ManagedChannel channel) {
       this.channel = channel;
-      this.interceptors = interceptors;
     }
 
     @Override
     protected ManagedChannel createChannel() {
       return channel;
-    }
-
-    @Override
-    protected ClientInterceptor[] getAdditionalInterceptors() {
-      return interceptors.toArray(new ClientInterceptor[0]);
     }
 
     @Override

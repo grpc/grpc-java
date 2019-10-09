@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
 import okio.Buffer;
 import okio.BufferedSource;
 import okio.ByteString;
@@ -47,6 +46,16 @@ final class Hpack {
   private static final int PREFIX_5_BITS = 0x1f;
   private static final int PREFIX_6_BITS = 0x3f;
   private static final int PREFIX_7_BITS = 0x7f;
+
+  private static final ByteString PSEUDO_PREFIX = ByteString.encodeUtf8(":");
+
+  private static final int SETTINGS_HEADER_TABLE_SIZE = 4_096;
+
+  /**
+   * The decoder has ultimate control of the maximum size of the dynamic table but we can choose
+   * to use less. We'll put a cap at 16K. This is arbitrary but should be enough for most purposes.
+   */
+  private static final int SETTINGS_HEADER_TABLE_SIZE_LIMIT = 16_384;
 
   private static final io.grpc.okhttp.internal.framed.Header[] STATIC_HEADER_TABLE = new io.grpc.okhttp.internal.framed.Header[] {
       new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY, ""),
@@ -131,8 +140,13 @@ final class Hpack {
     int dynamicTableByteCount = 0;
 
     Reader(int headerTableSizeSetting, Source source) {
+      this(headerTableSizeSetting, headerTableSizeSetting, source);
+    }
+
+    // Visible for testing.
+    Reader(int headerTableSizeSetting, int maxDynamicTableByteCount, Source source) {
       this.headerTableSizeSetting = headerTableSizeSetting;
-      this.maxDynamicTableByteCount = headerTableSizeSetting;
+      this.maxDynamicTableByteCount = maxDynamicTableByteCount;
       this.source = Okio.buffer(source);
     }
 
@@ -270,11 +284,15 @@ final class Hpack {
       insertIntoDynamicTable(-1, new io.grpc.okhttp.internal.framed.Header(name, value));
     }
 
-    private ByteString getName(int index) {
+    private ByteString getName(int index) throws IOException {
       if (isStaticHeader(index)) {
         return STATIC_HEADER_TABLE[index].name;
       } else {
-        return dynamicTable[dynamicTableIndex(index - STATIC_HEADER_TABLE.length)].name;
+        int dynamicTableIndex = dynamicTableIndex(index - STATIC_HEADER_TABLE.length);
+        if (dynamicTableIndex < 0 || dynamicTableIndex >= dynamicTable.length) {
+          throw new IOException("Header index too large " + (index + 1));
+        }
+        return dynamicTable[dynamicTableIndex].name;
       }
     }
 
@@ -373,26 +391,108 @@ final class Hpack {
 
   static final class Writer {
     private final Buffer out;
+    private boolean useCompression;
+    // Visible for testing.
+    int headerTableSizeSetting;
 
+    /**
+     * In the scenario where the dynamic table size changes multiple times between transmission of
+     * header blocks, we need to keep track of the smallest value in that interval.
+     */
+    private int smallestHeaderTableSizeSetting = Integer.MAX_VALUE;
+    private boolean emitDynamicTableSizeUpdate;
+    private int maxDynamicTableByteCount;
+
+    // Visible for testing.
+    io.grpc.okhttp.internal.framed.Header[] dynamicTable = new io.grpc.okhttp.internal.framed.Header[8];
+    // Visible for testing.
+    int dynamicTableHeaderCount;
+
+    // Array is populated back to front, so new entries always have lowest index.
+    private int nextDynamicTableIndex = dynamicTable.length - 1;
+    private int dynamicTableByteCount;
+
+    // Disable Huffman encoding as for the CPU vs bandwidth trade-off.
     Writer(Buffer out) {
+      this(SETTINGS_HEADER_TABLE_SIZE, false, out);
+    }
+
+    // Visible for testing.
+    Writer(int headerTableSizeSetting, boolean useCompression, Buffer out) {
+      this.headerTableSizeSetting = headerTableSizeSetting;
+      this.maxDynamicTableByteCount = headerTableSizeSetting;
+      this.useCompression = useCompression;
       this.out = out;
     }
 
     /** This does not use "never indexed" semantics for sensitive headers. */
     // http://tools.ietf.org/html/draft-ietf-httpbis-header-compression-12#section-6.2.3
     void writeHeaders(List<io.grpc.okhttp.internal.framed.Header> headerBlock) throws IOException {
-      // TODO: implement index tracking
+      if (emitDynamicTableSizeUpdate) {
+        if (smallestHeaderTableSizeSetting < maxDynamicTableByteCount) {
+          // Multiple dynamic table size updates!
+          writeInt(smallestHeaderTableSizeSetting, PREFIX_5_BITS, 0x20);
+        }
+        emitDynamicTableSizeUpdate = false;
+        smallestHeaderTableSizeSetting = Integer.MAX_VALUE;
+        writeInt(maxDynamicTableByteCount, PREFIX_5_BITS, 0x20);
+      }
+
       for (int i = 0, size = headerBlock.size(); i < size; i++) {
-        ByteString name = headerBlock.get(i).name.toAsciiLowercase();
+        io.grpc.okhttp.internal.framed.Header header = headerBlock.get(i);
+        ByteString name = header.name.toAsciiLowercase();
+        ByteString value = header.value;
+        int headerIndex = -1;
+        int headerNameIndex = -1;
+
         Integer staticIndex = NAME_TO_FIRST_INDEX.get(name);
         if (staticIndex != null) {
-          // Literal Header Field without Indexing - Indexed Name.
-          writeInt(staticIndex + 1, PREFIX_4_BITS, 0);
-          writeByteString(headerBlock.get(i).value);
-        } else {
-          out.writeByte(0x00); // Literal Header without Indexing - New Name.
+          headerNameIndex = staticIndex + 1;
+          if (headerNameIndex >= 2 && headerNameIndex <= 7) {
+            // Only search a subset of the static header table. Most entries have an empty value, so
+            // it's unnecessary to waste cycles looking at them. This check is built on the
+            // observation that the header entries we care about are in adjacent pairs, and we
+            // always know the first index of the pair.
+            if (STATIC_HEADER_TABLE[headerNameIndex - 1].value.equals(value)) {
+              headerIndex = headerNameIndex;
+            } else if (STATIC_HEADER_TABLE[headerNameIndex].value.equals(value)) {
+              headerIndex = headerNameIndex + 1;
+            }
+          }
+        }
+
+        if (headerIndex == -1) {
+          for (int j = nextDynamicTableIndex + 1; j < dynamicTable.length; j++) {
+            if (dynamicTable[j].name.equals(name)) {
+              if (dynamicTable[j].value.equals(value)) {
+                headerIndex = j - nextDynamicTableIndex + STATIC_HEADER_TABLE.length;
+                break;
+              } else if (headerNameIndex == -1) {
+                headerNameIndex = j - nextDynamicTableIndex + STATIC_HEADER_TABLE.length;
+              }
+            }
+          }
+        }
+
+        if (headerIndex != -1) {
+          // Indexed Header Field.
+          writeInt(headerIndex, PREFIX_7_BITS, 0x80);
+        } else if (headerNameIndex == -1) {
+          // Literal Header Field with Incremental Indexing - New Name.
+          out.writeByte(0x40);
           writeByteString(name);
-          writeByteString(headerBlock.get(i).value);
+          writeByteString(value);
+          insertIntoDynamicTable(header);
+        } else if (name.startsWith(PSEUDO_PREFIX) && !io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY.equals(name)) {
+          // Follow Chromes lead - only include the :authority pseudo header, but exclude all other
+          // pseudo headers. Literal Header Field without Indexing - Indexed Name.
+          writeInt(headerNameIndex, PREFIX_4_BITS, 0);
+          writeByteString(value);
+        } else {
+          // Literal Header Field with Incremental Indexing - Indexed Name.
+          writeInt(headerNameIndex, PREFIX_6_BITS, 0x40);
+          writeByteString(value);
+          insertIntoDynamicTable(header);
         }
       }
     }
@@ -419,8 +519,97 @@ final class Hpack {
     }
 
     void writeByteString(ByteString data) throws IOException {
-      writeInt(data.size(), PREFIX_7_BITS, 0);
-      out.write(data);
+      if (useCompression && io.grpc.okhttp.internal.framed.Huffman.get().encodedLength(data.toByteArray()) < data.size()) {
+        Buffer huffmanBuffer = new Buffer();
+        io.grpc.okhttp.internal.framed.Huffman.get().encode(data.toByteArray(), huffmanBuffer.outputStream());
+        ByteString huffmanBytes = huffmanBuffer.readByteString();
+        writeInt(huffmanBytes.size(), PREFIX_7_BITS, 0x80);
+        out.write(huffmanBytes);
+      } else {
+        writeInt(data.size(), PREFIX_7_BITS, 0);
+        out.write(data);
+      }
+    }
+
+    int maxDynamicTableByteCount() {
+      return maxDynamicTableByteCount;
+    }
+
+    private void clearDynamicTable() {
+      Arrays.fill(dynamicTable, null);
+      nextDynamicTableIndex = dynamicTable.length - 1;
+      dynamicTableHeaderCount = 0;
+      dynamicTableByteCount = 0;
+    }
+
+    /** Returns the count of entries evicted. */
+    private int evictToRecoverBytes(int bytesToRecover) {
+      int entriesToEvict = 0;
+      if (bytesToRecover > 0) {
+        // determine how many headers need to be evicted.
+        for (int j = dynamicTable.length - 1; j >= nextDynamicTableIndex && bytesToRecover > 0; j--) {
+          bytesToRecover -= dynamicTable[j].hpackSize;
+          dynamicTableByteCount -= dynamicTable[j].hpackSize;
+          dynamicTableHeaderCount--;
+          entriesToEvict++;
+        }
+        System.arraycopy(dynamicTable, nextDynamicTableIndex + 1, dynamicTable,
+            nextDynamicTableIndex + 1 + entriesToEvict, dynamicTableHeaderCount);
+        nextDynamicTableIndex += entriesToEvict;
+      }
+      return entriesToEvict;
+    }
+
+    private void insertIntoDynamicTable(io.grpc.okhttp.internal.framed.Header entry) {
+      int delta = entry.hpackSize;
+
+      // if the new or replacement header is too big, drop all entries.
+      if (delta > maxDynamicTableByteCount) {
+        clearDynamicTable();
+        return;
+      }
+
+      // Evict headers to the required length.
+      int bytesToRecover = dynamicTableByteCount + delta - maxDynamicTableByteCount;
+      evictToRecoverBytes(bytesToRecover);
+
+      if (dynamicTableHeaderCount + 1 > dynamicTable.length) { // Need to grow the dynamic table.
+        io.grpc.okhttp.internal.framed.Header[] doubled = new io.grpc.okhttp.internal.framed.Header[dynamicTable.length * 2];
+        System.arraycopy(dynamicTable, 0, doubled, dynamicTable.length, dynamicTable.length);
+        nextDynamicTableIndex = dynamicTable.length - 1;
+        dynamicTable = doubled;
+      }
+      int index = nextDynamicTableIndex--;
+      dynamicTable[index] = entry;
+      dynamicTableHeaderCount++;
+      dynamicTableByteCount += delta;
+    }
+
+    void resizeHeaderTable(int headerTableSizeSetting) {
+      this.headerTableSizeSetting = headerTableSizeSetting;
+      int effectiveHeaderTableSize = Math.min(headerTableSizeSetting, SETTINGS_HEADER_TABLE_SIZE_LIMIT);
+
+      if (maxDynamicTableByteCount == effectiveHeaderTableSize) { // No change.
+        return;
+      }
+
+      if (effectiveHeaderTableSize < maxDynamicTableByteCount) {
+        smallestHeaderTableSizeSetting =
+            Math.min(smallestHeaderTableSizeSetting, effectiveHeaderTableSize);
+      }
+      emitDynamicTableSizeUpdate = true;
+      maxDynamicTableByteCount = effectiveHeaderTableSize;
+      adjustDynamicTableByteCount();
+    }
+
+    private void adjustDynamicTableByteCount() {
+      if (maxDynamicTableByteCount < dynamicTableByteCount) {
+        if (maxDynamicTableByteCount == 0) {
+          clearDynamicTable();
+        } else {
+          evictToRecoverBytes(dynamicTableByteCount - maxDynamicTableByteCount);
+        }
+      }
     }
   }
 

@@ -1,17 +1,11 @@
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-        gradlePluginPortal()
-    }
-    dependencies {
-        classpath libraries.protobuf_plugin
-        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.4'
-    }
-}
+plugins {
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'com.github.johnrengelman.shadow'
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
 
 description = "gRPC: XDS plugin"
 
@@ -22,11 +16,19 @@ description = "gRPC: XDS plugin"
     ]
 }
 
+evaluationDependsOn(project(':grpc-core').path)
+
 dependencies {
     compile project(':grpc-protobuf'),
             project(':grpc-stub'),
             project(':grpc-core'),
+            project(':grpc-netty'),
             project(':grpc-services')
+    
+    compile (libraries.pgv) {
+        // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf
+        exclude group: 'com.google.protobuf'
+    }
     compile (libraries.protobuf_util) {
         // prefer 26.0-android from libraries instead of 20.0
         exclude group: 'com.google.guava', module: 'guava'
@@ -42,7 +44,6 @@ dependencies {
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
 }
 
-apply plugin: 'com.google.protobuf'
 sourceSets {
     main {
         proto {
@@ -64,10 +65,13 @@ shadowJar {
     classifier = null
     dependencies {
         include(project(':grpc-xds'))
+        include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
+    relocate 'com.google.protobuf.GoGoProtos', 'io.grpc.xds.shaded.gogoproto.GoGoProtos'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
-    relocate 'validate', 'io.grpc.xds.shaded.com.lyft.pgv.validate'
+    relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
+    relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
     exclude "**/*.proto"
 }
 
@@ -76,6 +80,18 @@ publishing {
         maven(MavenPublication) {
             artifact shadowJar
             artifacts.removeAll { it.classifier == 'original' }
+
+            pom.withXml {
+                // Swap our dependency to grpc-netty-shaded. Projects depending on this via
+                // project(':grpc-xds') will still be using the non-shaded form.
+                asNode().dependencies.'*'.findAll() { dep ->
+                    dep.artifactId.text() == 'grpc-netty'
+                }.each() { netty ->
+                    netty.artifactId*.value = 'grpc-netty-shaded'
+                    netty.version*.value = "[" + netty.version.text() + "]"
+                }
+            }
         }
     }
 }
+[publishMavenPublicationToMavenRepository, publishMavenPublicationToMavenLocal]*.onlyIf { false }

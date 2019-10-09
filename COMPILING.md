@@ -42,13 +42,12 @@ The codegen plugin is C++ code and requires protobuf 3.0.0 or later.
 
 For Linux, Mac and MinGW:
 ```
-$ git clone https://github.com/google/protobuf.git
-$ cd protobuf
-$ git checkout v3.9.0
-$ ./autogen.sh
+$ PROTOBUF_VERSION=3.9.0
+$ curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v$PROTOBUF_VERSION/protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ tar xzf protobuf-all-$PROTOBUF_VERSION.tar.gz
+$ cd protobuf-$PROTOBUF_VERSION
 $ ./configure --disable-shared
-$ make
-$ make check
+$ make   # You may want to pass -j to make this run faster; see make --help
 $ sudo make install
 ```
 
@@ -61,13 +60,6 @@ Protobuf installs to ``/usr/local`` by default.
 
 For Visual C++, please refer to the [Protobuf README](https://github.com/google/protobuf/blob/master/cmake/README.md)
 for how to compile Protobuf. gRPC-java assumes a Release build.
-
-#### Linux and MinGW
-If ``/usr/local/lib`` is not in your library search path, you can add it by running:
-```
-$ sudo sh -c 'echo /usr/local/lib >> /etc/ld.so.conf'
-$ sudo ldconfig
-```
 
 #### Mac
 Some versions of Mac OS X (e.g., 10.10) doesn't have ``/usr/local`` in the

@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
+import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -71,7 +72,8 @@ public class LoadStatsStoreImplTest {
     return res;
   }
 
-  private static UpstreamLocalityStats buildUpstreamLocalityStats(XdsLocality locality,
+  private static UpstreamLocalityStats buildUpstreamLocalityStats(
+      XdsLocality locality,
       long callsSucceed,
       long callsInProgress,
       long callsFailed,

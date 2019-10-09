@@ -11,7 +11,6 @@
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
-description = 'gRPC: gae interop testing (jdk8)'
 
 buildscript {
     // Configuration for building
@@ -26,6 +25,13 @@ buildscript {
     }
 }
 
+plugins {
+    id "java"
+    id "war"
+}
+
+description = 'gRPC: gae interop testing (jdk8)'
+
 repositories {
     // repositories for Jar's you access in your code
     mavenLocal()
@@ -34,8 +40,6 @@ repositories {
     jcenter()
 }
 
-apply plugin: 'java'                              // standard Java tasks
-apply plugin: 'war'                               // standard Web Archive plugin
 apply plugin: 'com.google.cloud.tools.appengine'  // App Engine tasks
 
 dependencies {

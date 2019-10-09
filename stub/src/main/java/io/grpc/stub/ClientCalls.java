@@ -124,6 +124,7 @@ public final class ClientCalls {
   public static <ReqT, RespT> RespT blockingUnaryCall(
       Channel channel, MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, ReqT req) {
     ThreadlessExecutor executor = new ThreadlessExecutor();
+    boolean interrupt = false;
     ClientCall<ReqT, RespT> call = channel.newCall(method, callOptions.withExecutor(executor));
     try {
       ListenableFuture<RespT> responseFuture = futureUnaryCall(call, req);
@@ -131,18 +132,22 @@ public final class ClientCalls {
         try {
           executor.waitAndDrain();
         } catch (InterruptedException e) {
-          Thread.currentThread().interrupt();
-          throw Status.CANCELLED
-              .withDescription("Call was interrupted")
-              .withCause(e)
-              .asRuntimeException();
+          interrupt = true;
+          call.cancel("Thread interrupted", e);
+          // Now wait for onClose() to be called, so interceptors can clean up
         }
       }
       return getUnchecked(responseFuture);
     } catch (RuntimeException e) {
+      // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
       throw cancelThrow(call, e);
     } catch (Error e) {
+      // Something very bad happened. All bets are off; it may be dangerous to wait for onClose().
       throw cancelThrow(call, e);
+    } finally {
+      if (interrupt) {
+        Thread.currentThread().interrupt();
+      }
     }
   }
 
@@ -209,7 +214,7 @@ public final class ClientCalls {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw Status.CANCELLED
-          .withDescription("Call was interrupted")
+          .withDescription("Thread interrupted")
           .withCause(e)
           .asRuntimeException();
     } catch (ExecutionException e) {
@@ -553,30 +558,45 @@ public final class ClientCalls {
       return listener;
     }
 
-    private Object waitForNext() throws InterruptedException {
-      if (threadless == null) {
-        return buffer.take();
-      } else {
-        Object next = buffer.poll();
-        while (next == null) {
-          threadless.waitAndDrain();
-          next = buffer.poll();
+    private Object waitForNext() {
+      boolean interrupt = false;
+      try {
+        if (threadless == null) {
+          while (true) {
+            try {
+              return buffer.take();
+            } catch (InterruptedException ie) {
+              interrupt = true;
+              call.cancel("Thread interrupted", ie);
+              // Now wait for onClose() to be called, to guarantee BlockingQueue doesn't fill
+            }
+          }
+        } else {
+          Object next;
+          while ((next = buffer.poll()) == null) {
+            try {
+              threadless.waitAndDrain();
+            } catch (InterruptedException ie) {
+              interrupt = true;
+              call.cancel("Thread interrupted", ie);
+              // Now wait for onClose() to be called, so interceptors can clean up
+            }
+          }
+          return next;
         }
-        return next;
+      } finally {
+        if (interrupt) {
+          Thread.currentThread().interrupt();
+        }
       }
     }
 
     @Override
     public boolean hasNext() {
-      if (last == null) {
-        try {
-          // Will block here indefinitely waiting for content. RPC timeouts defend against permanent
-          // hangs here as the call will become closed.
-          last = waitForNext();
-        } catch (InterruptedException ie) {
-          Thread.currentThread().interrupt();
-          throw Status.CANCELLED.withDescription("interrupted").withCause(ie).asRuntimeException();
-        }
+      while (last == null) {
+        // Will block here indefinitely waiting for content. RPC timeouts defend against permanent
+        // hangs here as the call will become closed.
+        last = waitForNext();
       }
       if (last instanceof StatusRuntimeException) {
         // Rethrow the exception with a new stacktrace.
@@ -650,15 +670,14 @@ public final class ClientCalls {
      * Must only be called by one thread at a time.
      */
     public void waitAndDrain() throws InterruptedException {
-      final Thread currentThread = Thread.currentThread();
-      throwIfInterrupted(currentThread);
+      throwIfInterrupted();
       Runnable runnable = poll();
       if (runnable == null) {
-        waiter = currentThread;
+        waiter = Thread.currentThread();
         try {
           while ((runnable = poll()) == null) {
             LockSupport.park(this);
-            throwIfInterrupted(currentThread);
+            throwIfInterrupted();
           }
         } finally {
           waiter = null;
@@ -673,8 +692,8 @@ public final class ClientCalls {
       } while ((runnable = poll()) != null);
     }
 
-    private static void throwIfInterrupted(Thread currentThread) throws InterruptedException {
-      if (currentThread.isInterrupted()) {
+    private static void throwIfInterrupted() throws InterruptedException {
+      if (Thread.interrupted()) {
         throw new InterruptedException();
       }
     }

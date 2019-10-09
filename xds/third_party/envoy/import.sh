@@ -24,6 +24,7 @@ GIT_BASE_DIR=envoy
 SOURCE_PROTO_BASE_DIR=envoy/api
 TARGET_PROTO_BASE_DIR=src/main/proto
 FILES=(
+envoy/api/v2/auth/cert.proto
 envoy/api/v2/core/address.proto
 envoy/api/v2/core/base.proto
 envoy/api/v2/core/config_source.proto
