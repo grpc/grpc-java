@@ -302,9 +302,9 @@ def com_squareup_okio():
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "873f3fdec7ed052f899aef83fc897926729713d96d7ccdb2df22843dc702ef3a",
-        strip_prefix = "grpc-proto-96ecba6941c67b1da2af598330c60cf9b0336051",
-        urls = ["https://github.com/grpc/grpc-proto/archive/96ecba6941c67b1da2af598330c60cf9b0336051.zip"],
+        sha256 = "9d96f861f01ed9e3d805024e72a6b218b626da2114c69c1cad5d0e967c8e23be",
+        strip_prefix = "grpc-proto-435d723289d348e1bc420d420b364369d565182a",
+        urls = ["https://github.com/grpc/grpc-proto/archive/435d723289d348e1bc420d420b364369d565182a.zip"],
     )
 
 def io_netty_buffer():
