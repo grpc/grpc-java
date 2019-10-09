@@ -23,7 +23,7 @@ $ ./gradlew publishToMavenLocal
 ```
 
 ### Notes for IntelliJ
-Building in IntelliJ works best when you import the project as a Gradle project and delegate IDE 
+Building in IntelliJ works best when you import the project as a Gradle project and delegate IDE
 build/run actions to Gradle.
 
 You can find this setting at:
@@ -44,7 +44,7 @@ For Linux, Mac and MinGW:
 ```
 $ git clone https://github.com/google/protobuf.git
 $ cd protobuf
-$ git checkout v3.9.0
+$ git checkout v3.10.0
 $ ./autogen.sh
 $ ./configure --disable-shared
 $ make
@@ -83,16 +83,16 @@ When building on Windows and VC++, you need to specify project properties for
 Gradle to find protobuf:
 ```
 .\gradlew publishToMavenLocal ^
-    -PvcProtobufInclude=C:\path\to\protobuf-3.9.0\src ^
-    -PvcProtobufLibs=C:\path\to\protobuf-3.9.0\vsprojects\Release ^
+    -PvcProtobufInclude=C:\path\to\protobuf-3.10.0\src ^
+    -PvcProtobufLibs=C:\path\to\protobuf-3.10.0\vsprojects\Release ^
     -PtargetArch=x86_32
 ```
 
 Since specifying those properties every build is bothersome, you can instead
 create ``<project-root>\gradle.properties`` with contents like:
 ```
-vcProtobufInclude=C:\\path\\to\\protobuf-3.9.0\\src
-vcProtobufLibs=C:\\path\\to\\protobuf-3.9.0\\vsprojects\\Release
+vcProtobufInclude=C:\\path\\to\\protobuf-3.10.0\\src
+vcProtobufLibs=C:\\path\\to\\protobuf-3.10.0\\vsprojects\\Release
 targetArch=x86_32
 ```
 
