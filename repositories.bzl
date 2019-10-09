@@ -38,7 +38,6 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 }
 
 def grpc_java_repositories(
-        omit_bazel_skylib = False,
         omit_com_google_android_annotations = False,
         omit_com_google_api_grpc_google_common_protos = False,
         omit_com_google_auth_google_auth_library_credentials = False,
@@ -73,12 +72,9 @@ def grpc_java_repositories(
         omit_io_perfmark = False,
         omit_javax_annotation = False,
         omit_junit_junit = False,
-        omit_net_zlib = False,
         omit_org_apache_commons_lang3 = False,
         omit_org_codehaus_mojo_animal_sniffer_annotations = False):
     """Imports dependencies for grpc-java."""
-    if not omit_bazel_skylib:
-        bazel_skylib()
     if not omit_com_google_android_annotations:
         com_google_android_annotations()
     if not omit_com_google_api_grpc_google_common_protos:
@@ -147,8 +143,6 @@ def grpc_java_repositories(
         javax_annotation()
     if not omit_junit_junit:
         junit_junit()
-    if not omit_net_zlib:
-        net_zlib()
     if not omit_org_apache_commons_lang3:
         org_apache_commons_lang3()
     if not omit_org_codehaus_mojo_animal_sniffer_annotations:
@@ -165,14 +159,6 @@ def grpc_java_repositories(
     native.bind(
         name = "error_prone_annotations",
         actual = "@com_google_errorprone_error_prone_annotations//jar",
-    )
-
-def bazel_skylib():
-    http_archive(
-        name = "bazel_skylib",
-        sha256 = "bce240a0749dfc52fab20dce400b4d5cf7c28b239d64f8fd1762b3c9470121d8",
-        strip_prefix = "bazel-skylib-0.7.0",
-        urls = ["https://github.com/bazelbuild/bazel-skylib/archive/0.7.0.zip"],
     )
 
 def com_google_android_annotations():
@@ -473,15 +459,6 @@ def junit_junit():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
         licenses = ["notice"],  # EPL 1.0
-    )
-
-def net_zlib():
-    http_archive(
-        name = "net_zlib",
-        build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
-        sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-        strip_prefix = "zlib-1.2.11",
-        urls = ["https://zlib.net/zlib-1.2.11.tar.gz"],
     )
 
 def org_apache_commons_lang3():
