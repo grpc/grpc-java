@@ -32,7 +32,7 @@ final class CertificateUtils {
 
   private static CertificateFactory factory;
 
-  private static void initInstance() throws CertificateException {
+  private static synchronized void initInstance() throws CertificateException {
     if (factory == null) {
       factory = CertificateFactory.getInstance("X.509");
     }
@@ -43,8 +43,11 @@ final class CertificateUtils {
     initInstance();
     FileInputStream fis = new FileInputStream(fileName);
     BufferedInputStream bis = new BufferedInputStream(fis);
-    Collection<? extends Certificate> certs = factory.generateCertificates(bis);
-    bis.close();
-    return certs.toArray(new X509Certificate[0]);
+    try {
+      Collection<? extends Certificate> certs = factory.generateCertificates(bis);
+      return certs.toArray(new X509Certificate[0]);
+    } finally {
+      bis.close();
+    }
   }
 }

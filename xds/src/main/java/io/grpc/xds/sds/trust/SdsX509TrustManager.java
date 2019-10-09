@@ -27,7 +27,6 @@ import java.security.cert.X509Certificate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
-import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509ExtendedTrustManager;
@@ -38,9 +37,6 @@ import javax.net.ssl.X509TrustManager;
  * SANs (subject-alternate-names) against the list in CertificateValidationContext.
  */
 final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509TrustManager {
-
-  @SuppressWarnings("unused")
-  private static final Logger logger = Logger.getLogger(SdsX509TrustManager.class.getName());
 
   // ref: io.grpc.okhttp.internal.OkHostnameVerifier and
   // sun.security.x509.GeneralNameInterface
@@ -58,67 +54,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     this.delegate = delegate;
   }
 
-  private static boolean verifyOneSanInList(List<?> entry, List<String> verifySanList)
-      throws CertificateParsingException {
-    // from OkHostnameVerifier.getSubjectAltNames
-    if (entry == null || entry.size() < 2) {
-      throw new CertificateParsingException("Invalid SAN entry");
-    }
-    Integer altNameType = (Integer) entry.get(0);
-    if (altNameType == null) {
-      throw new CertificateParsingException("Invalid SAN entry: null altNameType");
-    }
-    String altNameFromCert = (String) entry.get(1);
-    switch (altNameType) {
-      case ALT_DNS_NAME:
-        return verifyDnsNameInSanList(altNameFromCert, verifySanList);
-      case ALT_URI_NAME:
-      case ALT_IPA_NAME:
-        return verifyStringInSanList(altNameFromCert, verifySanList);
-      default:
-        throw new CertificateParsingException("Unsupported altNameType: " + altNameType);
-    }
-  }
-
-  /**
-   * helper function for verifying URI or IP address. For now we compare IP addresses as strings
-   * without any regard to IPv4 vs IPv6.
-   *
-   * @param stringFromCert either URI or IP address
-   * @param verifySanList list of SANs from certificate context
-   * @return true if there is a match
-   */
-  private static boolean verifyStringInSanList(String stringFromCert, List<String> verifySanList) {
-    for (String sanToVerify : verifySanList) {
-      if (sanToVerify.equalsIgnoreCase(stringFromCert)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}.
-   *
-   * @param altNameFromCert this name can be a pattern (can have * etc)
-   * @param verifySanList list of strings from Validation context
-   */
-  private static boolean verifyDnsNameInSanList(String altNameFromCert,
-      List<String> verifySanList) {
-    for (String verifySan : verifySanList) {
-      if (verifyDnsNameInPattern(altNameFromCert, verifySan)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * This is similar to OkHostnameVerifier#verifyHostName(java.lang.String, java.lang.String)}.
-   *
-   * @param pattern pattern (string value from the cert)
-   * @param sanToVerify a SAN string from Validation context
-   */
+  // Copied from OkHostnameVerifier.verifyHostName().
   private static boolean verifyDnsNameInPattern(String pattern, String sanToVerify) {
     // Basic sanity checks
     // Check length == 0 instead of .isEmpty() to support Java 5.
@@ -210,9 +146,58 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
     // sanToVerify matches pattern
   }
 
+  private static boolean verifyDnsNameInSanList(String altNameFromCert,
+                                                List<String> verifySanList) {
+    for (String verifySan : verifySanList) {
+      if (verifyDnsNameInPattern(altNameFromCert, verifySan)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * helper function for verifying URI or IP address. For now we compare IP addresses as strings
+   * without any regard to IPv4 vs IPv6.
+   *
+   * @param stringFromCert either URI or IP address
+   * @param verifySanList list of SANs from certificate context
+   * @return true if there is a match
+   */
+  private static boolean verifyStringInSanList(String stringFromCert, List<String> verifySanList) {
+    for (String sanToVerify : verifySanList) {
+      if (sanToVerify.equalsIgnoreCase(stringFromCert)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean verifyOneSanInList(List<?> entry, List<String> verifySanList)
+      throws CertificateParsingException {
+    // from OkHostnameVerifier.getSubjectAltNames
+    if (entry == null || entry.size() < 2) {
+      throw new CertificateParsingException("Invalid SAN entry");
+    }
+    Integer altNameType = (Integer) entry.get(0);
+    if (altNameType == null) {
+      throw new CertificateParsingException("Invalid SAN entry: null altNameType");
+    }
+    String altNameFromCert = (String) entry.get(1);
+    switch (altNameType) {
+      case ALT_DNS_NAME:
+        return verifyDnsNameInSanList(altNameFromCert, verifySanList);
+      case ALT_URI_NAME:
+      case ALT_IPA_NAME:
+        return verifyStringInSanList(altNameFromCert, verifySanList);
+      default:
+        throw new CertificateParsingException("Unsupported altNameType: " + altNameType);
+    }
+  }
+
   // logic from Envoy::Extensions::TransportSockets::Tls::ContextImpl::verifySubjectAltName
   private static void verifySubjectAltNameInLeaf(X509Certificate cert, List<String> verifyList)
-    throws CertificateException {
+      throws CertificateException {
     Collection<List<?>> names = cert.getSubjectAlternativeNames();
     if (names == null || names.size() == 0) {
       throw new CertificateException("Peer certificate SAN check failed");
@@ -227,7 +212,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   /**
-   * Verify SANs in the peer cert chain against verify_subject_alt_name in the certContext.
+   * Verifies SANs in the peer cert chain against verify_subject_alt_name in the certContext.
    * This is called from various check*Trusted methods.
    */
   @VisibleForTesting
@@ -236,7 +221,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     List<String> verifyList = certContext.getVerifySubjectAltNameList();
-    if (verifyList == null || verifyList.size() == 0) {
+    if (verifyList == null || verifyList.isEmpty()) {
       return;
     }
     if (peerCertChain == null || peerCertChain.length < 1) {
@@ -247,45 +232,45 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   }
 
   @Override
-  public void checkClientTrusted(X509Certificate[] x509Certificates, String s, Socket socket)
+  public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
-    delegate.checkClientTrusted(x509Certificates, s, socket);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkClientTrusted(chain, authType, socket);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override
-  public void checkClientTrusted(X509Certificate[] x509Certificates, String s, SSLEngine sslEngine)
+  public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
-    delegate.checkClientTrusted(x509Certificates, s, sslEngine);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkClientTrusted(chain, authType, sslEngine);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override
-  public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
+  public void checkClientTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    delegate.checkClientTrusted(x509Certificates, s);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkClientTrusted(chain, authType);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override
-  public void checkServerTrusted(X509Certificate[] x509Certificates, String s, Socket socket)
+  public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket)
       throws CertificateException {
-    delegate.checkServerTrusted(x509Certificates, s, socket);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkServerTrusted(chain, authType, socket);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override
-  public void checkServerTrusted(X509Certificate[] x509Certificates, String s, SSLEngine sslEngine)
+  public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine sslEngine)
       throws CertificateException {
-    delegate.checkServerTrusted(x509Certificates, s, sslEngine);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkServerTrusted(chain, authType, sslEngine);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override
-  public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
+  public void checkServerTrusted(X509Certificate[] chain, String authType)
       throws CertificateException {
-    delegate.checkServerTrusted(x509Certificates, s);
-    verifySubjectAltNameInChain(x509Certificates);
+    delegate.checkServerTrusted(chain, authType);
+    verifySubjectAltNameInChain(chain);
   }
 
   @Override

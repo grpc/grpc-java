@@ -41,12 +41,12 @@ public class SdsX509TrustManagerTest {
   /**
    * server1 has 4 SANs.
    */
-  private static final String SERVER_1_PEM_FILE = "../testing/src/main/resources/certs/server1.pem";
+  private static final String SERVER_1_PEM_FILE = "src/test/certs/server1.pem";
 
   /**
    * client has no SANs.
    */
-  private static final String CLIENT_PEM_FILE = "../testing/src/main/resources/certs/client.pem";
+  private static final String CLIENT_PEM_FILE = "src/test/certs/client.pem";
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
