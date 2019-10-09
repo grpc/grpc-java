@@ -8,6 +8,8 @@ plugins {
 
 description = 'gRPC: API'
 
+evaluationDependsOn(project(':grpc-context').path)
+
 dependencies {
     compile project(':grpc-context'),
             libraries.errorprone,

@@ -17,37 +17,51 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.XdsNameResolver.XDS_NODE;
+import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
-import io.grpc.xds.XdsComms.AdsStreamCallback;
+import io.grpc.xds.LocalityStore.LocalityStoreImpl;
+import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.Map;
+import java.util.logging.Logger;
 
 /** Lookaside load balancer that handles balancer name changes. */
 final class LookasideLb extends ForwardingLoadBalancer {
 
-  private final AdsStreamCallback adsCallback;
+  private final LookasideChannelCallback lookasideChannelCallback;
   private final LookasideChannelLbFactory lookasideChannelLbFactory;
   private final GracefulSwitchLoadBalancer lookasideChannelLb;
   private final LoadBalancerRegistry lbRegistry;
 
   private String balancerName;
 
-  // TODO(zdapeng): Add LookasideLb(Helper helper, AdsCallback adsCallback) with default factory
+  LookasideLb(Helper lookasideLbHelper, LookasideChannelCallback lookasideChannelCallback) {
+    this(
+        lookasideLbHelper, lookasideChannelCallback, new LookasideChannelLbFactoryImpl(),
+        LoadBalancerRegistry.getDefaultRegistry());
+  }
+
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
-      AdsStreamCallback adsCallback,
+      LookasideChannelCallback lookasideChannelCallback,
       LookasideChannelLbFactory lookasideChannelLbFactory,
       LoadBalancerRegistry lbRegistry) {
-    this.adsCallback = adsCallback;
+    this.lookasideChannelCallback = lookasideChannelCallback;
     this.lookasideChannelLbFactory = lookasideChannelLbFactory;
     this.lbRegistry = lbRegistry;
     this.lookasideChannelLb = new GracefulSwitchLoadBalancer(lookasideLbHelper);
@@ -75,12 +89,22 @@ final class LookasideLb extends ForwardingLoadBalancer {
     String newBalancerName = xdsConfig.balancerName;
     if (!newBalancerName.equals(balancerName)) {
       balancerName = newBalancerName; // cache the name and check next time for optimization
-      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(newBalancerName));
+      Node node = resolvedAddresses.getAttributes().get(XDS_NODE);
+      if (node == null) {
+        node = Node.newBuilder()
+            .setMetadata(Struct.newBuilder()
+                .putFields(
+                    "endpoints_required",
+                    Value.newBuilder().setBoolValue(true).build()))
+            .build();
+      }
+      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(newBalancerName, node));
     }
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
   }
 
-  private LoadBalancerProvider newLookasideChannelLbProvider(final String balancerName) {
+  private LoadBalancerProvider newLookasideChannelLbProvider(
+      final String balancerName, final Node node) {
     return new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
@@ -103,13 +127,52 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
       @Override
       public LoadBalancer newLoadBalancer(Helper helper) {
-        return lookasideChannelLbFactory.newLoadBalancer(helper, adsCallback, balancerName);
+        return lookasideChannelLbFactory.newLoadBalancer(
+            helper, lookasideChannelCallback, balancerName, node);
       }
     };
   }
 
   @VisibleForTesting
   interface LookasideChannelLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, AdsStreamCallback adsCallback, String balancerName);
+    LoadBalancer newLoadBalancer(
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
+        Node node);
+  }
+
+  private static final class LookasideChannelLbFactoryImpl implements LookasideChannelLbFactory {
+
+    @Override
+    public LoadBalancer newLoadBalancer(
+        Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
+        Node node) {
+      return new LookasideChannelLb(
+          helper, lookasideChannelCallback, initLbChannel(helper, balancerName),
+          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()),
+          node);
+    }
+
+    private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
+      ManagedChannel channel;
+      try {
+        channel = helper.createResolvingOobChannel(balancerName);
+      } catch (UnsupportedOperationException uoe) {
+        // Temporary solution until createResolvingOobChannel is implemented
+        // FIXME (https://github.com/grpc/grpc-java/issues/5495)
+        Logger logger = Logger.getLogger(LookasideChannelLb.class.getName());
+        if (logger.isLoggable(FINEST)) {
+          logger.log(
+              FINEST,
+              "createResolvingOobChannel() not supported by the helper: " + helper,
+              uoe);
+          logger.log(
+              FINEST,
+              "creating oob channel for target {0} using default ManagedChannelBuilder",
+              balancerName);
+        }
+        channel = ManagedChannelBuilder.forTarget(balancerName).build();
+      }
+      return channel;
+    }
   }
 }

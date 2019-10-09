@@ -13,6 +13,8 @@ configurations {
     alpnagent
 }
 
+evaluationDependsOn(project(':grpc-context').path)
+
 dependencies {
     compile project(':grpc-alts'),
             project(':grpc-auth'),
