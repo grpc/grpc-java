@@ -34,7 +34,8 @@ import okio.ByteString;
  */
 class Headers {
 
-  public static final Header SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "https");
+  public static final Header HTTPS_SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "https");
+  public static final Header HTTP_SCHEME_HEADER = new Header(Header.TARGET_SCHEME, "http");
   public static final Header METHOD_HEADER = new Header(Header.TARGET_METHOD, GrpcUtil.HTTP_METHOD);
   public static final Header METHOD_GET_HEADER = new Header(Header.TARGET_METHOD, "GET");
   public static final Header CONTENT_TYPE_HEADER =
@@ -47,7 +48,12 @@ class Headers {
    * application thread context.
    */
   public static List<Header> createRequestHeaders(
-      Metadata headers, String defaultPath, String authority, String userAgent, boolean useGet) {
+      Metadata headers,
+      String defaultPath,
+      String authority,
+      String userAgent,
+      boolean useGet,
+      boolean usePlaintext) {
     Preconditions.checkNotNull(headers, "headers");
     Preconditions.checkNotNull(defaultPath, "defaultPath");
     Preconditions.checkNotNull(authority, "authority");
@@ -61,7 +67,11 @@ class Headers {
     List<Header> okhttpHeaders = new ArrayList<>(7 + InternalMetadata.headerCount(headers));
 
     // Set GRPC-specific headers.
-    okhttpHeaders.add(SCHEME_HEADER);
+    if (usePlaintext) {
+      okhttpHeaders.add(HTTP_SCHEME_HEADER);
+    } else {
+      okhttpHeaders.add(HTTPS_SCHEME_HEADER);
+    }
     if (useGet) {
       okhttpHeaders.add(METHOD_GET_HEADER);
     } else {
