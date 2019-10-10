@@ -19,6 +19,7 @@ package io.grpc.xds.sds;
 import io.grpc.BindableService;
 import io.grpc.CompressorRegistry;
 import io.grpc.DecompressorRegistry;
+import io.grpc.ExperimentalApi;
 import io.grpc.HandlerRegistry;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
@@ -35,10 +36,11 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
 
 /**
- * A wrapper around NettyServerBuilder that sets up the appropriate ProtocolNegotiator
- * and ChannelHandlers to use SDS for TLS.
+ * A version of {@link ServerBuilder} to create xDS managed servers that will use SDS to set up SSL
+ * with peers. Note, this is not ready to use yet.
  */
-public class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6268")
+public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   private final NettyServerBuilder delegate;
 
@@ -96,8 +98,7 @@ public class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
 
   @Override
   public XdsServerBuilder useTransportSecurity(File certChain, File privateKey) {
-    delegate.useTransportSecurity(certChain, privateKey);
-    return this;
+    throw new UnsupportedOperationException("Cannot set security parameters on XdsServerBuilder");
   }
 
   @Override
@@ -118,9 +119,7 @@ public class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
-  /**
-   * Creates a gRPC server builder for the given port.
-   */
+  /** Creates a gRPC server builder for the given port. */
   public static XdsServerBuilder forPort(int port) {
     NettyServerBuilder nettyDelegate = NettyServerBuilder.forAddress(new InetSocketAddress(port));
     return new XdsServerBuilder(nettyDelegate);
@@ -129,8 +128,7 @@ public class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   @Override
   public Server build() {
     // note: doing it in build() will overwrite any previously set ProtocolNegotiator
-    delegate.protocolNegotiator(
-        SdsProtocolNegotiators.serverProtocolNegotiator());
+    delegate.protocolNegotiator(SdsProtocolNegotiators.serverProtocolNegotiator());
     return delegate.build();
   }
 }

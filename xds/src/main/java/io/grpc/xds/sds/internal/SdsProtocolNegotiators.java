@@ -26,17 +26,13 @@ import io.netty.channel.ChannelHandler;
 import io.netty.util.AsciiString;
 
 /**
- * An internal accessor for {@link ProtocolNegotiator}s  similar to
- * {@link io.grpc.netty.InternalProtocolNegotiators}. A gRPC {@link ProtocolNegotiator} is used
- * to provide SSL context using certs/keys provided by SDS.
+ * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
+ * context.
  */
 public class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
-  /**
-   * Factory for Netty clients protocol negotiation.
-   */
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
@@ -74,14 +70,12 @@ public class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      //TODO(sanjaypujare): once implemented return ClientSdsHandler
-      return null;
+      // TODO(sanjaypujare): once implemented return ClientSdsHandler
+      throw new UnsupportedOperationException("Not implemented yet");
     }
 
     @Override
-    public void close() {
-
-    }
+    public void close() {}
   }
 
   private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
@@ -93,26 +87,21 @@ public class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      //TODO(sanjaypujare): once implemented return ServerSdsHandler
-      return null;
+      // TODO(sanjaypujare): once implemented return ServerSdsHandler
+      throw new UnsupportedOperationException("Not implemented yet");
     }
 
     @Override
-    public void close() {
-    }
+    public void close() {}
   }
 
-  /**
-   * Sets the {@link ProtocolNegotiatorFactory} on a NettyChannelBuilder.
-   */
+  /** Sets the {@link ProtocolNegotiatorFactory} on a NettyChannelBuilder. */
   public static void setProtocolNegotiatorFactory(NettyChannelBuilder builder) {
-    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(builder,
-        new ClientSdsProtocolNegotiatorFactory());
+    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
+        builder, new ClientSdsProtocolNegotiatorFactory());
   }
 
-  /**
-   * Creates an SDS based {@link ProtocolNegotiator} for a server.
-   */
+  /** Creates an SDS based {@link ProtocolNegotiator} for a server. */
   public static ProtocolNegotiator serverProtocolNegotiator() {
     return new ServerSdsProtocolNegotiator();
   }

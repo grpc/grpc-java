@@ -16,6 +16,7 @@
 
 package io.grpc.xds.sds;
 
+import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -25,11 +26,11 @@ import java.net.SocketAddress;
 import javax.annotation.CheckReturnValue;
 
 /**
- * A wrapper around NettyChannelBuilder that sets up the appropriate ProtocolNegotiator
- * and ChannelHandlers to use SDS for TLS.
+ * A version of {@link ManagedChannelBuilder} to create xDS managed channels that will use SDS to
+ * set up SSL with peers. Note, this is not ready to use yet.
  */
-public class XdsChannelBuilder
-    extends ForwardingChannelBuilder<XdsChannelBuilder> {
+@ExperimentalApi("https://github.com/grpc/grpc-java/issues/6268")
+public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
 
@@ -39,8 +40,8 @@ public class XdsChannelBuilder
   }
 
   /**
-   * Creates a new builder with the given server address.
-   * See {@link NettyChannelBuilder#forAddress(SocketAddress)} for more info.
+   * Creates a new builder with the given server address. See {@link
+   * NettyChannelBuilder#forAddress(SocketAddress)} for more info.
    */
   @CheckReturnValue
   public static XdsChannelBuilder forAddress(SocketAddress serverAddress) {
@@ -48,8 +49,8 @@ public class XdsChannelBuilder
   }
 
   /**
-   * Creates a new builder with the given host and port.
-   * See {@link NettyChannelBuilder#forAddress(String, int)} for more info.
+   * Creates a new builder with the given host and port. See {@link
+   * NettyChannelBuilder#forAddress(String, int)} for more info.
    */
   @CheckReturnValue
   public static XdsChannelBuilder forAddress(String host, int port) {
@@ -57,8 +58,8 @@ public class XdsChannelBuilder
   }
 
   /**
-   * Creates a new builder with the given target string.
-   * See {@link NettyChannelBuilder#forTarget(String)} for more info.
+   * Creates a new builder with the given target string. See {@link
+   * NettyChannelBuilder#forTarget(String)} for more info.
    */
   @CheckReturnValue
   public static XdsChannelBuilder forTarget(String target) {
