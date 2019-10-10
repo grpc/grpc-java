@@ -199,7 +199,7 @@ public class OkHttpClientStreamTest {
     when(transport.isUsingPlaintext()).thenReturn(true);
     stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
         flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
-        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, false);
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT);
     stream.start(new BaseClientStreamListener());
     stream.transportState().start(3);
 
