@@ -19,6 +19,7 @@ package io.grpc.xds.sds.trust;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Ascii;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import java.net.Socket;
 import java.security.cert.CertificateException;
@@ -166,7 +167,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
    */
   private static boolean verifyStringInSanList(String stringFromCert, List<String> verifySanList) {
     for (String sanToVerify : verifySanList) {
-      if (sanToVerify.equalsIgnoreCase(stringFromCert)) {
+      if (Ascii.equalsIgnoreCase(sanToVerify, stringFromCert)) {
         return true;
       }
     }
@@ -199,7 +200,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
   private static void verifySubjectAltNameInLeaf(X509Certificate cert, List<String> verifyList)
       throws CertificateException {
     Collection<List<?>> names = cert.getSubjectAlternativeNames();
-    if (names == null || names.size() == 0) {
+    if (names == null || names.isEmpty()) {
       throw new CertificateException("Peer certificate SAN check failed");
     }
     for (List<?> name : names) {
@@ -221,7 +222,7 @@ final class SdsX509TrustManager extends X509ExtendedTrustManager implements X509
       return;
     }
     List<String> verifyList = certContext.getVerifySubjectAltNameList();
-    if (verifyList == null || verifyList.isEmpty()) {
+    if (verifyList.isEmpty()) {
       return;
     }
     if (peerCertChain == null || peerCertChain.length < 1) {
