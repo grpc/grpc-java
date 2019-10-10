@@ -95,6 +95,16 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
     return thisT();
   }
 
+  /**
+   * @deprecated use {@link #usePlaintext()} instead.
+   */
+  @Override
+  @Deprecated
+  public T usePlaintext(boolean skipNegotiation) {
+    delegate().usePlaintext(skipNegotiation);
+    return thisT();
+  }
+
   @Override
   public T usePlaintext() {
     delegate().usePlaintext();
