@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 import com.google.common.io.BaseEncoding;
 import io.grpc.CallOptions;
@@ -182,7 +183,7 @@ public class OkHttpClientStreamTest {
     verify(mockedFrameWriter)
         .synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
     assertThat(headersCaptor.getValue()).containsExactly(
-        Headers.SCHEME_HEADER,
+        Headers.HTTPS_SCHEME_HEADER,
         Headers.METHOD_HEADER,
         new Header(Header.TARGET_AUTHORITY, "localhost"),
         new Header(Header.TARGET_PATH, "/" + methodDescriptor.getFullMethodName()),
@@ -190,6 +191,30 @@ public class OkHttpClientStreamTest {
         Headers.CONTENT_TYPE_HEADER,
         Headers.TE_HEADER)
             .inOrder();
+  }
+
+  @Test
+  public void start_headerPlaintext() throws IOException {
+    Metadata metaData = new Metadata();
+    metaData.put(GrpcUtil.USER_AGENT_KEY, "misbehaving-application");
+    when(transport.isUsingPlaintext()).thenReturn(true);
+    stream = new OkHttpClientStream(methodDescriptor, metaData, frameWriter, transport,
+        flowController, lock, MAX_MESSAGE_SIZE, INITIAL_WINDOW_SIZE, "localhost",
+        "good-application", StatsTraceContext.NOOP, transportTracer, CallOptions.DEFAULT, false);
+    stream.start(new BaseClientStreamListener());
+    stream.transportState().start(3);
+
+    verify(mockedFrameWriter)
+        .synStream(eq(false), eq(false), eq(3), eq(0), headersCaptor.capture());
+    assertThat(headersCaptor.getValue()).containsExactly(
+        Headers.HTTP_SCHEME_HEADER,
+        Headers.METHOD_HEADER,
+        new Header(Header.TARGET_AUTHORITY, "localhost"),
+        new Header(Header.TARGET_PATH, "/" + methodDescriptor.getFullMethodName()),
+        new Header(GrpcUtil.USER_AGENT_KEY.name(), "good-application"),
+        Headers.CONTENT_TYPE_HEADER,
+        Headers.TE_HEADER)
+        .inOrder();
   }
 
   @Test
