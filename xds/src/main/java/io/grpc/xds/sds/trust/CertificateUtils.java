@@ -50,4 +50,6 @@ final class CertificateUtils {
       bis.close();
     }
   }
+
+  private CertificateUtils() {}
 }
