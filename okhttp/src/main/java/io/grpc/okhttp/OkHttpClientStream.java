@@ -407,7 +407,14 @@ class OkHttpClientStream extends AbstractClientStream {
 
     @GuardedBy("lock")
     private void streamReady(Metadata metadata, String path) {
-      requestHeaders = Headers.createRequestHeaders(metadata, path, authority, userAgent, useGet);
+      requestHeaders =
+          Headers.createRequestHeaders(
+              metadata,
+              path,
+              authority,
+              userAgent,
+              useGet,
+              transport.isUsingPlaintext());
       transport.streamReadyToStart(OkHttpClientStream.this);
     }
 
