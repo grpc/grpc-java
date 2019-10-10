@@ -19,6 +19,7 @@ package io.grpc.xds.sds.trust;
 import static com.google.common.truth.Truth.assertThat;
 
 import java.io.IOException;
+import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import javax.net.ssl.TrustManager;
@@ -47,7 +48,8 @@ public class SdsTrustManagerFactoryTest {
   private static final String BAD_CLIENT_PEM_FILE = "src/test/certs/badclient.pem";
 
   @Test
-  public void factoryConstructorFromFileTest() throws CertificateException, IOException {
+  public void factoryConstructorFromFileTest()
+      throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
     assertThat(factory).isNotNull();
@@ -65,7 +67,8 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void goodCertCheckServerTrusted() throws CertificateException, IOException {
+  public void goodCertCheckServerTrusted()
+      throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
@@ -74,7 +77,8 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void goodCertCheckClientTrusted() throws CertificateException, IOException {
+  public void goodCertCheckClientTrusted()
+      throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
@@ -83,7 +87,8 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void badCertCheckServerTrusted_ExpectException() throws CertificateException, IOException {
+  public void badCertCheckServerTrusted_ExpectException()
+      throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
@@ -99,7 +104,8 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void badCertCheckClientTrusted_ExpectException() throws CertificateException, IOException {
+  public void badCertCheckClientTrusted_ExpectException()
+      throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];

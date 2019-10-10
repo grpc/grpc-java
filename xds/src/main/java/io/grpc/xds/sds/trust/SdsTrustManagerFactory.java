@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.logging.Level;
@@ -34,6 +35,10 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 @Internal
+/**
+ * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManager} to provide an {@link
+ * SdsX509TrustManager} for trust and SAN checks.
+ */
 public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
@@ -43,18 +48,19 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   /** Constructor that loads certs from a file. */
   public SdsTrustManagerFactory(
       String certsFile, @Nullable CertificateValidationContext certContext)
-      throws CertificateException, IOException {
+      throws CertificateException, IOException, CertStoreException {
     this(CertificateUtils.toX509Certificates(certsFile), certContext);
   }
 
   /** Constructor that takes array of certs. */
   public SdsTrustManagerFactory(
-      X509Certificate[] certs, @Nullable CertificateValidationContext certContext) {
+      X509Certificate[] certs, @Nullable CertificateValidationContext certContext)
+      throws CertStoreException {
     createSdsX509TrustManager(certs, certContext);
   }
 
   private void createSdsX509TrustManager(
-      X509Certificate[] certs, CertificateValidationContext certContext) {
+      X509Certificate[] certs, CertificateValidationContext certContext) throws CertStoreException {
     TrustManagerFactory tmf = null;
     try {
       tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
@@ -71,6 +77,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
       tmf.init(ks);
     } catch (NoSuchAlgorithmException | KeyStoreException | IOException | CertificateException e) {
       logger.log(Level.SEVERE, "createSdsX509TrustManager", e);
+      throw new CertStoreException(e);
     }
     TrustManager[] tms = tmf.getTrustManagers();
     X509ExtendedTrustManager myDelegate = null;
@@ -82,6 +89,9 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
         }
       }
     }
+    if (myDelegate == null) {
+      throw new CertStoreException("Native X509 TrustManager not found.");
+    }
     sdsX509TrustManager = new SdsX509TrustManager(certContext, myDelegate);
   }
 
@@ -89,7 +99,9 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   protected void engineInit(KeyStore keyStore) throws Exception {}
 
   @Override
-  protected void engineInit(ManagerFactoryParameters managerFactoryParameters) throws Exception {}
+  protected void engineInit(ManagerFactoryParameters managerFactoryParameters) throws Exception {
+    throw new UnsupportedOperationException();
+  }
 
   @Override
   protected TrustManager[] engineGetTrustManagers() {
