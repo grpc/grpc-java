@@ -310,6 +310,11 @@ class OkHttpClientTransport implements ConnectionClientTransport, TransportExcep
     initTransportTracer();
   }
 
+  // sslSocketFactory is set to null when use plaintext.
+  boolean isUsingPlaintext() {
+    return sslSocketFactory == null;
+  }
+
   private void initTransportTracer() {
     synchronized (lock) { // to make @GuardedBy linter happy
       transportTracer.setFlowControlWindowReader(new TransportTracer.FlowControlReader() {
