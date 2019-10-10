@@ -57,69 +57,85 @@ final class Hpack {
    */
   private static final int SETTINGS_HEADER_TABLE_SIZE_LIMIT = 16_384;
 
-  private static final io.grpc.okhttp.internal.framed.Header[] STATIC_HEADER_TABLE = new io.grpc.okhttp.internal.framed.Header[] {
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY, ""),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_METHOD, "GET"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_METHOD, "POST"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_PATH, "/"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_PATH, "/index.html"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_SCHEME, "http"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.TARGET_SCHEME, "https"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "200"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "204"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "206"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "304"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "400"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "404"),
-      new io.grpc.okhttp.internal.framed.Header(io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "500"),
-      new io.grpc.okhttp.internal.framed.Header("accept-charset", ""),
-      new io.grpc.okhttp.internal.framed.Header("accept-encoding", "gzip, deflate"),
-      new io.grpc.okhttp.internal.framed.Header("accept-language", ""),
-      new io.grpc.okhttp.internal.framed.Header("accept-ranges", ""),
-      new io.grpc.okhttp.internal.framed.Header("accept", ""),
-      new io.grpc.okhttp.internal.framed.Header("access-control-allow-origin", ""),
-      new io.grpc.okhttp.internal.framed.Header("age", ""),
-      new io.grpc.okhttp.internal.framed.Header("allow", ""),
-      new io.grpc.okhttp.internal.framed.Header("authorization", ""),
-      new io.grpc.okhttp.internal.framed.Header("cache-control", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-disposition", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-encoding", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-language", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-length", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-location", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-range", ""),
-      new io.grpc.okhttp.internal.framed.Header("content-type", ""),
-      new io.grpc.okhttp.internal.framed.Header("cookie", ""),
-      new io.grpc.okhttp.internal.framed.Header("date", ""),
-      new io.grpc.okhttp.internal.framed.Header("etag", ""),
-      new io.grpc.okhttp.internal.framed.Header("expect", ""),
-      new io.grpc.okhttp.internal.framed.Header("expires", ""),
-      new io.grpc.okhttp.internal.framed.Header("from", ""),
-      new io.grpc.okhttp.internal.framed.Header("host", ""),
-      new io.grpc.okhttp.internal.framed.Header("if-match", ""),
-      new io.grpc.okhttp.internal.framed.Header("if-modified-since", ""),
-      new io.grpc.okhttp.internal.framed.Header("if-none-match", ""),
-      new io.grpc.okhttp.internal.framed.Header("if-range", ""),
-      new io.grpc.okhttp.internal.framed.Header("if-unmodified-since", ""),
-      new io.grpc.okhttp.internal.framed.Header("last-modified", ""),
-      new io.grpc.okhttp.internal.framed.Header("link", ""),
-      new io.grpc.okhttp.internal.framed.Header("location", ""),
-      new io.grpc.okhttp.internal.framed.Header("max-forwards", ""),
-      new io.grpc.okhttp.internal.framed.Header("proxy-authenticate", ""),
-      new io.grpc.okhttp.internal.framed.Header("proxy-authorization", ""),
-      new io.grpc.okhttp.internal.framed.Header("range", ""),
-      new io.grpc.okhttp.internal.framed.Header("referer", ""),
-      new io.grpc.okhttp.internal.framed.Header("refresh", ""),
-      new io.grpc.okhttp.internal.framed.Header("retry-after", ""),
-      new io.grpc.okhttp.internal.framed.Header("server", ""),
-      new io.grpc.okhttp.internal.framed.Header("set-cookie", ""),
-      new io.grpc.okhttp.internal.framed.Header("strict-transport-security", ""),
-      new io.grpc.okhttp.internal.framed.Header("transfer-encoding", ""),
-      new io.grpc.okhttp.internal.framed.Header("user-agent", ""),
-      new io.grpc.okhttp.internal.framed.Header("vary", ""),
-      new io.grpc.okhttp.internal.framed.Header("via", ""),
-      new io.grpc.okhttp.internal.framed.Header("www-authenticate", "")
-  };
+  private static final io.grpc.okhttp.internal.framed.Header[] STATIC_HEADER_TABLE =
+      new io.grpc.okhttp.internal.framed.Header[] {
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_AUTHORITY, ""),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_METHOD, "GET"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_METHOD, "POST"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_PATH, "/"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_PATH, "/index.html"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_SCHEME, "http"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.TARGET_SCHEME, "https"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "200"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "204"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "206"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "304"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "400"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "404"),
+        new io.grpc.okhttp.internal.framed.Header(
+              io.grpc.okhttp.internal.framed.Header.RESPONSE_STATUS, "500"),
+        new io.grpc.okhttp.internal.framed.Header("accept-charset", ""),
+        new io.grpc.okhttp.internal.framed.Header("accept-encoding", "gzip, deflate"),
+        new io.grpc.okhttp.internal.framed.Header("accept-language", ""),
+        new io.grpc.okhttp.internal.framed.Header("accept-ranges", ""),
+        new io.grpc.okhttp.internal.framed.Header("accept", ""),
+        new io.grpc.okhttp.internal.framed.Header("access-control-allow-origin", ""),
+        new io.grpc.okhttp.internal.framed.Header("age", ""),
+        new io.grpc.okhttp.internal.framed.Header("allow", ""),
+        new io.grpc.okhttp.internal.framed.Header("authorization", ""),
+        new io.grpc.okhttp.internal.framed.Header("cache-control", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-disposition", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-encoding", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-language", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-length", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-location", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-range", ""),
+        new io.grpc.okhttp.internal.framed.Header("content-type", ""),
+        new io.grpc.okhttp.internal.framed.Header("cookie", ""),
+        new io.grpc.okhttp.internal.framed.Header("date", ""),
+        new io.grpc.okhttp.internal.framed.Header("etag", ""),
+        new io.grpc.okhttp.internal.framed.Header("expect", ""),
+        new io.grpc.okhttp.internal.framed.Header("expires", ""),
+        new io.grpc.okhttp.internal.framed.Header("from", ""),
+        new io.grpc.okhttp.internal.framed.Header("host", ""),
+        new io.grpc.okhttp.internal.framed.Header("if-match", ""),
+        new io.grpc.okhttp.internal.framed.Header("if-modified-since", ""),
+        new io.grpc.okhttp.internal.framed.Header("if-none-match", ""),
+        new io.grpc.okhttp.internal.framed.Header("if-range", ""),
+        new io.grpc.okhttp.internal.framed.Header("if-unmodified-since", ""),
+        new io.grpc.okhttp.internal.framed.Header("last-modified", ""),
+        new io.grpc.okhttp.internal.framed.Header("link", ""),
+        new io.grpc.okhttp.internal.framed.Header("location", ""),
+        new io.grpc.okhttp.internal.framed.Header("max-forwards", ""),
+        new io.grpc.okhttp.internal.framed.Header("proxy-authenticate", ""),
+        new io.grpc.okhttp.internal.framed.Header("proxy-authorization", ""),
+        new io.grpc.okhttp.internal.framed.Header("range", ""),
+        new io.grpc.okhttp.internal.framed.Header("referer", ""),
+        new io.grpc.okhttp.internal.framed.Header("refresh", ""),
+        new io.grpc.okhttp.internal.framed.Header("retry-after", ""),
+        new io.grpc.okhttp.internal.framed.Header("server", ""),
+        new io.grpc.okhttp.internal.framed.Header("set-cookie", ""),
+        new io.grpc.okhttp.internal.framed.Header("strict-transport-security", ""),
+        new io.grpc.okhttp.internal.framed.Header("transfer-encoding", ""),
+        new io.grpc.okhttp.internal.framed.Header("user-agent", ""),
+        new io.grpc.okhttp.internal.framed.Header("vary", ""),
+        new io.grpc.okhttp.internal.framed.Header("via", ""),
+        new io.grpc.okhttp.internal.framed.Header("www-authenticate", "")
+      };
+
 
   private Hpack() {
   }
@@ -391,7 +407,7 @@ final class Hpack {
 
   static final class Writer {
     private final Buffer out;
-    private boolean useCompression;
+    private final boolean useCompression;
     // Visible for testing.
     int headerTableSizeSetting;
 
