@@ -16,6 +16,7 @@
 
 package io.grpc.xds.sds.internal;
 
+import io.grpc.Internal;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
@@ -29,7 +30,8 @@ import io.netty.util.AsciiString;
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
  * context.
  */
-public class SdsProtocolNegotiators {
+@Internal
+public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
