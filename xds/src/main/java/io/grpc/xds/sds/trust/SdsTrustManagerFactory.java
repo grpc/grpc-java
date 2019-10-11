@@ -34,11 +34,11 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
-@Internal
 /**
  * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManager} to provide an {@link
  * SdsX509TrustManager} for trust and SAN checks.
  */
+@Internal
 public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
@@ -96,7 +96,9 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   }
 
   @Override
-  protected void engineInit(KeyStore keyStore) throws Exception {}
+  protected void engineInit(KeyStore keyStore) throws Exception {
+    throw new UnsupportedOperationException();
+  }
 
   @Override
   protected void engineInit(ManagerFactoryParameters managerFactoryParameters) throws Exception {

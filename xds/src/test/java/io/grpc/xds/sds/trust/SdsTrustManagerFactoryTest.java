@@ -48,7 +48,7 @@ public class SdsTrustManagerFactoryTest {
   private static final String BAD_CLIENT_PEM_FILE = "src/test/certs/badclient.pem";
 
   @Test
-  public void factoryConstructorFromFileTest()
+  public void constructor_fromFile()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
@@ -67,7 +67,7 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void goodCertCheckServerTrusted()
+  public void checkServerTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
@@ -77,7 +77,7 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void goodCertCheckClientTrusted()
+  public void checkClientTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
@@ -87,7 +87,7 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void badCertCheckServerTrusted_ExpectException()
+  public void checkServerTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
@@ -104,7 +104,7 @@ public class SdsTrustManagerFactoryTest {
   }
 
   @Test
-  public void badCertCheckClientTrusted_ExpectException()
+  public void checkClientTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
