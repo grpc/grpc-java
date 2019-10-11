@@ -102,7 +102,6 @@ final class SslContextSecretVolumeSecretProvider
     return tlsCertificate;
   }
 
-  @VisibleForTesting
   static SslContextSecretVolumeSecretProvider getProviderForServer(TlsCertificate tlsCertificate,
       @Nullable CertificateValidationContext certContext) {
     // first validate
@@ -119,7 +118,6 @@ final class SslContextSecretVolumeSecretProvider
         trustedCa, /* server= */ true);
   }
 
-  @VisibleForTesting
   static SslContextSecretVolumeSecretProvider getProviderForClient(
       @Nullable TlsCertificate tlsCertificate,
       CertificateValidationContext certContext) {

@@ -51,7 +51,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
   @Test
-  public void certContextNullAndNotOptional_ExpectException() {
+  public void validateCertificateContext_nullAndNotOptional_throwsException() {
     // expect exception when certContext is null and not optional
     try {
       SslContextSecretVolumeSecretProvider.validateCertificateContext(
@@ -63,7 +63,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void certContextMissingTrustCaNotOptional_ExpectException() {
+  public void validateCertificateContext_missingTrustCa_throwsException() {
     // expect exception when certContext has no CA and not optional
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
@@ -76,7 +76,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void certContextIsNullAndOptional() {
+  public void validateCertificateContext_nullAndOptional() {
     // certContext argument can be null when optional
     CertificateValidationContext certContext =
         SslContextSecretVolumeSecretProvider.validateCertificateContext(
@@ -85,7 +85,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void certContextMissingTrustCaOptional() {
+  public void validateCertificateContext_missingTrustCaOptional() {
     // certContext argument can have missing CA when optional
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     assertThat(SslContextSecretVolumeSecretProvider.validateCertificateContext(certContext,
@@ -93,7 +93,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void certContextInlineString_ExpectException() {
+  public void validateCertificateContext_inlineString_throwsException() {
     // expect exception when certContext doesn't use filename (inline string)
     CertificateValidationContext certContext = CertificateValidationContext.newBuilder()
         .setTrustedCa(DataSource.newBuilder().setInlineString("foo"))
@@ -108,7 +108,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void certContextFilename() {
+  public void validateCertificateContext_filename() {
     // validation succeeds and returns same instance when filename provided
     CertificateValidationContext certContext = CertificateValidationContext.newBuilder()
         .setTrustedCa(DataSource.newBuilder().setFilename("bar"))
@@ -118,7 +118,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateNullNotOptional_ExpectException() {
+  public void validateTlsCertificate_nullAndNotOptional_throwsException() {
     // expect exception when tlsCertificate is null and not optional
     try {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(
@@ -130,14 +130,14 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateNullOptional() {
+  public void validateTlsCertificate_nullOptional() {
     assertThat(SslContextSecretVolumeSecretProvider.validateTlsCertificate(
         /* tlsCertificate= */null,
         /* optional= */true)).isNull();
   }
 
   @Test
-  public void tlsCertificateOptional_ExpectNull() {
+  public void validateTlsCertificate_defaultInstance_returnsNull() {
     // tlsCertificate is not null but has no value (default instance): expect null
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     assertThat(SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert,
@@ -145,7 +145,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateMissingCertChainNotOptional_ExpectException() {
+  public void validateTlsCertificate_missingCertChainNotOptional_throwsException() {
     // expect exception when tlsCertificate has missing certChain and not optional
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setPrivateKey(DataSource.newBuilder().setInlineString("foo"))
@@ -159,7 +159,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificatePrivateKeySetOptional_ExpectException() {
+  public void validateTlsCertificate_missingCertChainOptional_throwsException() {
     // expect exception when tlsCertificate has missing certChain even if optional
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setPrivateKey(DataSource.newBuilder().setInlineString("foo"))
@@ -173,7 +173,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateCertChainSetNotOptional_ExpectException() {
+  public void validateTlsCertificate_missingPrivateKeyNotOptional_throwsException() {
     // expect exception when tlsCertificate has missing private key and not optional
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
@@ -187,7 +187,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateCertChainSetOptional_ExpectException() {
+  public void validateTlsCertificate_missingPrivateKeyOptional_throwsException() {
     // expect exception when tlsCertificate has missing private key even if optional
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
@@ -201,7 +201,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificatePrivateKeyCertChainSetOptional_ExpectSameInstance() {
+  public void validateTlsCertificate_optional_returnsSameInstance() {
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setFilename("foo"))
         .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
@@ -211,7 +211,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificatePrivateKeyCertChainSetNotOptional_ExpectSameInstance() {
+  public void validateTlsCertificate_notOptional_returnsSameInstance() {
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setFilename("foo"))
         .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
@@ -221,7 +221,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificateCertChainInlineString_ExpectException() {
+  public void validateTlsCertificate_certChainInlineString_throwsException() {
     // expect exception when tlsCertificate has certChain as inline string
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
@@ -236,7 +236,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void tlsCertificatePrivateKeyInlineString_ExpectException() {
+  public void validateTlsCertificate_privateKeyInlineString_throwsException() {
     // expect exception when tlsCertificate has private key as inline string
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setPrivateKey(DataSource.newBuilder().setInlineString("foo"))
@@ -251,7 +251,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServerWithNullTlsCertificate_ExpectException() {
+  public void getProviderForServer_nullTlsCertificate_throwsException() {
     try {
       SslContextSecretVolumeSecretProvider.getProviderForServer(
           /* tlsCertificate= */ null,/* certContext= */ null);
@@ -262,7 +262,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServerWithDefaultTlsCertificate_ExpectException() {
+  public void getProviderForServer_defaultTlsCertificate_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
       SslContextSecretVolumeSecretProvider.getProviderForServer(tlsCert,/* certContext= */  null);
@@ -273,7 +273,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServerWithCertContextWithInlineString_ExpectException() {
+  public void getProviderForServer_certContextWithInlineString_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setFilename("foo"))
         .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
@@ -290,7 +290,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClientWithNullCertContext_ExpectException() {
+  public void getProviderForClient_nullCertContext_throwsException() {
     try {
       SslContextSecretVolumeSecretProvider.getProviderForClient(
           /* tlsCertificate= */ null,/* certContext= */  null);
@@ -301,7 +301,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClientWithDefaultCertContext_ExpectException() {
+  public void getProviderForClient_defaultCertContext_throwsException() {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
       SslContextSecretVolumeSecretProvider.getProviderForClient(
@@ -313,7 +313,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClientWithTlsCertWithPrivateKeyInlineString_ExpectException() {
+  public void getProviderForClient_certWithPrivateKeyInlineString_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setFilename("foo"))
         .setPrivateKey(DataSource.newBuilder().setInlineString("bar"))
@@ -330,7 +330,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClientWithTlsCertWithCertChainInlineString_ExpectException() {
+  public void getProviderForClient_certWithCertChainInlineString_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.newBuilder()
         .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
         .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
@@ -368,7 +368,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServerWithBoth_ExpectCorrectValues() {
+  public void getProviderForServer_setsCorrectValues() {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(true,
             "foo", "bar", "baz");
@@ -380,7 +380,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClientWithBoth_ExpectCorrectValues() {
+  public void getProviderForClient_setsCorrectValues() {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(false,
             "foo", "bar", "baz");
@@ -420,31 +420,31 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void sslContextForServerWithBothTlsCertAndCaCert() throws SSLException {
+  public void getProviderForServer() throws SSLException {
     sslContextForEitherWithBothCertAndTrust(true,
         SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void sslContextForClientWithBothTlsCertAndCaCert() throws SSLException {
+  public void getProviderForClient() throws SSLException {
     sslContextForEitherWithBothCertAndTrust(false,
         CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void sslContextForServerWithOnlyCert() throws SSLException {
+  public void getProviderForServer_onlyCert() throws SSLException {
     sslContextForEitherWithBothCertAndTrust(true,
         SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, null);
   }
 
   @Test
-  public void sslContextForClientWithOnlyTrust() throws SSLException {
+  public void getProviderForClient_onlyTrust() throws SSLException {
     sslContextForEitherWithBothCertAndTrust(false,
         null, null, CA_PEM_FILE);
   }
 
   @Test
-  public void sslContextForServerWithBadFile_ExpectException() throws SSLException {
+  public void getProviderForServer_badFile_throwsException() throws SSLException {
     try {
       sslContextForEitherWithBothCertAndTrust(true,
           SERVER_1_PEM_FILE, SERVER_1_PEM_FILE, null);
@@ -484,7 +484,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void sslContextForServerWithBothCallbackTest() {
+  public void getProviderForServer_both_callsback() {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(true,
             SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
@@ -494,7 +494,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void sslContextForClientWithBothCallbackTest() {
+  public void getProviderForClient_both_callsback() {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(false,
             CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
@@ -504,7 +504,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void sslContextForClientWithBadFileCallbackTest_ExpectException() {
+  public void getProviderForClient_both_callsback_setException() {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(false,
             CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
