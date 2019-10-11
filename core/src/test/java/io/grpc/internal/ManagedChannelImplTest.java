@@ -3587,7 +3587,15 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
-    assertThat(args.getBlockingExecutor()).isSameInstanceAs(blockingExecutor);
+
+    verify(blockingExecutor, never()).execute(any(Runnable.class));
+    args.getBlockingExecutor()
+        .execute(
+            new Runnable() {
+              @Override
+              public void run() {}
+            });
+    verify(blockingExecutor, times(1)).execute(any(Runnable.class));
   }
 
   @Test

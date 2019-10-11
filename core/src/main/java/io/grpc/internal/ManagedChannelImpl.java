@@ -581,7 +581,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     builder.maxRetryAttempts,
                     builder.maxHedgedAttempts,
                     loadBalancerFactory))
-            .setBlockingExecutor(builder.blockingExecutorPool.getObject())
+            .setBlockingExecutor(
+                // Avoid creating the blockingExecutor until it is first used
+                new Executor() {
+                  @Override
+                  public void execute(Runnable command) {
+                    blockingExecutorHolder.getExecutor().execute(command);
+                  }
+                })
             .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
