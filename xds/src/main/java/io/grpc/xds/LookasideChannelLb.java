@@ -22,6 +22,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.type.FractionalPercent;
@@ -176,7 +177,9 @@ final class LookasideChannelLb extends LoadBalancer {
         List<LbEndpoint> lbEndPoints = new ArrayList<>();
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {
-          lbEndPoints.add(new LbEndpoint(lbEndpoint));
+          if (lbEndpoint.getHealthStatus() == HealthStatus.HEALTHY) {
+            lbEndPoints.add(new LbEndpoint(lbEndpoint));
+          }
         }
         int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
         int priority = localityLbEndpoints.getPriority();
