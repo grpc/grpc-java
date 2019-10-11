@@ -38,16 +38,16 @@ import javax.net.ssl.SSLException;
  * client SslContexts
  */
 final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslContext> {
-  @VisibleForTesting
-  static final Logger logger =
+
+  private static final Logger logger =
       Logger.getLogger(SslContextSecretVolumeSecretProvider.class.getName());
 
-  @VisibleForTesting final boolean server;
-  @VisibleForTesting final String privateKey;
+  private final boolean server;
+  private final String privateKey;
 
   private final String privateKeyPassword;
-  @VisibleForTesting final String certificateChain;
-  @VisibleForTesting final String trustedCa;
+  private final String certificateChain;
+  private final String trustedCa;
 
   private SslContextSecretVolumeSecretProvider(
       String privateKey,

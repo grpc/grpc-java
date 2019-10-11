@@ -25,7 +25,6 @@ import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.netty.handler.ssl.SslContext;
 import java.util.List;
-import java.util.logging.Level;
 import javax.net.ssl.SSLException;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -394,28 +393,6 @@ public class SslContextSecretVolumeSecretProviderTest {
         : SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
   }
 
-  @Test
-  public void getProviderForServer_setsCorrectValues() {
-    SslContextSecretVolumeSecretProvider provider =
-        getSslContextSecretVolumeSecretProvider(true, "foo", "bar", "baz");
-
-    assertThat(provider.privateKey).isEqualTo("bar");
-    assertThat(provider.certificateChain).isEqualTo("foo");
-    assertThat(provider.trustedCa).isEqualTo("baz");
-    assertThat(provider.server).isTrue();
-  }
-
-  @Test
-  public void getProviderForClient_setsCorrectValues() {
-    SslContextSecretVolumeSecretProvider provider =
-        getSslContextSecretVolumeSecretProvider(false, "foo", "bar", "baz");
-
-    assertThat(provider.privateKey).isEqualTo("bar");
-    assertThat(provider.certificateChain).isEqualTo("foo");
-    assertThat(provider.trustedCa).isEqualTo("baz");
-    assertThat(provider.server).isFalse();
-  }
-
   /**
    * Helper method to build SslContextSecretVolumeSecretProvider, call buildSslContext on it and
    * check returned SslContext.
@@ -524,14 +501,10 @@ public class SslContextSecretVolumeSecretProviderTest {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    // suppress the scary stack-trace on stdout
-    Level oldLevel = SslContextSecretVolumeSecretProvider.logger.getLevel();
-    SslContextSecretVolumeSecretProvider.logger.setLevel(Level.OFF);
     TestCallback<SslContext> testCallback = getValueThruCallback(provider);
     assertThat(testCallback.updatedSecret).isNull();
     assertThat(testCallback.updatedThrowable).isInstanceOf(IllegalArgumentException.class);
     assertThat(testCallback.updatedThrowable.getMessage())
         .contains("File does not contain valid private key");
-    SslContextSecretVolumeSecretProvider.logger.setLevel(oldLevel);
   }
 }
