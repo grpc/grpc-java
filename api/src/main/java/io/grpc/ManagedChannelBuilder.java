@@ -104,7 +104,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T executor(Executor executor);
 
   /**
-   * Provides a custom executor that will be passed to the {@link NameResolver}.
+   * Provides a custom executor that will be used for operations that block.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
@@ -116,7 +116,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @throws UnsupportedOperationException if unsupported
    * @since 1.25.0
    */
-  public T nameResolverExecutor(Executor executor) {
+  public T blockingExecutor(Executor executor) {
     throw new UnsupportedOperationException();
   }
 

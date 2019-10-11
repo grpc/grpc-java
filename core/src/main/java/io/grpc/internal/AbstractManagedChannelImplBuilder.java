@@ -95,7 +95,7 @@ public abstract class AbstractManagedChannelImplBuilder
 
   ObjectPool<? extends Executor> executorPool = DEFAULT_EXECUTOR_POOL;
 
-  ObjectPool<? extends Executor> nameResolverExecutorPool = DEFAULT_EXECUTOR_POOL;
+  ObjectPool<? extends Executor> blockingExecutorPool = DEFAULT_EXECUTOR_POOL;
 
   private final List<ClientInterceptor> interceptors = new ArrayList<>();
   final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
@@ -220,11 +220,11 @@ public abstract class AbstractManagedChannelImplBuilder
   }
 
   @Override
-  public final T nameResolverExecutor(Executor executor) {
+  public final T blockingExecutor(Executor executor) {
     if (executor != null) {
-      this.nameResolverExecutorPool = new FixedObjectPool<>(executor);
+      this.blockingExecutorPool = new FixedObjectPool<>(executor);
     } else {
-      this.nameResolverExecutorPool = DEFAULT_EXECUTOR_POOL;
+      this.blockingExecutorPool = DEFAULT_EXECUTOR_POOL;
     }
     return thisT();
   }

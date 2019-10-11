@@ -473,7 +473,7 @@ public abstract class NameResolver {
      * @since 1.25.0
      */
     @Nullable
-    public Executor getExecutor() {
+    public Executor getBlockingExecutor() {
       return executor;
     }
 
@@ -499,7 +499,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
-      builder.setExecutor(executor);
+      builder.setBlockingExecutor(executor);
       return builder;
     }
 
@@ -568,11 +568,11 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@link Args#getExecutor}. This is an optional field.
+       * See {@link Args#getBlockingExecutor}. This is an optional field.
        *
        * @since 1.25.0
        */
-      public Builder setExecutor(Executor executor) {
+      public Builder setBlockingExecutor(Executor executor) {
         this.executor = executor;
         return this;
       }

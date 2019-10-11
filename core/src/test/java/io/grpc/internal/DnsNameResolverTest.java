@@ -330,7 +330,7 @@ public class DnsNameResolverTest {
             .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
             .setSynchronizationContext(syncContext)
             .setServiceConfigParser(mock(ServiceConfigParser.class))
-            .setExecutor(
+            .setBlockingExecutor(
                 new Executor() {
                   @Override
                   public void execute(Runnable command) {

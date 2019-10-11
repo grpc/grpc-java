@@ -182,7 +182,7 @@ final class DnsNameResolver extends NameResolver {
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
     this.syncContext =
         Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
-    this.executor = args.getExecutor();
+    this.executor = args.getBlockingExecutor();
     this.usingExecutorResource = executor == null;
   }
 
@@ -194,7 +194,7 @@ final class DnsNameResolver extends NameResolver {
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    if (executor == null) {
+    if (usingExecutorResource) {
       executor = SharedResourceHolder.get(executorResource);
     }
     this.listener = Preconditions.checkNotNull(listener, "listener");

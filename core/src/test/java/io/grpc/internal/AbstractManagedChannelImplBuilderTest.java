@@ -100,18 +100,18 @@ public class AbstractManagedChannelImplBuilderTest {
   }
 
   @Test
-  public void nameResolverExecutor_normal() {
+  public void blockingExecutor_normal() {
     Executor executor = mock(Executor.class);
-    assertEquals(builder, builder.nameResolverExecutor(executor));
-    assertEquals(executor, builder.nameResolverExecutorPool.getObject());
+    assertEquals(builder, builder.blockingExecutor(executor));
+    assertEquals(executor, builder.blockingExecutorPool.getObject());
   }
 
   @Test
-  public void nameResolverExecutor_null() {
-    ObjectPool<? extends Executor> defaultValue = builder.nameResolverExecutorPool;
-    builder.nameResolverExecutor(mock(Executor.class));
-    assertEquals(builder, builder.nameResolverExecutor(null));
-    assertEquals(defaultValue, builder.nameResolverExecutorPool);
+  public void blockingExecutor_null() {
+    ObjectPool<? extends Executor> defaultValue = builder.blockingExecutorPool;
+    builder.blockingExecutor(mock(Executor.class));
+    assertEquals(builder, builder.blockingExecutor(null));
+    assertEquals(defaultValue, builder.blockingExecutorPool);
   }
 
   @Test

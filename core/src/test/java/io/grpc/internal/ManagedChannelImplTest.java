@@ -266,7 +266,7 @@ public class ManagedChannelImplTest {
   @Mock
   private CallCredentials creds;
   @Mock
-  private Executor nameResolverExecutor;
+  private Executor blockingExecutor;
   private ChannelBuilder channelBuilder;
   private boolean requestConnection = true;
   private BlockingQueue<MockClientTransportInfo> transports;
@@ -328,7 +328,7 @@ public class ManagedChannelImplTest {
             .userAgent(USER_AGENT)
             .idleTimeout(
                 AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
-            .nameResolverExecutor(nameResolverExecutor);
+            .blockingExecutor(blockingExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
@@ -3587,7 +3587,7 @@ public class ManagedChannelImplTest {
     assertThat(args).isNotNull();
     assertThat(args.getDefaultPort()).isEqualTo(DEFAULT_PORT);
     assertThat(args.getProxyDetector()).isSameInstanceAs(neverProxy);
-    assertThat(args.getExecutor()).isSameInstanceAs(nameResolverExecutor);
+    assertThat(args.getBlockingExecutor()).isSameInstanceAs(blockingExecutor);
   }
 
   @Test
