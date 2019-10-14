@@ -148,7 +148,8 @@ public final class StatusProto {
 
   /**
    * Extracts the google.rpc.Status from trailers, and makes sure they match the gRPC
-   * {@code status}.
+   * {@code status}. If the trailers doesn't contain status entry, it uses {@code status} param to
+   * generate status.
    *
    * @return the embedded google.rpc.Status or {@code null} if it is not present.
    * @since 1.11.0
@@ -163,6 +164,15 @@ public final class StatusProto {
             "com.google.rpc.Status code must match gRPC status code");
         return statusProto;
       }
+    }
+    // fall-back to status, this is useful if the error is local. e.g. Server is unavailable.
+    if (status != null) {
+      com.google.rpc.Status.Builder statusBuilder = com.google.rpc.Status.newBuilder()
+          .setCode(status.getCode().value());
+      if (status.getDescription() != null) {
+        statusBuilder.setMessage(status.getDescription());
+      }
+      return statusBuilder.build();
     }
     return null;
   }
