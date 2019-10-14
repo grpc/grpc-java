@@ -147,9 +147,9 @@ public final class StatusProto {
   }
 
   /**
-   * Extracts the google.rpc.Status from trailers, and makes sure they match the gRPC
-   * {@code status}. If the trailers doesn't contain status entry, it uses {@code status} param to
-   * generate status.
+   * Extracts the {@code google.rpc.Status} from trailers, and makes sure they match the gRPC
+   * {@code status}. If the trailers do not contain a {@code google.rpc.Status}, it uses
+   * {@code status} param to generate a {@code google.rpc.Status}.
    *
    * @return the embedded google.rpc.Status or {@code null} if it is not present.
    * @since 1.11.0
