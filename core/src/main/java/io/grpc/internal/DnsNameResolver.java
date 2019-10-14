@@ -138,6 +138,8 @@ final class DnsNameResolver extends NameResolver {
   private final String authority;
   private final String host;
   private final int port;
+
+  /** Executor that will be used if an Executor is not provide via {@link NameResolver.Args}. */
   private final Resource<Executor> executorResource;
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
@@ -147,6 +149,10 @@ final class DnsNameResolver extends NameResolver {
   private ResolutionResults cachedResolutionResults;
   private boolean shutdown;
   private Executor executor;
+
+  /** True if using an executor resource that should be released after use. */
+  private final boolean usingExecutorResource;
+
   private boolean resolving;
 
   // The field must be accessed from syncContext, although the methods on an Listener2 can be called
@@ -176,6 +182,8 @@ final class DnsNameResolver extends NameResolver {
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
     this.syncContext =
         Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
+    this.executor = args.getBlockingExecutor();
+    this.usingExecutorResource = executor == null;
   }
 
   @Override
@@ -186,7 +194,9 @@ final class DnsNameResolver extends NameResolver {
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    executor = SharedResourceHolder.get(executorResource);
+    if (usingExecutorResource) {
+      executor = SharedResourceHolder.get(executorResource);
+    }
     this.listener = Preconditions.checkNotNull(listener, "listener");
     resolve();
   }
@@ -361,7 +371,7 @@ final class DnsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (executor != null) {
+    if (executor != null && usingExecutorResource) {
       executor = SharedResourceHolder.release(executorResource, executor);
     }
   }

@@ -70,6 +70,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -120,17 +121,20 @@ public class DnsNameResolverTest {
   private final FakeClock fakeClock = new FakeClock();
   private final FakeClock fakeExecutor = new FakeClock();
 
-  private final Resource<Executor> fakeExecutorResource =
-      new Resource<Executor>() {
-        @Override
-        public Executor create() {
-          return fakeExecutor.getScheduledExecutorService();
-        }
+  private final FakeExecutorResource fakeExecutorResource = new FakeExecutorResource();
 
-        @Override
-        public void close(Executor instance) {
-        }
-      };
+  private final class FakeExecutorResource implements Resource<Executor> {
+    private final AtomicInteger createCount = new AtomicInteger();
+
+    @Override
+    public Executor create() {
+      createCount.incrementAndGet();
+      return fakeExecutor.getScheduledExecutorService();
+    }
+
+    @Override
+    public void close(Executor instance) {}
+  }
 
   @Mock
   private NameResolver.Listener2 mockListener;
@@ -165,18 +169,20 @@ public class DnsNameResolverTest {
       final ProxyDetector proxyDetector,
       Stopwatch stopwatch,
       boolean isAndroid) {
-    DnsNameResolver dnsResolver = new DnsNameResolver(
-        null,
-        name,
+    NameResolver.Args args =
         NameResolver.Args.newBuilder()
             .setDefaultPort(defaultPort)
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
             .setServiceConfigParser(mock(ServiceConfigParser.class))
-            .build(),
-        fakeExecutorResource,
-        stopwatch,
-        isAndroid);
+            .build();
+    return newResolver(name, stopwatch, isAndroid, args);
+  }
+
+  private DnsNameResolver newResolver(
+      String name, Stopwatch stopwatch, boolean isAndroid, NameResolver.Args args) {
+    DnsNameResolver dnsResolver =
+        new DnsNameResolver(null, name, args, fakeExecutorResource, stopwatch, isAndroid);
     // By default, using the mocked ResourceResolver to avoid I/O
     dnsResolver.setResourceResolver(new JndiResourceResolver(recordFetcher));
     return dnsResolver;
@@ -291,6 +297,65 @@ public class DnsNameResolverTest {
     resolver.shutdown();
 
     verify(mockResolver, times(2)).resolveAddress(anyString());
+  }
+
+  @Test
+  public void testExecutor_default() throws Exception {
+    final List<InetAddress> answer = createAddressList(2);
+
+    DnsNameResolver resolver = newResolver("foo.googleapis.com", 81);
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(anyString())).thenReturn(answer);
+    resolver.setAddressResolver(mockResolver);
+
+    resolver.start(mockListener);
+    assertEquals(1, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    resolver.shutdown();
+
+    assertThat(fakeExecutorResource.createCount.get()).isEqualTo(1);
+  }
+
+  @Test
+  public void testExecutor_custom() throws Exception {
+    final List<InetAddress> answer = createAddressList(2);
+    final AtomicInteger executions = new AtomicInteger();
+
+    NameResolver.Args args =
+        NameResolver.Args.newBuilder()
+            .setDefaultPort(81)
+            .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
+            .setSynchronizationContext(syncContext)
+            .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .setBlockingExecutor(
+                new Executor() {
+                  @Override
+                  public void execute(Runnable command) {
+                    executions.incrementAndGet();
+                    command.run();
+                  }
+                })
+            .build();
+
+    DnsNameResolver resolver =
+        newResolver("foo.googleapis.com", Stopwatch.createUnstarted(), false, args);
+    AddressResolver mockResolver = mock(AddressResolver.class);
+    when(mockResolver.resolveAddress(anyString())).thenReturn(answer);
+    resolver.setAddressResolver(mockResolver);
+
+    resolver.start(mockListener);
+    assertEquals(0, fakeExecutor.runDueTasks());
+    verify(mockListener).onResult(resultCaptor.capture());
+    assertAnswerMatches(answer, 81, resultCaptor.getValue());
+    assertEquals(0, fakeClock.numPendingTasks());
+
+    resolver.shutdown();
+
+    assertThat(fakeExecutorResource.createCount.get()).isEqualTo(0);
+    assertThat(executions.get()).isEqualTo(1);
   }
 
   @Test

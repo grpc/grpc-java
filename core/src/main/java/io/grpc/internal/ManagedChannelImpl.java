@@ -142,6 +142,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
   private final ExecutorHolder balancerRpcExecutorHolder;
+  private final ExecutorHolder blockingExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
@@ -565,16 +566,30 @@ final class ManagedChannelImpl extends ManagedChannel implements
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
+    this.blockingExecutorHolder =
+        new ExecutorHolder(
+            checkNotNull(builder.blockingExecutorPool, "blockingExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
-    this.nameResolverArgs = NameResolver.Args.newBuilder()
-        .setDefaultPort(builder.getDefaultPort())
-        .setProxyDetector(proxyDetector)
-        .setSynchronizationContext(syncContext)
-        .setServiceConfigParser(
-            new ScParser(
-                retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts,
-                loadBalancerFactory))
-        .build();
+    this.nameResolverArgs =
+        NameResolver.Args.newBuilder()
+            .setDefaultPort(builder.getDefaultPort())
+            .setProxyDetector(proxyDetector)
+            .setSynchronizationContext(syncContext)
+            .setServiceConfigParser(
+                new ScParser(
+                    retryEnabled,
+                    builder.maxRetryAttempts,
+                    builder.maxHedgedAttempts,
+                    loadBalancerFactory))
+            .setBlockingExecutor(
+                // Avoid creating the blockingExecutor until it is first used
+                new Executor() {
+                  @Override
+                  public void execute(Runnable command) {
+                    blockingExecutorHolder.getExecutor().execute(command);
+                  }
+                })
+            .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
     maxTraceEvents = builder.maxTraceEvents;
@@ -885,6 +900,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       balancerRpcExecutorHolder.release();
+      blockingExecutorHolder.release();
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }

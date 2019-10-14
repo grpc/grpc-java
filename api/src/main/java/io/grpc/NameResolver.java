@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -411,13 +412,19 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
+    @Nullable private final Executor executor;
 
-    Args(Integer defaultPort, ProxyDetector proxyDetector,
-        SynchronizationContext syncContext, ServiceConfigParser serviceConfigParser) {
+    Args(
+        Integer defaultPort,
+        ProxyDetector proxyDetector,
+        SynchronizationContext syncContext,
+        ServiceConfigParser serviceConfigParser,
+        @Nullable Executor executor) {
       this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
+      this.executor = executor;
     }
 
     /**
@@ -459,6 +466,17 @@ public abstract class NameResolver {
       return serviceConfigParser;
     }
 
+    /**
+     * Returns the Executor on which this resolver should execute long-running or I/O bound work.
+     * Null if no Executor was set.
+     *
+     * @since 1.25.0
+     */
+    @Nullable
+    public Executor getBlockingExecutor() {
+      return executor;
+    }
+
     @Override
     public String toString() {
       return MoreObjects.toStringHelper(this)
@@ -466,6 +484,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("executor", executor)
           .toString();
     }
 
@@ -480,6 +499,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
+      builder.setBlockingExecutor(executor);
       return builder;
     }
 
@@ -502,6 +522,7 @@ public abstract class NameResolver {
       private ProxyDetector proxyDetector;
       private SynchronizationContext syncContext;
       private ServiceConfigParser serviceConfigParser;
+      private Executor executor;
 
       Builder() {
       }
@@ -547,12 +568,22 @@ public abstract class NameResolver {
       }
 
       /**
+       * See {@link Args#getBlockingExecutor}. This is an optional field.
+       *
+       * @since 1.25.0
+       */
+      public Builder setBlockingExecutor(Executor executor) {
+        this.executor = executor;
+        return this;
+      }
+
+      /**
        * Builds an {@link Args}.
        *
        * @since 1.21.0
        */
       public Args build() {
-        return new Args(defaultPort, proxyDetector, syncContext, serviceConfigParser);
+        return new Args(defaultPort, proxyDetector, syncContext, serviceConfigParser, executor);
       }
     }
   }
