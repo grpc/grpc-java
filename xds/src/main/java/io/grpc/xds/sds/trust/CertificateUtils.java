@@ -17,6 +17,7 @@
 package io.grpc.xds.sds.trust;
 
 import java.io.BufferedInputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.cert.Certificate;
@@ -38,10 +39,15 @@ final class CertificateUtils {
     }
   }
 
-  static synchronized X509Certificate[] toX509Certificates(String fileName)
+  /**
+   * Generates X509Certificate array from a file on disk.
+   *
+   * @param file a {@link File} containing the cert data
+   */
+  static synchronized X509Certificate[] toX509Certificates(File file)
       throws CertificateException, IOException {
     initInstance();
-    FileInputStream fis = new FileInputStream(fileName);
+    FileInputStream fis = new FileInputStream(file);
     BufferedInputStream bis = new BufferedInputStream(fis);
     try {
       Collection<? extends Certificate> certs = factory.generateCertificates(bis);
