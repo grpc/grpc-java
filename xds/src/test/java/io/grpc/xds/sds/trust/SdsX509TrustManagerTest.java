@@ -44,7 +44,7 @@ public class SdsX509TrustManagerTest {
   private static final String SERVER_1_PEM_FILE = "server1.pem";
 
   /** client has no SANs. */
-  private static final String CLIENT_PEM_FILE_IN_TESTING = "client.pem";
+  private static final String CLIENT_PEM_FILE = "client.pem";
 
   @Rule
   public final MockitoRule mockitoRule = MockitoJUnit.rule();
@@ -101,7 +101,7 @@ public class SdsX509TrustManagerTest {
         CertificateValidationContext.newBuilder().addVerifySubjectAltName("foo.com").build();
     SdsX509TrustManager trustManager = new SdsX509TrustManager(certContext, mockDelegate);
     X509Certificate[] certs =
-        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE_IN_TESTING));
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
     try {
       trustManager.verifySubjectAltNameInChain(certs);
       Assert.fail("no exception thrown");
