@@ -473,6 +473,7 @@ public abstract class NameResolver {
      * @since 1.25.0
      */
     @Nullable
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
     public Executor getBlockingExecutor() {
       return executor;
     }
@@ -572,6 +573,7 @@ public abstract class NameResolver {
        *
        * @since 1.25.0
        */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
       public Builder setBlockingExecutor(Executor executor) {
         this.executor = executor;
         return this;
