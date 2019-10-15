@@ -37,11 +37,11 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class SslContextSecretVolumeSecretProviderTest {
 
-  private static final String SERVER_1_PEM_FILE = "src/test/certs/server1.pem";
-  private static final String SERVER_1_KEY_FILE = "src/test/certs/server1.key";
-  private static final String CLIENT_PEM_FILE = "src/test/certs/client.pem";
-  private static final String CLIENT_KEY_FILE = "src/test/certs/client.key";
-  private static final String CA_PEM_FILE = "src/test/certs/ca.pem";
+  private static final String SERVER_1_PEM_FILE = "../testing/src/main/resources/certs/server1.pem";
+  private static final String SERVER_1_KEY_FILE = "../testing/src/main/resources/certs/server1.key";
+  private static final String CLIENT_PEM_FILE = "../testing/src/main/resources/certs/client.pem";
+  private static final String CLIENT_KEY_FILE = "../testing/src/main/resources/certs/client.key";
+  private static final String CA_PEM_FILE = "../testing/src/main/resources/certs/ca.pem";
 
   @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
