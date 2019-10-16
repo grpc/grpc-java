@@ -436,6 +436,7 @@ public final class ClientCalls {
       if (streamingResponse) {
         observer.onNext(message);
       } else {
+        // will send message in onClose() for unary calls.
         unaryMessage = message;
       }
 
@@ -448,8 +449,14 @@ public final class ClientCalls {
     @Override
     public void onClose(Status status, Metadata trailers) {
       if (status.isOk()) {
-        if (!streamingResponse && unaryMessage != null) {
-          observer.onNext(unaryMessage);
+        if (!streamingResponse) {
+          if (unaryMessage != null) {
+            observer.onNext(unaryMessage);
+          } else {
+            throw Status.INTERNAL
+                .withDescription("Status is OK but message is null for unary call")
+                .asRuntimeException();
+          }
         }
         observer.onCompleted();
       } else {

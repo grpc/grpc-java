@@ -138,6 +138,46 @@ public class ClientCallsTest {
   }
 
   @Test
+  public void unaryAsyncCallIsOkGetNullMessage() throws Exception {
+    Integer req = 2;
+    final Status status = Status.OK;
+    final Metadata trailers = new Metadata();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(null);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+      }
+
+      @Override
+      public void onError(Throwable t) {
+
+      }
+
+      @Override
+      public void onCompleted() {
+
+      }
+    };
+
+    try {
+      ClientCalls.asyncUnaryCall(call, req, responseObserver);
+      fail("Should fail");
+    } catch (StatusRuntimeException e) {
+      assertThat(e.getStatus().getCode()).isEqualTo(Status.INTERNAL.getCode());
+      assertThat(e.getMessage())
+          .isEqualTo("INTERNAL: Status is OK but message is null for unary call");
+    }
+  }
+
+  @Test
   public void unaryAsyncCallIsNotOkDoNotGetMessage() throws Exception {
     Integer req = 2;
     final Status status = Status.INTERNAL.withDescription("Unique status");
