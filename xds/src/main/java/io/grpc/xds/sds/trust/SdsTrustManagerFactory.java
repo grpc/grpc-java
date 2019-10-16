@@ -16,9 +16,12 @@
 
 package io.grpc.xds.sds.trust;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.grpc.Internal;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
+import java.io.File;
 import java.io.IOException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -35,27 +38,27 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509ExtendedTrustManager;
 
 /**
- * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManager} to provide an {@link
+ * Factory class used by providers of {@link io.grpc.xds.sds.TlsContextManager} to provide a {@link
  * SdsX509TrustManager} for trust and SAN checks.
  */
 @Internal
 public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
 
   private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
-
   private SdsX509TrustManager sdsX509TrustManager;
 
   /** Constructor that loads certs from a file. */
   public SdsTrustManagerFactory(
       String certsFile, @Nullable CertificateValidationContext certContext)
       throws CertificateException, IOException, CertStoreException {
-    this(CertificateUtils.toX509Certificates(certsFile), certContext);
+    this(CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
   }
 
   /** Constructor that takes array of certs. */
   public SdsTrustManagerFactory(
       X509Certificate[] certs, @Nullable CertificateValidationContext certContext)
       throws CertStoreException {
+    checkNotNull(certs, "certs");
     createSdsX509TrustManager(certs, certContext);
   }
 

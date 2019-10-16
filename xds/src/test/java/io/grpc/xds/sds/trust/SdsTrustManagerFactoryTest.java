@@ -18,6 +18,7 @@ package io.grpc.xds.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
 import java.security.cert.CertificateException;
@@ -33,25 +34,25 @@ import org.junit.runners.JUnit4;
 public class SdsTrustManagerFactoryTest {
 
   /** Trust store cert. */
-  private static final String CA_PEM_FILE = "src/test/certs/ca.pem";
+  private static final String CA_PEM_FILE = "ca.pem";
 
   /** server cert. */
-  private static final String SERVER_1_PEM_FILE = "src/test/certs/server1.pem";
+  private static final String SERVER_1_PEM_FILE = "server1.pem";
 
   /** client cert. */
-  private static final String CLIENT_PEM_FILE = "src/test/certs/client.pem";
+  private static final String CLIENT_PEM_FILE = "client.pem";
 
   /** bad server cert. */
-  private static final String BAD_SERVER_PEM_FILE = "src/test/certs/badserver.pem";
+  private static final String BAD_SERVER_PEM_FILE = "badserver.pem";
 
   /** bad client cert. */
-  private static final String BAD_CLIENT_PEM_FILE = "src/test/certs/badclient.pem";
+  private static final String BAD_CLIENT_PEM_FILE = "badclient.pem";
 
   @Test
-  public void constructor_fromFile()
-      throws CertificateException, IOException, CertStoreException {
+  public void constructor_fromFile() throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
+        new SdsTrustManagerFactory(
+            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -63,16 +64,19 @@ public class SdsTrustManagerFactoryTest {
     assertThat(acceptedIssuers).isNotNull();
     assertThat(acceptedIssuers).hasLength(1);
     X509Certificate caCert = acceptedIssuers[0];
-    assertThat(caCert).isEqualTo(CertificateUtils.toX509Certificates(CA_PEM_FILE)[0]);
+    assertThat(caCert)
+        .isEqualTo(CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE))[0]);
   }
 
   @Test
   public void checkServerTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
+        new SdsTrustManagerFactory(
+            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
-    X509Certificate[] serverChain = CertificateUtils.toX509Certificates(SERVER_1_PEM_FILE);
+    X509Certificate[] serverChain =
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
     sdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
   }
 
@@ -80,9 +84,11 @@ public class SdsTrustManagerFactoryTest {
   public void checkClientTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
+        new SdsTrustManagerFactory(
+            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
-    X509Certificate[] clientChain = CertificateUtils.toX509Certificates(CLIENT_PEM_FILE);
+    X509Certificate[] clientChain =
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
     sdsX509TrustManager.checkClientTrusted(clientChain, "RSA");
   }
 
@@ -90,9 +96,11 @@ public class SdsTrustManagerFactoryTest {
   public void checkServerTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
+        new SdsTrustManagerFactory(
+            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
-    X509Certificate[] serverChain = CertificateUtils.toX509Certificates(BAD_SERVER_PEM_FILE);
+    X509Certificate[] serverChain =
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
     try {
       sdsX509TrustManager.checkServerTrusted(serverChain, "RSA");
       Assert.fail("no exception thrown");
@@ -107,9 +115,11 @@ public class SdsTrustManagerFactoryTest {
   public void checkClientTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(CA_PEM_FILE, /* certContext= */ null);
+        new SdsTrustManagerFactory(
+            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
-    X509Certificate[] clientChain = CertificateUtils.toX509Certificates(BAD_CLIENT_PEM_FILE);
+    X509Certificate[] clientChain =
+        CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_CLIENT_PEM_FILE));
     try {
       sdsX509TrustManager.checkClientTrusted(clientChain, "RSA");
       Assert.fail("no exception thrown");
