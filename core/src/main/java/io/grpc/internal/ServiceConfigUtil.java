@@ -48,9 +48,12 @@ public final class ServiceConfigUtil {
   private static final String SERVICE_CONFIG_METHOD_CONFIG_KEY = "methodConfig";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_POLICY_KEY = "loadBalancingPolicy";
   private static final String SERVICE_CONFIG_LOAD_BALANCING_CONFIG_KEY = "loadBalancingConfig";
+  // TODO(chengyuanzhang): delete this key after shifting to use bootstrap.
   private static final String XDS_CONFIG_BALANCER_NAME_KEY = "balancerName";
   private static final String XDS_CONFIG_CHILD_POLICY_KEY = "childPolicy";
   private static final String XDS_CONFIG_FALLBACK_POLICY_KEY = "fallbackPolicy";
+  private static final String XDS_CONFIG_EDS_SERVICE_NAME = "edsServiceName";
+  private static final String XDS_CONFIG_LRS_SERVER_NAME = "lrsLoadReportingServerName";
   private static final String SERVICE_CONFIG_STICKINESS_METADATA_KEY = "stickinessMetadataKey";
   private static final String METHOD_CONFIG_NAME_KEY = "name";
   private static final String METHOD_CONFIG_TIMEOUT_KEY = "timeout";
@@ -423,8 +426,25 @@ public final class ServiceConfigUtil {
   /**
    * Extracts the loadbalancer name from xds loadbalancer config.
    */
+  // TODO(chengyuanzhang): delete after shifting to use bootstrap.
   public static String getBalancerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
     return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_BALANCER_NAME_KEY);
+  }
+
+  /**
+   * Extract the server name to use in EDS query.
+   */
+  @Nullable
+  public static String getEdsServiceNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_EDS_SERVICE_NAME);
+  }
+
+  /**
+   * Extract the LRS server name to send load reports to.
+   */
+  @Nullable
+  public static String getLrsServerNameFromXdsConfig(Map<String, ?> rawXdsConfig) {
+    return JsonUtil.getString(rawXdsConfig, XDS_CONFIG_LRS_SERVER_NAME);
   }
 
   /**
