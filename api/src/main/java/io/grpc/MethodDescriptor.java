@@ -224,7 +224,7 @@ public final class MethodDescriptor<ReqT, RespT> {
       boolean idempotent,
       boolean safe,
       boolean sampledToLocalTracing) {
-
+    assert !safe || idempotent : "safe should imply idempotent";
     this.type = Preconditions.checkNotNull(type, "type");
     this.fullMethodName = Preconditions.checkNotNull(fullMethodName, "fullMethodName");
     this.serviceName = extractFullServiceName(fullMethodName);
@@ -534,25 +534,31 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     /**
      * Sets whether the method is idempotent.  If true, calling this method more than once doesn't
-     * have additional side effects.
+     * have additional side effects. If {@code false}, method is also not safe.
      *
      * @since 1.1.0
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setIdempotent(boolean idempotent) {
       this.idempotent = idempotent;
+      if (!idempotent) {
+        this.safe = false;
+      }
       return this;
     }
 
     /**
      * Sets whether this method is safe.  If true, calling this method any number of times doesn't
-     * have side effects.
+     * have side effects. If {@code true}, method is also idempotent.
      *
      * @since 1.1.0
      */
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1775")
     public Builder<ReqT, RespT> setSafe(boolean safe) {
       this.safe = safe;
+      if (safe) {
+        this.idempotent = true;
+      }
       return this;
     }
 
