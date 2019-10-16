@@ -102,8 +102,9 @@ public class MethodDescriptorTest {
         .setResponseMarshaller(new StringMarshaller())
         .build();
 
-    thrown.expect(IllegalArgumentException.class);
-    MethodDescriptor<String, String> unused = descriptor.toBuilder().setSafe(true).build();
+    // Verify it does not throw
+    MethodDescriptor<String, String> newDescriptor = descriptor.toBuilder().setSafe(true).build();
+    assertTrue(newDescriptor.isSafe());
   }
 
   @Test

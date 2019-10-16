@@ -234,8 +234,6 @@ public final class MethodDescriptor<ReqT, RespT> {
     this.idempotent = idempotent;
     this.safe = safe;
     this.sampledToLocalTracing = sampledToLocalTracing;
-    Preconditions.checkArgument(!safe || type == MethodType.UNARY,
-        "Only unary methods can be specified safe");
   }
 
   /**
