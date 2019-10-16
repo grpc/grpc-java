@@ -17,10 +17,13 @@
 package io.grpc.stub;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.stub.AbstractAsyncStubTest.NoopAsyncStub;
 import io.grpc.stub.AbstractBlockingStubTest.NoopBlockingStub;
+import io.grpc.stub.AbstractFutureStubTest.NoopFutureStub;
 import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.ClientCalls.StubType;
 import org.junit.Test;
@@ -48,7 +51,39 @@ public class AbstractBlockingStubTest extends BaseAbstractStubTest<NoopBlockingS
         .isEqualTo(StubType.BLOCKING);
   }
 
-  class NoopBlockingStub extends AbstractBlockingStub<NoopBlockingStub> {
+  @Test
+  @SuppressWarnings("AssertionFailureIgnored")
+  public void newStub_asyncStub_throwsException() {
+    try {
+      NoopAsyncStub unused = NoopBlockingStub.newStub(new StubFactory<NoopAsyncStub>() {
+        @Override
+        public NoopAsyncStub newStub(Channel channel, CallOptions callOptions) {
+          return new NoopAsyncStub(channel, callOptions);
+        }
+      }, channel, CallOptions.DEFAULT);
+      fail("should not reach here");
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().startsWith("Expected AbstractBlockingStub");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("AssertionFailureIgnored")
+  public void newStub_futureStub_throwsException() {
+    try {
+      NoopFutureStub unused = NoopBlockingStub.newStub(new StubFactory<NoopFutureStub>() {
+        @Override
+        public NoopFutureStub newStub(Channel channel, CallOptions callOptions) {
+          return new NoopFutureStub(channel, callOptions);
+        }
+      }, channel, CallOptions.DEFAULT);
+      fail("should not reach here");
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().startsWith("Expected AbstractBlockingStub");
+    }
+  }
+
+  static class NoopBlockingStub extends AbstractBlockingStub<NoopBlockingStub> {
 
     NoopBlockingStub(Channel channel, CallOptions options) {
       super(channel, options);

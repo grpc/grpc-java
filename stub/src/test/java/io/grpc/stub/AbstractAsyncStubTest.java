@@ -17,10 +17,13 @@
 package io.grpc.stub;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.stub.AbstractAsyncStubTest.NoopAsyncStub;
+import io.grpc.stub.AbstractBlockingStubTest.NoopBlockingStub;
+import io.grpc.stub.AbstractFutureStubTest.NoopFutureStub;
 import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.ClientCalls.StubType;
 import org.junit.Test;
@@ -45,7 +48,39 @@ public class AbstractAsyncStubTest extends BaseAbstractStubTest<NoopAsyncStub> {
         .isEqualTo(StubType.ASYNC);
   }
 
-  class NoopAsyncStub extends AbstractAsyncStub<NoopAsyncStub> {
+  @Test
+  @SuppressWarnings("AssertionFailureIgnored")
+  public void newStub_futureStub_throwsException() {
+    try {
+      NoopFutureStub unused = NoopAsyncStub.newStub(new StubFactory<NoopFutureStub>() {
+        @Override
+        public NoopFutureStub newStub(Channel channel, CallOptions callOptions) {
+          return new NoopFutureStub(channel, callOptions);
+        }
+      }, channel, CallOptions.DEFAULT);
+      fail("should not reach here");
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().startsWith("Expected AbstractAsyncStub");
+    }
+  }
+
+  @Test
+  @SuppressWarnings("AssertionFailureIgnored")
+  public void newStub_blockingStub_throwsException() {
+    try {
+      NoopBlockingStub unused = NoopAsyncStub.newStub(new StubFactory<NoopBlockingStub>() {
+        @Override
+        public NoopBlockingStub newStub(Channel channel, CallOptions callOptions) {
+          return new NoopBlockingStub(channel, callOptions);
+        }
+      }, channel, CallOptions.DEFAULT);
+      fail("should not reach here");
+    } catch (AssertionError e) {
+      assertThat(e).hasMessageThat().startsWith("Expected AbstractAsyncStub");
+    }
+  }
+
+  static class NoopAsyncStub extends AbstractAsyncStub<NoopAsyncStub> {
 
     NoopAsyncStub(Channel channel, CallOptions options) {
       super(channel, options);

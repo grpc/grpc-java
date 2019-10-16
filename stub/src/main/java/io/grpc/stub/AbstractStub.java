@@ -26,6 +26,7 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.stub.ClientCalls.StubType;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
@@ -100,6 +101,32 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
   protected abstract S build(Channel channel, CallOptions callOptions);
+
+  /**
+   * Returns a new stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create a stub
+   * @param channel the channel that this stub will use to do communications
+   */
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel) {
+    return newStub(factory, channel, CallOptions.DEFAULT);
+  }
+
+  /**
+   * Returns a new stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create a stub
+   * @param channel the channel that this stub will use to do communications
+   * @param callOptions the runtime call options to be applied to every call on this stub
+   */
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
+    return factory.newStub(
+        channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.FUTURE));
+  }
 
   /**
    * Returns a new stub with an absolute deadline.

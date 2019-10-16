@@ -45,7 +45,7 @@ public abstract class AbstractAsyncStub<S extends AbstractAsyncStub<S>> extends 
    * @param factory the factory to create an async stub
    * @param channel the channel that this stub will use to do communications
    */
-  public static <T extends AbstractAsyncStub<T>> T newStub(
+  public static <T extends AbstractStub<T>> T newStub(
       StubFactory<T> factory, Channel channel) {
     return newStub(factory, channel, CallOptions.DEFAULT);
   }
@@ -58,9 +58,12 @@ public abstract class AbstractAsyncStub<S extends AbstractAsyncStub<S>> extends 
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
    */
-  public static <T extends AbstractAsyncStub<T>> T newStub(
+  public static <T extends AbstractStub<T>> T newStub(
       StubFactory<T> factory, Channel channel, CallOptions callOptions) {
-    return factory.newStub(
+    T stub = factory.newStub(
         channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.ASYNC));
+    assert stub instanceof AbstractAsyncStub
+        : String.format("Expected AbstractAsyncStub, but got %s.", stub.getClass());
+    return stub;
   }
 }

@@ -45,7 +45,7 @@ public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extend
    * @param factory the factory to create a future stub
    * @param channel the channel that this stub will use to do communications
    */
-  public static <T extends AbstractFutureStub<T>> T newStub(
+  public static <T extends AbstractStub<T>> T newStub(
       StubFactory<T> factory, Channel channel) {
     return newStub(factory, channel, CallOptions.DEFAULT);
   }
@@ -57,10 +57,14 @@ public abstract class AbstractFutureStub<S extends AbstractFutureStub<S>> extend
    * @param factory the factory to create a future stub
    * @param channel the channel that this stub will use to do communications
    * @param callOptions the runtime call options to be applied to every call on this stub
+   * @return a future stub
    */
-  public static <T extends AbstractFutureStub<T>> T newStub(
+  public static <T extends AbstractStub<T>> T newStub(
       StubFactory<T> factory, Channel channel, CallOptions callOptions) {
-    return factory.newStub(
+    T stub = factory.newStub(
         channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.FUTURE));
+    assert stub instanceof AbstractFutureStub
+        : String.format("Expected AbstractFutureStub, but got %s.", stub.getClass());
+    return stub;
   }
 }
