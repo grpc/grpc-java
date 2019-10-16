@@ -18,14 +18,14 @@ package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
+import io.grpc.internal.testing.TestUtils;
 import io.netty.handler.ssl.SslContext;
+import java.io.IOException;
 import java.util.List;
-import javax.net.ssl.SSLException;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -37,11 +37,11 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class SslContextSecretVolumeSecretProviderTest {
 
-  private static final String SERVER_1_PEM_FILE = "../testing/src/main/resources/certs/server1.pem";
-  private static final String SERVER_1_KEY_FILE = "../testing/src/main/resources/certs/server1.key";
-  private static final String CLIENT_PEM_FILE = "../testing/src/main/resources/certs/client.pem";
-  private static final String CLIENT_KEY_FILE = "../testing/src/main/resources/certs/client.key";
-  private static final String CA_PEM_FILE = "../testing/src/main/resources/certs/ca.pem";
+  private static final String SERVER_1_PEM_FILE = "server1.pem";
+  private static final String SERVER_1_KEY_FILE = "server1.key";
+  private static final String CLIENT_PEM_FILE = "client.pem";
+  private static final String CLIENT_KEY_FILE = "client.key";
+  private static final String CA_PEM_FILE = "ca.pem";
 
   @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
@@ -368,12 +368,26 @@ public class SslContextSecretVolumeSecretProviderTest {
     }
   }
 
+  private static String getTempFileNameForResourcesFile(String resFile) throws IOException {
+    return TestUtils.loadCert(resFile).getAbsolutePath();
+  }
+
   /** Helper method to build SslContextSecretVolumeSecretProvider from given files. */
   private static SslContextSecretVolumeSecretProvider getSslContextSecretVolumeSecretProvider(
-      boolean server,
-      String certChainFilename,
-      String privateKeyFilename,
-      String trustedCaFilename) {
+      boolean server, String certChainFilename, String privateKeyFilename, String trustedCaFilename)
+      throws IOException {
+
+    // get temp file for each file
+    if (certChainFilename != null) {
+      certChainFilename = getTempFileNameForResourcesFile(certChainFilename);
+    }
+    if (privateKeyFilename != null) {
+      privateKeyFilename = getTempFileNameForResourcesFile(privateKeyFilename);
+    }
+    if (trustedCaFilename != null) {
+      trustedCaFilename = getTempFileNameForResourcesFile(trustedCaFilename);
+    }
+
     TlsCertificate tlsCert =
         (certChainFilename == null && privateKeyFilename == null)
             ? null
@@ -398,7 +412,7 @@ public class SslContextSecretVolumeSecretProviderTest {
    * check returned SslContext.
    */
   private void sslContextForEitherWithBothCertAndTrust(
-      boolean server, String pemFile, String keyFile, String caFile) throws SSLException {
+      boolean server, String pemFile, String keyFile, String caFile) throws IOException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
 
@@ -418,28 +432,28 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServer() throws SSLException {
+  public void getProviderForServer() throws IOException {
     sslContextForEitherWithBothCertAndTrust(
         true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForClient() throws SSLException {
+  public void getProviderForClient() throws IOException {
     sslContextForEitherWithBothCertAndTrust(false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForServer_onlyCert() throws SSLException {
+  public void getProviderForServer_onlyCert() throws IOException {
     sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, null);
   }
 
   @Test
-  public void getProviderForClient_onlyTrust() throws SSLException {
+  public void getProviderForClient_onlyTrust() throws IOException {
     sslContextForEitherWithBothCertAndTrust(false, null, null, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForServer_badFile_throwsException() throws SSLException {
+  public void getProviderForServer_badFile_throwsException() throws IOException {
     try {
       sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_PEM_FILE, null);
       Assert.fail("no exception thrown");
@@ -448,7 +462,6 @@ public class SslContextSecretVolumeSecretProviderTest {
     }
   }
 
-  @VisibleForTesting
   static class TestCallback<T> implements SecretProvider.Callback<T> {
 
     T updatedSecret;
@@ -477,7 +490,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServer_both_callsback() {
+  public void getProviderForServer_both_callsback() throws IOException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(
             true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
@@ -487,7 +500,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClient_both_callsback() {
+  public void getProviderForClient_both_callsback() throws IOException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
@@ -497,7 +510,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForClient_both_callsback_setException() {
+  public void getProviderForClient_both_callsback_setException() throws IOException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
