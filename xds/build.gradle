@@ -42,6 +42,7 @@ dependencies {
             project(':grpc-testing-proto'),
             libraries.guava_testlib
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
+    testRuntime libraries.netty_tcnative
 }
 
 sourceSets {

@@ -58,26 +58,15 @@ public class TlsCertificateSecretProviderMapTest {
         .build();
   }
 
-  static class TestCallback implements
-      SecretProvider.Callback<TlsCertificateStore> {
-
-    TlsCertificateStore updatedSecret;
-
-    @Override
-    public void updateSecret(TlsCertificateStore secret) {
-      updatedSecret = secret;
-    }
-  }
-
   /**
    * Helper method to get the value thru directExecutore callback. Used by other classes.
    */
   static TlsCertificateStore getValueThruCallback(SecretProvider<TlsCertificateStore> provider) {
-    TestCallback testCallback = new TestCallback();
+    SslContextSecretVolumeSecretProviderTest.TestCallback<TlsCertificateStore> testCallback
+            = new SslContextSecretVolumeSecretProviderTest.TestCallback<>();
     provider.addCallback(testCallback, MoreExecutors.directExecutor());
     return testCallback.updatedSecret;
   }
-
 
   @Test
   public void createTest() throws IOException, ExecutionException, InterruptedException {

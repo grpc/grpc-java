@@ -29,12 +29,16 @@ import java.util.concurrent.Executor;
 public interface SecretProvider<T> {
 
   interface Callback<T> {
+    /** Informs callee of new/updated secret. */
     void updateSecret(T secret);
+
+    /** Informs callee of an exception that was generated. */
+    void onException(Throwable throwable);
   }
 
   /**
-   * Registers a callback on the given executor. The callback will run when secret becomes
-   * available or immediately if the result is already available.
+   * Registers a callback on the given executor. The callback will run when secret becomes available
+   * or immediately if the result is already available.
    */
   void addCallback(Callback<T> callback, Executor executor);
 }
