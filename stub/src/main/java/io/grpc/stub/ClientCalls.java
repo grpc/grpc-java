@@ -454,7 +454,7 @@ public final class ClientCalls {
             observer.onNext(unaryMessage);
           } else {
             observer.onError(Status.INTERNAL
-                .withDescription("Status is OK but message is null for unary call")
+                .withDescription("Response message is null for unary call")
                 .asRuntimeException());
           }
         } else {
