@@ -43,17 +43,16 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
       Logger.getLogger(SslContextSecretVolumeSecretProvider.class.getName());
 
   private final boolean server;
-  private final String privateKey;
-
-  private final String privateKeyPassword;
-  private final String certificateChain;
-  private final String trustedCa;
+  @Nullable private final String privateKey;
+  @Nullable private final String privateKeyPassword;
+  @Nullable private final String certificateChain;
+  @Nullable private final String trustedCa;
 
   private SslContextSecretVolumeSecretProvider(
-      String privateKey,
-      String privateKeyPassword,
-      String certificateChain,
-      String trustedCa,
+      @Nullable String privateKey,
+      @Nullable String privateKeyPassword,
+      @Nullable String certificateChain,
+      @Nullable String trustedCa,
       boolean server) {
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
