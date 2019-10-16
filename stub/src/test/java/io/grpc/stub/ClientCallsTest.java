@@ -123,12 +123,12 @@ public class ClientCallsTest {
 
       @Override
       public void onError(Throwable t) {
-
+        fail("Should not reach here");
       }
 
       @Override
       public void onCompleted() {
-
+        fail("Should not reach here");
       }
     };
 
@@ -142,6 +142,7 @@ public class ClientCallsTest {
     Integer req = 2;
     final Status status = Status.OK;
     final Metadata trailers = new Metadata();
+    final List<Throwable> expected = new ArrayList<>();
 
     NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
       @Override
@@ -154,27 +155,24 @@ public class ClientCallsTest {
     StreamObserver<String> responseObserver = new StreamObserver<String>() {
       @Override
       public void onNext(String value) {
+        fail("Should not reach here");
       }
 
       @Override
       public void onError(Throwable t) {
-
+        expected.add(t);
       }
 
       @Override
       public void onCompleted() {
-
+        fail("Should not reach here");
       }
     };
 
-    try {
-      ClientCalls.asyncUnaryCall(call, req, responseObserver);
-      fail("Should fail");
-    } catch (StatusRuntimeException e) {
-      assertThat(e.getStatus().getCode()).isEqualTo(Status.INTERNAL.getCode());
-      assertThat(e.getMessage())
-          .isEqualTo("INTERNAL: Status is OK but message is null for unary call");
-    }
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(expected.size()).isEqualTo(1);
+    assertThat(expected.get(0).getMessage())
+        .isEqualTo("INTERNAL: Status is OK but message is null for unary call");
   }
 
   @Test
@@ -183,7 +181,7 @@ public class ClientCallsTest {
     final Status status = Status.INTERNAL.withDescription("Unique status");
     final String resp = "bar";
     final Metadata trailers = new Metadata();
-    final List<String> actualResponse = new ArrayList<>();
+    final List<Throwable> expected = new ArrayList<>();
 
     NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
       @Override
@@ -196,22 +194,24 @@ public class ClientCallsTest {
     StreamObserver<String> responseObserver = new StreamObserver<String>() {
       @Override
       public void onNext(String value) {
-        actualResponse.add(value);
+        fail("Should not reach here");
       }
 
       @Override
       public void onError(Throwable t) {
-
+        expected.add(t);
       }
 
       @Override
       public void onCompleted() {
-
+        fail("Should not reach here");
       }
     };
 
     ClientCalls.asyncUnaryCall(call, req, responseObserver);
-    assertThat(actualResponse.size()).isEqualTo(0);
+    assertThat(expected.size()).isEqualTo(1);
+    assertThat(expected.get(0).getMessage())
+        .isEqualTo("INTERNAL: Unique status");
   }
 
   @Test
