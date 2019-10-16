@@ -74,7 +74,7 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
       for (X509Certificate cert : certs) {
         // note: alias lookup uses toLowerCase(Locale.ENGLISH)
         // so our alias needs to be all lower-case and unique
-        ks.setCertificateEntry("alias" + Integer.toString(i), cert);
+        ks.setCertificateEntry("alias" + i, cert);
         i++;
       }
       tmf.init(ks);

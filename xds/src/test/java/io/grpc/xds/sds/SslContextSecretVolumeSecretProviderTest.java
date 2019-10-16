@@ -53,7 +53,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           /* certContext= */ null, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("certContext is required");
+      assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
     }
   }
 
@@ -66,7 +66,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           certContext, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("certContext is required");
+      assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
     }
   }
 
@@ -101,7 +101,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           certContext, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -126,7 +126,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           /* tlsCertificate= */ null, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("tlsCertificate is required");
+      assertThat(expected).hasMessageThat().isEqualTo("tlsCertificate is required");
     }
   }
 
@@ -159,7 +159,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -174,7 +174,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -189,7 +189,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -204,7 +204,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -246,7 +246,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -262,7 +262,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -273,7 +273,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           /* tlsCertificate= */ null, /* certContext= */ null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("tlsCertificate is required");
+      assertThat(expected).hasMessageThat().isEqualTo("tlsCertificate is required");
     }
   }
 
@@ -284,7 +284,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.getProviderForServer(tlsCert, /* certContext= */ null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -314,7 +314,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           /* tlsCertificate= */ null, /* certContext= */ null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("certContext is required");
+      assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
     }
   }
 
@@ -326,7 +326,7 @@ public class SslContextSecretVolumeSecretProviderTest {
           /* tlsCertificate= */ null, certContext);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("certContext is required");
+      assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
     }
   }
 
@@ -345,7 +345,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -364,7 +364,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).isEqualTo("filename expected");
+      assertThat(expected).hasMessageThat().isEqualTo("filename expected");
     }
   }
 
@@ -411,7 +411,7 @@ public class SslContextSecretVolumeSecretProviderTest {
    * Helper method to build SslContextSecretVolumeSecretProvider, call buildSslContext on it and
    * check returned SslContext.
    */
-  private void sslContextForEitherWithBothCertAndTrust(
+  private static void sslContextForEitherWithBothCertAndTrust(
       boolean server, String pemFile, String keyFile, String caFile) throws IOException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
@@ -420,7 +420,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     doChecksOnSslContext(server, sslContext);
   }
 
-  private void doChecksOnSslContext(boolean server, SslContext sslContext) {
+  private static void doChecksOnSslContext(boolean server, SslContext sslContext) {
     if (server) {
       assertThat(sslContext.isServer()).isTrue();
     } else {
@@ -458,7 +458,7 @@ public class SslContextSecretVolumeSecretProviderTest {
       sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_PEM_FILE, null);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
-      assertThat(expected.getMessage()).contains("File does not contain valid private key");
+      assertThat(expected).hasMessageThat().contains("File does not contain valid private key");
     }
   }
 
@@ -517,7 +517,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     TestCallback<SslContext> testCallback = getValueThruCallback(provider);
     assertThat(testCallback.updatedSecret).isNull();
     assertThat(testCallback.updatedThrowable).isInstanceOf(IllegalArgumentException.class);
-    assertThat(testCallback.updatedThrowable.getMessage())
+    assertThat(testCallback.updatedThrowable).hasMessageThat()
         .contains("File does not contain valid private key");
   }
 }
