@@ -100,6 +100,81 @@ public class ClientCallsTest {
   }
 
   @Test
+  public void unaryAsyncCallIsOkGetMessage() throws Exception {
+    Integer req = 2;
+    final String resp = "bar";
+    final Status status = Status.OK;
+    final Metadata trailers = new Metadata();
+    final List<String> actualResponse = new ArrayList<>();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(resp);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+        actualResponse.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+
+      }
+
+      @Override
+      public void onCompleted() {
+
+      }
+    };
+
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(actualResponse.size()).isEqualTo(1);
+    assertEquals(resp, actualResponse.get(0));
+  }
+
+  @Test
+  public void unaryAsyncCallIsNotOkDoNotGetMessage() throws Exception {
+    Integer req = 2;
+    final Status status = Status.INTERNAL.withDescription("Unique status");
+    final String resp = "bar";
+    final Metadata trailers = new Metadata();
+    final List<String> actualResponse = new ArrayList<>();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(io.grpc.ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(resp);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+        actualResponse.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+
+      }
+
+      @Override
+      public void onCompleted() {
+
+      }
+    };
+
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(actualResponse.size()).isEqualTo(0);
+  }
+
+  @Test
   public void unaryBlockingCallSuccess() throws Exception {
     Integer req = 2;
     final String resp = "bar";

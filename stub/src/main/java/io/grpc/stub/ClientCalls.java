@@ -401,6 +401,7 @@ public final class ClientCalls {
     private final CallToStreamObserverAdapter<ReqT> adapter;
     private final boolean streamingResponse;
     private boolean firstResponseReceived;
+    private RespT unaryMessage;
 
     // Non private to avoid synthetic class
     StreamObserverToCallListenerAdapter(
@@ -431,7 +432,12 @@ public final class ClientCalls {
             .asRuntimeException();
       }
       firstResponseReceived = true;
-      observer.onNext(message);
+
+      if (streamingResponse) {
+        observer.onNext(message);
+      } else {
+        unaryMessage = message;
+      }
 
       if (streamingResponse && adapter.autoFlowControlEnabled) {
         // Request delivery of the next inbound message.
@@ -442,6 +448,9 @@ public final class ClientCalls {
     @Override
     public void onClose(Status status, Metadata trailers) {
       if (status.isOk()) {
+        if (!streamingResponse && unaryMessage != null) {
+          observer.onNext(unaryMessage);
+        }
         observer.onCompleted();
       } else {
         observer.onError(status.asRuntimeException(trailers));
