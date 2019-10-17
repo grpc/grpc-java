@@ -106,6 +106,7 @@ public class ClientCallsTest {
     final Status status = Status.OK;
     final Metadata trailers = new Metadata();
     final List<String> actualResponse = new ArrayList<>();
+    final List<Boolean> completed = new ArrayList<>();
 
     NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
       @Override
@@ -128,13 +129,15 @@ public class ClientCallsTest {
 
       @Override
       public void onCompleted() {
-        fail("Should not reach here");
+        completed.add(true);
       }
     };
 
     ClientCalls.asyncUnaryCall(call, req, responseObserver);
     assertThat(actualResponse.size()).isEqualTo(1);
     assertEquals(resp, actualResponse.get(0));
+    assertThat(completed.size()).isEqualTo(1);
+    assertThat(completed.get(0)).isTrue();
   }
 
   @Test
