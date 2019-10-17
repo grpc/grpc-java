@@ -452,6 +452,7 @@ public final class ClientCalls {
         if (!streamingResponse) {
           if (unaryMessage != null) {
             observer.onNext(unaryMessage);
+            observer.onCompleted();
           } else {
             observer.onError(Status.INTERNAL
                 .withDescription("Response message is null for unary call")
