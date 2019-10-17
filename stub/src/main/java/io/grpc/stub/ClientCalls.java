@@ -450,13 +450,10 @@ public final class ClientCalls {
     public void onClose(Status status, Metadata trailers) {
       Throwable error = null;
       if (status.isOk()) {
-        boolean shouldCallOnCompleted = true;
         if (!streamingResponse) {
-          shouldCallOnCompleted = false;
           if (unaryMessage != null) {
             try {
               observer.onNext(unaryMessage);
-              shouldCallOnCompleted = true;
             } catch (Throwable t) {
               error = t;
             }
@@ -465,15 +462,13 @@ public final class ClientCalls {
                 .asRuntimeException();
           }
         }
-
-        if (shouldCallOnCompleted) {
-          observer.onCompleted();
-        }
       } else {
         error = status.asRuntimeException(trailers);
       }
 
-      if (error != null) {
+      if (error == null) {
+        observer.onCompleted();
+      } else {
         observer.onError(error);
       }
     }
