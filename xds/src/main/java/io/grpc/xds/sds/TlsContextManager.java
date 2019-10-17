@@ -25,27 +25,33 @@ import io.netty.handler.ssl.SslContext;
  * Class to manage secrets used to create SSL contexts - this effectively manages SSL contexts
  * (aka TlsContexts) based on inputs we get from xDS. This is used by gRPC-xds to access the
  * SSL contexts/secrets and is not public API.
+ * Currently it just creates a new SecretProvider for each call.
  */
+// TODO(sanjaypujare): implement a Map and ref-counting
 @Internal
 public final class TlsContextManager {
 
-  /**
-   * Finds an existing SecretProvider or creates it if it doesn't exist.
-   * Used for retrieving a server-side SslContext
-   */
-  public SecretProvider<SslContext> findOrCreateServerSslContextProvider(
-      DownstreamTlsContext downstreamTlsContext) {
-    // TODO(sanjaypujare): implementation of SecretProvider<SslContext>
-    return null;
+  private static TlsContextManager instance;
+
+  private TlsContextManager() {}
+
+  /** Gets the ContextManager singleton. */
+  public static synchronized TlsContextManager getInstance() {
+    if (instance == null) {
+      instance = new TlsContextManager();
+    }
+    return instance;
   }
 
-  /**
-   * Finds an existing SecretProvider or creates it if it doesn't exist.
-   * Used for retrieving a client-side SslContext
-   */
+  /** Creates a SecretProvider. Used for retrieving a server-side SslContext. */
+  public SecretProvider<SslContext> findOrCreateServerSslContextProvider(
+      DownstreamTlsContext downstreamTlsContext) {
+    return SslContextSecretVolumeSecretProvider.getProviderForServer(downstreamTlsContext);
+  }
+
+  /** Creates a SecretProvider. Used for retrieving a client-side SslContext. */
   public SecretProvider<SslContext> findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
-    // TODO(sanjaypujare): implementation of SecretProvider<SslContext>
-    return null;
+    return SslContextSecretVolumeSecretProvider.getProviderForClient(upstreamTlsContext);
   }
 }

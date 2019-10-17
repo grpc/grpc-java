@@ -31,7 +31,6 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.net.ssl.ManagerFactoryParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -47,19 +46,17 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
   private SdsX509TrustManager sdsX509TrustManager;
 
-  /** Constructor that loads certs from a file. */
-  public SdsTrustManagerFactory(
-      String certsFile, @Nullable CertificateValidationContext certContext)
+  /** Constructor constructs from a {@link CertificateValidationContext}. */
+  public SdsTrustManagerFactory(CertificateValidationContext certContext)
       throws CertificateException, IOException, CertStoreException {
-    this(CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
+    checkNotNull(certContext, "certContext");
+    String certsFile = getTrustedCaFromCertContext(certContext);
+    createSdsX509TrustManager(
+        CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
   }
 
-  /** Constructor that takes array of certs. */
-  public SdsTrustManagerFactory(
-      X509Certificate[] certs, @Nullable CertificateValidationContext certContext)
-      throws CertStoreException {
-    checkNotNull(certs, "certs");
-    createSdsX509TrustManager(certs, certContext);
+  private static String getTrustedCaFromCertContext(CertificateValidationContext certContext) {
+    return certContext != null ? certContext.getTrustedCa().getFilename() : null;
   }
 
   private void createSdsX509TrustManager(
