@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 The gRPC Authors
+ * Copyright 2019 The gRPC Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-package io.grpc.internal;
+package io.grpc.grpclb;
+
+import io.grpc.Internal;
+import io.grpc.internal.BaseDnsNameResolverProvider;
 
 /**
- * A provider for {@link DnsNameResolver}.
+ * A provider for {@code io.grpc.internal.DnsNameResolver} for gRPC lb.
  *
  * <p>It resolves a target URI whose scheme is {@code "dns"}. The (optional) authority of the target
  * URI is reserved for the address of alternative DNS server (not implemented yet). The path of the
@@ -30,16 +33,21 @@ package io.grpc.internal;
  *   yet))</li>
  *   <li>{@code "dns:///foo.googleapis.com"} (without port)</li>
  * </ul>
+ *
+ * <p>Note: the main difference between {@code io.grpc.DnsNameResolver} is service record is enabled
+ * by default.
  */
-public final class DnsNameResolverProvider extends BaseDnsNameResolverProvider {
+@Internal
+public class GrpclbNameResolverProvider extends BaseDnsNameResolverProvider {
 
   @Override
   protected boolean isSrvEnabled() {
-    return Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "false"));
+    return Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "true"));
   }
 
   @Override
   protected int priority() {
-    return 5;
+    // Must be higher than DnsNameResolverProvider#priority.
+    return 6;
   }
 }
