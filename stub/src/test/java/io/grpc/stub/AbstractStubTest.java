@@ -20,10 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 
 import io.grpc.CallOptions;
 import io.grpc.Channel;
-import io.grpc.stub.AbstractFutureStubTest.NoopFutureStub;
 import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.AbstractStubTest.NoopStub;
-import io.grpc.stub.ClientCalls.StubType;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;

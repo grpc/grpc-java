@@ -26,7 +26,6 @@ import io.grpc.ClientInterceptors;
 import io.grpc.Deadline;
 import io.grpc.ExperimentalApi;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.stub.ClientCalls.StubType;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckReturnValue;
