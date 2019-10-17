@@ -448,21 +448,33 @@ public final class ClientCalls {
 
     @Override
     public void onClose(Status status, Metadata trailers) {
+      Throwable error = null;
       if (status.isOk()) {
+        boolean shouldCallOnCompleted = true;
         if (!streamingResponse) {
+          shouldCallOnCompleted = false;
           if (unaryMessage != null) {
-            observer.onNext(unaryMessage);
-            observer.onCompleted();
+            try {
+              observer.onNext(unaryMessage);
+              shouldCallOnCompleted = true;
+            } catch (Throwable t) {
+              error = t;
+            }
           } else {
-            observer.onError(Status.INTERNAL
-                .withDescription("Response message is null for unary call")
-                .asRuntimeException());
+            error = Status.INTERNAL.withDescription("Response message is null for unary call")
+                .asRuntimeException();
           }
-        } else {
+        }
+
+        if (shouldCallOnCompleted) {
           observer.onCompleted();
         }
       } else {
-        observer.onError(status.asRuntimeException(trailers));
+        error = status.asRuntimeException(trailers);
+      }
+
+      if (error != null) {
+        observer.onError(error);
       }
     }
 
