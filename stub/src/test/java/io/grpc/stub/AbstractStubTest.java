@@ -16,9 +16,15 @@
 
 package io.grpc.stub;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import io.grpc.CallOptions;
 import io.grpc.Channel;
+import io.grpc.stub.AbstractFutureStubTest.NoopFutureStub;
+import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.AbstractStubTest.NoopStub;
+import io.grpc.stub.ClientCalls.StubType;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -28,6 +34,19 @@ public class AbstractStubTest extends BaseAbstractStubTest<NoopStub> {
   @Override
   NoopStub create(Channel channel, CallOptions callOptions) {
     return new NoopStub(channel, callOptions);
+  }
+
+  @Test
+  public void defaultCallOptions() {
+    NoopStub stub = NoopStub.newStub(new StubFactory<NoopStub>() {
+      @Override
+      public NoopStub newStub(Channel channel, CallOptions callOptions) {
+        return create(channel, callOptions);
+      }
+    }, channel, CallOptions.DEFAULT);
+
+    assertThat(stub.getCallOptions().getOption(ClientCalls.STUB_TYPE_OPTION))
+        .isNull();
   }
 
   class NoopStub extends AbstractStub<NoopStub> {

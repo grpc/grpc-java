@@ -124,8 +124,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
    */
   public static <T extends AbstractStub<T>> T newStub(
       StubFactory<T> factory, Channel channel, CallOptions callOptions) {
-    return factory.newStub(
-        channel, callOptions.withOption(ClientCalls.STUB_TYPE_OPTION, StubType.FUTURE));
+    return factory.newStub(channel, callOptions);
   }
 
   /**
