@@ -37,7 +37,7 @@ public abstract class BaseDnsNameResolverProvider extends NameResolverProvider {
   public static final String ENABLE_GRPCLB_PROPERTY_NAME =
       "io.grpc.internal.DnsNameResolverProvider.enable_grpclb";
 
-  /** Returns boolean value of {@link #ENABLE_GRPCLB_PROPERTY_NAME}. */
+  /** Returns boolean value of system property {@link #ENABLE_GRPCLB_PROPERTY_NAME}. */
   protected abstract boolean isSrvEnabled();
 
   @Override

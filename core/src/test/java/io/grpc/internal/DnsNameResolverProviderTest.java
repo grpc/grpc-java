@@ -69,7 +69,7 @@ public class DnsNameResolverProviderTest {
   }
 
   @Test
-  public void enableSrv_noDefault() {
+  public void enableSrv_useDefault() {
     System.clearProperty(ENABLE_GRPCLB_PROPERTY_NAME);
 
     assertThat(new DnsNameResolverProvider().isSrvEnabled()).isFalse();
