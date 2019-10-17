@@ -33,6 +33,7 @@ import io.grpc.ServerCallHandler;
 import io.grpc.ServerServiceDefinition;
 import io.grpc.ServiceDescriptor;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -437,6 +438,80 @@ public class ServerCallsTest {
     assertEquals(ServerCalls.TOO_MANY_REQUESTS, serverCall.status.getDescription());
     // ensure onHalfClose does not invoke
     listener.onHalfClose();
+  }
+
+  @Test
+  public void serverUnaryMultipleMsgGetErrorWithoutMsg() {
+
+    ServerCallHandler<Integer, Integer> serverCallHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+                responseObserver.onNext(request);
+                responseObserver.onCompleted();
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        serverCallHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    callListener.onReady();
+    callListener.onMessage(1);
+    callListener.onMessage(1);
+    callListener.onHalfClose();
+    assertThat(serverCall.status.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(serverCall.status.getDescription())
+        .isEqualTo("Too many requests");
+    assertThat(serverCall.responses).isEmpty();
+  }
+
+  @Test
+  public void serverUnaryNullMsgGetErrorWithoutMsg() {
+
+    ServerCallHandler<Integer, Integer> serverCallHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+                responseObserver.onNext(null);
+                responseObserver.onCompleted();
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        serverCallHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    callListener.onReady();
+    callListener.onMessage(1);
+    callListener.onHalfClose();
+    assertThat(serverCall.status.getCode()).isEqualTo(Code.INTERNAL);
+    assertThat(serverCall.status.getDescription())
+        .isEqualTo("Response message is null for unary call");
+    assertThat(serverCall.responses).isEmpty();
+  }
+
+  @Test
+  public void serverUnaryMsgGetOkWithMsg() {
+
+    ServerCallHandler<Integer, Integer> serverCallHandler =
+        ServerCalls.asyncUnaryCall(
+            new ServerCalls.UnaryMethod<Integer, Integer>() {
+              @Override
+              public void invoke(Integer request, StreamObserver<Integer> responseObserver) {
+                responseObserver.onNext(request);
+                responseObserver.onCompleted();
+              }
+            });
+    ServerCall.Listener<Integer> callListener =
+        serverCallHandler.startCall(serverCall, new Metadata());
+    serverCall.isReady = true;
+    serverCall.isCancelled = false;
+    callListener.onReady();
+    callListener.onMessage(132);
+    callListener.onHalfClose();
+    assertThat(serverCall.status.getCode()).isEqualTo(Code.OK);
+    assertThat(serverCall.responses).containsExactly(132);
   }
 
   @Test

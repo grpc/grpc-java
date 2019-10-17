@@ -314,6 +314,7 @@ public final class ServerCalls {
     private Runnable onCancelHandler;
     private boolean aborted = false;
     private boolean completed = false;
+    private RespT unaryResponse;
 
     // Non private to avoid synthetic class
     ServerCallStreamObserverImpl(ServerCall<ReqT, RespT> call) {
@@ -348,7 +349,13 @@ public final class ServerCalls {
         call.sendHeaders(new Metadata());
         sentHeaders = true;
       }
-      call.sendMessage(response);
+
+      if (!call.getMethodDescriptor().getType().serverSendsOneMessage()) {
+        call.sendMessage(response);
+      } else {
+        // delay the sendMessage() to onComplete()/onError()
+        unaryResponse = response;
+      }
     }
 
     @Override
@@ -368,8 +375,28 @@ public final class ServerCalls {
           throw Status.CANCELLED.withDescription("call already cancelled").asRuntimeException();
         }
       } else {
-        call.close(Status.OK, new Metadata());
-        completed = true;
+
+        if (call.getMethodDescriptor().getType().serverSendsOneMessage()) {
+          Throwable error = null;
+          if (unaryResponse != null) {
+            try {
+              call.sendMessage(unaryResponse);
+            } catch (Throwable t) {
+              error = t;
+            }
+          } else {
+            error = Status.INTERNAL.withDescription("Response message is null for unary call")
+                .asRuntimeException();
+          }
+          if (error != null) {
+            onError(error);
+          }
+        }
+
+        if (!aborted) {
+          call.close(Status.OK, new Metadata());
+          completed = true;
+        }
       }
     }
 
