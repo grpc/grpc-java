@@ -100,6 +100,123 @@ public class ClientCallsTest {
   }
 
   @Test
+  public void unaryAsyncCallStatusIsOkWithMessageSuccess() throws Exception {
+    Integer req = 2;
+    final String resp = "bar";
+    final Status status = Status.OK;
+    final Metadata trailers = new Metadata();
+    final List<String> actualResponse = new ArrayList<>();
+    final List<Boolean> completed = new ArrayList<>();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(resp);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+        actualResponse.add(value);
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        fail("Should not reach here");
+      }
+
+      @Override
+      public void onCompleted() {
+        completed.add(true);
+      }
+    };
+
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(actualResponse.size()).isEqualTo(1);
+    assertEquals(resp, actualResponse.get(0));
+    assertThat(completed.size()).isEqualTo(1);
+    assertThat(completed.get(0)).isTrue();
+  }
+
+  @Test
+  public void unaryAsyncCallStatusIsOkWithNullMessageGetError() throws Exception {
+    Integer req = 2;
+    final Status status = Status.OK;
+    final Metadata trailers = new Metadata();
+    final List<Throwable> expected = new ArrayList<>();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(null);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+        fail("Should not reach here");
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        expected.add(t);
+      }
+
+      @Override
+      public void onCompleted() {
+        fail("Should not reach here");
+      }
+    };
+
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(expected.size()).isEqualTo(1);
+    assertThat(expected.get(0)).hasMessageThat()
+        .isEqualTo("INTERNAL: Response message is null for unary call");
+  }
+
+  @Test
+  public void unaryAsyncCallStatusIsNotOkWithMessageDoNotSendMessage() throws Exception {
+    Integer req = 2;
+    final Status status = Status.INTERNAL.withDescription("Unique status");
+    final String resp = "bar";
+    final Metadata trailers = new Metadata();
+    final List<Throwable> expected = new ArrayList<>();
+
+    NoopClientCall<Integer, String> call = new NoopClientCall<Integer, String>() {
+      @Override
+      public void start(io.grpc.ClientCall.Listener<String> listener, Metadata headers) {
+        listener.onMessage(resp);
+        listener.onClose(status, trailers);
+      }
+    };
+
+    StreamObserver<String> responseObserver = new StreamObserver<String>() {
+      @Override
+      public void onNext(String value) {
+        fail("Should not reach here");
+      }
+
+      @Override
+      public void onError(Throwable t) {
+        expected.add(t);
+      }
+
+      @Override
+      public void onCompleted() {
+        fail("Should not reach here");
+      }
+    };
+
+    ClientCalls.asyncUnaryCall(call, req, responseObserver);
+    assertThat(expected.size()).isEqualTo(1);
+    assertThat(expected.get(0)).hasMessageThat().isEqualTo("INTERNAL: Unique status");
+  }
+
+  @Test
   public void unaryBlockingCallSuccess() throws Exception {
     Integer req = 2;
     final String resp = "bar";
