@@ -534,7 +534,9 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     /**
      * Sets whether the method is idempotent.  If true, calling this method more than once doesn't
-     * have additional side effects. If {@code false}, method is also not safe.
+     * have additional side effects. If {@code false}, method is also not safe. Note that implies
+     * calling {@code builder.setIdempotent(false).setIdempotent(true)} will leave {@code
+     * isSafe() == false}.
      *
      * @since 1.1.0
      */
@@ -549,7 +551,8 @@ public final class MethodDescriptor<ReqT, RespT> {
 
     /**
      * Sets whether this method is safe.  If true, calling this method any number of times doesn't
-     * have side effects. If {@code true}, method is also idempotent.
+     * have side effects. If {@code true}, method is also idempotent. Note that implies calling
+     * {@code builder.setSafe(true).setSafe(false)} will leave {@code isIdempotent() == true}.
      *
      * @since 1.1.0
      */
