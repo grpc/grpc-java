@@ -100,7 +100,7 @@ public class ClientCallsTest {
   }
 
   @Test
-  public void unaryAsyncCallIsOkGetMessage() throws Exception {
+  public void unaryAsyncCallStatusIsOkWithMessageSuccess() throws Exception {
     Integer req = 2;
     final String resp = "bar";
     final Status status = Status.OK;
@@ -138,7 +138,7 @@ public class ClientCallsTest {
   }
 
   @Test
-  public void unaryAsyncCallIsOkGetNullMessage() throws Exception {
+  public void unaryAsyncCallStatusIsOkWithNullMessageGetError() throws Exception {
     Integer req = 2;
     final Status status = Status.OK;
     final Metadata trailers = new Metadata();
@@ -176,7 +176,7 @@ public class ClientCallsTest {
   }
 
   @Test
-  public void unaryAsyncCallIsNotOkDoNotGetMessage() throws Exception {
+  public void unaryAsyncCallStatusIsNotOkWithMessageDoNotSendMessage() throws Exception {
     Integer req = 2;
     final Status status = Status.INTERNAL.withDescription("Unique status");
     final String resp = "bar";
