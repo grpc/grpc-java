@@ -174,7 +174,7 @@ public class ClientCallsTest {
 
     ClientCalls.asyncUnaryCall(call, req, responseObserver);
     assertThat(expected.size()).isEqualTo(1);
-    assertThat(expected.get(0).getMessage())
+    assertThat(expected.get(0)).hasMessageThat()
         .isEqualTo("INTERNAL: Response message is null for unary call");
   }
 
@@ -213,8 +213,7 @@ public class ClientCallsTest {
 
     ClientCalls.asyncUnaryCall(call, req, responseObserver);
     assertThat(expected.size()).isEqualTo(1);
-    assertThat(expected.get(0).getMessage())
-        .isEqualTo("INTERNAL: Unique status");
+    assertThat(expected.get(0)).hasMessageThat().isEqualTo("INTERNAL: Unique status");
   }
 
   @Test
