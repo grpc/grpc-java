@@ -53,7 +53,7 @@ final class SecretGrpclbNameResolverProvider {
     }
 
     @Override
-    protected int priority() {
+    public int priority() {
       // Must be higher than DnsNameResolverProvider#priority.
       return 6;
     }

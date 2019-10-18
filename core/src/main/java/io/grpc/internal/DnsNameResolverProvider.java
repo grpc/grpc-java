@@ -42,7 +42,7 @@ public final class DnsNameResolverProvider extends BaseDnsNameResolverProvider {
   }
 
   @Override
-  protected int priority() {
+  public int priority() {
     return 5;
   }
 }
