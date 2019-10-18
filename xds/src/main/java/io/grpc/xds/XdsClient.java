@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import io.grpc.Status;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
@@ -61,7 +62,7 @@ abstract class XdsClient {
      */
     void onConfigChanged(ConfigUpdate update);
 
-    void onError(Throwable t);
+    void onError(Status error);
   }
 
   /**
@@ -71,7 +72,7 @@ abstract class XdsClient {
 
     void onClusterChanged(CdsUpdate update);
 
-    void onError(Throwable t);
+    void onError(Status error);
   }
 
   /**
@@ -81,7 +82,7 @@ abstract class XdsClient {
 
     void onEndpointChanged(CdsUpdate update);
 
-    void onError(Throwable t);
+    void onError(Status error);
   }
 
   /**
