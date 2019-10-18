@@ -45,6 +45,9 @@ envoy/api/v2/listener/listener.proto
 envoy/api/v2/listener/udp_listener_config.proto
 envoy/api/v2/rds.proto
 envoy/api/v2/route/route.proto
+envoy/api/v2/srds.proto
+envoy/config/filter/accesslog/v2/accesslog.proto
+envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/service/discovery/v2/ads.proto
 envoy/service/load_stats/v2/lrs.proto
