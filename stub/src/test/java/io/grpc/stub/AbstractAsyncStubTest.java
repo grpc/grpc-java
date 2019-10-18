@@ -27,7 +27,10 @@ import io.grpc.stub.AbstractFutureStubTest.NoopFutureStub;
 import io.grpc.stub.AbstractStub.StubFactory;
 import io.grpc.stub.ClientCalls.StubType;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
+@RunWith(JUnit4.class)
 public class AbstractAsyncStubTest extends BaseAbstractStubTest<NoopAsyncStub> {
 
   @Override
