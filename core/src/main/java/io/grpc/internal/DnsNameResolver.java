@@ -92,8 +92,6 @@ final class DnsNameResolver extends NameResolver {
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
   private static final String JNDI_LOCALHOST_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
-  private static final String JNDI_SRV_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "false");
   private static final String JNDI_TXT_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_service_config", "false");
 
@@ -116,8 +114,6 @@ final class DnsNameResolver extends NameResolver {
   static boolean enableJndi = Boolean.parseBoolean(JNDI_PROPERTY);
   @VisibleForTesting
   static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
-  @VisibleForTesting
-  static boolean enableSrv = Boolean.parseBoolean(JNDI_SRV_PROPERTY);
   @VisibleForTesting
   static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
 
@@ -152,6 +148,7 @@ final class DnsNameResolver extends NameResolver {
 
   /** True if using an executor resource that should be released after use. */
   private final boolean usingExecutorResource;
+  private final boolean enableSrv;
 
   private boolean resolving;
 
@@ -159,8 +156,14 @@ final class DnsNameResolver extends NameResolver {
   // from any thread.
   private NameResolver.Listener2 listener;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Args args,
-      Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
+  DnsNameResolver(
+      @Nullable String nsAuthority,
+      String name,
+      Args args,
+      Resource<Executor> executorResource,
+      Stopwatch stopwatch,
+      boolean isAndroid,
+      boolean enableSrv) {
     Preconditions.checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
@@ -184,6 +187,7 @@ final class DnsNameResolver extends NameResolver {
         Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.executor = args.getBlockingExecutor();
     this.usingExecutorResource = executor == null;
+    this.enableSrv = enableSrv;
   }
 
   @Override
