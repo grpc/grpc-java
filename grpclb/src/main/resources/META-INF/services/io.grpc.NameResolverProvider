@@ -1,1 +1,1 @@
-io.grpc.grpclb.GrpclbNameResolverProvider
+io.grpc.grpclb.SecretGrpclbNameResolverProvider$Provider

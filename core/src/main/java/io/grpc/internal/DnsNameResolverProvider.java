@@ -33,9 +33,12 @@ package io.grpc.internal;
  */
 public final class DnsNameResolverProvider extends BaseDnsNameResolverProvider {
 
+  private static final boolean SRV_ENABLED =
+      Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "false"));
+
   @Override
   protected boolean isSrvEnabled() {
-    return Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "false"));
+    return SRV_ENABLED;
   }
 
   @Override

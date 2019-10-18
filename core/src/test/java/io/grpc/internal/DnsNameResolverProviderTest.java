@@ -16,8 +16,6 @@
 
 package io.grpc.internal;
 
-import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.BaseDnsNameResolverProvider.ENABLE_GRPCLB_PROPERTY_NAME;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -27,9 +25,6 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
 import java.net.URI;
-import javax.annotation.Nullable;
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -51,52 +46,15 @@ public class DnsNameResolverProviderTest {
       .setServiceConfigParser(mock(ServiceConfigParser.class))
       .build();
 
-  @Nullable
-  private String jndiSrvProperty;
-
-  @Before
-  public void memoizeSrvProperty() {
-    jndiSrvProperty = System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME);
-  }
-
-  @After
-  public void restoreSrvProperty() {
-    if (jndiSrvProperty == null) {
-      System.clearProperty(ENABLE_GRPCLB_PROPERTY_NAME);
-    } else {
-      System.setProperty(ENABLE_GRPCLB_PROPERTY_NAME, jndiSrvProperty);
-    }
-  }
-
-  @Test
-  public void enableSrv_useDefault() {
-    System.clearProperty(ENABLE_GRPCLB_PROPERTY_NAME);
-
-    assertThat(new DnsNameResolverProvider().isSrvEnabled()).isFalse();
-  }
-
-  @Test
-  public void enableSrv_defaultEnabled() {
-    System.setProperty(ENABLE_GRPCLB_PROPERTY_NAME, "true");
-
-    assertThat(new DnsNameResolverProvider().isSrvEnabled()).isTrue();
-  }
-
-  @Test
-  public void enableSrv_defaultDisabled() {
-    System.setProperty(ENABLE_GRPCLB_PROPERTY_NAME, "false");
-
-    assertThat(new DnsNameResolverProvider().isSrvEnabled()).isFalse();
-  }
+  private DnsNameResolverProvider provider = new DnsNameResolverProvider();
 
   @Test
   public void isAvailable() {
-    assertTrue(new DnsNameResolverProvider().isAvailable());
+    assertTrue(provider.isAvailable());
   }
 
   @Test
   public void newNameResolver() {
-    DnsNameResolverProvider provider = new DnsNameResolverProvider();
     assertSame(DnsNameResolver.class,
         provider.newNameResolver(URI.create("dns:///localhost:443"), args).getClass());
     assertNull(

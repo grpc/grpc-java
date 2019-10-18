@@ -16,7 +16,6 @@
 
 package io.grpc.grpclb;
 
-import io.grpc.Internal;
 import io.grpc.internal.BaseDnsNameResolverProvider;
 
 /**
@@ -37,17 +36,26 @@ import io.grpc.internal.BaseDnsNameResolverProvider;
  * <p>Note: the main difference between {@code io.grpc.DnsNameResolver} is service record is enabled
  * by default.
  */
-@Internal
-public class GrpclbNameResolverProvider extends BaseDnsNameResolverProvider {
+// Make it package-private so that it cannot be directly referenced by users.  Java service loader
+// requires the provider to be public, but we can hide it under a package-private class.
+final class SecretGrpclbNameResolverProvider {
 
-  @Override
-  protected boolean isSrvEnabled() {
-    return Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "true"));
-  }
+  private SecretGrpclbNameResolverProvider() {}
 
-  @Override
-  protected int priority() {
-    // Must be higher than DnsNameResolverProvider#priority.
-    return 6;
+  public static final class Provider extends BaseDnsNameResolverProvider {
+
+    private static final boolean SRV_ENABLED =
+        Boolean.parseBoolean(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME, "true"));
+
+    @Override
+    protected boolean isSrvEnabled() {
+      return SRV_ENABLED;
+    }
+
+    @Override
+    protected int priority() {
+      // Must be higher than DnsNameResolverProvider#priority.
+      return 6;
+    }
   }
 }

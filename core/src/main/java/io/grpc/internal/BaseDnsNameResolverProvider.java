@@ -19,7 +19,6 @@ package io.grpc.internal;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
-import io.grpc.Internal;
 import io.grpc.InternalServiceProviders;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
@@ -28,7 +27,6 @@ import java.net.URI;
 /**
  * Base provider of name resolvers for name agnostic consumption.
  */
-@Internal
 public abstract class BaseDnsNameResolverProvider extends NameResolverProvider {
 
   private static final String SCHEME = "dns";
