@@ -451,7 +451,6 @@ final class DnsNameResolver extends NameResolver {
    *
    * @throws IOException if one of the txt records contains improperly formatted JSON.
    */
-  @SuppressWarnings("unchecked")
   @VisibleForTesting
   static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) throws IOException {
     List<Map<String, ?>> possibleServiceConfigChoices = new ArrayList<>();

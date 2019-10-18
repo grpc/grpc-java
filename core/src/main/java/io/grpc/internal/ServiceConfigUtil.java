@@ -352,7 +352,6 @@ public final class ServiceConfigUtil {
   /**
    * Extracts load balancing configs from a service config.
    */
-  @SuppressWarnings("unchecked")
   @VisibleForTesting
   public static List<Map<String, ?>> getLoadBalancingConfigsFromServiceConfig(
       Map<String, ?> serviceConfig) {
@@ -397,7 +396,6 @@ public final class ServiceConfigUtil {
    * (map) with exactly one entry, where the key is the policy name and the value is a config object
    * for that policy.
    */
-  @SuppressWarnings("unchecked")
   public static LbConfig unwrapLoadBalancingConfig(Map<String, ?> lbConfig) {
     if (lbConfig.size() != 1) {
       throw new RuntimeException(
@@ -411,7 +409,6 @@ public final class ServiceConfigUtil {
   /**
    * Given a JSON list of LoadBalancingConfigs, and convert it into a list of LbConfig.
    */
-  @SuppressWarnings("unchecked")
   public static List<LbConfig> unwrapLoadBalancingConfigList(List<Map<String, ?>> list) {
     ArrayList<LbConfig> result = new ArrayList<>();
     for (Map<String, ?> rawChildPolicy : list) {

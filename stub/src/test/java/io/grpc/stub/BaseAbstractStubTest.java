@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.CallOptions;
@@ -48,15 +49,24 @@ abstract class BaseAbstractStubTest<T extends AbstractStub<T>> {
 
   abstract T create(@Nullable Channel channel, @Nullable CallOptions callOptions);
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void callOptionsMustNotBeNull() {
-    create(channel, null);
-    throw new NullPointerException();
+    try {
+      create(channel, null);
+      fail("NullPointerException expected");
+    } catch (NullPointerException npe) {
+      // expected
+    }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test
   public void channelMustNotBeNull2() {
-    create(null, CallOptions.DEFAULT);
+    try {
+      create(null, CallOptions.DEFAULT);
+      fail("NullPointerException expected");
+    } catch (NullPointerException npe) {
+      // expected
+    }
   }
 
   @Test
