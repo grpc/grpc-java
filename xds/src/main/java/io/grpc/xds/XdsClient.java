@@ -97,9 +97,9 @@ abstract class XdsClient {
 
   abstract void watchClusterData(String clusterName, ClusterWatcher watcher);
 
-  abstract void cancelClusterDataWatch(String clusterName);
+  abstract void cancelClusterDataWatch(ClusterWatcher watcher);
 
   abstract void watchEndpointData(String clusterName, EndpointWatcher watcher);
 
-  abstract void cancelEndpointDataWatch(String clusterName);
+  abstract void cancelEndpointDataWatch(EndpointWatcher watcher);
 }
