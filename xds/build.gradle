@@ -49,7 +49,6 @@ sourceSets {
     main {
         proto {
             srcDir 'third_party/envoy/src/main/proto'
-            srcDir 'third_party/gogoproto/src/main/proto'
             srcDir 'third_party/udpa/src/main/proto'
         }
     }
@@ -68,7 +67,6 @@ shadowJar {
         include(dependency('io.envoyproxy.protoc-gen-validate:'))
     }
     relocate 'com.github.udpa', 'io.grpc.xds.shaded.com.github.udpa'
-    relocate 'com.google.protobuf.GoGoProtos', 'io.grpc.xds.shaded.gogoproto.GoGoProtos'
     relocate 'io.envoyproxy', 'io.grpc.xds.shaded.io.envoyproxy'
     relocate 'io.grpc.netty', 'io.grpc.netty.shaded.io.grpc.netty'
     relocate 'io.netty', 'io.grpc.netty.shaded.io.netty'
