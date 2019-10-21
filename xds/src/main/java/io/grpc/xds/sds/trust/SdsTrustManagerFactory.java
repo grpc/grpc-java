@@ -16,9 +16,13 @@
 
 package io.grpc.xds.sds.trust;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.api.v2.core.DataSource.SpecifierCase;
 import io.grpc.Internal;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
@@ -31,7 +35,6 @@ import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 import javax.net.ssl.ManagerFactoryParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -47,19 +50,23 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   private static final Logger logger = Logger.getLogger(SdsTrustManagerFactory.class.getName());
   private SdsX509TrustManager sdsX509TrustManager;
 
-  /** Constructor that loads certs from a file. */
-  public SdsTrustManagerFactory(
-      String certsFile, @Nullable CertificateValidationContext certContext)
+  /** Constructor constructs from a {@link CertificateValidationContext}. */
+  public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    this(CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
+    checkNotNull(certificateValidationContext, "certificateValidationContext");
+    String certsFile = getTrustedCaFromCertContext(certificateValidationContext);
+    checkState(!Strings.isNullOrEmpty(certsFile),
+        "trustedCa.file-name in certificateValidationContext cannot be empty");
+    createSdsX509TrustManager(
+        CertificateUtils.toX509Certificates(new File(certsFile)), certificateValidationContext);
   }
 
-  /** Constructor that takes array of certs. */
-  public SdsTrustManagerFactory(
-      X509Certificate[] certs, @Nullable CertificateValidationContext certContext)
-      throws CertStoreException {
-    checkNotNull(certs, "certs");
-    createSdsX509TrustManager(certs, certContext);
+  private static String getTrustedCaFromCertContext(
+      CertificateValidationContext certificateValidationContext) {
+    checkArgument(
+        certificateValidationContext.getTrustedCa().getSpecifierCase() == SpecifierCase.FILENAME,
+        "filename expected");
+    return certificateValidationContext.getTrustedCa().getFilename();
   }
 
   private void createSdsX509TrustManager(

@@ -18,6 +18,8 @@ package io.grpc.xds.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.security.cert.CertStoreException;
@@ -51,8 +53,7 @@ public class SdsTrustManagerFactoryTest {
   @Test
   public void constructor_fromFile() throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(
-            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
+        new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -72,8 +73,7 @@ public class SdsTrustManagerFactoryTest {
   public void checkServerTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(
-            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
+        new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(SERVER_1_PEM_FILE));
@@ -84,8 +84,7 @@ public class SdsTrustManagerFactoryTest {
   public void checkClientTrusted_goodCert()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(
-            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
+        new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(CLIENT_PEM_FILE));
@@ -96,8 +95,7 @@ public class SdsTrustManagerFactoryTest {
   public void checkServerTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(
-            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
+        new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] serverChain =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_SERVER_PEM_FILE));
@@ -115,8 +113,7 @@ public class SdsTrustManagerFactoryTest {
   public void checkClientTrusted_badCert_throwsException()
       throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
-        new SdsTrustManagerFactory(
-            TestUtils.loadCert(CA_PEM_FILE).getAbsolutePath(), /* certContext= */ null);
+        new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
     SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) factory.getTrustManagers()[0];
     X509Certificate[] clientChain =
         CertificateUtils.toX509Certificates(TestUtils.loadCert(BAD_CLIENT_PEM_FILE));
@@ -128,5 +125,14 @@ public class SdsTrustManagerFactoryTest {
           .hasMessageThat()
           .contains("unable to find valid certification path to requested target");
     }
+  }
+
+  /** constructs CertificateValidationContext from the resources file-path. */
+  private static final CertificateValidationContext getCertContextFromPath(String pemFilePath)
+      throws IOException {
+    return CertificateValidationContext.newBuilder()
+        .setTrustedCa(
+            DataSource.newBuilder().setFilename(TestUtils.loadCert(pemFilePath).getAbsolutePath()))
+        .build();
   }
 }

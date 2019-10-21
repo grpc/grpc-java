@@ -18,13 +18,19 @@ package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.base.Strings;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
 import io.netty.handler.ssl.SslContext;
 import java.io.IOException;
+import java.security.cert.CertStoreException;
+import java.security.cert.CertificateException;
 import java.util.List;
 import org.junit.Assert;
 import org.junit.Rule;
@@ -267,21 +273,11 @@ public class SslContextSecretVolumeSecretProviderTest {
   }
 
   @Test
-  public void getProviderForServer_nullTlsCertificate_throwsException() {
-    try {
-      SslContextSecretVolumeSecretProvider.getProviderForServer(
-          /* tlsCertificate= */ null, /* certContext= */ null);
-      Assert.fail("no exception thrown");
-    } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("tlsCertificate is required");
-    }
-  }
-
-  @Test
   public void getProviderForServer_defaultTlsCertificate_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForServer(tlsCert, /* certContext= */ null);
+      SslContextSecretVolumeSecretProvider.getProviderForServer(
+          buildDownstreamTlsContext(getCommonTlsContext(tlsCert, /* certContext= */ null)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -300,21 +296,11 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForServer(tlsCert, certContext);
+      SslContextSecretVolumeSecretProvider.getProviderForServer(
+          buildDownstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected.getMessage()).isEqualTo("filename expected");
-    }
-  }
-
-  @Test
-  public void getProviderForClient_nullCertContext_throwsException() {
-    try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(
-          /* tlsCertificate= */ null, /* certContext= */ null);
-      Assert.fail("no exception thrown");
-    } catch (IllegalArgumentException expected) {
-      assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
     }
   }
 
@@ -323,7 +309,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
       SslContextSecretVolumeSecretProvider.getProviderForClient(
-          /* tlsCertificate= */ null, certContext);
+          buildUpstreamTlsContext(getCommonTlsContext(/* tlsCertificate= */ null, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("certContext is required");
@@ -342,7 +328,8 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setFilename("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
+      SslContextSecretVolumeSecretProvider.getProviderForClient(
+          buildUpstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -361,7 +348,8 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setFilename("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
+      SslContextSecretVolumeSecretProvider.getProviderForClient(
+          buildUpstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -387,24 +375,13 @@ public class SslContextSecretVolumeSecretProviderTest {
     if (trustedCaFilename != null) {
       trustedCaFilename = getTempFileNameForResourcesFile(trustedCaFilename);
     }
-
-    TlsCertificate tlsCert =
-        (certChainFilename == null && privateKeyFilename == null)
-            ? null
-            : TlsCertificate.newBuilder()
-                .setCertificateChain(DataSource.newBuilder().setFilename(certChainFilename))
-                .setPrivateKey(DataSource.newBuilder().setFilename(privateKeyFilename))
-                .build();
-    CertificateValidationContext certContext =
-        trustedCaFilename == null
-            ? null
-            : CertificateValidationContext.newBuilder()
-                .setTrustedCa(DataSource.newBuilder().setFilename(trustedCaFilename))
-                .build();
-
     return server
-        ? SslContextSecretVolumeSecretProvider.getProviderForServer(tlsCert, certContext)
-        : SslContextSecretVolumeSecretProvider.getProviderForClient(tlsCert, certContext);
+        ? SslContextSecretVolumeSecretProvider.getProviderForServer(
+        buildDownstreamTlsContextFromFilenames(
+            privateKeyFilename, certChainFilename, trustedCaFilename))
+        : SslContextSecretVolumeSecretProvider.getProviderForClient(
+            buildUpstreamTlsContextFromFilenames(
+                privateKeyFilename, certChainFilename, trustedCaFilename));
   }
 
   /**
@@ -412,7 +389,8 @@ public class SslContextSecretVolumeSecretProviderTest {
    * check returned SslContext.
    */
   private static void sslContextForEitherWithBothCertAndTrust(
-      boolean server, String pemFile, String keyFile, String caFile) throws IOException {
+      boolean server, String pemFile, String keyFile, String caFile)
+      throws IOException, CertificateException, CertStoreException {
     SslContextSecretVolumeSecretProvider provider =
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
 
@@ -431,29 +409,100 @@ public class SslContextSecretVolumeSecretProviderTest {
     assertThat(apnProtos).contains("h2");
   }
 
+  /**
+   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   */
+  static DownstreamTlsContext buildDownstreamTlsContextFromFilenames(
+      String privateKey, String certChain, String trustCa) {
+    return buildDownstreamTlsContext(
+        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
+   */
+  static UpstreamTlsContext buildUpstreamTlsContextFromFilenames(
+      String privateKey, String certChain, String trustCa) {
+    return buildUpstreamTlsContext(
+        buildCommonTlsContextFromFilenames(privateKey, certChain, trustCa));
+  }
+
+  private static CommonTlsContext buildCommonTlsContextFromFilenames(
+      String privateKey, String certChain, String trustCa) {
+    TlsCertificate tlsCert = null;
+    if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
+      tlsCert =
+          TlsCertificate.newBuilder()
+              .setCertificateChain(DataSource.newBuilder().setFilename(certChain))
+              .setPrivateKey(DataSource.newBuilder().setFilename(privateKey))
+              .build();
+    }
+    CertificateValidationContext certContext = null;
+    if (!Strings.isNullOrEmpty(trustCa)) {
+      certContext =
+          CertificateValidationContext.newBuilder()
+              .setTrustedCa(DataSource.newBuilder().setFilename(trustCa))
+              .build();
+    }
+    return getCommonTlsContext(tlsCert, certContext);
+  }
+
+  private static CommonTlsContext getCommonTlsContext(
+      TlsCertificate tlsCertificate, CertificateValidationContext certContext) {
+    CommonTlsContext.Builder builder = CommonTlsContext.newBuilder();
+    if (tlsCertificate != null) {
+      builder = builder.addTlsCertificates(tlsCertificate);
+    }
+    if (certContext != null) {
+      builder = builder.setValidationContext(certContext);
+    }
+    return builder.build();
+  }
+
+  /**
+   * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
+   */
+  private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
+    DownstreamTlsContext downstreamTlsContext =
+        DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+    return downstreamTlsContext;
+  }
+
+  /**
+   * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
+   */
+  private static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
+    UpstreamTlsContext upstreamTlsContext =
+        UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
+    return upstreamTlsContext;
+  }
+
   @Test
-  public void getProviderForServer() throws IOException {
+  public void getProviderForServer() throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(
         true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForClient() throws IOException {
+  public void getProviderForClient() throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForServer_onlyCert() throws IOException {
+  public void getProviderForServer_onlyCert()
+      throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, null);
   }
 
   @Test
-  public void getProviderForClient_onlyTrust() throws IOException {
+  public void getProviderForClient_onlyTrust()
+      throws IOException, CertificateException, CertStoreException {
     sslContextForEitherWithBothCertAndTrust(false, null, null, CA_PEM_FILE);
   }
 
   @Test
-  public void getProviderForServer_badFile_throwsException() throws IOException {
+  public void getProviderForServer_badFile_throwsException()
+      throws IOException, CertificateException, CertStoreException {
     try {
       sslContextForEitherWithBothCertAndTrust(true, SERVER_1_PEM_FILE, SERVER_1_PEM_FILE, null);
       Assert.fail("no exception thrown");
@@ -509,6 +558,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     doChecksOnSslContext(false, testCallback.updatedSecret);
   }
 
+  // note this test generates stack-trace but can be safely ignored
   @Test
   public void getProviderForClient_both_callsback_setException() throws IOException {
     SslContextSecretVolumeSecretProvider provider =
