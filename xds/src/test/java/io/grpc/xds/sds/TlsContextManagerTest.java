@@ -48,7 +48,7 @@ public class TlsContextManagerTest {
   public void createClientSslContextProvider() {
     UpstreamTlsContext upstreamTlsContext =
         SslContextSecretVolumeSecretProviderTest.buildUpstreamTlsContextFromFilenames(
-            /* privateKey= */null, /* certChain= */null, CA_PEM_FILE);
+            /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
     SecretProvider<SslContext> serverSecretProvider =
         TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);

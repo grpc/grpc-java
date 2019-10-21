@@ -16,9 +16,13 @@
 
 package io.grpc.xds.sds.trust;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.base.Strings;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
+import io.envoyproxy.envoy.api.v2.core.DataSource.SpecifierCase;
 import io.grpc.Internal;
 import io.netty.handler.ssl.util.SimpleTrustManagerFactory;
 import java.io.File;
@@ -47,20 +51,21 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
   private SdsX509TrustManager sdsX509TrustManager;
 
   /** Constructor constructs from a {@link CertificateValidationContext}. */
-  public SdsTrustManagerFactory(CertificateValidationContext certContext)
+  public SdsTrustManagerFactory(CertificateValidationContext certificateValidationContext)
       throws CertificateException, IOException, CertStoreException {
-    checkNotNull(certContext, "certContext");
-    String certsFile = getTrustedCaFromCertContext(certContext);
-    checkNotNull(certsFile, "certsFile");
+    checkNotNull(certificateValidationContext, "certificateValidationContext");
+    String certsFile = getTrustedCaFromCertContext(certificateValidationContext);
+    checkState(!Strings.isNullOrEmpty(certsFile), "certsFile");
     createSdsX509TrustManager(
-        CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
+        CertificateUtils.toX509Certificates(new File(certsFile)), certificateValidationContext);
   }
 
   private static String getTrustedCaFromCertContext(
       CertificateValidationContext certificateValidationContext) {
-    // only file-name possible: see SslContextSecretVolumeSecretProvider.validateCertificateContext
-    return certificateValidationContext != null ? certificateValidationContext.getTrustedCa()
-        .getFilename() : null;
+    checkArgument(
+        certificateValidationContext.getTrustedCa().getSpecifierCase() == SpecifierCase.FILENAME,
+        "filename expected");
+    return certificateValidationContext.getTrustedCa().getFilename();
   }
 
   private void createSdsX509TrustManager(
