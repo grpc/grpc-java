@@ -55,7 +55,8 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
       throws CertificateException, IOException, CertStoreException {
     checkNotNull(certificateValidationContext, "certificateValidationContext");
     String certsFile = getTrustedCaFromCertContext(certificateValidationContext);
-    checkState(!Strings.isNullOrEmpty(certsFile), "certsFile");
+    checkState(!Strings.isNullOrEmpty(certsFile),
+        "trustedCa.file-name in certificateValidationContext cannot be empty");
     createSdsX509TrustManager(
         CertificateUtils.toX509Certificates(new File(certsFile)), certificateValidationContext);
   }
