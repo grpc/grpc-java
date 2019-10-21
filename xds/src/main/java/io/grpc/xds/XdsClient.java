@@ -42,12 +42,12 @@ abstract class XdsClient {
   }
 
   // TODO(zdapeng): content TBD.
-  static final class CdsUpdate {
+  static final class ClusterUpdate {
 
   }
 
   // TODO(zdapeng): content TBD.
-  static final class EdsUpdate {
+  static final class EndpointUpdate {
 
   }
 
@@ -70,7 +70,7 @@ abstract class XdsClient {
    */
   interface ClusterWatcher {
 
-    void onClusterChanged(CdsUpdate update);
+    void onClusterChanged(ClusterUpdate update);
 
     void onError(Status error);
   }
@@ -80,7 +80,7 @@ abstract class XdsClient {
    */
   interface EndpointWatcher {
 
-    void onEndpointChanged(CdsUpdate update);
+    void onEndpointChanged(EndpointUpdate update);
 
     void onError(Status error);
   }
