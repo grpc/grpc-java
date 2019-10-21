@@ -51,12 +51,16 @@ public final class SdsTrustManagerFactory extends SimpleTrustManagerFactory {
       throws CertificateException, IOException, CertStoreException {
     checkNotNull(certContext, "certContext");
     String certsFile = getTrustedCaFromCertContext(certContext);
+    checkNotNull(certsFile, "certsFile");
     createSdsX509TrustManager(
         CertificateUtils.toX509Certificates(new File(certsFile)), certContext);
   }
 
-  private static String getTrustedCaFromCertContext(CertificateValidationContext certContext) {
-    return certContext != null ? certContext.getTrustedCa().getFilename() : null;
+  private static String getTrustedCaFromCertContext(
+      CertificateValidationContext certificateValidationContext) {
+    // only file-name possible: see SslContextSecretVolumeSecretProvider.validateCertificateContext
+    return certificateValidationContext != null ? certificateValidationContext.getTrustedCa()
+        .getFilename() : null;
   }
 
   private void createSdsX509TrustManager(

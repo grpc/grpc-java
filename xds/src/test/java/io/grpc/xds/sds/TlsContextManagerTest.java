@@ -21,9 +21,7 @@ import static com.google.common.truth.Truth.assertThat;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.netty.handler.ssl.SslContext;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -34,8 +32,6 @@ public class TlsContextManagerTest {
   private static final String SERVER_1_PEM_FILE = "server1.pem";
   private static final String SERVER_1_KEY_FILE = "server1.key";
   private static final String CA_PEM_FILE = "ca.pem";
-
-  @Rule public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
   @Test
   public void createServerSslContextProvider() {
