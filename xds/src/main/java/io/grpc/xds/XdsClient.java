@@ -21,9 +21,9 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * An {@link XdsClient} instance encapsulates all of the logic for communicating with the xDS
- * server. It may create multiple RPC streams for a series of xDS protocols (e.g., LDS, RDS,
- * VHDS, CDS and EDS) over a single channel. Watch-based interfaces are provided for each set
- * of data needed by gRPC.
+ * server. It may create multiple RPC streams (or a single ADS stream) for a series of xDS
+ * protocols (e.g., LDS, RDS, VHDS, CDS and EDS) over a single channel. Watch-based interfaces
+ * are provided for each set of data needed by gRPC.
  *
  * <p>This class should only be instantiated by the xDS resolver but can be passed to load
  * balancing policies.
