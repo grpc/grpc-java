@@ -116,6 +116,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @throws UnsupportedOperationException if unsupported
    * @since 1.25.0
    */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
   public T blockingExecutor(Executor executor) {
     throw new UnsupportedOperationException();
   }

@@ -93,7 +93,14 @@ public final class HealthGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static HealthStub newStub(io.grpc.Channel channel) {
-    return new HealthStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthStub>() {
+        @java.lang.Override
+        public HealthStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthStub(channel, callOptions);
+        }
+      };
+    return HealthStub.newStub(factory, channel);
   }
 
   /**
@@ -101,7 +108,14 @@ public final class HealthGrpc {
    */
   public static HealthBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new HealthBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthBlockingStub>() {
+        @java.lang.Override
+        public HealthBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthBlockingStub(channel, callOptions);
+        }
+      };
+    return HealthBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -109,7 +123,14 @@ public final class HealthGrpc {
    */
   public static HealthFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new HealthFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<HealthFutureStub>() {
+        @java.lang.Override
+        public HealthFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new HealthFutureStub(channel, callOptions);
+        }
+      };
+    return HealthFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -171,19 +192,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthStub extends io.grpc.stub.AbstractStub<HealthStub> {
-    private HealthStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthStub extends io.grpc.stub.AbstractAsyncStub<HealthStub> {
+    private HealthStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthStub(channel, callOptions);
     }
 
@@ -225,19 +242,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthBlockingStub extends io.grpc.stub.AbstractStub<HealthBlockingStub> {
-    private HealthBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthBlockingStub extends io.grpc.stub.AbstractBlockingStub<HealthBlockingStub> {
+    private HealthBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthBlockingStub(channel, callOptions);
     }
 
@@ -278,19 +291,15 @@ public final class HealthGrpc {
 
   /**
    */
-  public static final class HealthFutureStub extends io.grpc.stub.AbstractStub<HealthFutureStub> {
-    private HealthFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private HealthFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class HealthFutureStub extends io.grpc.stub.AbstractFutureStub<HealthFutureStub> {
+    private HealthFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected HealthFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected HealthFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new HealthFutureStub(channel, callOptions);
     }
 

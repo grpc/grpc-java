@@ -182,7 +182,8 @@ public class DnsNameResolverTest {
   private DnsNameResolver newResolver(
       String name, Stopwatch stopwatch, boolean isAndroid, NameResolver.Args args) {
     DnsNameResolver dnsResolver =
-        new DnsNameResolver(null, name, args, fakeExecutorResource, stopwatch, isAndroid);
+        new DnsNameResolver(
+            null, name, args, fakeExecutorResource, stopwatch, isAndroid, /* enableSrv= */ false);
     // By default, using the mocked ResourceResolver to avoid I/O
     dnsResolver.setResourceResolver(new JndiResourceResolver(recordFetcher));
     return dnsResolver;
