@@ -283,14 +283,7 @@ public final class TestServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static TestServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<TestServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<TestServiceStub>() {
-        @java.lang.Override
-        public TestServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new TestServiceStub(channel, callOptions);
-        }
-      };
-    return TestServiceStub.newStub(factory, channel);
+    return new TestServiceStub(channel);
   }
 
   /**
@@ -298,14 +291,7 @@ public final class TestServiceGrpc {
    */
   public static TestServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<TestServiceBlockingStub>() {
-        @java.lang.Override
-        public TestServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new TestServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return TestServiceBlockingStub.newStub(factory, channel);
+    return new TestServiceBlockingStub(channel);
   }
 
   /**
@@ -313,14 +299,7 @@ public final class TestServiceGrpc {
    */
   public static TestServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<TestServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<TestServiceFutureStub>() {
-        @java.lang.Override
-        public TestServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new TestServiceFutureStub(channel, callOptions);
-        }
-      };
-    return TestServiceFutureStub.newStub(factory, channel);
+    return new TestServiceFutureStub(channel);
   }
 
   /**
@@ -489,15 +468,19 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceStub extends io.grpc.stub.AbstractAsyncStub<TestServiceStub> {
-    private TestServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class TestServiceStub extends io.grpc.stub.AbstractStub<TestServiceStub> {
+    private TestServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private TestServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected TestServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected TestServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new TestServiceStub(channel, callOptions);
     }
 
@@ -606,15 +589,19 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<TestServiceBlockingStub> {
-    private TestServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class TestServiceBlockingStub extends io.grpc.stub.AbstractStub<TestServiceBlockingStub> {
+    private TestServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private TestServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected TestServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected TestServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new TestServiceBlockingStub(channel, callOptions);
     }
 
@@ -680,15 +667,19 @@ public final class TestServiceGrpc {
    * performance with various types of payload.
    * </pre>
    */
-  public static final class TestServiceFutureStub extends io.grpc.stub.AbstractFutureStub<TestServiceFutureStub> {
-    private TestServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class TestServiceFutureStub extends io.grpc.stub.AbstractStub<TestServiceFutureStub> {
+    private TestServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private TestServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected TestServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected TestServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new TestServiceFutureStub(channel, callOptions);
     }
 

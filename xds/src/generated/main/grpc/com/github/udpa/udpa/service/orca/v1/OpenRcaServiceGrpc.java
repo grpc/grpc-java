@@ -72,14 +72,7 @@ public final class OpenRcaServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static OpenRcaServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceStub>() {
-        @java.lang.Override
-        public OpenRcaServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new OpenRcaServiceStub(channel, callOptions);
-        }
-      };
-    return OpenRcaServiceStub.newStub(factory, channel);
+    return new OpenRcaServiceStub(channel);
   }
 
   /**
@@ -87,14 +80,7 @@ public final class OpenRcaServiceGrpc {
    */
   public static OpenRcaServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceBlockingStub>() {
-        @java.lang.Override
-        public OpenRcaServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new OpenRcaServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return OpenRcaServiceBlockingStub.newStub(factory, channel);
+    return new OpenRcaServiceBlockingStub(channel);
   }
 
   /**
@@ -102,14 +88,7 @@ public final class OpenRcaServiceGrpc {
    */
   public static OpenRcaServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<OpenRcaServiceFutureStub>() {
-        @java.lang.Override
-        public OpenRcaServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new OpenRcaServiceFutureStub(channel, callOptions);
-        }
-      };
-    return OpenRcaServiceFutureStub.newStub(factory, channel);
+    return new OpenRcaServiceFutureStub(channel);
   }
 
   /**
@@ -158,15 +137,19 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceStub extends io.grpc.stub.AbstractAsyncStub<OpenRcaServiceStub> {
-    private OpenRcaServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class OpenRcaServiceStub extends io.grpc.stub.AbstractStub<OpenRcaServiceStub> {
+    private OpenRcaServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private OpenRcaServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected OpenRcaServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new OpenRcaServiceStub(channel, callOptions);
     }
 
@@ -191,15 +174,19 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<OpenRcaServiceBlockingStub> {
-    private OpenRcaServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class OpenRcaServiceBlockingStub extends io.grpc.stub.AbstractStub<OpenRcaServiceBlockingStub> {
+    private OpenRcaServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private OpenRcaServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected OpenRcaServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new OpenRcaServiceBlockingStub(channel, callOptions);
     }
 
@@ -224,15 +211,19 @@ public final class OpenRcaServiceGrpc {
    * a new call to change backend reporting frequency.
    * </pre>
    */
-  public static final class OpenRcaServiceFutureStub extends io.grpc.stub.AbstractFutureStub<OpenRcaServiceFutureStub> {
-    private OpenRcaServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class OpenRcaServiceFutureStub extends io.grpc.stub.AbstractStub<OpenRcaServiceFutureStub> {
+    private OpenRcaServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private OpenRcaServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected OpenRcaServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected OpenRcaServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new OpenRcaServiceFutureStub(channel, callOptions);
     }
   }

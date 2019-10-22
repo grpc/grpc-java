@@ -62,14 +62,7 @@ public final class ReflectableServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static ReflectableServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceStub>() {
-        @java.lang.Override
-        public ReflectableServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ReflectableServiceStub(channel, callOptions);
-        }
-      };
-    return ReflectableServiceStub.newStub(factory, channel);
+    return new ReflectableServiceStub(channel);
   }
 
   /**
@@ -77,14 +70,7 @@ public final class ReflectableServiceGrpc {
    */
   public static ReflectableServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceBlockingStub>() {
-        @java.lang.Override
-        public ReflectableServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ReflectableServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return ReflectableServiceBlockingStub.newStub(factory, channel);
+    return new ReflectableServiceBlockingStub(channel);
   }
 
   /**
@@ -92,14 +78,7 @@ public final class ReflectableServiceGrpc {
    */
   public static ReflectableServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ReflectableServiceFutureStub>() {
-        @java.lang.Override
-        public ReflectableServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ReflectableServiceFutureStub(channel, callOptions);
-        }
-      };
-    return ReflectableServiceFutureStub.newStub(factory, channel);
+    return new ReflectableServiceFutureStub(channel);
   }
 
   /**
@@ -128,15 +107,19 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceStub extends io.grpc.stub.AbstractAsyncStub<ReflectableServiceStub> {
-    private ReflectableServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ReflectableServiceStub extends io.grpc.stub.AbstractStub<ReflectableServiceStub> {
+    private ReflectableServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ReflectableServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ReflectableServiceStub(channel, callOptions);
     }
 
@@ -151,15 +134,19 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReflectableServiceBlockingStub> {
-    private ReflectableServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ReflectableServiceBlockingStub extends io.grpc.stub.AbstractStub<ReflectableServiceBlockingStub> {
+    private ReflectableServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ReflectableServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ReflectableServiceBlockingStub(channel, callOptions);
     }
 
@@ -173,15 +160,19 @@ public final class ReflectableServiceGrpc {
 
   /**
    */
-  public static final class ReflectableServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReflectableServiceFutureStub> {
-    private ReflectableServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ReflectableServiceFutureStub extends io.grpc.stub.AbstractStub<ReflectableServiceFutureStub> {
+    private ReflectableServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ReflectableServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReflectableServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ReflectableServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ReflectableServiceFutureStub(channel, callOptions);
     }
 

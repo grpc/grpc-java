@@ -489,37 +489,6 @@ static void PrintBindServiceMethodBody(const ServiceDescriptor* service,
                                    std::map<string, string>* vars,
                                    Printer* p);
 
-// Prints a StubFactory for given service / stub type.
-static void PrintStubFactory(
-    const ServiceDescriptor* service,
-    std::map<string, string>* vars,
-    Printer* p, StubType type) {
-  string stub_type_name;
-  switch (type) {
-    case ASYNC_CLIENT_IMPL:
-      stub_type_name = "";
-      break;
-    case FUTURE_CLIENT_IMPL:
-      stub_type_name = "Future";
-      break;
-    case BLOCKING_CLIENT_IMPL:
-      stub_type_name = "Blocking";
-      break;
-    default:
-      GRPC_CODEGEN_FAIL << "Cannot generate StubFactory for StubType: " << type;
-  }
-  (*vars)["stub_full_name"] = (*vars)["service_name"] + stub_type_name + "Stub";
-  p->Print(
-    *vars,
-    "$StubFactory$<$stub_full_name$> factory =\n"
-    "  new $StubFactory$<$stub_full_name$>() {\n"
-    "    @$Override$\n"
-    "    public $stub_full_name$ newStub($Channel$ channel, $CallOptions$ callOptions) {\n"
-    "      return new $stub_full_name$(channel, callOptions);\n"
-    "    }\n"
-    "  };\n");
-}
-
 // Prints a client interface or implementation class, or a server interface.
 static void PrintStub(
     const ServiceDescriptor* service,
@@ -530,7 +499,6 @@ static void PrintStub(
   (*vars)["abstract_name"] = service_name + "ImplBase";
   string stub_name = service_name;
   string client_name = service_name;
-  string stub_base_class_name = "AbstractStub";
   CallType call_type;
   bool impl_base = false;
   bool interface = false;
@@ -542,7 +510,6 @@ static void PrintStub(
     case ASYNC_CLIENT_IMPL:
       call_type = ASYNC_CALL;
       stub_name += "Stub";
-      stub_base_class_name = "AbstractAsyncStub";
       break;
     case BLOCKING_CLIENT_INTERFACE:
       interface = true;
@@ -551,7 +518,6 @@ static void PrintStub(
       call_type = BLOCKING_CALL;
       stub_name += "BlockingStub";
       client_name += "BlockingClient";
-      stub_base_class_name = "AbstractBlockingStub";
       break;
     case FUTURE_CLIENT_INTERFACE:
       interface = true;
@@ -560,20 +526,16 @@ static void PrintStub(
       call_type = FUTURE_CALL;
       stub_name += "FutureStub";
       client_name += "FutureClient";
-      stub_base_class_name = "AbstractFutureStub";
       break;
     case ASYNC_INTERFACE:
       call_type = ASYNC_CALL;
       interface = true;
-      stub_name += "Stub";
-      stub_base_class_name = "AbstractAsyncStub";
       break;
     default:
       GRPC_CODEGEN_FAIL << "Cannot determine class name for StubType: " << type;
   }
   (*vars)["stub_name"] = stub_name;
   (*vars)["client_name"] = client_name;
-  (*vars)["stub_base_class_name"] = (*vars)[stub_base_class_name];
 
   // Class head
   if (!interface) {
@@ -587,13 +549,11 @@ static void PrintStub(
   if (impl_base) {
     p->Print(
         *vars,
-        "public static abstract class $abstract_name$"
-        " implements $BindableService$ {\n");
+        "public static abstract class $abstract_name$ implements $BindableService$ {\n");
   } else {
     p->Print(
         *vars,
-        "public static final class $stub_name$"
-        " extends $stub_base_class_name$<$stub_name$> {\n");
+        "public static final class $stub_name$ extends $AbstractStub$<$stub_name$> {\n");
   }
   p->Indent();
 
@@ -601,9 +561,15 @@ static void PrintStub(
   if (!impl_base && !interface) {
     p->Print(
         *vars,
-        "private $stub_name$(\n"
-        "    $Channel$ channel, $CallOptions$ callOptions) {"
-        "\n");
+        "private $stub_name$($Channel$ channel) {\n");
+    p->Indent();
+    p->Print("super(channel);\n");
+    p->Outdent();
+    p->Print("}\n\n");
+    p->Print(
+        *vars,
+        "private $stub_name$($Channel$ channel,\n"
+        "    $CallOptions$ callOptions) {\n");
     p->Indent();
     p->Print("super(channel, callOptions);\n");
     p->Outdent();
@@ -611,9 +577,8 @@ static void PrintStub(
     p->Print(
         *vars,
         "@$Override$\n"
-        "protected $stub_name$ build(\n"
-        "    $Channel$ channel, $CallOptions$ callOptions) {"
-        "\n");
+        "protected $stub_name$ build($Channel$ channel,\n"
+        "    $CallOptions$ callOptions) {\n");
     p->Indent();
     p->Print(
         *vars,
@@ -1111,8 +1076,9 @@ static void PrintService(const ServiceDescriptor* service,
       *vars,
       "public static $service_name$Stub newStub($Channel$ channel) {\n");
   p->Indent();
-  PrintStubFactory(service, vars, p, ASYNC_CLIENT_IMPL);
-  p->Print(*vars, "return $service_name$Stub.newStub(factory, channel);\n");
+  p->Print(
+      *vars,
+      "return new $service_name$Stub(channel);\n");
   p->Outdent();
   p->Print("}\n\n");
 
@@ -1124,10 +1090,9 @@ static void PrintService(const ServiceDescriptor* service,
       "public static $service_name$BlockingStub newBlockingStub(\n"
       "    $Channel$ channel) {\n");
   p->Indent();
-  PrintStubFactory(service, vars, p, BLOCKING_CLIENT_IMPL);
   p->Print(
       *vars,
-      "return $service_name$BlockingStub.newStub(factory, channel);\n");
+      "return new $service_name$BlockingStub(channel);\n");
   p->Outdent();
   p->Print("}\n\n");
 
@@ -1139,10 +1104,9 @@ static void PrintService(const ServiceDescriptor* service,
       "public static $service_name$FutureStub newFutureStub(\n"
       "    $Channel$ channel) {\n");
   p->Indent();
-  PrintStubFactory(service, vars, p, FUTURE_CLIENT_IMPL);
   p->Print(
       *vars,
-      "return $service_name$FutureStub.newStub(factory, channel);\n");
+      "return new $service_name$FutureStub(channel);\n");
   p->Outdent();
   p->Print("}\n\n");
 
@@ -1216,10 +1180,6 @@ void GenerateService(const ServiceDescriptor* service,
   vars["ProtoMethodDescriptorSupplier"] =
       "io.grpc.protobuf.ProtoMethodDescriptorSupplier";
   vars["AbstractStub"] = "io.grpc.stub.AbstractStub";
-  vars["AbstractAsyncStub"] = "io.grpc.stub.AbstractAsyncStub";
-  vars["AbstractFutureStub"] = "io.grpc.stub.AbstractFutureStub";
-  vars["AbstractBlockingStub"] = "io.grpc.stub.AbstractBlockingStub";
-  vars["StubFactory"] = "io.grpc.stub.AbstractStub.StubFactory";
   vars["RpcMethod"] = "io.grpc.stub.annotations.RpcMethod";
   vars["MethodDescriptor"] = "io.grpc.MethodDescriptor";
   vars["StreamObserver"] = "io.grpc.stub.StreamObserver";
