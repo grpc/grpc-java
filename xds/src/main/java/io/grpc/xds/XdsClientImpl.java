@@ -1,0 +1,374 @@
+/*
+ * Copyright 2019 The gRPC Authors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package io.grpc.xds;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
+import com.google.protobuf.Any;
+import com.google.protobuf.InvalidProtocolBufferException;
+import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
+import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
+import io.envoyproxy.envoy.api.v2.Listener;
+import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.route.VirtualHost;
+import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
+import io.grpc.ManagedChannel;
+import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.internal.BackoffPolicy;
+import io.grpc.stub.StreamObserver;
+import java.util.List;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javax.annotation.Nullable;
+
+final class XdsClientImpl extends XdsClient {
+  private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
+
+  private static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
+  private static final String ADS_TYPE_URL_RDS =
+      "type.googleapis.com/envoy.api.v2.RouteConfiguration";
+
+  private final ManagedChannel channel;
+  private final SynchronizationContext syncContext;
+  private final ScheduledExecutorService timeService;
+  private final BackoffPolicy.Provider backoffPolicyProvider;
+  private final Stopwatch stopwatch;
+  // The original "xds:" URI for the server name that the gRPC client targets for.
+  private final String targetName;
+  // The node identifier to be included in xDS requests. Management server only requires the
+  // first request to carry the node identifier on a stream. It should be identical if present
+  // more than once.
+  private final Node node;
+  private final ConfigWatcher configWatcher;
+
+  private AdsStream adsStream;
+
+  private BackoffPolicy retryBackoffPolicy;
+  private ScheduledHandle rpcRetryTimer;
+
+  // TODO(chengyuanzhang): add a primary constructor that takes in management server URI
+  //  (and ChannelCreds config etc) and build a channel.
+
+  @VisibleForTesting
+  XdsClientImpl(
+      ManagedChannel channel,
+      SynchronizationContext syncContext,
+      ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Stopwatch stopwatch,
+      String targetName,
+      Node node,
+      ConfigWatcher configWatcher) {
+    this.channel = checkNotNull(channel, "channel");
+    this.syncContext = checkNotNull(syncContext, "syncContext");
+    this.timeService = checkNotNull(timeService, "timeService");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.targetName = checkNotNull(targetName, "targetName");
+    this.node = checkNotNull(node, "node");
+    this.configWatcher = checkNotNull(configWatcher, "configWatcher");
+  }
+
+  /**
+   * Starts with a LDS RPC.
+   */
+  void start() {
+    startDiscoveryRpc();
+  }
+
+  void shutdown() {
+    if (adsStream != null) {
+      adsStream.close(null);
+    }
+    if (rpcRetryTimer != null) {
+      rpcRetryTimer.cancel();
+    }
+  }
+
+  /**
+   * Creates a new RPC stream for xDS protocol communication and starts with a LDS request.
+   */
+  private void startDiscoveryRpc() {
+    checkState(adsStream == null, "previous adsStream has not been cleared yet");
+    AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
+        AggregatedDiscoveryServiceGrpc.newStub(channel);
+    adsStream = new AdsStream(stub);
+    adsStream.start();
+    stopwatch.reset().start();
+    adsStream.sendLdsRequest(targetName);
+  }
+
+  /**
+   * Handle LDS response, which may either contain the RouteConfiguration directly in-line or
+   * contain the configuration to send RDS requests for dynamic resolution.
+   */
+  private void handleLdsResponse(DiscoveryResponse ldsResponse) {
+    logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
+    List<Any> respResources = ldsResponse.getResourcesList();
+    HttpConnectionManager connManager = null;
+    try {
+      for (com.google.protobuf.Any res : respResources) {
+        Listener listener = res.unpack(Listener.class);
+        if (listener.getName().equals(targetName)) {
+          HttpConnectionManager httpConnManager =
+              listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
+          if (httpConnManager.hasRouteConfig() || httpConnManager.hasRds()) {
+            connManager = httpConnManager;
+          }
+          // Ignore remaining listeners once the requested one is found.
+          break;
+        }
+      }
+    } catch (InvalidProtocolBufferException e) {
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid LDS response"));
+    }
+    if (connManager != null) {
+      // Accept this listener update.
+      adsStream.ldsVersion = ldsResponse.getVersionInfo();
+    }
+    // Send ACK/NACK request.
+    adsStream.sendLdsRequest(targetName);
+    if (connManager != null) {
+      if (connManager.hasRouteConfig()) {
+        processRouteConfig(connManager.getRouteConfig());
+      } else if (connManager.hasRds()) {
+        String rcName = connManager.getRds().getRouteConfigName();
+        adsStream.sendRdsRequest(rcName);
+      } else {
+        // Impossible to be here.
+        throw new AssertionError("Severe bug: accepted listener update contains invalid config");
+      }
+    }
+  }
+
+  /**
+   * Handle RDS response, which may either contain the RouteConfiguration directly in-line or
+   * contain the configuration to send VHDS requests for dynamic resolution.
+   */
+  private void handleRdsResponse(DiscoveryResponse rdsResponse) {
+    logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
+    List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
+    RouteConfiguration routeConfig = null;
+    try {
+      for (com.google.protobuf.Any res : respResources) {
+        RouteConfiguration conf = res.unpack(RouteConfiguration.class);
+        if (routeConfig.getName().equals(adsStream.rdsResourceName)) {
+          routeConfig = conf;
+          // Ignore remaining route configs once the requested one is found.
+          break;
+        }
+      }
+    } catch (InvalidProtocolBufferException e) {
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid RDS response"));
+    }
+    if (routeConfig != null) {
+      // Accept this route configuration update.
+      adsStream.rdsVersion = rdsResponse.getVersionInfo();
+    }
+    // Send ACK/NACK request.
+    adsStream.sendRdsRequest(adsStream.rdsResourceName);
+    if (routeConfig != null) {
+      processRouteConfig(routeConfig);
+    }
+  }
+
+  private void processRouteConfig(RouteConfiguration config) {
+    List<VirtualHost> virtualHosts = config.getVirtualHostsList();
+    for (VirtualHost host : virtualHosts) {
+      for (String domain : host.getDomainsList()) {
+        // TODO(chengyuanzhang): find the first matching (wildcard matching) domain name that
+        //  matches the original "xds:" URI.
+      }
+    }
+  }
+
+  private final class RpcRetryTask implements Runnable {
+    @Override
+    public void run() {
+      startDiscoveryRpc();
+    }
+  }
+
+  private final class AdsStream implements StreamObserver<DiscoveryResponse> {
+    private final AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub;
+
+    private StreamObserver<DiscoveryRequest> requestWriter;
+    private boolean responseReceived;
+    private boolean closed;
+
+    // Last successfully applied version_info for each resource type. Starts with empty string.
+    private String ldsVersion = "";
+    private String rdsVersion = "";
+
+    // Most recently requested resource name for each resource type. Note the resource_name in
+    // LDS requests will always be the
+    private String rdsResourceName = "";
+
+    private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
+      this.stub = checkNotNull(stub, "stub");
+    }
+
+    private void start() {
+      requestWriter = stub.withWaitForReady().streamAggregatedResources(this);
+    }
+
+
+    @Override
+    public void onNext(final DiscoveryResponse response) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          responseReceived = true;
+          String typeUrl = response.getTypeUrl();
+          if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+            handleLdsResponse(response);
+          } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+            handleRdsResponse(response);
+          }
+          // TODO(zdapeng): add CDS/EDS response handles.
+        }
+      });
+    }
+
+    @Override
+    public void onError(final Throwable t) {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          handleStreamClosed(
+              Status.fromThrowable(t).augmentDescription("ADS stream [" + this + "] had an error"));
+        }
+      });
+    }
+
+    @Override
+    public void onCompleted() {
+      syncContext.execute(new Runnable() {
+        @Override
+        public void run() {
+          handleStreamClosed(
+              Status.UNAVAILABLE.withDescription("ADS stream [" + this + "] was closed"));
+        }
+      });
+    }
+
+    private void handleStreamClosed(Status error) {
+      checkArgument(!error.isOk(), "unexpected OK status");
+      if (closed) {
+        return;
+      }
+      closed = true;
+      cleanUp();
+      configWatcher.onError(error);
+      if (responseReceived || retryBackoffPolicy == null) {
+        // Reset the backoff sequence if had received a response, or backoff sequence
+        // has never been initialized.
+        retryBackoffPolicy = backoffPolicyProvider.get();
+      }
+      long delayNanos = 0;
+      if (!responseReceived) {
+        delayNanos =
+            retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
+      }
+      logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
+      if (delayNanos <= 0) {
+        startDiscoveryRpc();
+      } else {
+        rpcRetryTimer =
+            syncContext.schedule(
+                new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
+      }
+    }
+
+    private void close(@Nullable Exception error) {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      cleanUp();
+      if (error == null) {
+        requestWriter.onCompleted();
+      } else {
+        requestWriter.onError(error);
+      }
+    }
+
+    private void cleanUp() {
+      if (adsStream == this) {
+        adsStream = null;
+      }
+    }
+
+    private void sendLdsRequest(String resourceName) {
+      checkState(requestWriter != null, "ADS stream has not been started");
+      DiscoveryRequest request =
+          DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(ldsVersion)
+              .setNode(node)
+              .addResourceNames(resourceName)
+              .setTypeUrl(ADS_TYPE_URL_LDS)
+              // .setResponseNonce(...)
+              .build();
+      requestWriter.onNext(request);
+    }
+
+    private void sendRdsRequest(String resourceName) {
+      checkState(requestWriter != null, "ADS has not been started");
+      DiscoveryRequest request =
+          DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(rdsVersion)
+              .setNode(node)
+              .addResourceNames(resourceName)
+              .setTypeUrl(ADS_TYPE_URL_RDS)
+              // .setResponseNonce(...)
+              .build();
+      requestWriter.onNext(request);
+    }
+  }
+
+  @Override
+  void watchClusterData(String clusterName, ClusterWatcher watcher) {
+
+  }
+
+  @Override
+  void cancelClusterDataWatch(ClusterWatcher watcher) {
+
+  }
+
+  @Override
+  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+
+  }
+
+  @Override
+  void cancelEndpointDataWatch(EndpointWatcher watcher) {
+
+  }
+}
