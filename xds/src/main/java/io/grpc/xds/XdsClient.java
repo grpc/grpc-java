@@ -16,7 +16,9 @@
 
 package io.grpc.xds;
 
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.grpc.Status;
+import java.util.Objects;
 
 /**
  * An {@link XdsClient} instance encapsulates all of the logic for communicating with the xDS
@@ -48,7 +50,7 @@ abstract class XdsClient {
     }
 
     static final class Builder {
-      private ConfigUpdate base;
+      private final ConfigUpdate base;
 
       private Builder() {
         base = new ConfigUpdate();
@@ -81,9 +83,44 @@ abstract class XdsClient {
    * configurations for traffic control such as drop overloads, inter-cluster load balancing
    * policy and etc.
    */
-  // TODO(zdapeng): content TBD.
   static final class EndpointUpdate {
+    private ClusterLoadAssignment clusterLoadAssignment;
 
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private final EndpointUpdate base = new EndpointUpdate();
+
+      private Builder() {}
+
+      Builder setClusterLoadAssignment(ClusterLoadAssignment clusterLoadAssignment) {
+        base.clusterLoadAssignment = clusterLoadAssignment;
+        return this;
+      }
+
+      EndpointUpdate build() {
+        return base;
+      }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      EndpointUpdate that = (EndpointUpdate) o;
+      return Objects.equals(clusterLoadAssignment, that.clusterLoadAssignment);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(clusterLoadAssignment);
+    }
   }
 
   /**
