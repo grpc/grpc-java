@@ -85,16 +85,6 @@ abstract class XdsClient {
     void onError(Status error);
   }
 
-  /**
-   * Starts virtual host configuration config watch for the given target name.
-   */
-  abstract void watchConfigData(String targetName, ConfigWatcher watcher);
-
-  /**
-   * Cancels virtual host configuration config watch for the given target name.
-   */
-  abstract void cancelConfigDataWatch(String targetName);
-
   abstract void watchClusterData(String clusterName, ClusterWatcher watcher);
 
   abstract void cancelClusterDataWatch(ClusterWatcher watcher);
