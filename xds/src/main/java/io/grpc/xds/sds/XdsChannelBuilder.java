@@ -16,6 +16,7 @@
 
 package io.grpc.xds.sds;
 
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
@@ -34,9 +35,11 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
 
   private final NettyChannelBuilder delegate;
 
+  // temporary: until CDS is implemented we need caller to pass UpstreamTlsContext.
+  private UpstreamTlsContext upstreamTlsContext;
+
   private XdsChannelBuilder(NettyChannelBuilder delegate) {
     this.delegate = delegate;
-    SdsProtocolNegotiators.setProtocolNegotiatorFactory(delegate);
   }
 
   /**
@@ -66,6 +69,15 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
     return new XdsChannelBuilder(NettyChannelBuilder.forTarget(target));
   }
 
+  /**
+   * Set the UpstreamTlsContext for this channel. This is a temporary workaround until CDS is
+   * implemented in the XDS client.
+   */
+  public XdsChannelBuilder tlsContext(UpstreamTlsContext upstreamTlsContext) {
+    this.upstreamTlsContext = upstreamTlsContext;
+    return this;
+  }
+
   @Override
   protected ManagedChannelBuilder<?> delegate() {
     return delegate;
@@ -73,6 +85,7 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
 
   @Override
   public ManagedChannel build() {
+    SdsProtocolNegotiators.setProtocolNegotiatorFactory(delegate, upstreamTlsContext);
     return delegate.build();
   }
 }
