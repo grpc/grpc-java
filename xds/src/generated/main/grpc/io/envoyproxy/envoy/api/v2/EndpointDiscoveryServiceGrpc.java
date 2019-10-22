@@ -124,14 +124,7 @@ public final class EndpointDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceStub>() {
-        @java.lang.Override
-        public EndpointDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new EndpointDiscoveryServiceStub(channel, callOptions);
-        }
-      };
-    return EndpointDiscoveryServiceStub.newStub(factory, channel);
+    return new EndpointDiscoveryServiceStub(channel);
   }
 
   /**
@@ -139,14 +132,7 @@ public final class EndpointDiscoveryServiceGrpc {
    */
   public static EndpointDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceBlockingStub>() {
-        @java.lang.Override
-        public EndpointDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return EndpointDiscoveryServiceBlockingStub.newStub(factory, channel);
+    return new EndpointDiscoveryServiceBlockingStub(channel);
   }
 
   /**
@@ -154,14 +140,7 @@ public final class EndpointDiscoveryServiceGrpc {
    */
   public static EndpointDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<EndpointDiscoveryServiceFutureStub>() {
-        @java.lang.Override
-        public EndpointDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
-        }
-      };
-    return EndpointDiscoveryServiceFutureStub.newStub(factory, channel);
+    return new EndpointDiscoveryServiceFutureStub(channel);
   }
 
   /**
@@ -222,15 +201,19 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<EndpointDiscoveryServiceStub> {
-    private EndpointDiscoveryServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceStub> {
+    private EndpointDiscoveryServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private EndpointDiscoveryServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -265,15 +248,19 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<EndpointDiscoveryServiceBlockingStub> {
-    private EndpointDiscoveryServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceBlockingStub> {
+    private EndpointDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private EndpointDiscoveryServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -287,15 +274,19 @@ public final class EndpointDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<EndpointDiscoveryServiceFutureStub> {
-    private EndpointDiscoveryServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class EndpointDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<EndpointDiscoveryServiceFutureStub> {
+    private EndpointDiscoveryServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private EndpointDiscoveryServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected EndpointDiscoveryServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected EndpointDiscoveryServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new EndpointDiscoveryServiceFutureStub(channel, callOptions);
     }
 

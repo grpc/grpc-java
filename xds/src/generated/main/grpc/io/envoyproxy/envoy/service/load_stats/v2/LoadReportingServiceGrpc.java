@@ -62,14 +62,7 @@ public final class LoadReportingServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static LoadReportingServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceStub>() {
-        @java.lang.Override
-        public LoadReportingServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new LoadReportingServiceStub(channel, callOptions);
-        }
-      };
-    return LoadReportingServiceStub.newStub(factory, channel);
+    return new LoadReportingServiceStub(channel);
   }
 
   /**
@@ -77,14 +70,7 @@ public final class LoadReportingServiceGrpc {
    */
   public static LoadReportingServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceBlockingStub>() {
-        @java.lang.Override
-        public LoadReportingServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new LoadReportingServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return LoadReportingServiceBlockingStub.newStub(factory, channel);
+    return new LoadReportingServiceBlockingStub(channel);
   }
 
   /**
@@ -92,14 +78,7 @@ public final class LoadReportingServiceGrpc {
    */
   public static LoadReportingServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<LoadReportingServiceFutureStub>() {
-        @java.lang.Override
-        public LoadReportingServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new LoadReportingServiceFutureStub(channel, callOptions);
-        }
-      };
-    return LoadReportingServiceFutureStub.newStub(factory, channel);
+    return new LoadReportingServiceFutureStub(channel);
   }
 
   /**
@@ -157,15 +136,19 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static final class LoadReportingServiceStub extends io.grpc.stub.AbstractAsyncStub<LoadReportingServiceStub> {
-    private LoadReportingServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class LoadReportingServiceStub extends io.grpc.stub.AbstractStub<LoadReportingServiceStub> {
+    private LoadReportingServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private LoadReportingServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadReportingServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected LoadReportingServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new LoadReportingServiceStub(channel, callOptions);
     }
 
@@ -209,30 +192,38 @@ public final class LoadReportingServiceGrpc {
 
   /**
    */
-  public static final class LoadReportingServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<LoadReportingServiceBlockingStub> {
-    private LoadReportingServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class LoadReportingServiceBlockingStub extends io.grpc.stub.AbstractStub<LoadReportingServiceBlockingStub> {
+    private LoadReportingServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private LoadReportingServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadReportingServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected LoadReportingServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new LoadReportingServiceBlockingStub(channel, callOptions);
     }
   }
 
   /**
    */
-  public static final class LoadReportingServiceFutureStub extends io.grpc.stub.AbstractFutureStub<LoadReportingServiceFutureStub> {
-    private LoadReportingServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class LoadReportingServiceFutureStub extends io.grpc.stub.AbstractStub<LoadReportingServiceFutureStub> {
+    private LoadReportingServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private LoadReportingServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected LoadReportingServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected LoadReportingServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new LoadReportingServiceFutureStub(channel, callOptions);
     }
   }

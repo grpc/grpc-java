@@ -130,14 +130,7 @@ public final class ListenerDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static ListenerDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceStub>() {
-        @java.lang.Override
-        public ListenerDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ListenerDiscoveryServiceStub(channel, callOptions);
-        }
-      };
-    return ListenerDiscoveryServiceStub.newStub(factory, channel);
+    return new ListenerDiscoveryServiceStub(channel);
   }
 
   /**
@@ -145,14 +138,7 @@ public final class ListenerDiscoveryServiceGrpc {
    */
   public static ListenerDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceBlockingStub>() {
-        @java.lang.Override
-        public ListenerDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ListenerDiscoveryServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return ListenerDiscoveryServiceBlockingStub.newStub(factory, channel);
+    return new ListenerDiscoveryServiceBlockingStub(channel);
   }
 
   /**
@@ -160,14 +146,7 @@ public final class ListenerDiscoveryServiceGrpc {
    */
   public static ListenerDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ListenerDiscoveryServiceFutureStub>() {
-        @java.lang.Override
-        public ListenerDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ListenerDiscoveryServiceFutureStub(channel, callOptions);
-        }
-      };
-    return ListenerDiscoveryServiceFutureStub.newStub(factory, channel);
+    return new ListenerDiscoveryServiceFutureStub(channel);
   }
 
   /**
@@ -236,15 +215,19 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ListenerDiscoveryServiceStub> {
-    private ListenerDiscoveryServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ListenerDiscoveryServiceStub extends io.grpc.stub.AbstractStub<ListenerDiscoveryServiceStub> {
+    private ListenerDiscoveryServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ListenerDiscoveryServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ListenerDiscoveryServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ListenerDiscoveryServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ListenerDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -281,15 +264,19 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ListenerDiscoveryServiceBlockingStub> {
-    private ListenerDiscoveryServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ListenerDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<ListenerDiscoveryServiceBlockingStub> {
+    private ListenerDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ListenerDiscoveryServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ListenerDiscoveryServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ListenerDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ListenerDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -309,15 +296,19 @@ public final class ListenerDiscoveryServiceGrpc {
    * allowed to drain from listeners that are no longer present.
    * </pre>
    */
-  public static final class ListenerDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ListenerDiscoveryServiceFutureStub> {
-    private ListenerDiscoveryServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ListenerDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<ListenerDiscoveryServiceFutureStub> {
+    private ListenerDiscoveryServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ListenerDiscoveryServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ListenerDiscoveryServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ListenerDiscoveryServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ListenerDiscoveryServiceFutureStub(channel, callOptions);
     }
 

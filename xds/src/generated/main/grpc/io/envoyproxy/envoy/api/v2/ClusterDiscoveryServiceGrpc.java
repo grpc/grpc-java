@@ -127,14 +127,7 @@ public final class ClusterDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static ClusterDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceStub>() {
-        @java.lang.Override
-        public ClusterDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ClusterDiscoveryServiceStub(channel, callOptions);
-        }
-      };
-    return ClusterDiscoveryServiceStub.newStub(factory, channel);
+    return new ClusterDiscoveryServiceStub(channel);
   }
 
   /**
@@ -142,14 +135,7 @@ public final class ClusterDiscoveryServiceGrpc {
    */
   public static ClusterDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceBlockingStub>() {
-        @java.lang.Override
-        public ClusterDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ClusterDiscoveryServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return ClusterDiscoveryServiceBlockingStub.newStub(factory, channel);
+    return new ClusterDiscoveryServiceBlockingStub(channel);
   }
 
   /**
@@ -157,14 +143,7 @@ public final class ClusterDiscoveryServiceGrpc {
    */
   public static ClusterDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ClusterDiscoveryServiceFutureStub>() {
-        @java.lang.Override
-        public ClusterDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ClusterDiscoveryServiceFutureStub(channel, callOptions);
-        }
-      };
-    return ClusterDiscoveryServiceFutureStub.newStub(factory, channel);
+    return new ClusterDiscoveryServiceFutureStub(channel);
   }
 
   /**
@@ -227,15 +206,19 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ClusterDiscoveryServiceStub> {
-    private ClusterDiscoveryServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceStub> {
+    private ClusterDiscoveryServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ClusterDiscoveryServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -269,15 +252,19 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ClusterDiscoveryServiceBlockingStub> {
-    private ClusterDiscoveryServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceBlockingStub> {
+    private ClusterDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ClusterDiscoveryServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -294,15 +281,19 @@ public final class ClusterDiscoveryServiceGrpc {
    * Return list of all clusters this proxy will load balance to.
    * </pre>
    */
-  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ClusterDiscoveryServiceFutureStub> {
-    private ClusterDiscoveryServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ClusterDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<ClusterDiscoveryServiceFutureStub> {
+    private ClusterDiscoveryServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ClusterDiscoveryServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ClusterDiscoveryServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ClusterDiscoveryServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ClusterDiscoveryServiceFutureStub(channel, callOptions);
     }
 

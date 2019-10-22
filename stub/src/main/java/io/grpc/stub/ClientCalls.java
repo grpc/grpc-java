@@ -729,14 +729,4 @@ public final class ClientCalls {
       LockSupport.unpark(waiter); // no-op if null
     }
   }
-
-  enum StubType {
-    BLOCKING, FUTURE, ASYNC
-  }
-
-  /**
-   * Internal {@link CallOptions.Key} to indicate stub types.
-   */
-  static final CallOptions.Key<StubType> STUB_TYPE_OPTION =
-      CallOptions.Key.create("internal-stub-type");
 }

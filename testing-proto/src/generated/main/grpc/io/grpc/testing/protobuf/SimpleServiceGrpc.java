@@ -158,14 +158,7 @@ public final class SimpleServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static SimpleServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceStub>() {
-        @java.lang.Override
-        public SimpleServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SimpleServiceStub(channel, callOptions);
-        }
-      };
-    return SimpleServiceStub.newStub(factory, channel);
+    return new SimpleServiceStub(channel);
   }
 
   /**
@@ -173,14 +166,7 @@ public final class SimpleServiceGrpc {
    */
   public static SimpleServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceBlockingStub>() {
-        @java.lang.Override
-        public SimpleServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SimpleServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return SimpleServiceBlockingStub.newStub(factory, channel);
+    return new SimpleServiceBlockingStub(channel);
   }
 
   /**
@@ -188,14 +174,7 @@ public final class SimpleServiceGrpc {
    */
   public static SimpleServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SimpleServiceFutureStub>() {
-        @java.lang.Override
-        public SimpleServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SimpleServiceFutureStub(channel, callOptions);
-        }
-      };
-    return SimpleServiceFutureStub.newStub(factory, channel);
+    return new SimpleServiceFutureStub(channel);
   }
 
   /**
@@ -284,15 +263,19 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceStub extends io.grpc.stub.AbstractAsyncStub<SimpleServiceStub> {
-    private SimpleServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceStub extends io.grpc.stub.AbstractStub<SimpleServiceStub> {
+    private SimpleServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SimpleServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SimpleServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SimpleServiceStub(channel, callOptions);
     }
 
@@ -346,15 +329,19 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<SimpleServiceBlockingStub> {
-    private SimpleServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceBlockingStub extends io.grpc.stub.AbstractStub<SimpleServiceBlockingStub> {
+    private SimpleServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SimpleServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SimpleServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SimpleServiceBlockingStub(channel, callOptions);
     }
 
@@ -385,15 +372,19 @@ public final class SimpleServiceGrpc {
    * A simple service for test.
    * </pre>
    */
-  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractFutureStub<SimpleServiceFutureStub> {
-    private SimpleServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SimpleServiceFutureStub extends io.grpc.stub.AbstractStub<SimpleServiceFutureStub> {
+    private SimpleServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SimpleServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SimpleServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SimpleServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SimpleServiceFutureStub(channel, callOptions);
     }
 
