@@ -46,7 +46,7 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
   private final NettyServerBuilder delegate;
 
   // temporary: until LDS is implemented we need caller to pass DownstreamTlsContext.
-  private DownstreamTlsContext downstreamTlsContext;
+  @Nullable private DownstreamTlsContext downstreamTlsContext;
 
   private XdsServerBuilder(NettyServerBuilder nettyDelegate) {
     this.delegate = nettyDelegate;
@@ -123,7 +123,11 @@ public final class XdsServerBuilder extends ServerBuilder<XdsServerBuilder> {
     return this;
   }
 
-  public XdsServerBuilder tlsContext(DownstreamTlsContext downstreamTlsContext) {
+  /**
+   * Set the DownstreamTlsContext for the server. This is a temporary workaround until integration
+   * with xDS client is implemented to get LDS. Passing {@code null} will fall back to plaintext.
+   */
+  public XdsServerBuilder tlsContext(@Nullable DownstreamTlsContext downstreamTlsContext) {
     this.downstreamTlsContext = downstreamTlsContext;
     return this;
   }

@@ -27,12 +27,14 @@ import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.ManagedChannel;
 import io.grpc.Server;
-import io.grpc.examples.helloworld.GreeterGrpc;
-import io.grpc.examples.helloworld.HelloReply;
-import io.grpc.examples.helloworld.HelloRequest;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
+import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.testing.protobuf.SimpleRequest;
+import io.grpc.testing.protobuf.SimpleResponse;
+import io.grpc.testing.protobuf.SimpleServiceGrpc;
 import java.io.IOException;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -44,32 +46,17 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class XdsSdsClientServerTest {
 
+  @Rule public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
+
   @Test
-  public void buildsPlaintextClientServer() throws IOException {
-    XdsServerBuilder serverBuilder =
-        XdsServerBuilder.forPort(8080).addService(new GreeterImpl()).tlsContext(null);
-    Server server = serverBuilder.build();
-    server.start();
-
-    // now build the client channel
-    XdsChannelBuilder builder = XdsChannelBuilder.forTarget("localhost:8080").tlsContext(null);
-    ManagedChannel channel = builder.build();
-    GreeterGrpc.GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(channel);
-    String resp = greet("buddy", blockingStub);
-    assertThat(resp).isEqualTo("Hello buddy");
-    server.shutdownNow();
-  }
-
-  /** Say hello to server. */
-  private static String greet(String name, GreeterGrpc.GreeterBlockingStub blockingStub) {
-    HelloRequest request = HelloRequest.newBuilder().setName(name).build();
-    HelloReply response = blockingStub.sayHello(request);
-    return response.getMessage();
+  public void plaintextClientServer() throws IOException {
+    Server unused = getXdsServer(/* downstreamTlsContext= */ null);
+    buildClientAndTest(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null, "buddy");
   }
 
   /** TLS channel - no mTLS. */
   @Test
-  public void buildsTlsClientServer() throws IOException {
+  public void tlsClientServer_noClientAuthentication() throws IOException {
     String server1Pem = TestUtils.loadCert("server1.pem").getAbsolutePath();
     String server1Key = TestUtils.loadCert("server1.key").getAbsolutePath();
 
@@ -91,10 +78,7 @@ public class XdsSdsClientServerTest {
             .setRequireClientCertificate(BoolValue.of(false))
             .build();
 
-    XdsServerBuilder serverBuilder =
-        XdsServerBuilder.forPort(8080).addService(new GreeterImpl()).tlsContext(tlsContext);
-    Server server = serverBuilder.build();
-    server.start();
+    Server unused = getXdsServer(tlsContext);
 
     // now build the client channel
     // client only needs trustCa
@@ -110,21 +94,12 @@ public class XdsSdsClientServerTest {
 
     UpstreamTlsContext tlsContext1 =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext1).build();
-
-    XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:8080")
-            .tlsContext(tlsContext1)
-            .overrideAuthority("foo.test.google.fr");
-    ManagedChannel channel = builder.build();
-    GreeterGrpc.GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(channel);
-    String resp = greet("buddy", blockingStub);
-    assertThat(resp).isEqualTo("Hello buddy");
-    server.shutdownNow();
+    buildClientAndTest(tlsContext1, "foo.test.google.fr", "buddy");
   }
 
   /** mTLS - client auth enabled. */
   @Test
-  public void buildsMtlsClientServer() throws IOException, InterruptedException {
+  public void mtlsClientServer_withClientAuthentication() throws IOException, InterruptedException {
     String server1Pem = TestUtils.loadCert("server1.pem").getAbsolutePath();
     String server1Key = TestUtils.loadCert("server1.key").getAbsolutePath();
     String trustCa = TestUtils.loadCert("ca.pem").getAbsolutePath();
@@ -155,10 +130,7 @@ public class XdsSdsClientServerTest {
             .setRequireClientCertificate(BoolValue.of(false))
             .build();
 
-    XdsServerBuilder serverBuilder =
-        XdsServerBuilder.forPort(8080).addService(new GreeterImpl()).tlsContext(tlsContext);
-    Server server = serverBuilder.build();
-    server.start();
+    Server unused = getXdsServer(tlsContext);
 
     // now build the client channel
     String clientPem = TestUtils.loadCert("client.pem").getAbsolutePath();
@@ -181,23 +153,53 @@ public class XdsSdsClientServerTest {
     UpstreamTlsContext tlsContext1 =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext1).build();
 
-    XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:8080")
-            .tlsContext(tlsContext1)
-            .overrideAuthority("foo.test.google.fr");
-    ManagedChannel channel = builder.build();
-    GreeterGrpc.GreeterBlockingStub blockingStub = GreeterGrpc.newBlockingStub(channel);
-    String resp = greet("buddy", blockingStub);
-    assertThat(resp).isEqualTo("Hello buddy");
-    server.shutdownNow();
+    buildClientAndTest(tlsContext1, "foo.test.google.fr", "buddy");
   }
 
-  private static class GreeterImpl extends GreeterGrpc.GreeterImplBase {
+  private Server getXdsServer(DownstreamTlsContext downstreamTlsContext) throws IOException {
+    XdsServerBuilder serverBuilder =
+        XdsServerBuilder.forPort(8080)
+            .addService(new SimpleServiceImpl())
+            .tlsContext(downstreamTlsContext);
+    Server server = serverBuilder.build();
+    server.start();
+    cleanupRule.register(server);
+    return server;
+  }
+
+  private void buildClientAndTest(
+      UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String requestMessage) {
+    // build the client channel
+    XdsChannelBuilder builder =
+        XdsChannelBuilder.forTarget("localhost:8080").tlsContext(upstreamTlsContext);
+    if (overrideAuthority != null) {
+      builder = builder.overrideAuthority(overrideAuthority);
+    }
+    ManagedChannel channel = builder.build();
+    cleanupRule.register(channel);
+    SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
+        SimpleServiceGrpc.newBlockingStub(channel);
+    String resp = unaryRpc(requestMessage, blockingStub);
+    assertThat(resp).isEqualTo("Hello " + requestMessage);
+  }
+
+  /** Say hello to server. */
+  private static String unaryRpc(
+      String requestMessage, SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub) {
+    SimpleRequest request = SimpleRequest.newBuilder().setRequestMessage(requestMessage).build();
+    SimpleResponse response = blockingStub.unaryRpc(request);
+    return response.getResponseMessage();
+  }
+
+  private static class SimpleServiceImpl extends SimpleServiceGrpc.SimpleServiceImplBase {
 
     @Override
-    public void sayHello(HelloRequest req, StreamObserver<HelloReply> responseObserver) {
-      HelloReply reply = HelloReply.newBuilder().setMessage("Hello " + req.getName()).build();
-      responseObserver.onNext(reply);
+    public void unaryRpc(SimpleRequest req, StreamObserver<SimpleResponse> responseObserver) {
+      SimpleResponse response =
+          SimpleResponse.newBuilder()
+              .setResponseMessage("Hello " + req.getRequestMessage())
+              .build();
+      responseObserver.onNext(response);
       responseObserver.onCompleted();
     }
   }

@@ -37,8 +37,6 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
@@ -47,20 +45,19 @@ import java.util.logging.Logger;
 @Internal
 public final class SdsProtocolNegotiators {
 
-  private static final Logger logger = Logger.getLogger(SdsProtocolNegotiators.class.getName());
-
   private static final AsciiString SCHEME = AsciiString.of("https");
 
-  /** Sets the {@link ProtocolNegotiatorFactory} on a NettyChannelBuilder. */
-  // temporary: until CDS is implemented, we need to pass upstreamTlsContext
-  public static void setProtocolNegotiatorFactory(
-      NettyChannelBuilder builder, UpstreamTlsContext upstreamTlsContext) {
-    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        builder, new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext));
+  /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
+  // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
+      UpstreamTlsContext upstreamTlsContext) {
+    return new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext);
   }
 
-  /** Creates an SDS based {@link ProtocolNegotiator} for a server. */
-  // temporary: until LDS watcher implemented, we need to pass downstreamTlsContext
+  /**
+   * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
+   */
+  // TODO (sanjaypujare) integrate with xDS client to get LDS
   public static ProtocolNegotiator serverProtocolNegotiator(
       DownstreamTlsContext downstreamTlsContext) {
     return new ServerSdsProtocolNegotiator(downstreamTlsContext);
@@ -69,8 +66,8 @@ public final class SdsProtocolNegotiators {
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
-    // temporary: until we have CDS implemented, we need to pass upstreamTlsContext
-    UpstreamTlsContext upstreamTlsContext;
+    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+    private final UpstreamTlsContext upstreamTlsContext;
 
     ClientSdsProtocolNegotiatorFactory(UpstreamTlsContext upstreamTlsContext) {
       this.upstreamTlsContext = upstreamTlsContext;
@@ -105,7 +102,7 @@ public final class SdsProtocolNegotiators {
   @VisibleForTesting
   static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // temporary until CDS implemented
+    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
     UpstreamTlsContext upstreamTlsContext;
 
     ClientSdsProtocolNegotiator(UpstreamTlsContext upstreamTlsContext) {
@@ -121,13 +118,13 @@ public final class SdsProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       // once CDS is implemented we will retrieve upstreamTlsContext as follows:
       // grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
-      if (tlsContextIsEmpty(upstreamTlsContext)) {
+      if (isTlsContextEmpty(upstreamTlsContext)) {
         return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
       }
       return new ClientSdsHandler(grpcHandler, upstreamTlsContext);
     }
 
-    private static boolean tlsContextIsEmpty(UpstreamTlsContext upstreamTlsContext) {
+    private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
       return upstreamTlsContext == null || !upstreamTlsContext.hasCommonTlsContext();
     }
 
@@ -169,6 +166,8 @@ public final class SdsProtocolNegotiators {
     ClientSdsHandler(
         GrpcHttp2ConnectionHandler grpcHandler, UpstreamTlsContext upstreamTlsContext) {
       super(
+          // super (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler so we create this (and remove as soon as added).
           new ChannelHandlerAdapter() {
             @Override
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -203,7 +202,6 @@ public final class SdsProtocolNegotiators {
 
             @Override
             public void onException(Throwable throwable) {
-              logger.log(Level.SEVERE, "onException", throwable);
               ctx.fireExceptionCaught(throwable);
             }
           },
@@ -213,7 +211,7 @@ public final class SdsProtocolNegotiators {
 
   private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
-    // temporary: until we have LDS watcher implemented. LDS watcher will
+    // TODO (sanjaypujare) integrate with xDS client to get LDS. LDS watcher will
     // inject/update the downstreamTlsContext from LDS
     private DownstreamTlsContext downstreamTlsContext;
 
@@ -228,16 +226,13 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      DownstreamTlsContext downstreamTlsContext = this.downstreamTlsContext;
-
-      if (tlsContextIsEmpty(downstreamTlsContext)) {
+      if (isTlsContextEmpty(downstreamTlsContext)) {
         return InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler);
       }
-
       return new ServerSdsHandler(grpcHandler, downstreamTlsContext);
     }
 
-    private static boolean tlsContextIsEmpty(DownstreamTlsContext downstreamTlsContext) {
+    private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
       return downstreamTlsContext == null || !downstreamTlsContext.hasCommonTlsContext();
     }
 
@@ -254,6 +249,8 @@ public final class SdsProtocolNegotiators {
     ServerSdsHandler(
         GrpcHttp2ConnectionHandler grpcHandler, DownstreamTlsContext downstreamTlsContext) {
       super(
+          // super (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler so we create this (and remove as soon as added).
           new ChannelHandlerAdapter() {
             @Override
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -289,7 +286,6 @@ public final class SdsProtocolNegotiators {
 
             @Override
             public void onException(Throwable throwable) {
-              logger.log(Level.SEVERE, "onException", throwable);
               ctx.fireExceptionCaught(throwable);
             }
           },

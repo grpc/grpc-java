@@ -21,10 +21,12 @@ import io.grpc.ExperimentalApi;
 import io.grpc.ForwardingChannelBuilder;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.xds.sds.internal.SdsProtocolNegotiators;
 import java.net.SocketAddress;
 import javax.annotation.CheckReturnValue;
+import javax.annotation.Nullable;
 
 /**
  * A version of {@link ManagedChannelBuilder} to create xDS managed channels that will use SDS to
@@ -36,7 +38,7 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
   private final NettyChannelBuilder delegate;
 
   // temporary: until CDS is implemented we need caller to pass UpstreamTlsContext.
-  private UpstreamTlsContext upstreamTlsContext;
+  @Nullable private UpstreamTlsContext upstreamTlsContext;
 
   private XdsChannelBuilder(NettyChannelBuilder delegate) {
     this.delegate = delegate;
@@ -71,9 +73,9 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
 
   /**
    * Set the UpstreamTlsContext for this channel. This is a temporary workaround until CDS is
-   * implemented in the XDS client.
+   * implemented in the XDS client. Passing {@code null} will fall back to plaintext.
    */
-  public XdsChannelBuilder tlsContext(UpstreamTlsContext upstreamTlsContext) {
+  public XdsChannelBuilder tlsContext(@Nullable UpstreamTlsContext upstreamTlsContext) {
     this.upstreamTlsContext = upstreamTlsContext;
     return this;
   }
@@ -85,7 +87,8 @@ public final class XdsChannelBuilder extends ForwardingChannelBuilder<XdsChannel
 
   @Override
   public ManagedChannel build() {
-    SdsProtocolNegotiators.setProtocolNegotiatorFactory(delegate, upstreamTlsContext);
+    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
+        delegate, SdsProtocolNegotiators.clientProtocolNegotiatorFactory(upstreamTlsContext));
     return delegate.build();
   }
 }
