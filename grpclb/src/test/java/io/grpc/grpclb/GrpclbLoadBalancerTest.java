@@ -65,6 +65,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.ManagedChannel;
 import io.grpc.Metadata;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.grpclb.GrpclbState.BackendEntry;
 import io.grpc.grpclb.GrpclbState.DropEntry;
@@ -1835,7 +1836,10 @@ public class GrpclbLoadBalancerTest {
 
     verify(requestObserver, never()).onCompleted();
     balancer.shutdown();
-    verify(requestObserver).onCompleted();
+    ArgumentCaptor<Throwable> throwableCaptor = ArgumentCaptor.forClass(Throwable.class);
+    verify(requestObserver).onError(throwableCaptor.capture());
+    assertThat(Status.fromThrowable(throwableCaptor.getValue()).getCode())
+        .isEqualTo(Code.CANCELLED);
   }
 
   @SuppressWarnings("deprecation")
