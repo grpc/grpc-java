@@ -68,6 +68,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
       = "gzip".getBytes(Charset.forName("US-ASCII"));
+  // visible for testing
+  static final long EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS = 1_000_000;
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
@@ -360,8 +362,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private ScheduledFuture<?> startDeadlineTimer(Deadline deadline) {
     long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
     return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(
-            new DeadlineTimer(remainingNanos)), remainingNanos, TimeUnit.NANOSECONDS);
+        new LogExceptionRunnable(new DeadlineTimer(remainingNanos)),
+        remainingNanos + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS,
+        TimeUnit.NANOSECONDS);
   }
 
   @Nullable

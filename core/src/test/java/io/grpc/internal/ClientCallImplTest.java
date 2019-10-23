@@ -17,6 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.ClientCallImpl.EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -816,12 +817,34 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
+    fakeClock.forwardNanos(
+        TimeUnit.SECONDS.toNanos(1) + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS + 1);
 
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+  }
+
+  @Test
+  public void expiredDeadlineWithoutExtraWaitingDoNotReceiveCancel() {
+    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
+    // The deadline needs to be a number large enough to get encompass the call to start, otherwise
+    // the scheduled cancellation won't be created, and the call will fail early.
+    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
+        method,
+        MoreExecutors.directExecutor(),
+        baseCallOptions.withDeadline(Deadline.after(1000, TimeUnit.NANOSECONDS)),
+        provider,
+        deadlineCancellationExecutor,
+        channelCallTracer,
+        false /* retryEnabled */);
+
+    call.start(callListener, new Metadata());
+
+    fakeClock.forwardNanos(950L + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS /* nanoseconds */);
+
+    verify(stream, times(0)).cancel(statusCaptor.capture());
   }
 
   @Test
