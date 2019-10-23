@@ -142,8 +142,12 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Handle LDS response, which may either contain the RouteConfiguration directly in-line or
-   * contain the configuration to send RDS requests for dynamic resolution.
+   * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
+   * Sends an ACK request to the management server if the HttpConnectionManager for the requested
+   * resource name is found, which may either contain the RouteConfiguration directly in-line or
+   * contain the configuration to send RDS requests for dynamic resolution. Otherwise, sends back
+   * a NACK request. Proceed with the resolved RouteConfiguration (if exists) to find the
+   * VirtualHost configuration for the "xds:" URI.
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
@@ -185,8 +189,11 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Handle RDS response, which may either contain the RouteConfiguration directly in-line or
-   * contain the configuration to send VHDS requests for dynamic resolution.
+   * Handles RDS response to find the RouteConfiguration message for the requested resource name.
+   * Sends an ACK request to the management server if the RouteConfiguration for the requested
+   * resource name is found. Otherwise, sends back a NACK request. Proceed with the
+   * resolved RouteConfiguration (if exists) to find the VirtualHost configuration for the "xds:"
+   * URI.
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
@@ -208,13 +215,20 @@ final class XdsClientImpl extends XdsClient {
       // Accept this route configuration update.
       adsStream.rdsVersion = rdsResponse.getVersionInfo();
     }
-    // Send ACK/NACK request.
+    // Send an ACK/NACK request.
     adsStream.sendRdsRequest(adsStream.rdsResourceName, rdsResponse.getNonce());
     if (routeConfig != null) {
       processRouteConfig(routeConfig);
     }
   }
 
+  /**
+   * Processes RouteConfiguration message, which may either contain a VirtualHost with domains
+   * matching the "xds:" URI directly in-line or contain the configuration to send VHDS requests
+   * for dynamic resolution (currently not implemented). Forwards the resolved VirtualHost
+   * configuration as a {@link io.grpc.xds.XdsClient.ConfigUpdate} to the registered config watcher.
+   * Otherwise, forwards an error message to the config watcher.
+   */
   private void processRouteConfig(RouteConfiguration config) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     String clusterName = null;
@@ -241,7 +255,7 @@ final class XdsClientImpl extends XdsClient {
     // TODO(chengyuanzhang): check VHDS config and perform VHDS if set.
     if (clusterName == null) {
       configWatcher.onError(
-          Status.NOT_FOUND.withDescription("Cluster for target " + targetName + " not found"));
+          Status.NOT_FOUND.withDescription("Virtual host for target " + targetName + " not found"));
     } else {
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
