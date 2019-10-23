@@ -45,7 +45,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 final class XdsClientImpl extends XdsClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
@@ -104,7 +103,7 @@ final class XdsClientImpl extends XdsClient {
 
   void shutdown() {
     if (adsStream != null) {
-      adsStream.close(null);
+      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -325,17 +324,13 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    private void close(@Nullable Exception error) {
+    private void close(Exception error) {
       if (closed) {
         return;
       }
       closed = true;
       cleanUp();
-      if (error == null) {
-        requestWriter.onCompleted();
-      } else {
-        requestWriter.onError(error);
-      }
+      requestWriter.onError(error);
     }
 
     private void cleanUp() {
