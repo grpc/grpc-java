@@ -38,7 +38,32 @@ abstract class XdsClient {
    */
   // TODO(chengyuanzhang): content TBD, most information comes from VirtualHost proto.
   static final class ConfigUpdate {
+    private String clusterName;
 
+    String getClusterName() {
+      return clusterName;
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private ConfigUpdate base;
+
+      private Builder () {
+        base = new ConfigUpdate();
+      }
+
+      Builder setClusterName(String clusterName) {
+        base.clusterName = clusterName;
+        return this;
+      }
+
+      ConfigUpdate build() {
+        return base;
+      }
+    }
   }
 
   // TODO(zdapeng): content TBD.
