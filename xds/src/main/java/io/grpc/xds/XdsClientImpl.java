@@ -34,11 +34,13 @@ import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
@@ -71,18 +73,29 @@ final class XdsClientImpl extends XdsClient {
   private BackoffPolicy retryBackoffPolicy;
   private ScheduledHandle rpcRetryTimer;
 
-  // TODO(chengyuanzhang): add a primary constructor that takes in management server URI
-  //  (and ChannelCreds config etc) and build a channel.
-
-  @VisibleForTesting
   XdsClientImpl(
-      ManagedChannel channel,
+      String serverUri, /* URI of the management server to be connected to */
+      Node node,
+      ChannelCreds channelCreds, /* channel credentials for xDS communication (not used now) */
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch,
       String targetName,
+      ConfigWatcher configWatcher) {
+    this(createChannel(checkNotNull(serverUri, "serverUri")), node, syncContext,
+        timeService, backoffPolicyProvider, stopwatch, targetName, configWatcher);
+  }
+
+  @VisibleForTesting
+  XdsClientImpl(
+      ManagedChannel channel,
       Node node,
+      SynchronizationContext syncContext,
+      ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Stopwatch stopwatch,
+      String targetName,
       ConfigWatcher configWatcher) {
     this.channel = checkNotNull(channel, "channel");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -92,6 +105,10 @@ final class XdsClientImpl extends XdsClient {
     this.targetName = checkNotNull(targetName, "targetName");
     this.node = checkNotNull(node, "node");
     this.configWatcher = checkNotNull(configWatcher, "configWatcher");
+  }
+
+  private static ManagedChannel createChannel(String serverUri) {
+    return ManagedChannelBuilder.forTarget(serverUri).build();
   }
 
   /**
@@ -202,8 +219,8 @@ final class XdsClientImpl extends XdsClient {
     String clusterName = null;
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
-        // TODO(chengyuanzhang): find the first matching (wildcard matching) domain name that
-        //  matches the original "xds:" URI.
+        // Find the first matching (wildcard matching) domain name that matches the
+        // original "xds:" URI.
         if (matchHostName(targetName, domain)) {
           // The client will look only at the last route in the list (the default route),
           // whose match field must be empty and whose route field must be set.
@@ -218,6 +235,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     }
+    // TODO(chengyuanzhang): check of VHDS config and perform VHDS if set.
     if (clusterName == null) {
       configWatcher.onError(
           Status.NOT_FOUND.withDescription("Cluster for target " + targetName + " not found"));
