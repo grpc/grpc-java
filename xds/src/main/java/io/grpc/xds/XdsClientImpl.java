@@ -29,6 +29,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
@@ -39,6 +40,7 @@ import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -198,11 +200,31 @@ final class XdsClientImpl extends XdsClient {
 
   private void processRouteConfig(RouteConfiguration config) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
-    for (VirtualHost host : virtualHosts) {
-      for (String domain : host.getDomainsList()) {
+    String clusterName = null;
+    for (VirtualHost vHost : virtualHosts) {
+      for (String domain : vHost.getDomainsList()) {
         // TODO(chengyuanzhang): find the first matching (wildcard matching) domain name that
         //  matches the original "xds:" URI.
+        if (matchHostName(targetName, domain)) {
+          // The client will look only at the last route in the list (the default route),
+          // whose match field must be empty and whose route field must be set.
+          List<Route> routes = vHost.getRoutesList();
+          if (!routes.isEmpty()) {
+            Route route = routes.get(routes.size() - 1);
+            // TODO(chengyuanzhang): check the match field must be empty.
+            if (route.hasRoute()) {
+              clusterName = route.getRoute().getCluster();
+            }
+          }
+        }
       }
+    }
+    if (clusterName == null) {
+      configWatcher.onError(
+          Status.NOT_FOUND.withDescription("Cluster for target " + targetName + " not found"));
+    } else {
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
+      configWatcher.onConfigChanged(configUpdate);
     }
   }
 
@@ -235,7 +257,6 @@ final class XdsClientImpl extends XdsClient {
     private void start() {
       requestWriter = stub.withWaitForReady().streamAggregatedResources(this);
     }
-
 
     @Override
     public void onNext(final DiscoveryResponse response) {
@@ -370,5 +391,69 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void cancelEndpointDataWatch(EndpointWatcher watcher) {
 
+  }
+
+  /**
+   * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern}.
+   *
+   * <p>WILDCARD PATTERN RULES:
+   * <ol>
+   * <li>A single asterisk (*) matches any domain.</li>
+   * <li>Asterisk (*) is only permitted in the left-most or the right-most part of the pattern,
+   *     but not both.</li>
+   * </ol>
+   */
+  private static boolean matchHostName(String hostName, String pattern) {
+    // Basic sanity checks
+    if (hostName == null || hostName.length() == 0 || hostName.startsWith(".")
+        || hostName.endsWith(".")) {
+      // Invalid domain name
+      return false;
+    }
+    if (pattern == null || pattern.length() == 0 || pattern.startsWith(".")
+        || pattern.endsWith(".")) {
+      // Invalid pattern/domain name
+      return false;
+    }
+
+    pattern = pattern.toLowerCase(Locale.US);
+    // hostName and pattern are now in lower case -- domain names are case-insensitive.
+
+    if (!pattern.contains("*")) {
+      // Not a wildcard pattern -- hostName and pattern must match exactly.
+      return hostName.equals(pattern);
+    }
+    // Wildcard pattern
+
+    if (pattern.length() == 1) {
+      return true;
+    }
+
+    int index = pattern.indexOf('*');
+
+    if (pattern.indexOf('*', index + 1) != -1) {
+      // At most one asterisk (*) is allowed.
+      return false;
+    }
+
+    if (index != 0 && index != pattern.length() - 1) {
+      return false;
+    }
+
+    // Optimization: check whether hostName is too short to match the pattern. hostName must be at
+    // least as long as the pattern because asterisk has to match one or more characters.
+    if (hostName.length() < pattern.length()) {
+      // hostName too short to match the pattern.
+      return false;
+    }
+
+    if (index == 0 && !hostName.endsWith(pattern.substring(1))) {
+      // Prefix matching fails.
+      return false;
+    }
+
+    // Pattern matches hostname if suffix matching succeeds.
+    return index == pattern.length() - 1
+        && hostName.startsWith(pattern.substring(0, pattern.length() - 1));
   }
 }
