@@ -119,6 +119,7 @@ final class XdsClientImpl extends XdsClient {
   }
 
   void shutdown() {
+    channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
