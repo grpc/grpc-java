@@ -119,7 +119,7 @@ final class XdsClientImpl extends XdsClient {
     adsStream = new AdsStream(stub);
     adsStream.start();
     stopwatch.reset().start();
-    adsStream.sendLdsRequest(targetName);
+    adsStream.sendLdsRequest(targetName, "");
   }
 
   /**
@@ -151,13 +151,13 @@ final class XdsClientImpl extends XdsClient {
       adsStream.ldsVersion = ldsResponse.getVersionInfo();
     }
     // Send ACK/NACK request.
-    adsStream.sendLdsRequest(targetName);
+    adsStream.sendLdsRequest(targetName, ldsResponse.getNonce());
     if (connManager != null) {
       if (connManager.hasRouteConfig()) {
         processRouteConfig(connManager.getRouteConfig());
       } else if (connManager.hasRds()) {
         String rcName = connManager.getRds().getRouteConfigName();
-        adsStream.sendRdsRequest(rcName);
+        adsStream.sendRdsRequest(rcName, ldsResponse.getNonce());
       } else {
         // Impossible to be here.
         throw new AssertionError("Severe bug: accepted listener update contains invalid config");
@@ -190,7 +190,7 @@ final class XdsClientImpl extends XdsClient {
       adsStream.rdsVersion = rdsResponse.getVersionInfo();
     }
     // Send ACK/NACK request.
-    adsStream.sendRdsRequest(adsStream.rdsResourceName);
+    adsStream.sendRdsRequest(adsStream.rdsResourceName, rdsResponse.getNonce());
     if (routeConfig != null) {
       processRouteConfig(routeConfig);
     }
@@ -323,7 +323,7 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    private void sendLdsRequest(String resourceName) {
+    private void sendLdsRequest(String resourceName, String nonce) {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest request =
           DiscoveryRequest
@@ -332,12 +332,12 @@ final class XdsClientImpl extends XdsClient {
               .setNode(node)
               .addResourceNames(resourceName)
               .setTypeUrl(ADS_TYPE_URL_LDS)
-              // .setResponseNonce(...)
+              .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
     }
 
-    private void sendRdsRequest(String resourceName) {
+    private void sendRdsRequest(String resourceName, String nonce) {
       checkState(requestWriter != null, "ADS has not been started");
       DiscoveryRequest request =
           DiscoveryRequest
@@ -346,7 +346,7 @@ final class XdsClientImpl extends XdsClient {
               .setNode(node)
               .addResourceNames(resourceName)
               .setTypeUrl(ADS_TYPE_URL_RDS)
-              // .setResponseNonce(...)
+              .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
     }
