@@ -47,6 +47,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 final class XdsClientImpl extends XdsClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
@@ -55,7 +56,8 @@ final class XdsClientImpl extends XdsClient {
   private static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
 
-  private final ManagedChannel channel;
+  // URI of the management server to be connected to.
+  private final String serverUri;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -68,13 +70,17 @@ final class XdsClientImpl extends XdsClient {
   private final Node node;
   private final ConfigWatcher configWatcher;
 
+  @Nullable
+  private ManagedChannel channel;
+  @Nullable
   private AdsStream adsStream;
-
+  @Nullable
   private BackoffPolicy retryBackoffPolicy;
+  @Nullable
   private ScheduledHandle rpcRetryTimer;
 
   XdsClientImpl(
-      String serverUri, /* URI of the management server to be connected to */
+      String serverUri,
       Node node,
       ChannelCreds channelCreds, /* channel credentials for xDS communication (not used now) */
       SynchronizationContext syncContext,
@@ -83,21 +89,7 @@ final class XdsClientImpl extends XdsClient {
       Stopwatch stopwatch,
       String targetName,
       ConfigWatcher configWatcher) {
-    this(createChannel(checkNotNull(serverUri, "serverUri")), node, syncContext,
-        timeService, backoffPolicyProvider, stopwatch, targetName, configWatcher);
-  }
-
-  @VisibleForTesting
-  XdsClientImpl(
-      ManagedChannel channel,
-      Node node,
-      SynchronizationContext syncContext,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch,
-      String targetName,
-      ConfigWatcher configWatcher) {
-    this.channel = checkNotNull(channel, "channel");
+    this.serverUri = checkNotNull(serverUri, "serverUri");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
@@ -107,38 +99,49 @@ final class XdsClientImpl extends XdsClient {
     this.configWatcher = checkNotNull(configWatcher, "configWatcher");
   }
 
-  private static ManagedChannel createChannel(String serverUri) {
-    return ManagedChannelBuilder.forTarget(serverUri).build();
-  }
-
   /**
-   * Starts with a LDS RPC.
+   * Starts resource discovery with xDS protocol. This should be the first method to be called in
+   * this class. It should only be called once.
    */
   void start() {
-    startDiscoveryRpc();
-  }
-
-  void shutdown() {
-    channel.shutdown();
-    if (adsStream != null) {
-      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
-    }
-    if (rpcRetryTimer != null) {
-      rpcRetryTimer.cancel();
-    }
+    ManagedChannel channel = ManagedChannelBuilder.forTarget(serverUri).build();
+    startDiscoveryRpc(channel);
   }
 
   /**
-   * Creates a new RPC stream for xDS protocol communication and starts with a LDS request.
+   * Stops resource discovery. No method in this class should be called after this point.
    */
-  private void startDiscoveryRpc() {
+  void shutdown() {
+    channel.shutdown();
+    channel = null;
+    shutdownDiscoveryRpc();
+  }
+
+  /**
+   * Creates a new RPC stream on the given channel for xDS protocol communication
+   * and starts with a LDS request.
+   */
+  @VisibleForTesting
+  void startDiscoveryRpc(ManagedChannel channel) {
+    checkState(this.channel == null, "previous channel has not been cleared yet");
     checkState(adsStream == null, "previous adsStream has not been cleared yet");
+    this.channel = checkNotNull(channel, "channel");
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
         AggregatedDiscoveryServiceGrpc.newStub(channel);
     adsStream = new AdsStream(stub);
     adsStream.start();
     stopwatch.reset().start();
     adsStream.sendLdsRequest(targetName, "");
+  }
+
+  @VisibleForTesting
+  void shutdownDiscoveryRpc() {
+    if (adsStream != null) {
+      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    if (rpcRetryTimer != null) {
+      rpcRetryTimer.cancel();
+    }
   }
 
   /**
@@ -265,7 +268,7 @@ final class XdsClientImpl extends XdsClient {
   private final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
-      startDiscoveryRpc();
+      startDiscoveryRpc(channel);
     }
   }
 
@@ -351,7 +354,7 @@ final class XdsClientImpl extends XdsClient {
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
       if (delayNanos <= 0) {
-        startDiscoveryRpc();
+        startDiscoveryRpc(channel);
       } else {
         rpcRetryTimer =
             syncContext.schedule(
