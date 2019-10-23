@@ -217,11 +217,13 @@ final class XdsClientImpl extends XdsClient {
   private void processRouteConfig(RouteConfiguration config) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     String clusterName = null;
+    // Proceed with the virtual host that has longest wildcard matched domain name with the
+    // original "xds:" URI.
+    int matchingLen = -1;  // longest length of wildcard pattern that matches target name
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
-        // Find the first matching (wildcard matching) domain name that matches the
-        // original "xds:" URI.
-        if (matchHostName(targetName, domain)) {
+        if (matchHostName(targetName, domain) && domain.length() > matchingLen) {
+          matchingLen = domain.length();
           // The client will look only at the last route in the list (the default route),
           // whose match field must be empty and whose route field must be set.
           List<Route> routes = vHost.getRoutesList();
@@ -235,7 +237,7 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     }
-    // TODO(chengyuanzhang): check of VHDS config and perform VHDS if set.
+    // TODO(chengyuanzhang): check VHDS config and perform VHDS if set.
     if (clusterName == null) {
       configWatcher.onError(
           Status.NOT_FOUND.withDescription("Cluster for target " + targetName + " not found"));
@@ -409,7 +411,7 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern}.
    *
-   * <p>WILDCARD PATTERN RULES:
+   * <p>Wildcard pattern rules:
    * <ol>
    * <li>A single asterisk (*) matches any domain.</li>
    * <li>Asterisk (*) is only permitted in the left-most or the right-most part of the pattern,
