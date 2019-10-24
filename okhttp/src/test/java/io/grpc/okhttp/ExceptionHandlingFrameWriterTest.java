@@ -71,18 +71,22 @@ public class ExceptionHandlingFrameWriterTest {
   }
 
   @Test
-  public void quiet() {
+  public void ioException() {
     assertThat(getLogLevel(new IOException("Socket closed"))).isEqualTo(Level.FINE);
   }
 
   @Test
-  public void nonquiet() {
-    assertThat(getLogLevel(new IOException("foo"))).isEqualTo(Level.INFO);
+  public void ioException_nullMessage() {
+    IOException e = new IOException();
+    assertThat(e.getMessage()).isNull();
+    assertThat(getLogLevel(e)).isEqualTo(Level.FINE);
   }
 
   @Test
-  public void nullMessage() {
-    IOException e = new IOException();
+  public void extendedIoException() {
+    class ExtendedIoException extends IOException {}
+
+    ExtendedIoException e = new ExtendedIoException();
     assertThat(e.getMessage()).isNull();
     assertThat(getLogLevel(e)).isEqualTo(Level.INFO);
   }
