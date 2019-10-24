@@ -62,13 +62,17 @@ final class XdsClientImpl extends XdsClient {
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
-  // The original "xds:" URI for the server name that the gRPC client targets for.
-  private final String targetName;
+  // The host name part of the "xds:" URI for the server name that the gRPC client targets for.
+  // Must NOT contain port.
+  private final String hostName;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private final Node node;
   private final ConfigWatcher configWatcher;
+
+  // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
+  private final String targetName;
 
   @Nullable
   private ManagedChannel channel;
@@ -87,16 +91,22 @@ final class XdsClientImpl extends XdsClient {
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch,
-      String targetName,
+      String hostName,
+      int port,
       ConfigWatcher configWatcher) {
     this.serverUri = checkNotNull(serverUri, "serverUri");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
-    this.targetName = checkNotNull(targetName, "targetName");
+    this.hostName = checkNotNull(hostName, "hostName");
     this.node = checkNotNull(node, "node");
     this.configWatcher = checkNotNull(configWatcher, "configWatcher");
+    if (port == -1) {
+      targetName = hostName;
+    } else {
+      targetName = hostName + ":" + port;
+    }
   }
 
   /**
@@ -150,7 +160,7 @@ final class XdsClientImpl extends XdsClient {
    * resource name is found, which may either contain the RouteConfiguration directly in-line or
    * contain the configuration to send RDS requests for dynamic resolution. Otherwise, sends back
    * a NACK request. Proceed with the resolved RouteConfiguration (if exists) to find the
-   * VirtualHost configuration for the "xds:" URI.
+   * VirtualHost configuration for the "xds:" URI (with the port, if any, stripped off).
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
@@ -196,7 +206,7 @@ final class XdsClientImpl extends XdsClient {
    * Sends an ACK request to the management server if the RouteConfiguration for the requested
    * resource name is found. Otherwise, sends back a NACK request. Proceed with the
    * resolved RouteConfiguration (if exists) to find the VirtualHost configuration for the "xds:"
-   * URI.
+   * URI (with the port, if any, stripped off).
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
@@ -237,10 +247,10 @@ final class XdsClientImpl extends XdsClient {
     String clusterName = null;
     // Proceed with the virtual host that has longest wildcard matched domain name with the
     // original "xds:" URI.
-    int matchingLen = -1;  // longest length of wildcard pattern that matches target name
+    int matchingLen = -1;  // longest length of wildcard pattern that matches host name
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
-        if (matchHostName(targetName, domain) && domain.length() > matchingLen) {
+        if (matchHostName(hostName, domain) && domain.length() > matchingLen) {
           matchingLen = domain.length();
           // The client will look only at the last route in the list (the default route),
           // whose match field must be empty and whose route field must be set.
