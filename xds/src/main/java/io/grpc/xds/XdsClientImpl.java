@@ -86,7 +86,7 @@ final class XdsClientImpl extends XdsClient {
   XdsClientImpl(
       String serverUri,
       Node node,
-      ChannelCreds channelCreds, /* channel credentials for xDS communication (not used now) */
+      @Nullable ChannelCreds channelCreds, /* channel credentials for xDS communication (not used now) */
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
