@@ -16,6 +16,8 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.base.Preconditions;
 import io.grpc.NameResolver.Args;
 import io.grpc.NameResolverProvider;
@@ -39,14 +41,14 @@ public final class XdsNameResolverProvider extends NameResolverProvider {
   @Override
   public XdsNameResolver newNameResolver(URI targetUri, Args args) {
     if (SCHEME.equals(targetUri.getScheme())) {
-      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      String targetPath = checkNotNull(targetUri.getPath(), "targetPath");
       Preconditions.checkArgument(
           targetPath.startsWith("/"),
           "the path component (%s) of the target (%s) must start with '/'",
           targetPath,
           targetUri);
-      String name = targetPath.substring(1);
-      return new XdsNameResolver(name);
+      String authority = targetPath.substring(1);
+      return new XdsNameResolver(authority);
     }
     return null;
   }

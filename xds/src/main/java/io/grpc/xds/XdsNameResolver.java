@@ -16,10 +16,7 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
@@ -28,7 +25,6 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import java.io.IOException;
-import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
 import java.util.logging.Level;
@@ -62,17 +58,13 @@ final class XdsNameResolver extends NameResolver {
   private final String serviceConfig;
   private final Node node;
 
-  XdsNameResolver(String name) {
-    this(name, createBootstrapper());
+  XdsNameResolver(String authority) {
+    this(authority, createBootstrapper());
   }
 
   @VisibleForTesting
-  XdsNameResolver(String name, @Nullable Bootstrapper bootstrapper) {
-    URI nameUri = URI.create("//" + checkNotNull(name, "name"));
-    authority =
-        Preconditions.checkNotNull(
-            nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-
+  XdsNameResolver(String authority, @Nullable Bootstrapper bootstrapper) {
+    this.authority = authority;
     String serviceConfig = SERVICE_CONFIG_HARDCODED;
     Node node = Node.getDefaultInstance();
 
