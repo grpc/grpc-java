@@ -109,18 +109,13 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  /**
-   * Starts resource discovery with xDS protocol. This should be the first method to be called in
-   * this class. It should only be called once.
-   */
+  @Override
   void start() {
     ManagedChannel channel = ManagedChannelBuilder.forTarget(serverUri).build();
     startDiscoveryRpc(channel);
   }
 
-  /**
-   * Stops resource discovery. No method in this class should be called after this point.
-   */
+  @Override
   void shutdown() {
     channel.shutdown();
     channel = null;
@@ -414,26 +409,6 @@ final class XdsClientImpl extends XdsClient {
               .build();
       requestWriter.onNext(request);
     }
-  }
-
-  @Override
-  void watchClusterData(String clusterName, ClusterWatcher watcher) {
-
-  }
-
-  @Override
-  void cancelClusterDataWatch(ClusterWatcher watcher) {
-
-  }
-
-  @Override
-  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
-
-  }
-
-  @Override
-  void cancelEndpointDataWatch(EndpointWatcher watcher) {
-
   }
 
   /**
