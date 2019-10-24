@@ -68,15 +68,20 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private static final Logger log = Logger.getLogger(ClientCallImpl.class.getName());
   private static final byte[] FULL_STREAM_DECOMPRESSION_ENCODINGS
       = "gzip".getBytes(Charset.forName("US-ASCII"));
+  // There is a race between server receiving the cancellation from the client and the server
+  // cancelling the stream, which changes the final status of the stream from the server's
+  // perspective.
+  // Mitigate this by introduce a delay for client to send the cancel request.(b/118879795)
   @VisibleForTesting
-  static final long EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS = TimeUnit.SECONDS.toNanos(1);
+  static final long DEADLINE_EXPIRATION_CANCEL_DELAY = TimeUnit.SECONDS.toNanos(1);
 
   private final MethodDescriptor<ReqT, RespT> method;
   private final Tag tag;
   private final Executor callExecutor;
   private final CallTracer channelCallsTracer;
   private final Context context;
-  private volatile ScheduledFuture<?> deadlineCancellationFuture;
+  private ClientStreamListener listener;
+  private volatile ScheduledFuture<?> deadlineCancellationSendToServerFuture;
   private final boolean unaryRequest;
   private final CallOptions callOptions;
   private final boolean retryEnabled;
@@ -90,6 +95,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
   private CompressorRegistry compressorRegistry = CompressorRegistry.getDefaultInstance();
+  private boolean notifyApplicationCancelledOnly = false;
+  private ScheduledFuture<?> deadlineCancellationNotifyApplicationFuture;
 
   ClientCallImpl(
       MethodDescriptor<ReqT, RespT> method, Executor executor, CallOptions callOptions,
@@ -289,7 +296,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
     stream.setDecompressorRegistry(decompressorRegistry);
     channelCallsTracer.reportCallStarted();
-    stream.start(new ClientStreamListenerImpl(observer));
+    listener = new ClientStreamListenerImpl(observer);
+    stream.start(listener);
 
     // Delay any sources of cancellation after start(), because most of the transports are broken if
     // they receive cancel before start. Issue #1343 has more details
@@ -301,7 +309,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         && !effectiveDeadline.equals(context.getDeadline())
         // If the channel has been terminated, we don't need to schedule an extra task.
         && deadlineCancellationExecutor != null) {
-      deadlineCancellationFuture = startDeadlineTimer(effectiveDeadline);
+      deadlineCancellationNotifyApplicationFuture =
+          startDeadlineNotifyApplicationTimer(effectiveDeadline);
+      deadlineCancellationSendToServerFuture =
+          startDeadlineSendCancelToServerTimer(effectiveDeadline);
     }
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
@@ -335,16 +346,37 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private void removeContextListenerAndCancelDeadlineFuture() {
     context.removeListener(cancellationListener);
-    ScheduledFuture<?> f = deadlineCancellationFuture;
+    ScheduledFuture<?> f = deadlineCancellationSendToServerFuture;
+    if (f != null) {
+      f.cancel(false);
+    }
+
+    f = deadlineCancellationNotifyApplicationFuture;
     if (f != null) {
       f.cancel(false);
     }
   }
 
-  private class DeadlineTimer implements Runnable {
+  private ScheduledFuture<?> startDeadlineSendCancelToServerTimer(Deadline deadline) {
+    long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
+    return deadlineCancellationExecutor.schedule(
+        new LogExceptionRunnable(new DeadlineSendCancelToServerTimer(remainingNanos)),
+        remainingNanos + DEADLINE_EXPIRATION_CANCEL_DELAY,
+        TimeUnit.NANOSECONDS);
+  }
+
+  private ScheduledFuture<?> startDeadlineNotifyApplicationTimer(Deadline deadline) {
+    long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
+    return deadlineCancellationExecutor.schedule(
+        new LogExceptionRunnable(new DeadlineNotifyApplicationTimer(remainingNanos)),
+        remainingNanos,
+        TimeUnit.NANOSECONDS);
+  }
+
+  private class DeadlineSendCancelToServerTimer implements Runnable {
     private final long remainingNanos;
 
-    DeadlineTimer(long remainingNanos) {
+    DeadlineSendCancelToServerTimer(long remainingNanos) {
       this.remainingNanos = remainingNanos;
     }
 
@@ -359,12 +391,23 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private ScheduledFuture<?> startDeadlineTimer(Deadline deadline) {
-    long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
-    return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new DeadlineTimer(remainingNanos)),
-        remainingNanos + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS,
-        TimeUnit.NANOSECONDS);
+  private class DeadlineNotifyApplicationTimer implements Runnable {
+    private final long remainingNanos;
+
+    DeadlineNotifyApplicationTimer(long remainingNanos) {
+      this.remainingNanos = remainingNanos;
+    }
+
+    @Override
+    public void run() {
+      InsightBuilder insight = new InsightBuilder();
+      stream.appendTimeoutInsight(insight);
+      // DelayedStream.cancel() is safe to call from a thread that is different from where the
+      // stream is created.
+      notifyApplicationCancelledOnly = true;
+      listener.closed(DEADLINE_EXCEEDED.augmentDescription(
+          "deadline exceeded after " + remainingNanos + "ns. " + insight), new Metadata());
+    }
   }
 
   @Nullable
@@ -632,8 +675,12 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       try {
         closeObserver(observer, status, trailers);
       } finally {
-        removeContextListenerAndCancelDeadlineFuture();
-        channelCallsTracer.reportCallEnded(status.isOk());
+        if (!notifyApplicationCancelledOnly) {
+          removeContextListenerAndCancelDeadlineFuture();
+          channelCallsTracer.reportCallEnded(status.isOk());
+        } else {
+          notifyApplicationCancelledOnly = false;
+        }
       }
     }
 

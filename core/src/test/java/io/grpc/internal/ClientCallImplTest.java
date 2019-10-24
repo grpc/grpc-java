@@ -17,7 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.ClientCallImpl.EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS;
+import static io.grpc.internal.ClientCallImpl.DEADLINE_EXPIRATION_CANCEL_DELAY;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -55,6 +55,7 @@ import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.MethodDescriptor.MethodType;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.internal.ClientCallImpl.ClientTransportProvider;
 import io.grpc.internal.testing.SingleMessageProducer;
 import io.grpc.testing.TestMethodDescriptors;
@@ -131,6 +132,9 @@ public class ClientCallImplTest {
 
   @Captor
   private ArgumentCaptor<Status> statusArgumentCaptor;
+
+  @Captor
+  private ArgumentCaptor<Metadata> metadataArgumentCaptor;
 
   private CallOptions baseCallOptions;
 
@@ -817,9 +821,19 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(
-        TimeUnit.SECONDS.toNanos(1) + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS + 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
 
+    // Verify cancel sent to application when deadline just past
+    verify(callListener).onClose(statusArgumentCaptor.capture(),
+        ArgumentMatchers.isA(Metadata.class));
+    verify(callListener, times(1))
+        .onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
+    verify(stream, never()).cancel(statusCaptor.capture());
+
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY);
+
+    // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
@@ -842,7 +856,7 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(950L + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS);
+    fakeClock.forwardNanos(950L + DEADLINE_EXPIRATION_CANCEL_DELAY);
 
     verify(stream, never()).cancel(statusCaptor.capture());
   }
