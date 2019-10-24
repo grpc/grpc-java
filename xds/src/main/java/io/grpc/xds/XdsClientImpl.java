@@ -402,7 +402,7 @@ final class XdsClientImpl extends XdsClient {
     }
 
     private void sendRdsRequest(String resourceName, String nonce) {
-      checkState(requestWriter != null, "ADS has not been started");
+      checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
