@@ -16,6 +16,8 @@
 
 package io.grpc.xds.sds.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
@@ -37,6 +39,7 @@ import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
 import java.util.ArrayList;
 import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
@@ -47,19 +50,23 @@ public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
-  /** Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. */
+  /**
+   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. Passing
+   * {@code null} for upstreamTlsContext will fall back to plaintext.
+   */
   // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
   public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
-      UpstreamTlsContext upstreamTlsContext) {
+      @Nullable UpstreamTlsContext upstreamTlsContext) {
     return new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext);
   }
 
   /**
    * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
+   * Passing {@code null} for downstreamTlsContext will fall back to plaintext.
    */
   // TODO (sanjaypujare) integrate with xDS client to get LDS
   public static ProtocolNegotiator serverProtocolNegotiator(
-      DownstreamTlsContext downstreamTlsContext) {
+      @Nullable DownstreamTlsContext downstreamTlsContext) {
     return new ServerSdsProtocolNegotiator(downstreamTlsContext);
   }
 
@@ -174,6 +181,7 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().remove(this);
             }
           });
+      checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.upstreamTlsContext = upstreamTlsContext;
     }
@@ -257,6 +265,7 @@ public final class SdsProtocolNegotiators {
               ctx.pipeline().remove(this);
             }
           });
+      checkNotNull(grpcHandler, "grpcHandler");
       this.grpcHandler = grpcHandler;
       this.downstreamTlsContext = downstreamTlsContext;
     }

@@ -226,7 +226,7 @@ public class SdsProtocolNegotiatorsTest {
     pipeline.fireUserEventTriggered(InternalProtocolNegotiationEvent.getDefault());
     channel.runPendingTasks(); // need this for tasks to execute on eventLoop
     channelHandlerCtx = pipeline.context(clientSdsHandler);
-    assertThat(channelHandlerCtx).isNull(); //
+    assertThat(channelHandlerCtx).isNull();
     Object sslEvent = SslHandshakeCompletionEvent.SUCCESS;
 
     pipeline.fireUserEventTriggered(sslEvent);

@@ -25,7 +25,6 @@ import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.TlsCertificate;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
-import io.grpc.ManagedChannel;
 import io.grpc.Server;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.stub.StreamObserver;
@@ -50,8 +49,9 @@ public class XdsSdsClientServerTest {
 
   @Test
   public void plaintextClientServer() throws IOException {
-    Server unused = getXdsServer(/* downstreamTlsContext= */ null);
-    buildClientAndTest(/* upstreamTlsContext= */ null, /* overrideAuthority= */ null, "buddy");
+    Server server = getXdsServer(/* downstreamTlsContext= */ null);
+    buildClientAndTest(
+        /* upstreamTlsContext= */ null, /* overrideAuthority= */ null, "buddy", server.getPort());
   }
 
   /** TLS channel - no mTLS. */
@@ -60,41 +60,36 @@ public class XdsSdsClientServerTest {
     String server1Pem = TestUtils.loadCert("server1.pem").getAbsolutePath();
     String server1Key = TestUtils.loadCert("server1.key").getAbsolutePath();
 
-    // TlsCert but no certCa
     TlsCertificate tlsCert =
         TlsCertificate.newBuilder()
             .setPrivateKey(DataSource.newBuilder().setFilename(server1Key).build())
             .setCertificateChain(DataSource.newBuilder().setFilename(server1Pem).build())
             .build();
 
-    // commonTlsContext
     CommonTlsContext commonTlsContext =
         CommonTlsContext.newBuilder().addTlsCertificates(tlsCert).build();
 
-    // build the DownstreamTlsContext
-    DownstreamTlsContext tlsContext =
+    DownstreamTlsContext downstreamTlsContext =
         DownstreamTlsContext.newBuilder()
             .setCommonTlsContext(commonTlsContext)
             .setRequireClientCertificate(BoolValue.of(false))
             .build();
 
-    Server unused = getXdsServer(tlsContext);
+    Server server = getXdsServer(downstreamTlsContext);
 
-    // now build the client channel
-    // client only needs trustCa
+    // for TLS client doesn't need cert but needs trustCa
     String trustCa = TestUtils.loadCert("ca.pem").getAbsolutePath();
     CertificateValidationContext certContext =
         CertificateValidationContext.newBuilder()
             .setTrustedCa(DataSource.newBuilder().setFilename(trustCa).build())
             .build();
 
-    // commonTlsContext
     CommonTlsContext commonTlsContext1 =
         CommonTlsContext.newBuilder().setValidationContext(certContext).build();
 
-    UpstreamTlsContext tlsContext1 =
+    UpstreamTlsContext upstreamTlsContext =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext1).build();
-    buildClientAndTest(tlsContext1, "foo.test.google.fr", "buddy");
+    buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
   }
 
   /** mTLS - client auth enabled. */
@@ -104,7 +99,6 @@ public class XdsSdsClientServerTest {
     String server1Key = TestUtils.loadCert("server1.key").getAbsolutePath();
     String trustCa = TestUtils.loadCert("ca.pem").getAbsolutePath();
 
-    // TlsCert
     TlsCertificate tlsCert =
         TlsCertificate.newBuilder()
             .setPrivateKey(DataSource.newBuilder().setFilename(server1Key).build())
@@ -116,69 +110,62 @@ public class XdsSdsClientServerTest {
             .setTrustedCa(DataSource.newBuilder().setFilename(trustCa).build())
             .build();
 
-    // commonTlsContext
     CommonTlsContext commonTlsContext =
         CommonTlsContext.newBuilder()
             .addTlsCertificates(tlsCert)
             .setValidationContext(certContext)
             .build();
 
-    // build the DownstreamTlsContext
-    DownstreamTlsContext tlsContext =
+    DownstreamTlsContext downstreamTlsContext =
         DownstreamTlsContext.newBuilder()
             .setCommonTlsContext(commonTlsContext)
             .setRequireClientCertificate(BoolValue.of(false))
             .build();
 
-    Server unused = getXdsServer(tlsContext);
+    Server server = getXdsServer(downstreamTlsContext);
 
-    // now build the client channel
     String clientPem = TestUtils.loadCert("client.pem").getAbsolutePath();
     String clientKey = TestUtils.loadCert("client.key").getAbsolutePath();
 
-    // TlsCert
     TlsCertificate tlsCert1 =
         TlsCertificate.newBuilder()
             .setPrivateKey(DataSource.newBuilder().setFilename(clientKey).build())
             .setCertificateChain(DataSource.newBuilder().setFilename(clientPem).build())
             .build();
 
-    // commonTlsContext
     CommonTlsContext commonTlsContext1 =
         CommonTlsContext.newBuilder()
             .addTlsCertificates(tlsCert1)
             .setValidationContext(certContext)
             .build();
 
-    UpstreamTlsContext tlsContext1 =
+    UpstreamTlsContext upstreamTlsContext =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext1).build();
 
-    buildClientAndTest(tlsContext1, "foo.test.google.fr", "buddy");
+    buildClientAndTest(upstreamTlsContext, "foo.test.google.fr", "buddy", server.getPort());
   }
 
   private Server getXdsServer(DownstreamTlsContext downstreamTlsContext) throws IOException {
     XdsServerBuilder serverBuilder =
-        XdsServerBuilder.forPort(8080)
+        XdsServerBuilder.forPort(0) // get unused port
             .addService(new SimpleServiceImpl())
             .tlsContext(downstreamTlsContext);
-    Server server = serverBuilder.build();
-    server.start();
-    cleanupRule.register(server);
-    return server;
+    return cleanupRule.register(serverBuilder.build()).start();
   }
 
   private void buildClientAndTest(
-      UpstreamTlsContext upstreamTlsContext, String overrideAuthority, String requestMessage) {
-    // build the client channel
+      UpstreamTlsContext upstreamTlsContext,
+      String overrideAuthority,
+      String requestMessage,
+      int serverPort) {
+
     XdsChannelBuilder builder =
-        XdsChannelBuilder.forTarget("localhost:8080").tlsContext(upstreamTlsContext);
+        XdsChannelBuilder.forTarget("localhost:" + serverPort).tlsContext(upstreamTlsContext);
     if (overrideAuthority != null) {
       builder = builder.overrideAuthority(overrideAuthority);
     }
-    ManagedChannel channel = builder.build();
-    cleanupRule.register(channel);
     SimpleServiceGrpc.SimpleServiceBlockingStub blockingStub =
-        SimpleServiceGrpc.newBlockingStub(channel);
+        SimpleServiceGrpc.newBlockingStub(cleanupRule.register(builder.build()));
     String resp = unaryRpc(requestMessage, blockingStub);
     assertThat(resp).isEqualTo("Hello " + requestMessage);
   }
