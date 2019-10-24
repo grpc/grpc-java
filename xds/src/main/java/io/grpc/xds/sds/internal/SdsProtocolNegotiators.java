@@ -173,8 +173,9 @@ public final class SdsProtocolNegotiators {
     ClientSdsHandler(
         GrpcHttp2ConnectionHandler grpcHandler, UpstreamTlsContext upstreamTlsContext) {
       super(
-          // super (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
-          // handler so we create this (and remove as soon as added).
+          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
+          // here and then manually add 'next' when we call fireProtocolNegotiationEvent()
           new ChannelHandlerAdapter() {
             @Override
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
@@ -257,8 +258,9 @@ public final class SdsProtocolNegotiators {
     ServerSdsHandler(
         GrpcHttp2ConnectionHandler grpcHandler, DownstreamTlsContext downstreamTlsContext) {
       super(
-          // super (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
-          // handler so we create this (and remove as soon as added).
+          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
+          // here and then manually add 'next' when we call fireProtocolNegotiationEvent()
           new ChannelHandlerAdapter() {
             @Override
             public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
