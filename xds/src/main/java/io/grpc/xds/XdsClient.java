@@ -51,7 +51,7 @@ abstract class XdsClient {
     static final class Builder {
       private ConfigUpdate base;
 
-      private Builder () {
+      private Builder() {
         base = new ConfigUpdate();
       }
 
