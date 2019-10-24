@@ -562,8 +562,8 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               public void cancelled(Context context) {
                 Status status = statusFromCancelled(context);
                 if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-                  // This should rarely get run, since the client will likely cancel the stream before
-                  // the timeout is reached.
+                  // This should rarely get run, since the client will likely cancel the stream
+                  // before the timeout is reached.
                   stream.cancel(status);
                 }
               }
