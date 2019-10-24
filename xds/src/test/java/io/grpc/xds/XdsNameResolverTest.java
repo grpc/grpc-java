@@ -31,6 +31,7 @@ import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +73,23 @@ public class XdsNameResolverTest {
 
   @Mock private NameResolver.Listener2 mockListener;
   @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
+
+  @Test
+  public void validName_withAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(
+            URI.create("xds-experimental://trafficdirector.google.com/foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void validName_noAuthority() {
+    XdsNameResolver resolver =
+        provider.newNameResolver(URI.create("xds-experimental:///foo.googleapis.com"), args);
+    assertThat(resolver).isNotNull();
+    assertThat(resolver.getServiceAuthority()).isEqualTo("foo.googleapis.com");
+  }
 
   @Test
   public void resolve_hardcodedResult() {
