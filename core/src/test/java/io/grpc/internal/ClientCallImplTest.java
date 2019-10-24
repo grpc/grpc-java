@@ -166,7 +166,7 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        false /* retryEnabled */);
+        /* retryEnabled= */ false);
     call.start(callListener, new Metadata());
     verify(stream).start(listenerArgumentCaptor.capture());
     final ClientStreamListener streamListener = listenerArgumentCaptor.getValue();
@@ -838,13 +838,13 @@ public class ClientCallImplTest {
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
-        false /* retryEnabled */);
+        /* retryEnabled= */false );
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(950L + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS /* nanoseconds */);
+    fakeClock.forwardNanos(950L + EXTRA_WAIT_TIME_BEFORE_SEND_CANCEL_IN_NS);
 
-    verify(stream, times(0)).cancel(statusCaptor.capture());
+    verify(stream, never()).cancel(statusCaptor.capture());
   }
 
   @Test
