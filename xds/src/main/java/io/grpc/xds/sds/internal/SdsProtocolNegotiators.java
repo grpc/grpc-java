@@ -16,15 +16,30 @@
 
 package io.grpc.xds.sds.internal;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.annotations.VisibleForTesting;
+import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Internal;
 import io.grpc.netty.GrpcHttp2ConnectionHandler;
 import io.grpc.netty.InternalNettyChannelBuilder;
 import io.grpc.netty.InternalNettyChannelBuilder.ProtocolNegotiatorFactory;
 import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
+import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
+import io.grpc.xds.sds.SecretProvider;
+import io.grpc.xds.sds.TlsContextManager;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerAdapter;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.ssl.SslContext;
 import io.netty.util.AsciiString;
+import java.util.ArrayList;
+import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * Provides client and server side gRPC {@link ProtocolNegotiator}s that use SDS to provide the SSL
@@ -35,12 +50,40 @@ public final class SdsProtocolNegotiators {
 
   private static final AsciiString SCHEME = AsciiString.of("https");
 
+  /**
+   * Returns a {@link ProtocolNegotiatorFactory} to be used on {@link NettyChannelBuilder}. Passing
+   * {@code null} for upstreamTlsContext will fall back to plaintext.
+   */
+  // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+  public static ProtocolNegotiatorFactory clientProtocolNegotiatorFactory(
+      @Nullable UpstreamTlsContext upstreamTlsContext) {
+    return new ClientSdsProtocolNegotiatorFactory(upstreamTlsContext);
+  }
+
+  /**
+   * Creates an SDS based {@link ProtocolNegotiator} for a {@link io.grpc.netty.NettyServerBuilder}.
+   * Passing {@code null} for downstreamTlsContext will fall back to plaintext.
+   */
+  // TODO (sanjaypujare) integrate with xDS client to get LDS
+  public static ProtocolNegotiator serverProtocolNegotiator(
+      @Nullable DownstreamTlsContext downstreamTlsContext) {
+    return new ServerSdsProtocolNegotiator(downstreamTlsContext);
+  }
+
   private static final class ClientSdsProtocolNegotiatorFactory
       implements InternalNettyChannelBuilder.ProtocolNegotiatorFactory {
 
+    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+    private final UpstreamTlsContext upstreamTlsContext;
+
+    ClientSdsProtocolNegotiatorFactory(UpstreamTlsContext upstreamTlsContext) {
+      this.upstreamTlsContext = upstreamTlsContext;
+    }
+
     @Override
     public InternalProtocolNegotiator.ProtocolNegotiator buildProtocolNegotiator() {
-      final ClientSdsProtocolNegotiator negotiator = new ClientSdsProtocolNegotiator();
+      final ClientSdsProtocolNegotiator negotiator =
+          new ClientSdsProtocolNegotiator(upstreamTlsContext);
       final class LocalSdsNegotiator implements InternalProtocolNegotiator.ProtocolNegotiator {
 
         @Override
@@ -63,7 +106,15 @@ public final class SdsProtocolNegotiators {
     }
   }
 
-  private static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
+  @VisibleForTesting
+  static final class ClientSdsProtocolNegotiator implements ProtocolNegotiator {
+
+    // TODO (sanjaypujare) integrate with xDS client to get upstreamTlsContext from CDS
+    UpstreamTlsContext upstreamTlsContext;
+
+    ClientSdsProtocolNegotiator(UpstreamTlsContext upstreamTlsContext) {
+      this.upstreamTlsContext = upstreamTlsContext;
+    }
 
     @Override
     public AsciiString scheme() {
@@ -72,16 +123,111 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      // TODO(sanjaypujare): once implemented return ClientSdsHandler
-      throw new UnsupportedOperationException("Not implemented yet");
+      // once CDS is implemented we will retrieve upstreamTlsContext as follows:
+      // grpcHandler.getEagAttributes().get(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT);
+      if (isTlsContextEmpty(upstreamTlsContext)) {
+        return InternalProtocolNegotiators.plaintext().newHandler(grpcHandler);
+      }
+      return new ClientSdsHandler(grpcHandler, upstreamTlsContext);
+    }
+
+    private static boolean isTlsContextEmpty(UpstreamTlsContext upstreamTlsContext) {
+      return upstreamTlsContext == null || !upstreamTlsContext.hasCommonTlsContext();
     }
 
     @Override
     public void close() {}
+  }
+
+  private static class BufferReadsHandler extends ChannelInboundHandlerAdapter {
+    private final List<Object> reads = new ArrayList<>();
+    private boolean readComplete;
+
+    @Override
+    public void channelRead(ChannelHandlerContext ctx, Object msg) {
+      reads.add(msg);
+    }
+
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) {
+      readComplete = true;
+    }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+      for (Object msg : reads) {
+        super.channelRead(ctx, msg);
+      }
+      if (readComplete) {
+        super.channelReadComplete(ctx);
+      }
+    }
+  }
+
+  @VisibleForTesting
+  static final class ClientSdsHandler
+      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+    private final UpstreamTlsContext upstreamTlsContext;
+
+    ClientSdsHandler(
+        GrpcHttp2ConnectionHandler grpcHandler, UpstreamTlsContext upstreamTlsContext) {
+      super(
+          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
+          // here and then manually add 'next' when we call fireProtocolNegotiationEvent()
+          new ChannelHandlerAdapter() {
+            @Override
+            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+              ctx.pipeline().remove(this);
+            }
+          });
+      checkNotNull(grpcHandler, "grpcHandler");
+      this.grpcHandler = grpcHandler;
+      this.upstreamTlsContext = upstreamTlsContext;
+    }
+
+    @Override
+    protected void handlerAdded0(final ChannelHandlerContext ctx) {
+      final BufferReadsHandler bufferReads = new BufferReadsHandler();
+      ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
+
+      SecretProvider<SslContext> sslContextProvider =
+          TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
+
+      sslContextProvider.addCallback(
+          new SecretProvider.Callback<SslContext>() {
+
+            @Override
+            public void updateSecret(SslContext sslContext) {
+              ChannelHandler handler =
+                  InternalProtocolNegotiators.tls(sslContext).newHandler(grpcHandler);
+
+              // Delegate rest of handshake to TLS handler
+              ctx.pipeline().addAfter(ctx.name(), null, handler);
+              fireProtocolNegotiationEvent(ctx);
+              ctx.pipeline().remove(bufferReads);
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+              ctx.fireExceptionCaught(throwable);
+            }
+          },
+          ctx.executor());
+    }
   }
 
   private static final class ServerSdsProtocolNegotiator implements ProtocolNegotiator {
 
+    // TODO (sanjaypujare) integrate with xDS client to get LDS. LDS watcher will
+    // inject/update the downstreamTlsContext from LDS
+    private DownstreamTlsContext downstreamTlsContext;
+
+    ServerSdsProtocolNegotiator(DownstreamTlsContext downstreamTlsContext) {
+      this.downstreamTlsContext = downstreamTlsContext;
+    }
+
     @Override
     public AsciiString scheme() {
       return SCHEME;
@@ -89,22 +235,72 @@ public final class SdsProtocolNegotiators {
 
     @Override
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      // TODO(sanjaypujare): once implemented return ServerSdsHandler
-      throw new UnsupportedOperationException("Not implemented yet");
+      if (isTlsContextEmpty(downstreamTlsContext)) {
+        return InternalProtocolNegotiators.serverPlaintext().newHandler(grpcHandler);
+      }
+      return new ServerSdsHandler(grpcHandler, downstreamTlsContext);
+    }
+
+    private static boolean isTlsContextEmpty(DownstreamTlsContext downstreamTlsContext) {
+      return downstreamTlsContext == null || !downstreamTlsContext.hasCommonTlsContext();
     }
 
     @Override
     public void close() {}
   }
 
-  /** Sets the {@link ProtocolNegotiatorFactory} on a NettyChannelBuilder. */
-  public static void setProtocolNegotiatorFactory(NettyChannelBuilder builder) {
-    InternalNettyChannelBuilder.setProtocolNegotiatorFactory(
-        builder, new ClientSdsProtocolNegotiatorFactory());
-  }
+  @VisibleForTesting
+  static final class ServerSdsHandler
+      extends InternalProtocolNegotiators.ProtocolNegotiationHandler {
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+    private final DownstreamTlsContext downstreamTlsContext;
 
-  /** Creates an SDS based {@link ProtocolNegotiator} for a server. */
-  public static ProtocolNegotiator serverProtocolNegotiator() {
-    return new ServerSdsProtocolNegotiator();
+    ServerSdsHandler(
+        GrpcHttp2ConnectionHandler grpcHandler, DownstreamTlsContext downstreamTlsContext) {
+      super(
+          // superclass (InternalProtocolNegotiators.ProtocolNegotiationHandler) expects 'next'
+          // handler but we don't have a next handler _yet_. So we "disable" superclass's behavior
+          // here and then manually add 'next' when we call fireProtocolNegotiationEvent()
+          new ChannelHandlerAdapter() {
+            @Override
+            public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+              ctx.pipeline().remove(this);
+            }
+          });
+      checkNotNull(grpcHandler, "grpcHandler");
+      this.grpcHandler = grpcHandler;
+      this.downstreamTlsContext = downstreamTlsContext;
+    }
+
+    @Override
+    protected void handlerAdded0(final ChannelHandlerContext ctx) {
+      final BufferReadsHandler bufferReads = new BufferReadsHandler();
+      ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
+
+      SecretProvider<SslContext> sslContextProvider =
+          TlsContextManager.getInstance()
+              .findOrCreateServerSslContextProvider(downstreamTlsContext);
+
+      sslContextProvider.addCallback(
+          new SecretProvider.Callback<SslContext>() {
+
+            @Override
+            public void updateSecret(SslContext sslContext) {
+              ChannelHandler handler =
+                  InternalProtocolNegotiators.serverTls(sslContext).newHandler(grpcHandler);
+
+              // Delegate rest of handshake to TLS handler
+              ctx.pipeline().addAfter(ctx.name(), null, handler);
+              fireProtocolNegotiationEvent(ctx);
+              ctx.pipeline().remove(bufferReads);
+            }
+
+            @Override
+            public void onException(Throwable throwable) {
+              ctx.fireExceptionCaught(throwable);
+            }
+          },
+          ctx.executor());
+    }
   }
 }
