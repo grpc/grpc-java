@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import io.grpc.Status;
-import javax.annotation.concurrent.NotThreadSafe;
 
 /**
  * An {@link XdsClient} instance encapsulates all of the logic for communicating with the xDS
@@ -66,11 +65,22 @@ abstract class XdsClient {
     }
   }
 
+  /**
+   * Data class containing the results of performing a resource discovery RPC via CDS protocol.
+   * The results include configurations for a single upstream cluster, such as endpoint discovery
+   * type, load balancing policy, connection timeout and etc.
+   */
   // TODO(zdapeng): content TBD.
   static final class ClusterUpdate {
 
   }
 
+  /**
+   * Data class containing the results of performing a resource discovery RPC via EDS protocol.
+   * The results include endpoint addresses running the requested service, as well as
+   * configurations for traffic control such as drop overloads, inter-cluster load balancing
+   * policy and etc.
+   */
   // TODO(zdapeng): content TBD.
   static final class EndpointUpdate {
 
@@ -79,7 +89,6 @@ abstract class XdsClient {
   /**
    * Config watcher interface. To be implemented by the xDS resolver.
    */
-  @NotThreadSafe
   interface ConfigWatcher {
 
     /**
@@ -110,11 +119,38 @@ abstract class XdsClient {
     void onError(Status error);
   }
 
-  abstract void watchClusterData(String clusterName, ClusterWatcher watcher);
+  /**
+   * Starts resource discovery with xDS protocol. This should be the first method to be called in
+   * this class. It should only be called once.
+   */
+  abstract void start();
 
-  abstract void cancelClusterDataWatch(ClusterWatcher watcher);
+  /**
+   * Stops resource discovery. No method in this class should be called after this point.
+   */
+  abstract void shutdown();
 
-  abstract void watchEndpointData(String clusterName, EndpointWatcher watcher);
+  /**
+   * Registers a data watcher for the given cluster.
+   */
+  void watchClusterData(String clusterName, ClusterWatcher watcher) {
+  }
 
-  abstract void cancelEndpointDataWatch(EndpointWatcher watcher);
+  /**
+   * Unregisters the given cluster watcher.
+   */
+  void cancelClusterDataWatch(ClusterWatcher watcher) {
+  }
+
+  /**
+   * Registers a data watcher for endpoints in the given cluster.
+   */
+  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the given endpoints watcher.
+   */
+  void cancelEndpointDataWatch(EndpointWatcher watcher) {
+  }
 }
