@@ -191,6 +191,7 @@ final class XdsClientImpl extends XdsClient {
         processRouteConfig(connManager.getRouteConfig());
       } else if (connManager.hasRds()) {
         String rcName = connManager.getRds().getRouteConfigName();
+        adsStream.rdsResourceName = rcName;
         adsStream.sendRdsRequest(rcName);
       } else {
         // Impossible to be here.
@@ -214,7 +215,7 @@ final class XdsClientImpl extends XdsClient {
     try {
       for (com.google.protobuf.Any res : respResources) {
         RouteConfiguration conf = res.unpack(RouteConfiguration.class);
-        if (routeConfig.getName().equals(adsStream.rdsResourceName)) {
+        if (conf.getName().equals(adsStream.rdsResourceName)) {
           routeConfig = conf;
           // Ignore remaining route configs once the requested one is found.
           break;
@@ -259,6 +260,8 @@ final class XdsClientImpl extends XdsClient {
             // TODO(chengyuanzhang): check the match field must be empty.
             if (route.hasRoute()) {
               clusterName = route.getRoute().getCluster();
+              // Ignore remaining routes once a matched one is found.
+              break;
             }
           }
         }
@@ -427,7 +430,8 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern}.
+   * Returns {@code true} iff {@code hostName} matches the domain name {@code pattern} with
+   * case-insensitive.
    *
    * <p>Wildcard pattern rules:
    * <ol>
@@ -436,7 +440,8 @@ final class XdsClientImpl extends XdsClient {
    *     but not both.</li>
    * </ol>
    */
-  private static boolean matchHostName(String hostName, String pattern) {
+  @VisibleForTesting
+  static boolean matchHostName(String hostName, String pattern) {
     // Basic sanity checks
     if (hostName == null || hostName.length() == 0 || hostName.startsWith(".")
         || hostName.endsWith(".")) {
@@ -449,6 +454,7 @@ final class XdsClientImpl extends XdsClient {
       return false;
     }
 
+    hostName = hostName.toLowerCase(Locale.US);
     pattern = pattern.toLowerCase(Locale.US);
     // hostName and pattern are now in lower case -- domain names are case-insensitive.
 
@@ -464,11 +470,12 @@ final class XdsClientImpl extends XdsClient {
 
     int index = pattern.indexOf('*');
 
+    // At most one asterisk (*) is allowed.
     if (pattern.indexOf('*', index + 1) != -1) {
-      // At most one asterisk (*) is allowed.
       return false;
     }
 
+    // Asterisk can only match prefix or suffix.
     if (index != 0 && index != pattern.length() - 1) {
       return false;
     }
@@ -480,9 +487,9 @@ final class XdsClientImpl extends XdsClient {
       return false;
     }
 
-    if (index == 0 && !hostName.endsWith(pattern.substring(1))) {
+    if (index == 0 && hostName.endsWith(pattern.substring(1))) {
       // Prefix matching fails.
-      return false;
+      return true;
     }
 
     // Pattern matches hostname if suffix matching succeeds.
