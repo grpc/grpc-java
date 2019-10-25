@@ -37,7 +37,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
 /**
- * Loads configuration information to bootstrap xDS load balancer.
+ * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
 abstract class Bootstrapper {
 
