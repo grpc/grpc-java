@@ -52,8 +52,10 @@ import javax.annotation.Nullable;
 final class XdsClientImpl extends XdsClient {
   private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
-  private static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
-  private static final String ADS_TYPE_URL_RDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_LDS = "type.googleapis.com/envoy.api.v2.Listener";
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
 
   // URI of the management server to be connected to.
@@ -86,7 +88,7 @@ final class XdsClientImpl extends XdsClient {
   XdsClientImpl(
       String serverUri,
       Node node,
-      @Nullable ChannelCreds channelCreds, /* channel credentials for xDS communication (not used now) */
+      @Nullable ChannelCreds channelCreds,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
@@ -136,7 +138,7 @@ final class XdsClientImpl extends XdsClient {
     adsStream = new AdsStream(stub);
     adsStream.start();
     stopwatch.reset().start();
-    adsStream.sendLdsRequest(targetName, "");
+    adsStream.sendLdsRequest(targetName);
   }
 
   @VisibleForTesting
@@ -159,6 +161,7 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
+    adsStream.ldsRespNonce = ldsResponse.getNonce();
     List<Any> respResources = ldsResponse.getResourcesList();
     HttpConnectionManager connManager = null;
     try {
@@ -182,13 +185,13 @@ final class XdsClientImpl extends XdsClient {
       adsStream.ldsVersion = ldsResponse.getVersionInfo();
     }
     // Send ACK/NACK request.
-    adsStream.sendLdsRequest(targetName, ldsResponse.getNonce());
+    adsStream.sendLdsRequest(targetName);
     if (connManager != null) {
       if (connManager.hasRouteConfig()) {
         processRouteConfig(connManager.getRouteConfig());
       } else if (connManager.hasRds()) {
         String rcName = connManager.getRds().getRouteConfigName();
-        adsStream.sendRdsRequest(rcName, ldsResponse.getNonce());
+        adsStream.sendRdsRequest(rcName);
       } else {
         // Impossible to be here.
         throw new AssertionError("Severe bug: accepted listener update contains invalid config");
@@ -205,6 +208,7 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
+    adsStream.rdsRespNonce = rdsResponse.getNonce();
     List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
     RouteConfiguration routeConfig = null;
     try {
@@ -224,7 +228,7 @@ final class XdsClientImpl extends XdsClient {
       adsStream.rdsVersion = rdsResponse.getVersionInfo();
     }
     // Send an ACK/NACK request.
-    adsStream.sendRdsRequest(adsStream.rdsResourceName, rdsResponse.getNonce());
+    adsStream.sendRdsRequest(adsStream.rdsResourceName);
     if (routeConfig != null) {
       processRouteConfig(routeConfig);
     }
@@ -285,11 +289,22 @@ final class XdsClientImpl extends XdsClient {
     private boolean closed;
 
     // Last successfully applied version_info for each resource type. Starts with empty string.
+    // A version_info is used to update management server with client's most recent knowledge of
+    // resources.
     private String ldsVersion = "";
     private String rdsVersion = "";
 
+    // Response nonce for the most recently received discovery responses of each resource type.
+    // Client initiated requests start response nonce with empty string.
+    // A nonce is used to indicate the specific DiscoveryResponse each DiscoveryRequest
+    // corresponds to.
+    // A nonce becomes stale following a newer nonce being presented to the client in a
+    // DiscoveryResponse.
+    private String ldsRespNonce = "";
+    private String rdsRespNonce = "";
+
     // Most recently requested resource name for each resource type. Note the resource_name in
-    // LDS requests will always be the
+    // LDS requests will always be "xds:" URI (including port suffix if present).
     private String rdsResourceName = "";
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
@@ -382,7 +397,7 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    private void sendLdsRequest(String resourceName, String nonce) {
+    private void sendLdsRequest(String resourceName) {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest request =
           DiscoveryRequest
@@ -391,12 +406,12 @@ final class XdsClientImpl extends XdsClient {
               .setNode(node)
               .addResourceNames(resourceName)
               .setTypeUrl(ADS_TYPE_URL_LDS)
-              .setResponseNonce(nonce)
+              .setResponseNonce(ldsRespNonce)
               .build();
       requestWriter.onNext(request);
     }
 
-    private void sendRdsRequest(String resourceName, String nonce) {
+    private void sendRdsRequest(String resourceName) {
       checkState(requestWriter != null, "ADS stream has not been started");
       DiscoveryRequest request =
           DiscoveryRequest
@@ -405,7 +420,7 @@ final class XdsClientImpl extends XdsClient {
               .setNode(node)
               .addResourceNames(resourceName)
               .setTypeUrl(ADS_TYPE_URL_RDS)
-              .setResponseNonce(nonce)
+              .setResponseNonce(rdsRespNonce)
               .build();
       requestWriter.onNext(request);
     }
