@@ -3478,7 +3478,7 @@ public class ManagedChannelImplTest {
         CallOptions.DEFAULT.withDeadlineAfter(5, TimeUnit.SECONDS));
     ListenableFuture<Void> future2 = ClientCalls.futureUnaryCall(call2, null);
 
-    timer.forwardTime(1234, TimeUnit.SECONDS);
+    timer.forwardTime(5, TimeUnit.SECONDS);
 
     executor.runDueTasks();
     try {
@@ -3487,6 +3487,10 @@ public class ManagedChannelImplTest {
     } catch (ExecutionException e) {
       assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("deadline");
     }
+
+    // run the delayed cancel request task for deadline exceeded.
+    timer.forwardTime(5, TimeUnit.SECONDS);
+    executor.runDueTasks();
 
     mychannel.shutdownNow();
   }

@@ -17,7 +17,7 @@
 package io.grpc.internal;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.internal.ClientCallImpl.DEADLINE_EXPIRATION_CANCEL_DELAY;
+import static io.grpc.internal.ClientCallImpl.DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS;
 import static io.grpc.internal.GrpcUtil.ACCEPT_ENCODING_SPLITTER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -821,17 +821,19 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
+    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
 
     // Verify cancel sent to application when deadline just past
     verify(callListener).onClose(statusArgumentCaptor.capture(),
         ArgumentMatchers.isA(Metadata.class));
     verify(callListener, times(1))
         .onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
+    assertThat(statusCaptor.getValue().getDescription())
+        .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     verify(stream, never()).cancel(statusCaptor.capture());
 
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY);
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
 
     // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
     verify(stream, times(1)).cancel(statusCaptor.capture());
@@ -856,7 +858,7 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(950L + DEADLINE_EXPIRATION_CANCEL_DELAY);
+    fakeClock.forwardNanos(950L + DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
 
     verify(stream, never()).cancel(statusCaptor.capture());
   }
