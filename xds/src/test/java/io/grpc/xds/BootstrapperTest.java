@@ -18,17 +18,12 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.common.collect.ImmutableList;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
-import io.grpc.xds.Bootstrapper.FileBasedBootstrapper;
-import io.grpc.xds.Bootstrapper.ServerConfig;
 import java.io.IOException;
-import java.util.List;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -40,56 +35,6 @@ import org.junit.runners.JUnit4;
 public class BootstrapperTest {
 
   @Rule public ExpectedException thrown = ExpectedException.none();
-
-  @Test
-  public void validBootstrap() {
-    List<ChannelCreds> channelCredsList =
-        ImmutableList.of(new ChannelCreds("TLS", null), new ChannelCreds("LOAS", null));
-    ServerConfig serverConfig =
-        new ServerConfig("trafficdirector.googleapis.com:443", channelCredsList);
-
-    Node node =
-        Node.newBuilder()
-            .setId("ENVOY_NODE_ID")
-            .setCluster("ENVOY_CLUSTER")
-            .setLocality(
-                Locality.newBuilder()
-                    .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
-            .setMetadata(
-                Struct.newBuilder()
-                    .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                        Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                    .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                        Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build()))
-            .build();
-
-    BootstrapInfo config = new BootstrapInfo(serverConfig, node);
-    Bootstrapper bootstrapper = new FileBasedBootstrapper(config);
-    assertThat(bootstrapper.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(bootstrapper.getNode())
-        .isEqualTo(
-            Node.newBuilder()
-                .setId("ENVOY_NODE_ID")
-                .setCluster("ENVOY_CLUSTER")
-                .setLocality(
-                    Locality.newBuilder()
-                        .setRegion("ENVOY_REGION")
-                        .setZone("ENVOY_ZONE")
-                        .setSubZone("ENVOY_SUBZONE"))
-                .setMetadata(
-                    Struct.newBuilder()
-                        .putFields("TRAFFICDIRECTOR_INTERCEPTION_PORT",
-                            Value.newBuilder().setStringValue("ENVOY_PORT").build())
-                        .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
-                            Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
-                        .build())
-                .build());
-    assertThat(bootstrapper.getChannelCredentials()).hasSize(2);
-    assertThat(bootstrapper.getChannelCredentials().get(0).getType()).isEqualTo("TLS");
-    assertThat(bootstrapper.getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(bootstrapper.getChannelCredentials().get(1).getType()).isEqualTo("LOAS");
-    assertThat(bootstrapper.getChannelCredentials().get(1).getConfig()).isNull();
-  }
 
   @Test
   public void parseBootstrap_validData() throws IOException {
@@ -113,13 +58,13 @@ public class BootstrapperTest {
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
-    assertThat(info.serverConfig.uri).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.serverConfig.channelCredsList).hasSize(2);
-    assertThat(info.serverConfig.channelCredsList.get(0).getType()).isEqualTo("TLS");
-    assertThat(info.serverConfig.channelCredsList.get(0).getConfig()).isNull();
-    assertThat(info.serverConfig.channelCredsList.get(1).getType()).isEqualTo("LOAS");
-    assertThat(info.serverConfig.channelCredsList.get(1).getConfig()).isNull();
-    assertThat(info.node).isEqualTo(
+    assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(info.getChannelCredentials()).hasSize(2);
+    assertThat(info.getChannelCredentials().get(0).getType()).isEqualTo("TLS");
+    assertThat(info.getChannelCredentials().get(0).getConfig()).isNull();
+    assertThat(info.getChannelCredentials().get(1).getType()).isEqualTo("LOAS");
+    assertThat(info.getChannelCredentials().get(1).getConfig()).isNull();
+    assertThat(info.getNode()).isEqualTo(
         Node.newBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
@@ -154,8 +99,8 @@ public class BootstrapperTest {
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
-    assertThat(info.serverConfig.uri).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.node).isEqualTo(Node.getDefaultInstance());
+    assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(info.getNode()).isEqualTo(Node.getDefaultInstance());
   }
 
   @Test
