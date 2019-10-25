@@ -147,6 +147,8 @@ protobuf {
 
 [protobuf-gradle-plugin]: https://github.com/google/protobuf-gradle-plugin
 
+The gRPC generated code will be generated in build directory. If you wish to put it in anywhere else you can set the `generatedFilesBaseDir` to your target directory.
+
 The prebuilt protoc-gen-grpc-java binary uses glibc on Linux. If you are
 compiling on Alpine Linux, you may want to use the [Alpine grpc-java package][]
 which uses musl instead.
