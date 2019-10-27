@@ -352,8 +352,19 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       stream.appendTimeoutInsight(insight);
       // DelayedStream.cancel() is safe to call from a thread that is different from where the
       // stream is created.
-      stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-              "deadline exceeded after " + remainingNanos + "ns. " + insight));
+      long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
+      long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
+
+      StringBuilder buf = new StringBuilder();
+      buf.append("deadline exceeded after ");
+      if (remainingNanos < 0) {
+        buf.append('-');
+      }
+      buf.append(seconds);
+      buf.append(String.format(".%09d", nanos));
+      buf.append("s. ");
+      buf.append(insight);
+      stream.cancel(DEADLINE_EXCEEDED.augmentDescription(buf.toString()));
     }
   }
 
