@@ -43,7 +43,7 @@ abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
-  static Bootstrapper getInstance() {
+  static Bootstrapper newInsatnce() {
     return new FileBasedBootstrapper();
   }
 
