@@ -401,7 +401,6 @@ public final class ClientCalls {
     private final CallToStreamObserverAdapter<ReqT> adapter;
     private final boolean streamingResponse;
     private boolean firstResponseReceived;
-    private RespT unaryMessage;
 
     // Non private to avoid synthetic class
     StreamObserverToCallListenerAdapter(
@@ -432,13 +431,7 @@ public final class ClientCalls {
             .asRuntimeException();
       }
       firstResponseReceived = true;
-
-      if (streamingResponse) {
-        observer.onNext(message);
-      } else {
-        // will send message in onClose() for unary calls.
-        unaryMessage = message;
-      }
+      observer.onNext(message);
 
       if (streamingResponse && adapter.autoFlowControlEnabled) {
         // Request delivery of the next inbound message.
@@ -448,28 +441,10 @@ public final class ClientCalls {
 
     @Override
     public void onClose(Status status, Metadata trailers) {
-      Throwable error = null;
       if (status.isOk()) {
-        if (!streamingResponse) {
-          if (unaryMessage != null) {
-            try {
-              observer.onNext(unaryMessage);
-            } catch (Throwable t) {
-              error = t;
-            }
-          } else {
-            error = Status.INTERNAL.withDescription("Response message is null for unary call")
-                .asRuntimeException();
-          }
-        }
-      } else {
-        error = status.asRuntimeException(trailers);
-      }
-
-      if (error == null) {
         observer.onCompleted();
       } else {
-        observer.onError(error);
+        observer.onError(status.asRuntimeException(trailers));
       }
     }
 
