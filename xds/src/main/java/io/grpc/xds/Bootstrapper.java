@@ -54,28 +54,29 @@ abstract class Bootstrapper {
 
   private static final class FileBasedBootstrapper extends Bootstrapper {
 
-    private static Exception failToBootstrapException;
-    private static BootstrapInfo bootstrapInfo;
+    private static volatile Exception failToBootstrapException;
+    private static volatile BootstrapInfo bootstrapInfo;
 
     @Override
     BootstrapInfo readBootstrap() throws Exception {
-      if (bootstrapInfo != null) {
-        return bootstrapInfo;
-      }
-      if (failToBootstrapException != null) {
-        throw failToBootstrapException;
-      }
-      try {
-        String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
-        if (filePath == null) {
-          throw
-              new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
+      if (bootstrapInfo == null && failToBootstrapException == null) {
+        synchronized (Bootstrapper.FileBasedBootstrapper.class) {
+          if (bootstrapInfo == null && failToBootstrapException == null) {
+            try {
+              String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
+              if (filePath == null) {
+                throw
+                    new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
+                        + " not found.");
+              }
+              bootstrapInfo =
+                  parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
+                      StandardCharsets.UTF_8));
+            } catch (Exception e) {
+              failToBootstrapException = e;
+            }
+          }
         }
-        bootstrapInfo =
-            parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
-                StandardCharsets.UTF_8));
-      } catch (Exception e) {
-        failToBootstrapException = e;
       }
       if (failToBootstrapException != null) {
         throw failToBootstrapException;
