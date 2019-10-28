@@ -64,7 +64,9 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -78,6 +80,13 @@ public class XdsClientImplTest {
   private static final int PORT = 8080;
 
   private static final Node NODE = Node.getDefaultInstance();
+  private static final FakeClock.TaskFilter RPC_RETRY_TASK_FILTER =
+      new FakeClock.TaskFilter() {
+        @Override
+        public boolean shouldAccept(Runnable command) {
+          return command.toString().contains(XdsClientImpl.RpcRetryTask.class.getSimpleName());
+        }
+      };
 
   @Rule
   public final GrpcCleanupRule cleanupRule = new GrpcCleanupRule();
@@ -97,7 +106,9 @@ public class XdsClientImplTest {
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
-  private BackoffPolicy backoffPolicy;
+  private BackoffPolicy backoffPolicy1;
+  @Mock
+  private BackoffPolicy backoffPolicy2;
   @Mock
   private ConfigWatcher configWatcher;
 
@@ -107,7 +118,9 @@ public class XdsClientImplTest {
   @Before
   public void setUp() throws IOException {
     MockitoAnnotations.initMocks(this);
-    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy);
+    when(backoffPolicyProvider.get()).thenReturn(backoffPolicy1, backoffPolicy2);
+    when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
+    when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
     String serverName = InProcessServerBuilder.generateName();
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
@@ -550,7 +563,142 @@ public class XdsClientImplTest {
         .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
   }
   
-  // TODO(chengyuanzhang): retry tests.
+  // TODO(chengyuanzhang): integrated retry test for LDS/RDS/CDS/EDS.
+  @Test
+  public void streamClosedAndRetry() {
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+    InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server closes the RPC stream immediately.
+    responseObserver.onCompleted();
+    inOrder.verify(backoffPolicyProvider).get();
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(9L);
+    assertThat(responseObservers).isEmpty();
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    responseObserver = responseObservers.poll();
+    requestObserver = requestObservers.poll();
+
+    // Client retied by sending an LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server closes the RPC stream with an error.
+    responseObserver.onError(Status.UNAVAILABLE.asException());
+    verifyNoMoreInteractions(backoffPolicyProvider);
+    inOrder.verify(backoffPolicy1).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(99L);
+    assertThat(responseObservers).isEmpty();
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    responseObserver = responseObservers.poll();
+    requestObserver = requestObservers.poll();
+
+    // Client retied again by sending an LDS.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server responses with a listener for the requested resource.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            .setConfigSource(ConfigSource.getDefaultInstance())
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse ldsResponse =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(ldsResponse);
+
+    // Client sent back an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    // Client sent an RDS request based on the received listener.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    // Management server encounters an error and closes the stream.
+    responseObserver.onError(Status.UNKNOWN.asException());
+
+    // Reset backoff and retry immediately.
+    inOrder.verify(backoffPolicyProvider).get();
+    responseObserver = responseObservers.poll();
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // RPC stream closed immediately
+    responseObserver.onError(Status.UNKNOWN.asException());
+    inOrder.verify(backoffPolicy2).nextBackoffNanos();
+    assertThat(fakeClock.getPendingTasks(RPC_RETRY_TASK_FILTER)).hasSize(1);
+
+    // Retry after backoff.
+    fakeClock.forwardNanos(19L);
+    assertThat(responseObservers).isEmpty();
+    assertThat(requestObservers).isEmpty();
+    fakeClock.forwardNanos(1L);
+    responseObserver = responseObservers.poll();
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server sends an LDS response.
+    responseObserver.onNext(ldsResponse);
+
+    // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster.googleapis.com")))));
+    DiscoveryResponse rdsResponse =
+        buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    // Management server sends an RDS response.
+    responseObserver.onNext(rdsResponse);
+
+    // Client has resolved the cluster based on the RDS response.
+    configWatcher
+        .onConfigChanged(
+            eq(ConfigUpdate.newBuilder().setClusterName("cluster.googleapis.com").build()));
+
+    // RPC stream closed with an error again.
+    responseObserver.onError(Status.UNKNOWN.asException());
+
+    // Reset backoff and retry immediately.
+    inOrder.verify(backoffPolicyProvider).get();
+    requestObserver = requestObservers.poll();
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    verifyNoMoreInteractions(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
+  }
 
   @Test
   public void matchHostName_exactlyMatch() {

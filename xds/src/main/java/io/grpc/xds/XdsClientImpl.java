@@ -131,8 +131,12 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   void startDiscoveryRpc(ManagedChannel channel) {
     checkState(this.channel == null, "previous channel has not been cleared yet");
-    checkState(adsStream == null, "previous adsStream has not been cleared yet");
     this.channel = checkNotNull(channel, "channel");
+    startDiscoveryRpc();
+  }
+
+  private void startDiscoveryRpc() {
+    checkState(adsStream == null, "previous adsStream has not been cleared yet");
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
         AggregatedDiscoveryServiceGrpc.newStub(channel);
     adsStream = new AdsStream(stub);
@@ -281,10 +285,11 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
-  private final class RpcRetryTask implements Runnable {
+  @VisibleForTesting
+  final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
-      startDiscoveryRpc(channel);
+      startDiscoveryRpc();
     }
   }
 
@@ -387,7 +392,7 @@ final class XdsClientImpl extends XdsClient {
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
       if (delayNanos <= 0) {
-        startDiscoveryRpc(channel);
+        startDiscoveryRpc();
       } else {
         rpcRetryTimer =
             syncContext.schedule(
