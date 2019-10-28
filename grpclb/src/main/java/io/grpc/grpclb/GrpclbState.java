@@ -279,7 +279,7 @@ final class GrpclbState {
 
   private void shutdownLbRpc() {
     if (lbStream != null) {
-      lbStream.close(null);
+      lbStream.close(Status.CANCELLED.withDescription("balancer shutdown").asException());
       // lbStream will be set to null in LbStream.cleanup()
     }
   }
@@ -668,17 +668,13 @@ final class GrpclbState {
       helper.refreshNameResolution();
     }
 
-    void close(@Nullable Exception error) {
+    void close(Exception error) {
       if (closed) {
         return;
       }
       closed = true;
       cleanUp();
-      if (error == null) {
-        lbRequestWriter.onCompleted();
-      } else {
-        lbRequestWriter.onError(error);
-      }
+      lbRequestWriter.onError(error);
     }
 
     private void cleanUp() {

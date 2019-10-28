@@ -107,6 +107,60 @@ public class ServiceConfigUtilTest {
   }
 
   @Test
+  public void getEdsServiceNameFromXdsConfig() throws Exception {
+    String rawLbConfig = "{"
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}],"
+        + "\"edsServiceName\" : \"dns:///eds.service.com:8080\""
+        + "}";
+
+    String edsServiceName = ServiceConfigUtil.getEdsServiceNameFromXdsConfig(
+        checkObject(JsonParser.parse(rawLbConfig)));
+    assertThat(edsServiceName).isEqualTo("dns:///eds.service.com:8080");
+  }
+
+  @Test
+  public void getEdsServiceNameFromXdsConfig_null() throws Exception {
+    String rawLbConfig = "{"
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
+        + "}";
+
+    String edsServiceName = ServiceConfigUtil.getEdsServiceNameFromXdsConfig(
+        checkObject(JsonParser.parse(rawLbConfig)));
+    assertThat(edsServiceName).isNull();
+  }
+
+  @Test
+  public void getLrsServerNameFromXdsConfig() throws Exception {
+    String rawLbConfig = "{"
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}],"
+        + "\"lrsLoadReportingServerName\" : \"dns:///lrs.service.com:8080\""
+        + "}";
+
+    String lrsServerName = ServiceConfigUtil.getLrsServerNameFromXdsConfig(
+        checkObject(JsonParser.parse(rawLbConfig)));
+    assertThat(lrsServerName).isEqualTo("dns:///lrs.service.com:8080");
+  }
+
+  @Test
+  public void getLrsServerNameFromXdsConfig_null() throws Exception {
+    String rawLbConfig = "{"
+        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}, {\"lbPolicy2\" : {\"key\" : \"val\"}}],"
+        + "\"fallbackPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"lbPolicy4\" : {}}]"
+        + "}";
+
+    String lrsServerName = ServiceConfigUtil.getLrsServerNameFromXdsConfig(
+        checkObject(JsonParser.parse(rawLbConfig)));
+    assertThat(lrsServerName).isNull();
+  }
+
+  @Test
   public void unwrapLoadBalancingConfig() throws Exception {
     String lbConfig = "{\"xds_experimental\" : { "
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","

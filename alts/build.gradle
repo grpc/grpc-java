@@ -1,22 +1,16 @@
-buildscript {
-    repositories { jcenter() }
-    dependencies { classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.4' }
-}
+plugins {
+    id "java"
+    id "maven-publish"
 
-apply plugin: 'com.github.johnrengelman.shadow'
+    id "com.github.johnrengelman.shadow"
+    id "com.google.protobuf"
+    id "ru.vyarus.animalsniffer"
+}
 
 description = "gRPC: ALTS"
 
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
-
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
-}
 
 dependencies {
     compile project(':grpc-auth'),
@@ -25,7 +19,8 @@ dependencies {
             project(':grpc-protobuf'),
             project(':grpc-stub'),
             libraries.lang,
-            libraries.protobuf
+            libraries.protobuf,
+            libraries.conscrypt
     compile (libraries.google_auth_oauth2_http) {
         // prefer 26.0-android from libraries instead of 25.1-android
         exclude group: 'com.google.guava', module: 'guava'
@@ -42,8 +37,7 @@ dependencies {
             libraries.mockito,
             libraries.truth
     testRuntime libraries.netty_tcnative,
-            libraries.netty_epoll,
-            libraries.conscrypt
+            libraries.netty_epoll
     signature 'org.codehaus.mojo.signature:java17:1.0@signature'
 }
 

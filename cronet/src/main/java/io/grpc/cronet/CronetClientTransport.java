@@ -60,6 +60,8 @@ class CronetClientTransport implements ConnectionClientTransport {
   private final boolean alwaysUsePut;
   private final TransportTracer transportTracer;
   private final Attributes attrs;
+  private final boolean useGetForSafeMethods;
+  private final boolean usePutForIdempotentMethods;
   // Indicates the transport is in go-away state: no new streams will be processed,
   // but existing streams may continue.
   @GuardedBy("lock")
@@ -86,7 +88,9 @@ class CronetClientTransport implements ConnectionClientTransport {
       Executor executor,
       int maxMessageSize,
       boolean alwaysUsePut,
-      TransportTracer transportTracer) {
+      TransportTracer transportTracer,
+      boolean useGetForSafeMethods,
+      boolean usePutForIdempotentMethods) {
     this.address = Preconditions.checkNotNull(address, "address");
     this.logId = InternalLogId.allocate(getClass(), address.toString());
     this.authority = authority;
@@ -100,6 +104,8 @@ class CronetClientTransport implements ConnectionClientTransport {
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
         .build();
+    this.useGetForSafeMethods = useGetForSafeMethods;
+    this.usePutForIdempotentMethods = usePutForIdempotentMethods;
   }
 
   @Override
@@ -123,7 +129,8 @@ class CronetClientTransport implements ConnectionClientTransport {
     class StartCallback implements Runnable {
       final CronetClientStream clientStream = new CronetClientStream(
           url, userAgent, executor, headers, CronetClientTransport.this, this, lock, maxMessageSize,
-          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer);
+          alwaysUsePut, method, statsTraceCtx, callOptions, transportTracer, useGetForSafeMethods,
+          usePutForIdempotentMethods);
 
       @Override
       public void run() {

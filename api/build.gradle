@@ -1,4 +1,14 @@
+plugins {
+    id "java"
+    id "maven-publish"
+
+    id "me.champeau.gradle.jmh"
+    id "ru.vyarus.animalsniffer"
+}
+
 description = 'gRPC: API'
+
+evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
     compile project(':grpc-context'),

@@ -18,9 +18,9 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import com.google.common.base.Throwables;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import io.grpc.ExperimentalApi;
+import io.grpc.internal.ConscryptLoader;
 import io.netty.handler.codec.http2.Http2SecurityUtil;
 import io.netty.handler.ssl.ApplicationProtocolConfig;
 import io.netty.handler.ssl.ApplicationProtocolConfig.Protocol;
@@ -32,8 +32,6 @@ import io.netty.handler.ssl.SslProvider;
 import io.netty.handler.ssl.SupportedCipherSuiteFilter;
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.security.Provider;
 import java.security.Security;
 import java.util.Arrays;
@@ -95,20 +93,6 @@ public class GrpcSslContexts {
       NEXT_PROTOCOL_VERSIONS);
 
   private static final String SUN_PROVIDER_NAME = "SunJSSE";
-  private static final Method IS_CONSCRYPT_PROVIDER;
-
-  static {
-    Method method = null;
-    try {
-      Class<?> conscryptClass = Class.forName("org.conscrypt.Conscrypt");
-      method = conscryptClass.getMethod("isConscrypt", Provider.class);
-    } catch (ClassNotFoundException ex) {
-      logger.log(Level.FINE, "Conscrypt class not found. Not using Conscrypt", ex);
-    } catch (NoSuchMethodException ex) {
-      throw new AssertionError(ex);
-    }
-    IS_CONSCRYPT_PROVIDER = method;
-  }
 
   /**
    * Creates an SslContextBuilder with ciphers and APN appropriate for gRPC.
@@ -223,9 +207,9 @@ public class GrpcSslContexts {
         apc = ALPN;
       } else {
         throw new IllegalArgumentException(
-            SUN_PROVIDER_NAME + " selected, but Jetty NPN/ALPN unavailable");
+            SUN_PROVIDER_NAME + " selected, but Java 9+ and Jetty NPN/ALPN unavailable");
       }
-    } else if (isConscrypt(jdkProvider)) {
+    } else if (ConscryptLoader.isConscrypt(jdkProvider)) {
       apc = ALPN;
     } else {
       throw new IllegalArgumentException("Unknown provider; can't configure: " + jdkProvider);
@@ -250,9 +234,11 @@ public class GrpcSslContexts {
       logger.log(Level.FINE, "Selecting JDK with provider {0}", provider);
       return SslProvider.JDK;
     }
+    logger.log(Level.INFO, "Java 9 ALPN API unavailable (this may be normal)");
     logger.log(Level.INFO, "netty-tcnative unavailable (this may be normal)",
         OpenSsl.unavailabilityCause());
-    logger.log(Level.INFO, "Conscrypt not found (this may be normal)");
+    logger.log(Level.INFO, "Conscrypt not found (this may be normal)",
+        ConscryptHolder.UNAVAILABILITY_CAUSE);
     logger.log(Level.INFO, "Jetty ALPN unavailable (this may be normal)",
         JettyTlsUtil.getJettyAlpnUnavailabilityCause());
     throw new IllegalStateException(
@@ -268,28 +254,14 @@ public class GrpcSslContexts {
             || JettyTlsUtil.isJava9AlpnAvailable()) {
           return provider;
         }
-      } else if (isConscrypt(provider)) {
+      } else if (ConscryptLoader.isConscrypt(provider)) {
         return provider;
       }
     }
+    if (ConscryptHolder.PROVIDER != null) {
+      return ConscryptHolder.PROVIDER;
+    }
     return null;
-  }
-
-  private static boolean isConscrypt(Provider provider) {
-    if (IS_CONSCRYPT_PROVIDER == null) {
-      return false;
-    }
-    try {
-      return (Boolean) IS_CONSCRYPT_PROVIDER.invoke(null, provider);
-    } catch (IllegalAccessException ex) {
-      throw new AssertionError(ex);
-    } catch (InvocationTargetException ex) {
-      if (ex.getCause() != null) {
-        Throwables.throwIfUnchecked(ex.getCause());
-        // If checked, just wrap up everything.
-      }
-      throw new AssertionError(ex);
-    }
   }
 
   @SuppressWarnings("deprecation")
@@ -303,5 +275,24 @@ public class GrpcSslContexts {
         "This ALPN config does not support HTTP/2. Expected %s, but got %s'.",
         HTTP2_VERSION,
         alpnNegotiator.protocols());
+  }
+
+  private static class ConscryptHolder {
+    static final Provider PROVIDER;
+    static final Throwable UNAVAILABILITY_CAUSE;
+
+    static {
+      Provider provider;
+      Throwable cause;
+      try {
+        provider = ConscryptLoader.newProvider();
+        cause = null;
+      } catch (Throwable t) {
+        provider = null;
+        cause = t;
+      }
+      PROVIDER = provider;
+      UNAVAILABILITY_CAUSE = cause;
+    }
   }
 }

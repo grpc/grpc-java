@@ -161,7 +161,9 @@ public class XdsLoadBalancerProviderTest {
         + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"childPolicy\" : [{\"lbPolicy3\" : {\"key\" : \"val\"}}, {\"supported_1\" : {}}],"
         + "\"fallbackPolicy\" : [{\"unsupported\" : {}}, {\"round_robin\" : {\"key\" : \"val\"}},"
-        + "{\"supported_2\" : {\"key\" : \"val\"}}]"
+        + "{\"supported_2\" : {\"key\" : \"val\"}}],"
+        + "\"edsServiceName\" : \"dns:///eds.service.com:8080\","
+        + "\"lrsLoadReportingServerName\" : \"dns:///lrs.service.com:8080\""
         + "}";
     Map<String, ?> rawlbConfigMap = checkObject(JsonParser.parse(rawLbConfig));
     ConfigOrError configOrError =
@@ -175,7 +177,9 @@ public class XdsLoadBalancerProviderTest {
             ServiceConfigUtil.unwrapLoadBalancingConfig(
                 checkObject(JsonParser.parse("{\"supported_1\" : {}}"))),
             ServiceConfigUtil.unwrapLoadBalancingConfig(
-                checkObject(JsonParser.parse("{\"round_robin\" : {\"key\" : \"val\"}}"))))
+                checkObject(JsonParser.parse("{\"round_robin\" : {\"key\" : \"val\"}}"))),
+            "dns:///eds.service.com:8080",
+            "dns:///lrs.service.com:8080")
     );
   }
 

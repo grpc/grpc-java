@@ -91,6 +91,12 @@ public final class NettyChannelBuilder
   private LocalSocketPicker localSocketPicker;
 
   /**
+   * If true, indicates that the transport may use the GET method for RPCs, and may include the
+   * request body in the query params.
+   */
+  private final boolean useGetForSafeMethods = false;
+
+  /**
    * Creates a new builder with the given server address. This factory method is primarily intended
    * for using Netty Channel types other than SocketChannel. {@link #forAddress(String, int)} should
    * generally be preferred over this method, since that API permits delaying DNS lookups and
@@ -415,7 +421,7 @@ public final class NettyChannelBuilder
         negotiator, channelFactory, channelOptions,
         eventLoopGroupPool, flowControlWindow, maxInboundMessageSize(),
         maxHeaderListSize, keepAliveTimeNanos, keepAliveTimeoutNanos, keepAliveWithoutCalls,
-        transportTracerFactory, localSocketPicker);
+        transportTracerFactory, localSocketPicker, useGetForSafeMethods);
   }
 
   @VisibleForTesting
@@ -536,6 +542,7 @@ public final class NettyChannelBuilder
     private final boolean keepAliveWithoutCalls;
     private final TransportTracer.Factory transportTracerFactory;
     private final LocalSocketPicker localSocketPicker;
+    private final boolean useGetForSafeMethods;
 
     private boolean closed;
 
@@ -544,7 +551,8 @@ public final class NettyChannelBuilder
         Map<ChannelOption<?>, ?> channelOptions, ObjectPool<? extends EventLoopGroup> groupPool,
         int flowControlWindow, int maxMessageSize, int maxHeaderListSize,
         long keepAliveTimeNanos, long keepAliveTimeoutNanos, boolean keepAliveWithoutCalls,
-        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker) {
+        TransportTracer.Factory transportTracerFactory, LocalSocketPicker localSocketPicker,
+        boolean useGetForSafeMethods) {
       this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
       this.channelFactory = channelFactory;
       this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
@@ -559,6 +567,7 @@ public final class NettyChannelBuilder
       this.transportTracerFactory = transportTracerFactory;
       this.localSocketPicker =
           localSocketPicker != null ? localSocketPicker : new LocalSocketPicker();
+      this.useGetForSafeMethods = useGetForSafeMethods;
     }
 
     @Override
@@ -592,7 +601,7 @@ public final class NettyChannelBuilder
           maxMessageSize, maxHeaderListSize, keepAliveTimeNanosState.get(), keepAliveTimeoutNanos,
           keepAliveWithoutCalls, options.getAuthority(), options.getUserAgent(),
           tooManyPingsRunnable, transportTracerFactory.create(), options.getEagAttributes(),
-          localSocketPicker, channelLogger);
+          localSocketPicker, channelLogger, useGetForSafeMethods);
       return transport;
     }
 

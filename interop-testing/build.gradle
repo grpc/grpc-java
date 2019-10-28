@@ -1,16 +1,19 @@
-apply plugin: 'application'
+plugins {
+    id "application"
+    id "java"
+    id "maven-publish"
+
+    id "com.google.protobuf"
+}
 
 description = "gRPC: Integration Testing"
 startScripts.enabled = false
 
-// Add dependency on the protobuf plugin
-buildscript {
-    repositories {
-        maven { // The google mirror is less flaky than mavenCentral()
-            url "https://maven-central.storage-download.googleapis.com/repos/central/data/" }
-    }
-    dependencies { classpath libraries.protobuf_plugin }
+configurations {
+    alpnagent
 }
+
+evaluationDependsOn(project(':grpc-context').path)
 
 dependencies {
     compile project(':grpc-alts'),
@@ -30,6 +33,7 @@ dependencies {
             project(':grpc-grpclb')
     testCompile project(':grpc-context').sourceSets.test.output,
             libraries.mockito
+    alpnagent libraries.jetty_alpn_agent
 }
 
 configureProtoCompilation()

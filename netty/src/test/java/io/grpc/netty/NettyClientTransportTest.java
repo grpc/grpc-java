@@ -67,8 +67,10 @@ import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.ReflectiveChannelFactory;
@@ -191,7 +193,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
-        new SocketPicker(), new FakeChannelLogger());
+        new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     callMeMaybe(transport.start(clientTransportListener));
 
@@ -437,7 +439,7 @@ public class NettyClientTransportTest {
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
-        new FakeChannelLogger());
+        new FakeChannelLogger(), false);
     transports.add(transport);
 
     // Should not throw
@@ -707,7 +709,7 @@ public class NettyClientTransportTest {
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
-        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger());
+        new TransportTracer(), eagAttributes, new SocketPicker(), new FakeChannelLogger(), false);
     transports.add(transport);
     return transport;
   }
@@ -719,7 +721,7 @@ public class NettyClientTransportTest {
   private void startServer(int maxStreamsPerConnection, int maxHeaderListSize) throws IOException {
     server = new NettyServer(
         TestUtils.testServerAddress(new InetSocketAddress(0)),
-        NioServerSocketChannel.class,
+        new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
         new FixedObjectPool<>(group), new FixedObjectPool<>(group), negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
@@ -915,9 +917,21 @@ public class NettyClientTransportTest {
     }
   }
 
-  private static class NoopHandler extends ProtocolNegotiators.AbstractBufferingHandler {
+  private static class NoopHandler extends ChannelDuplexHandler {
+
+    private final GrpcHttp2ConnectionHandler grpcHandler;
+
     public NoopHandler(GrpcHttp2ConnectionHandler grpcHandler) {
-      super(grpcHandler);
+      this.grpcHandler = grpcHandler;
+    }
+
+    @Override
+    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+      ctx.pipeline().addBefore(ctx.name(), null, grpcHandler);
+    }
+
+    public void fail(ChannelHandlerContext ctx, Throwable cause) {
+      ctx.fireExceptionCaught(cause);
     }
   }
 

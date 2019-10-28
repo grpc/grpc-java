@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
 import javax.annotation.Nullable;
 
 /**
@@ -26,7 +27,7 @@ import javax.annotation.Nullable;
  * (i.e., Google backends) are aggregated in locality granularity (i.e., Google cluster) while the
  * numbers of dropped calls are aggregated in cluster granularity.
  *
- * <p>An {@code LoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer} and
+ * <p>An {@code LoadStatsStore} lives the same span of lifecycle as {@link XdsLoadBalancer2} and
  * only tracks loads for localities exposed by remote traffic director. A proper usage should be
  *
  * <ol>
@@ -60,7 +61,7 @@ interface LoadStatsStore {
    * reporting.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
   ClusterStats generateLoadReport();
 
@@ -72,7 +73,7 @@ interface LoadStatsStore {
    * balancer discovery responses before recording loads for those localities.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
   void addLocality(XdsLocality locality);
 
@@ -87,7 +88,7 @@ interface LoadStatsStore {
    * waste and keep including zero-load upstream locality stats in generated load reports.
    *
    * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer.Helper#getSynchronizationContext}.
+   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
   void removeLocality(XdsLocality locality);
 

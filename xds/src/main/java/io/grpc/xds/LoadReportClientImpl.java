@@ -53,7 +53,7 @@ import javax.annotation.concurrent.NotThreadSafe;
  * Client of xDS load reporting service.
  *
  * <p>Methods in this class are expected to be called in the same synchronized context that {@link
- * XdsLoadBalancer.Helper#getSynchronizationContext} returns.
+ * XdsLoadBalancer2.Helper#getSynchronizationContext} returns.
  */
 @NotThreadSafe
 final class LoadReportClientImpl implements LoadReportClient {

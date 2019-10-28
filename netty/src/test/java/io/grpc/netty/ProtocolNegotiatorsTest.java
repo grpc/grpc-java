@@ -35,7 +35,6 @@ import io.grpc.InternalChannelz.Security;
 import io.grpc.SecurityLevel;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.testing.TestUtils;
-import io.grpc.netty.ProtocolNegotiators.AbstractBufferingHandler;
 import io.grpc.netty.ProtocolNegotiators.ClientTlsProtocolNegotiator;
 import io.grpc.netty.ProtocolNegotiators.HostPort;
 import io.grpc.netty.ProtocolNegotiators.ServerTlsHandler;
@@ -45,6 +44,7 @@ import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -465,7 +465,10 @@ public class ProtocolNegotiatorsTest {
 
     ProtocolNegotiator nego =
         ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
-    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    // normally NettyClientTransport will add WBAEH which kick start the ProtocolNegotiation,
+    // mocking the behavior using KickStartHandler.
+    ChannelHandler handler =
+        new KickStartHandler(nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler()));
     Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
         .register().sync().channel();
     pipeline = channel.pipeline();
@@ -525,7 +528,10 @@ public class ProtocolNegotiatorsTest {
 
     ProtocolNegotiator nego =
         ProtocolNegotiators.httpProxy(proxy, null, null, ProtocolNegotiators.plaintext());
-    ChannelHandler handler = nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler());
+    // normally NettyClientTransport will add WBAEH which kick start the ProtocolNegotiation,
+    // mocking the behavior using KickStartHandler.
+    ChannelHandler handler =
+        new KickStartHandler(nego.newHandler(FakeGrpcHttp2ConnectionHandler.noopHandler()));
     Channel channel = new Bootstrap().group(elg).channel(LocalChannel.class).handler(handler)
         .register().sync().channel();
     pipeline = channel.pipeline();
@@ -602,24 +608,6 @@ public class ProtocolNegotiatorsTest {
 
     s.close();
     elg.shutdownGracefully();
-  }
-
-  @Test(expected = Test.None.class /* no exception expected */)
-  @SuppressWarnings("TestExceptionChecker")
-  public void bufferingHandler_shouldNotThrowForEmptyHandler() throws Exception {
-    LocalAddress addr = new LocalAddress("local");
-    ChannelFuture unused = new Bootstrap()
-        .channel(LocalChannel.class)
-        .handler(new BufferingHandlerWithoutHandlers())
-        .group(group)
-        .register().sync();
-    ChannelFuture sf = new ServerBootstrap()
-        .channel(LocalServerChannel.class)
-        .childHandler(new ChannelHandlerAdapter() {})
-        .group(group)
-        .bind(addr);
-    // sync will trigger client's NoHandlerBufferingHandler which should not throw
-    sf.sync();
   }
 
   @Test
@@ -815,10 +803,18 @@ public class ProtocolNegotiatorsTest {
     return ByteBufUtil.writeUtf8(c.alloc(), s);
   }
 
-  private static class BufferingHandlerWithoutHandlers extends AbstractBufferingHandler {
+  private static final class KickStartHandler extends ChannelDuplexHandler {
 
-    public BufferingHandlerWithoutHandlers(ChannelHandler... handlers) {
-      super(handlers);
+    private final ChannelHandler next;
+
+    public KickStartHandler(ChannelHandler next) {
+      this.next = checkNotNull(next, "next");
+    }
+
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+      ctx.pipeline().replace(ctx.name(), null, next);
+      ctx.pipeline().fireUserEventTriggered(ProtocolNegotiationEvent.DEFAULT);
     }
   }
 }
