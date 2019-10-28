@@ -22,7 +22,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -53,7 +52,7 @@ final class LookasideChannelLb extends LoadBalancer {
 
   LookasideChannelLb(
       Helper helper, LookasideChannelCallback lookasideChannelCallback, ManagedChannel lbChannel,
-      LocalityStore localityStore, Node node) {
+      LocalityStore localityStore) {
     this(
         helper,
         lookasideChannelCallback,
@@ -61,8 +60,7 @@ final class LookasideChannelLb extends LoadBalancer {
         new LoadReportClientImpl(
             lbChannel, helper, GrpcUtil.STOPWATCH_SUPPLIER, new ExponentialBackoffPolicy.Provider(),
             localityStore.getLoadStatsStore()),
-        localityStore,
-        node);
+        localityStore);
   }
 
   @VisibleForTesting
@@ -71,8 +69,7 @@ final class LookasideChannelLb extends LoadBalancer {
       LookasideChannelCallback lookasideChannelCallback,
       ManagedChannel lbChannel,
       LoadReportClient lrsClient,
-      final LocalityStore localityStore,
-      Node node) {
+      final LocalityStore localityStore) {
     this.lbChannel = lbChannel;
     LoadReportCallback lrsCallback =
         new LoadReportCallback() {
@@ -87,7 +84,7 @@ final class LookasideChannelLb extends LoadBalancer {
         lookasideChannelCallback, lrsClient, lrsCallback, localityStore) ;
     xdsComms2 = new XdsComms2(
         lbChannel, helper, adsCallback, new ExponentialBackoffPolicy.Provider(),
-        GrpcUtil.STOPWATCH_SUPPLIER, node);
+        GrpcUtil.STOPWATCH_SUPPLIER);
   }
 
   private static int rateInMillion(FractionalPercent fractionalPercent) {

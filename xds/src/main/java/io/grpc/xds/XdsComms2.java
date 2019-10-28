@@ -22,6 +22,8 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -47,8 +49,6 @@ final class XdsComms2 {
   private final Helper helper;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Supplier<Stopwatch> stopwatchSupplier;
-  // Metadata to be included in every xDS request.
-  private final Node node;
 
   @CheckForNull
   private ScheduledHandle adsRpcRetryTimer;
@@ -177,7 +177,11 @@ final class XdsComms2 {
       // Assuming standard mode, and send EDS request only
       DiscoveryRequest edsRequest =
           DiscoveryRequest.newBuilder()
-              .setNode(node)
+              .setNode(Node.newBuilder()
+                  .setMetadata(Struct.newBuilder()
+                      .putFields(
+                          "endpoints_required",
+                          Value.newBuilder().setBoolValue(true).build())))
               .setTypeUrl(EDS_TYPE_URL)
               // In the future, the right resource name can be obtained from CDS response.
               .addResourceNames(helper.getAuthority()).build();
@@ -205,12 +209,10 @@ final class XdsComms2 {
    */
   XdsComms2(
       ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
-      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
-      Node node) {
+      BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
-    this.node = node;
     this.adsStream = new AdsStream(
         checkNotNull(adsStreamCallback, "adsStreamCallback"));
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
