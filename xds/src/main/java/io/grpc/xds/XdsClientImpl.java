@@ -153,11 +153,10 @@ final class XdsClientImpl extends XdsClient {
 
   /**
    * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
-   * Sends an ACK request to the management server if the HttpConnectionManager for the requested
-   * resource name is found, which may either contain the RouteConfiguration directly in-line or
-   * contain the configuration to send RDS requests for dynamic resolution. Otherwise, sends back
-   * a NACK request. Proceed with the resolved RouteConfiguration (if exists) to find the
-   * VirtualHost configuration for the "xds:" URI (with the port, if any, stripped off).
+   * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
+   * listener, if exists, to find the VirtualHost configuration for the "xds:" * URI
+   * (with the port, if any, stripped off). Or sends an RDS request if configured for dynamic
+   * resolution. Otherwise, sends back a NACK request.
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
@@ -180,32 +179,36 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid LDS response"));
     }
-    if (connManager != null) {
-      // Accept this listener update.
-      adsStream.ldsVersion = ldsResponse.getVersionInfo();
-    }
-    // Send ACK/NACK request.
-    adsStream.sendLdsRequest(targetName);
+    // Prepare an ACK/NACK request.
+    adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, targetName, ldsResponse.getVersionInfo(),
+        ldsResponse.getNonce());
+    boolean canProceed = false;  // true if current LDS response contains valid information
     if (connManager != null) {
       if (connManager.hasRouteConfig()) {
+        canProceed = true;
         processRouteConfig(connManager.getRouteConfig());
       } else if (connManager.hasRds()) {
+        canProceed = true;
+        adsStream.sendPendingAckRequest();
         String rcName = connManager.getRds().getRouteConfigName();
         adsStream.rdsResourceName = rcName;
         adsStream.sendRdsRequest(rcName);
       } else {
-        // Impossible to be here.
-        throw new AssertionError("Severe bug: accepted listener update contains invalid config");
+        configWatcher.onError(
+            Status.UNKNOWN.withDescription(
+                "Cannot proceed to resolve routes based on listener " + connManager));
       }
+    }
+    if (!canProceed) {
+      adsStream.nackPendingAckRequest();
     }
   }
 
   /**
    * Handles RDS response to find the RouteConfiguration message for the requested resource name.
-   * Sends an ACK request to the management server if the RouteConfiguration for the requested
-   * resource name is found. Otherwise, sends back a NACK request. Proceed with the
-   * resolved RouteConfiguration (if exists) to find the VirtualHost configuration for the "xds:"
-   * URI (with the port, if any, stripped off).
+   * Proceed with the resolved RouteConfiguration if exists to find the VirtualHost
+   * configuration for the "xds:" * URI (with the port, if any, stripped off).
+   * Otherwise, sends back an NACK request.
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
@@ -224,14 +227,13 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid RDS response"));
     }
-    if (routeConfig != null) {
-      // Accept this route configuration update.
-      adsStream.rdsVersion = rdsResponse.getVersionInfo();
-    }
-    // Send an ACK/NACK request.
-    adsStream.sendRdsRequest(adsStream.rdsResourceName);
+    // Prepare an ACK/NACK request.
+    adsStream.prepareAckRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
+        rdsResponse.getVersionInfo(), rdsResponse.getNonce());
     if (routeConfig != null) {
       processRouteConfig(routeConfig);
+    } else {
+      adsStream.nackPendingAckRequest();
     }
   }
 
@@ -269,9 +271,11 @@ final class XdsClientImpl extends XdsClient {
     }
     // TODO(chengyuanzhang): check VHDS config and perform VHDS if set.
     if (clusterName == null) {
+      adsStream.nackPendingAckRequest();
       configWatcher.onError(
           Status.NOT_FOUND.withDescription("Virtual host for target " + targetName + " not found"));
     } else {
+      adsStream.sendPendingAckRequest();
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
     }
@@ -309,6 +313,12 @@ final class XdsClientImpl extends XdsClient {
     // Most recently requested resource name for each resource type. Note the resource_name in
     // LDS requests will always be "xds:" URI (including port suffix if present).
     private String rdsResourceName = "";
+
+    // A prepared ACK request. Every DiscoveryResponse is replied with a DiscoveryRequest as ACK
+    // (with version_info set to response's version_info) or NACK (with version_info set to last
+    // ACKed response's version_info).
+    @Nullable
+    private DiscoveryRequest pendingAckRequest;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
@@ -389,6 +399,7 @@ final class XdsClientImpl extends XdsClient {
       if (closed) {
         return;
       }
+      checkState(pendingAckRequest == null, "Severe bug: pending ACK/NACK not sent");
       closed = true;
       cleanUp();
       requestWriter.onError(error);
@@ -426,6 +437,61 @@ final class XdsClientImpl extends XdsClient {
               .setResponseNonce(rdsRespNonce)
               .build();
       requestWriter.onNext(request);
+    }
+
+    /**
+     * Prepares a DiscoveryRequest containing the given information as an ACK.
+     */
+    private void prepareAckRequest(String typeUrl, String resourceName, String versionInfo,
+        String nonce) {
+      pendingAckRequest =
+          DiscoveryRequest
+              .newBuilder()
+              .setVersionInfo(versionInfo)
+              .setNode(node)
+              .addResourceNames(resourceName)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(nonce)
+              .build();
+    }
+
+    /**
+     * Sends the previously prepared ACK DiscoveryRequest to management server. Updates the latest
+     * accepted version for the corresponding resource type.
+     */
+    private void sendPendingAckRequest() {
+      checkState(pendingAckRequest != null, "There is no pending ACK request");
+      checkState(requestWriter != null, "ADS stream has not been started");
+      // Update the latest accepted version.
+      String typeUrl = pendingAckRequest.getTypeUrl();
+      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+        ldsVersion = pendingAckRequest.getVersionInfo();
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+        rdsVersion = pendingAckRequest.getVersionInfo();
+      }
+      // TODO: cases for (VHDS/)CDS/EDS.
+      requestWriter.onNext(pendingAckRequest);
+      pendingAckRequest = null;
+    }
+
+    /**
+     * Cancels the pending ACK request and sends its corresponding (with version reverted)
+     * NACK request.
+     */
+    private void nackPendingAckRequest() {
+      checkState(pendingAckRequest != null, "There is no pending ACK request");
+      checkState(requestWriter != null, "ADS stream has not been started");
+      DiscoveryRequest.Builder nackRequestBuilder = pendingAckRequest.toBuilder();
+      // Reverts the request version to the latest accepted version.
+      String typeUrl = pendingAckRequest.getTypeUrl();
+      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+        nackRequestBuilder.setVersionInfo(ldsVersion);
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+        nackRequestBuilder.setVersionInfo(rdsVersion);
+      }
+      // TODO: cases for (VHDS/)CDS/EDS.
+      requestWriter.onNext(nackRequestBuilder.build());
+      pendingAckRequest = null;
     }
   }
 

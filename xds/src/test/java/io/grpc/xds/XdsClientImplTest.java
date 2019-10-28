@@ -35,6 +35,7 @@ import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
+import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.RouteAction;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
@@ -44,6 +45,7 @@ import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
@@ -198,6 +200,57 @@ public class XdsClientImplTest {
   }
 
   /**
+   * An LDS response contains the requested listener and an in-lined RouteConfiguration message for
+   * that listener. But VirtualHost information for the cluster cannot be resolved.
+   * An error is returned to the watching party.
+   */
+  @Test
+  public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "do not care",  // don't care route config name when in-lined
+            ImmutableList.of(
+                buildVirtualHost(ImmutableList.of("something does not match"),
+                    "some cluster"),
+                buildVirtualHost(ImmutableList.of("something else does not match"),
+                    "some other cluster")));
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("bar.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("baz.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an NACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(error.getDescription())
+        .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
+
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  /**
    * Client resolves the virtual host config from an LDS response that contains a
    * RouteConfiguration message directly in-line for the requested resource. No RDS is needed.
    * Config is returned to the watching party.
@@ -241,6 +294,8 @@ public class XdsClientImplTest {
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+
+    verifyNoMoreInteractions(requestObserver);
   }
 
   /**
@@ -322,6 +377,7 @@ public class XdsClientImplTest {
   @Test
   public void resolveVirtualHostInRdsResponse() {
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     Rds rdsConfig =
         Rds.newBuilder()
@@ -361,6 +417,11 @@ public class XdsClientImplTest {
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
+    // Client sent an ACK RDS request.
+    verify(requestObserver).onNext(
+        buildDiscoveryRequest("0", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
@@ -373,6 +434,7 @@ public class XdsClientImplTest {
   @Test
   public void failToFindVirtualHostInRdsResponse() {
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
     Rds rdsConfig =
         Rds.newBuilder()
@@ -413,10 +475,78 @@ public class XdsClientImplTest {
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
+    // Client sent an NACK RDS request.
+    verify(requestObserver).onNext(
+        buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+
     ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onError(errorStatusCaptor.capture());
-    assertThat(errorStatusCaptor.getValue().getCode()).isEqualTo(Status.Code.NOT_FOUND);
-    assertThat(errorStatusCaptor.getValue().getDescription())
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(error.getDescription())
+        .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
+  }
+
+  /**
+   * The VirtualHost message in RDS response contains a VirtualHost with domain matching the
+   * requested host name, but cannot be resolved to find a cluster name in the RouteAction message.
+   */
+  @Test
+  public void matchingVirtualHostDoesNotContainRouteAction() {
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    Rds rdsConfig =
+        Rds.newBuilder()
+            .setConfigSource(ConfigSource.getDefaultInstance())
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("bar.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("baz.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
+
+    // A VirtualHost with a Route that contains only redirect configuration.
+    VirtualHost virtualHost =
+        VirtualHost.newBuilder()
+            .setName("virtualhost00.googleapis.com")  // don't care
+            .addDomains("foo.googleapis.com")
+            .addRoutes(
+                Route.newBuilder()
+                    .setRedirect(
+                        RedirectAction.newBuilder()
+                            .setHostRedirect("bar.googleapis.com")
+                            .setPortRedirect(443)))
+            .build();
+
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration("route-foo.googleapis.com",
+                ImmutableList.of(virtualHost))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an NACK RDS request.
+    verify(requestObserver).onNext(
+        buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    assertThat(error.getDescription())
         .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
   }
   
