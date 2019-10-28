@@ -63,7 +63,7 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   }
 
   /**
-   * Constructor for use by subclasses, with the default {@code CallOptions}.
+   * Constructor for use by subclasses.
    *
    * @since 1.0.0
    * @param channel the channel that this stub will use to do communications
