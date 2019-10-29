@@ -554,9 +554,19 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               return;
             }
             listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
-
-            // Delay cancellation to after startCall().
-            // related issue: https://github.com/grpc/grpc-java/issues/6300
+          } catch (RuntimeException e) {
+            stream.close(Status.fromThrowable(e), new Metadata());
+            context.cancel(null);
+            throw e;
+          } catch (Error e) {
+            stream.close(Status.fromThrowable(e), new Metadata());
+            context.cancel(null);
+            throw e;
+          } finally {
+            jumpListener.setListener(listener);
+            // An extremely short deadline may expire before the stream listener is set. This causes
+            // NPE as in issue: https://github.com/grpc/grpc-java/issues/6300
+            // Delay the setting of listener will fix the NPE.
             final class ServerStreamCancellationListener implements Context.CancellationListener {
               @Override
               public void cancelled(Context context) {
@@ -570,16 +580,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
             }
 
             context.addListener(new ServerStreamCancellationListener(), directExecutor());
-          } catch (RuntimeException e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
-          } catch (Error e) {
-            stream.close(Status.fromThrowable(e), new Metadata());
-            context.cancel(null);
-            throw e;
-          } finally {
-            jumpListener.setListener(listener);
           }
         }
       }
