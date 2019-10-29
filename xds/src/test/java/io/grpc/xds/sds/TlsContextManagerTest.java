@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
-import io.netty.handler.ssl.SslContext;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -36,10 +35,10 @@ public class TlsContextManagerTest {
   @Test
   public void createServerSslContextProvider() {
     DownstreamTlsContext downstreamTlsContext =
-        SslContextSecretVolumeSecretProviderTest.buildDownstreamTlsContextFromFilenames(
+        SecretVolumeSslContextProviderTest.buildDownstreamTlsContextFromFilenames(
             SERVER_1_KEY_FILE, SERVER_1_PEM_FILE, /* trustCa= */ null);
 
-    SecretProvider<SslContext> serverSecretProvider =
+    SslContextProvider serverSecretProvider =
         TlsContextManager.getInstance().findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
   }
@@ -47,10 +46,10 @@ public class TlsContextManagerTest {
   @Test
   public void createClientSslContextProvider() {
     UpstreamTlsContext upstreamTlsContext =
-        SslContextSecretVolumeSecretProviderTest.buildUpstreamTlsContextFromFilenames(
+        SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
             /* privateKey= */ null, /* certChain= */ null, CA_PEM_FILE);
 
-    SecretProvider<SslContext> serverSecretProvider =
+    SslContextProvider serverSecretProvider =
         TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(serverSecretProvider).isNotNull();
   }

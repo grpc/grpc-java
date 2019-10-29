@@ -45,10 +45,10 @@ import javax.annotation.Nullable;
  * An SslContext provider that uses file-based secrets (secret volume). Used for both server and
  * client SslContexts
  */
-final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslContext> {
+final class SecretVolumeSslContextProvider implements SslContextProvider {
 
   private static final Logger logger =
-      Logger.getLogger(SslContextSecretVolumeSecretProvider.class.getName());
+      Logger.getLogger(SecretVolumeSslContextProvider.class.getName());
 
   private final boolean server;
   @Nullable private final String privateKey;
@@ -56,7 +56,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
   @Nullable private final String certificateChain;
   @Nullable private final CertificateValidationContext certContext;
 
-  private SslContextSecretVolumeSecretProvider(
+  private SecretVolumeSslContextProvider(
       @Nullable String privateKey,
       @Nullable String privateKeyPassword,
       @Nullable String certificateChain,
@@ -106,7 +106,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
     return tlsCertificate;
   }
 
-  static SslContextSecretVolumeSecretProvider getProviderForServer(
+  static SecretVolumeSslContextProvider getProviderForServer(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     CommonTlsContext commonTlsContext = downstreamTlsContext.getCommonTlsContext();
@@ -125,7 +125,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
     }
     String privateKeyPassword =
         tlsCertificate.hasPassword() ? tlsCertificate.getPassword().getInlineString() : null;
-    return new SslContextSecretVolumeSecretProvider(
+    return new SecretVolumeSslContextProvider(
         tlsCertificate.getPrivateKey().getFilename(),
         privateKeyPassword,
         tlsCertificate.getCertificateChain().getFilename(),
@@ -133,7 +133,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
         /* server= */ true);
   }
 
-  static SslContextSecretVolumeSecretProvider getProviderForClient(
+  static SecretVolumeSslContextProvider getProviderForClient(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     CommonTlsContext commonTlsContext = upstreamTlsContext.getCommonTlsContext();
@@ -159,7 +159,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
       }
       certificateChain = tlsCertificate.getCertificateChain().getFilename();
     }
-    return new SslContextSecretVolumeSecretProvider(
+    return new SecretVolumeSslContextProvider(
         privateKey,
         privateKeyPassword,
         certificateChain,
@@ -181,7 +181,7 @@ final class SslContextSecretVolumeSecretProvider implements SecretProvider<SslCo
   }
 
   @Override
-  public void addCallback(final Callback<SslContext> callback, Executor executor) {
+  public void addCallback(final Callback callback, Executor executor) {
     checkNotNull(callback, "callback");
     checkNotNull(executor, "executor");
     executor.execute(

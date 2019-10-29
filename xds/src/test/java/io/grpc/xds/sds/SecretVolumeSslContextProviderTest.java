@@ -39,9 +39,9 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link SslContextSecretVolumeSecretProvider}. */
+/** Unit tests for {@link SecretVolumeSslContextProvider}. */
 @RunWith(JUnit4.class)
-public class SslContextSecretVolumeSecretProviderTest {
+public class SecretVolumeSslContextProviderTest {
 
   private static final String SERVER_1_PEM_FILE = "server1.pem";
   private static final String SERVER_1_KEY_FILE = "server1.key";
@@ -55,7 +55,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public void validateCertificateContext_nullAndNotOptional_throwsException() {
     // expect exception when certContext is null and not optional
     try {
-      SslContextSecretVolumeSecretProvider.validateCertificateContext(
+      SecretVolumeSslContextProvider.validateCertificateContext(
           /* certContext= */ null, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -68,7 +68,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     // expect exception when certContext has no CA and not optional
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
-      SslContextSecretVolumeSecretProvider.validateCertificateContext(
+      SecretVolumeSslContextProvider.validateCertificateContext(
           certContext, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -80,7 +80,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public void validateCertificateContext_nullAndOptional() {
     // certContext argument can be null when optional
     CertificateValidationContext certContext =
-        SslContextSecretVolumeSecretProvider.validateCertificateContext(
+        SecretVolumeSslContextProvider.validateCertificateContext(
             /* certContext= */ null, /* optional= */ true);
     assertThat(certContext).isNull();
   }
@@ -90,7 +90,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     // certContext argument can have missing CA when optional
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateCertificateContext(
+            SecretVolumeSslContextProvider.validateCertificateContext(
                 certContext, /* optional= */ true))
         .isNull();
   }
@@ -103,7 +103,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateCertificateContext(
+      SecretVolumeSslContextProvider.validateCertificateContext(
           certContext, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -119,7 +119,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setFilename("bar"))
             .build();
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateCertificateContext(
+            SecretVolumeSslContextProvider.validateCertificateContext(
                 certContext, /* optional= */ false))
         .isSameInstanceAs(certContext);
   }
@@ -128,7 +128,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public void validateTlsCertificate_nullAndNotOptional_throwsException() {
     // expect exception when tlsCertificate is null and not optional
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(
+      SecretVolumeSslContextProvider.validateTlsCertificate(
           /* tlsCertificate= */ null, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -139,7 +139,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   @Test
   public void validateTlsCertificate_nullOptional() {
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateTlsCertificate(
+            SecretVolumeSslContextProvider.validateTlsCertificate(
                 /* tlsCertificate= */ null, /* optional= */ true))
         .isNull();
   }
@@ -149,7 +149,7 @@ public class SslContextSecretVolumeSecretProviderTest {
     // tlsCertificate is not null but has no value (default instance): expect null
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateTlsCertificate(
+            SecretVolumeSslContextProvider.validateTlsCertificate(
                 tlsCert, /* optional= */ true))
         .isNull();
   }
@@ -162,7 +162,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setPrivateKey(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -177,7 +177,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setPrivateKey(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -192,7 +192,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ false);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -207,7 +207,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setCertificateChain(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -222,7 +222,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
             .build();
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateTlsCertificate(
+            SecretVolumeSslContextProvider.validateTlsCertificate(
                 tlsCert, /* optional= */ true))
         .isSameInstanceAs(tlsCert);
   }
@@ -235,7 +235,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
             .build();
     assertThat(
-            SslContextSecretVolumeSecretProvider.validateTlsCertificate(
+            SecretVolumeSslContextProvider.validateTlsCertificate(
                 tlsCert, /* optional= */ false))
         .isSameInstanceAs(tlsCert);
   }
@@ -249,7 +249,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setPrivateKey(DataSource.newBuilder().setFilename("bar"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -265,7 +265,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setCertificateChain(DataSource.newBuilder().setFilename("bar"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
+      SecretVolumeSslContextProvider.validateTlsCertificate(tlsCert, /* optional= */ true);
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().isEqualTo("filename expected");
@@ -276,7 +276,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public void getProviderForServer_defaultTlsCertificate_throwsException() {
     TlsCertificate tlsCert = TlsCertificate.getDefaultInstance();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForServer(
+      SecretVolumeSslContextProvider.getProviderForServer(
           buildDownstreamTlsContext(getCommonTlsContext(tlsCert, /* certContext= */ null)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -296,7 +296,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setInlineString("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForServer(
+      SecretVolumeSslContextProvider.getProviderForServer(
           buildDownstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -308,7 +308,7 @@ public class SslContextSecretVolumeSecretProviderTest {
   public void getProviderForClient_defaultCertContext_throwsException() {
     CertificateValidationContext certContext = CertificateValidationContext.getDefaultInstance();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(
+      SecretVolumeSslContextProvider.getProviderForClient(
           buildUpstreamTlsContext(getCommonTlsContext(/* tlsCertificate= */ null, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -328,7 +328,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setFilename("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(
+      SecretVolumeSslContextProvider.getProviderForClient(
           buildUpstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -348,7 +348,7 @@ public class SslContextSecretVolumeSecretProviderTest {
             .setTrustedCa(DataSource.newBuilder().setFilename("foo"))
             .build();
     try {
-      SslContextSecretVolumeSecretProvider.getProviderForClient(
+      SecretVolumeSslContextProvider.getProviderForClient(
           buildUpstreamTlsContext(getCommonTlsContext(tlsCert, certContext)));
       Assert.fail("no exception thrown");
     } catch (IllegalArgumentException expected) {
@@ -360,8 +360,8 @@ public class SslContextSecretVolumeSecretProviderTest {
     return TestUtils.loadCert(resFile).getAbsolutePath();
   }
 
-  /** Helper method to build SslContextSecretVolumeSecretProvider from given files. */
-  private static SslContextSecretVolumeSecretProvider getSslContextSecretVolumeSecretProvider(
+  /** Helper method to build SecretVolumeSslContextProvider from given files. */
+  private static SecretVolumeSslContextProvider getSslContextSecretVolumeSecretProvider(
       boolean server, String certChainFilename, String privateKeyFilename, String trustedCaFilename)
       throws IOException {
 
@@ -376,22 +376,22 @@ public class SslContextSecretVolumeSecretProviderTest {
       trustedCaFilename = getTempFileNameForResourcesFile(trustedCaFilename);
     }
     return server
-        ? SslContextSecretVolumeSecretProvider.getProviderForServer(
+        ? SecretVolumeSslContextProvider.getProviderForServer(
         buildDownstreamTlsContextFromFilenames(
             privateKeyFilename, certChainFilename, trustedCaFilename))
-        : SslContextSecretVolumeSecretProvider.getProviderForClient(
+        : SecretVolumeSslContextProvider.getProviderForClient(
             buildUpstreamTlsContextFromFilenames(
                 privateKeyFilename, certChainFilename, trustedCaFilename));
   }
 
   /**
-   * Helper method to build SslContextSecretVolumeSecretProvider, call buildSslContext on it and
+   * Helper method to build SecretVolumeSslContextProvider, call buildSslContext on it and
    * check returned SslContext.
    */
   private static void sslContextForEitherWithBothCertAndTrust(
       boolean server, String pemFile, String keyFile, String caFile)
       throws IOException, CertificateException, CertStoreException {
-    SslContextSecretVolumeSecretProvider provider =
+    SecretVolumeSslContextProvider provider =
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
 
     SslContext sslContext = provider.buildSslContextFromSecrets();
@@ -511,14 +511,14 @@ public class SslContextSecretVolumeSecretProviderTest {
     }
   }
 
-  static class TestCallback<T> implements SecretProvider.Callback<T> {
+  static class TestCallback implements SslContextProvider.Callback {
 
-    T updatedSecret;
+    SslContext updatedSslContext;
     Throwable updatedThrowable;
 
     @Override
-    public void updateSecret(T secret) {
-      updatedSecret = secret;
+    public void updateSecret(SslContext sslContext) {
+      updatedSslContext = sslContext;
     }
 
     @Override
@@ -531,41 +531,41 @@ public class SslContextSecretVolumeSecretProviderTest {
    * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
    * a synchronous callback - so need to provide a listener.
    */
-  private static TestCallback<SslContext> getValueThruCallback(
-      SecretProvider<SslContext> provider) {
-    TestCallback<SslContext> testCallback = new TestCallback<>();
+  private static TestCallback getValueThruCallback(
+      SslContextProvider provider) {
+    TestCallback testCallback = new TestCallback();
     provider.addCallback(testCallback, MoreExecutors.directExecutor());
     return testCallback;
   }
 
   @Test
   public void getProviderForServer_both_callsback() throws IOException {
-    SslContextSecretVolumeSecretProvider provider =
+    SecretVolumeSslContextProvider provider =
         getSslContextSecretVolumeSecretProvider(
             true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
 
-    TestCallback<SslContext> testCallback = getValueThruCallback(provider);
-    doChecksOnSslContext(true, testCallback.updatedSecret);
+    TestCallback testCallback = getValueThruCallback(provider);
+    doChecksOnSslContext(true, testCallback.updatedSslContext);
   }
 
   @Test
   public void getProviderForClient_both_callsback() throws IOException {
-    SslContextSecretVolumeSecretProvider provider =
+    SecretVolumeSslContextProvider provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
 
-    TestCallback<SslContext> testCallback = getValueThruCallback(provider);
-    doChecksOnSslContext(false, testCallback.updatedSecret);
+    TestCallback testCallback = getValueThruCallback(provider);
+    doChecksOnSslContext(false, testCallback.updatedSslContext);
   }
 
   // note this test generates stack-trace but can be safely ignored
   @Test
   public void getProviderForClient_both_callsback_setException() throws IOException {
-    SslContextSecretVolumeSecretProvider provider =
+    SecretVolumeSslContextProvider provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
-    TestCallback<SslContext> testCallback = getValueThruCallback(provider);
-    assertThat(testCallback.updatedSecret).isNull();
+    TestCallback testCallback = getValueThruCallback(provider);
+    assertThat(testCallback.updatedSslContext).isNull();
     assertThat(testCallback.updatedThrowable).isInstanceOf(IllegalArgumentException.class);
     assertThat(testCallback.updatedThrowable).hasMessageThat()
         .contains("File does not contain valid private key");
