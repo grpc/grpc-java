@@ -127,9 +127,9 @@ final class AdsLifecycleManager {
 
     long delayNanos;
     if (firstResponseReceived) {
-      // Reset the backoff sequence if balancer has sent the initial response
+      // Reset the backoff sequence if balancer has sent the initial response.
       adsRpcRetryPolicy = backoffPolicyProvider.get();
-      // Retry immediately
+      // Retry immediately.
       delayNanos = 0;
     } else {
       delayNanos = Math.max(

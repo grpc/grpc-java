@@ -77,7 +77,7 @@ public class XdsClientImplTest {
     final BackoffPolicy backoffPolicy = new BackoffPolicy() {
       @Override
       public long nextBackoffNanos() {
-        return 1234567;
+        return retryBackOff;
       }
     };
 
@@ -92,6 +92,7 @@ public class XdsClientImplTest {
   @Mock
   private EndpointWatcher endpointWatcher2;
 
+  private long retryBackOff = 1234567;
   private StreamRecorder<DiscoveryRequest> streamRecorder;
   private StreamObserver<DiscoveryResponse> responseWriter;
   private XdsClientImpl xdsClient;
@@ -212,14 +213,40 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void addEndpointWatcher_rpcFailure_endpointWatcherOnError() {
+  public void addEndpointWatcher_rpcFailure_endpointWatcherOnError_retryAfterBackoff() {
+    FakeClock.TaskFilter lbRpcRetryTaskFilter =
+        new FakeClock.TaskFilter() {
+          @Override
+          public boolean shouldAccept(Runnable command) {
+            return command.toString().contains("AdsRpcRetryTask");
+          }
+        };
+
     xdsClient.watchEndpointData("cluster2", endpointWatcher2);
 
+    assertThat(fakeClock.getPendingTasks(lbRpcRetryTaskFilter)).isEmpty();
     responseWriter.onError(Status.UNAVAILABLE.asException());
 
     verify(endpointWatcher1, never()).onError(any(Status.class));
     ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
     verify(endpointWatcher2).onError(statusCaptor.capture());
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Status.Code.UNAVAILABLE);
+
+    StreamObserver<DiscoveryResponse> oldResponseWriter = responseWriter;
+    assertThat(fakeClock.getPendingTasks(lbRpcRetryTaskFilter)).hasSize(1);
+    fakeClock.forwardNanos(retryBackOff);
+    assertThat(fakeClock.getPendingTasks(lbRpcRetryTaskFilter)).isEmpty();
+    assertThat(responseWriter).isNotSameInstanceAs(oldResponseWriter);
+
+    ClusterLoadAssignment clusterLoadAssignment =
+        ClusterLoadAssignment.newBuilder().setClusterName("cluster2").build();
+    DiscoveryResponse edsResponse = DiscoveryResponse.newBuilder()
+        .addAllResources(Arrays.asList(Any.pack(clusterLoadAssignment)))
+        .setTypeUrl(EDS_TYPE_URL)
+        .setNonce("A")
+        .build();
+    responseWriter.onNext(edsResponse);
+    verify(endpointWatcher2).onEndpointChanged(
+        EndpointUpdate.newBuilder().setClusterLoadAssignment(clusterLoadAssignment).build());
   }
 }
