@@ -17,28 +17,30 @@
 package io.grpc.xds.sds;
 
 import io.grpc.Internal;
+import io.netty.handler.ssl.SslContext;
+
 import java.util.concurrent.Executor;
 
 /**
- * A SecretProvider is a "container" or provider of a secret. This is used by gRPC-xds to access
- * secrets, so is not part of the public API of gRPC. This "container" may represent a stream that
- * is receiving the requested secret(s) or it could represent file-system based secret(s) that are
- * dynamic.
+ * A SslContextProvider is a "container" or provider of SslContext. This is used by gRPC-xds to
+ * obtain an SslContext, so is not part of the public API of gRPC. This "container" may represent
+ * a stream that is receiving the requested secret(s) or it could represent file-system based
+ * secret(s) that are dynamic.
  */
 @Internal
-public interface SecretProvider<T> {
+public interface SslContextProvider {
 
-  interface Callback<T> {
-    /** Informs callee of new/updated secret. */
-    void updateSecret(T secret);
+  interface Callback {
+    /** Informs callee of new/updated SslContext. */
+    void updateSecret(SslContext sslContext);
 
     /** Informs callee of an exception that was generated. */
     void onException(Throwable throwable);
   }
 
   /**
-   * Registers a callback on the given executor. The callback will run when secret becomes available
-   * or immediately if the result is already available.
+   * Registers a callback on the given executor. The callback will run when SslContext becomes
+   * available or immediately if the result is already available.
    */
-  void addCallback(Callback<T> callback, Executor executor);
+  void addCallback(Callback callback, Executor executor);
 }
