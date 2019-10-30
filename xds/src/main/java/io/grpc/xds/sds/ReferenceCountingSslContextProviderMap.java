@@ -84,7 +84,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
   private synchronized SslContextProvider releaseInternal(
       final K key, final SslContextProvider instance) {
     final Instance cached = instances.get(key);
-    checkArgument(cached != null, "No cached instance found for " + key);
+    checkArgument(cached != null, "No cached instance found for %s", key);
     checkArgument(
         instance == cached.sslContextProvider, "Releasing the wrong instance");
     if (cached.release()) {
