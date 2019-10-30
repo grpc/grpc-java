@@ -206,6 +206,8 @@ final class XdsClientImpl extends XdsClient {
     if (!canProceed) {
       adsStream.nackPendingAckRequest();
     }
+    checkState(adsStream.pendingAckRequest == null,
+        "LDS response %s has not been ACKed/NACKed", ldsResponse);
   }
 
   /**
@@ -239,6 +241,8 @@ final class XdsClientImpl extends XdsClient {
     } else {
       adsStream.nackPendingAckRequest();
     }
+    checkState(adsStream.pendingAckRequest == null,
+        "RDS response %s has not been ACKed/NACKed", rdsResponse);
   }
 
   /**
