@@ -21,19 +21,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
-import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityInfo;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsComms2.AdsStreamCallback;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -137,24 +134,18 @@ final class LookasideChannelLb extends LoadBalancer {
       ImmutableList<DropOverload> dropOverloads = dropOverloadsBuilder.build();
       localityStore.updateDropPercentage(dropOverloads);
 
-      List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-      ImmutableMap.Builder<Locality, LocalityInfo> localityEndpointsMapping =
+      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localities =
+          clusterLoadAssignment.getEndpointsList();
+      ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
           new ImmutableMap.Builder<>();
-      for (LocalityLbEndpoints localityLbEndpoints : localities) {
-        io.envoyproxy.envoy.api.v2.core.Locality localityProto =
-            localityLbEndpoints.getLocality();
-        Locality locality = Locality.fromEnvoyProtoLocality(localityProto);
-        List<LbEndpoint> lbEndPoints = new ArrayList<>();
-        for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
-            : localityLbEndpoints.getLbEndpointsList()) {
-          lbEndPoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(lbEndpoint));
-        }
+      for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
+          : localities) {
+        Locality locality = Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality());
         int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
-        int priority = localityLbEndpoints.getPriority();
 
         if (localityWeight != 0) {
           localityEndpointsMapping.put(
-              locality, new LocalityInfo(lbEndPoints, localityWeight, priority));
+              locality, LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
         }
       }
 

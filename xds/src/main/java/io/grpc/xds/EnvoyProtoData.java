@@ -25,7 +25,6 @@ import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
@@ -118,25 +117,45 @@ final class EnvoyProtoData {
   }
 
   /**
-   * Information about the locality from EDS response.
+   * See corresponding Envoy proto message {@link
+   * io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints}.
    */
-  static final class LocalityInfo {
-    final List<EquivalentAddressGroup> eags;
-    final List<Integer> endPointWeights;
-    final int localityWeight;
-    final int priority;
+  static final class LocalityLbEndpoints {
+    private final List<LbEndpoint> endpoints;
+    private final int localityWeight;
+    private final int priority;
 
-    LocalityInfo(Collection<LbEndpoint> lbEndPoints, int localityWeight, int priority) {
-      List<EquivalentAddressGroup> eags = new ArrayList<>(lbEndPoints.size());
-      List<Integer> endPointWeights = new ArrayList<>(lbEndPoints.size());
-      for (LbEndpoint lbEndPoint : lbEndPoints) {
-        eags.add(lbEndPoint.eag);
-        endPointWeights.add(lbEndPoint.loadBalancingWeight);
-      }
-      this.eags = Collections.unmodifiableList(eags);
-      this.endPointWeights = Collections.unmodifiableList(new ArrayList<>(endPointWeights));
+    /** Must only be used for testing. */
+    @VisibleForTesting
+    LocalityLbEndpoints(List<LbEndpoint> endpoints, int localityWeight, int priority) {
+      this.endpoints = endpoints;
       this.localityWeight = localityWeight;
       this.priority = priority;
+    }
+
+    static LocalityLbEndpoints fromEnvoyProtoLocalityLbEndpoints(
+        io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints proto) {
+      List<LbEndpoint> endpoints = new ArrayList<>(proto.getLbEndpointsCount());
+      for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint endpoint : proto.getLbEndpointsList()) {
+        endpoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint));
+      }
+      return
+          new LocalityLbEndpoints(
+              endpoints,
+              proto.getLoadBalancingWeight().getValue(),
+              proto.getPriority());
+    }
+
+    List<LbEndpoint> getEndpoints() {
+      return Collections.unmodifiableList(endpoints);
+    }
+
+    int getLocalityWeight() {
+      return localityWeight;
+    }
+
+    int getPriority() {
+      return priority;
     }
 
     @Override
@@ -147,16 +166,24 @@ final class EnvoyProtoData {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      LocalityInfo that = (LocalityInfo) o;
+      LocalityLbEndpoints that = (LocalityLbEndpoints) o;
       return localityWeight == that.localityWeight
           && priority == that.priority
-          && Objects.equal(eags, that.eags)
-          && Objects.equal(endPointWeights, that.endPointWeights);
+          && Objects.equal(endpoints, that.endpoints);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eags, endPointWeights, localityWeight, priority);
+      return Objects.hashCode(endpoints, localityWeight, priority);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("endpoints", endpoints)
+          .add("localityWeight", localityWeight)
+          .add("priority", priority)
+          .toString();
     }
   }
 
@@ -195,7 +222,31 @@ final class EnvoyProtoData {
       return loadBalancingWeight;
     }
 
-    // TODO(chengyuanzhang): define equals()/hashCode()/toString() if necessary.
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      LbEndpoint that = (LbEndpoint) o;
+      return loadBalancingWeight == that.loadBalancingWeight
+          && Objects.equal(eag, that.eag);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(eag, loadBalancingWeight);
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("eag", eag)
+          .add("loadBalancingWeight", loadBalancingWeight)
+          .toString();
+    }
   }
 
   /**

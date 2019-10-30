@@ -41,7 +41,6 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
-import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
@@ -57,7 +56,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityInfo;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import org.junit.Before;
@@ -116,7 +115,8 @@ public class LookasideChannelLbTest {
   private StreamObserver<DiscoveryResponse> serverResponseWriter;
 
   @Captor
-  private ArgumentCaptor<ImmutableMap<Locality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<ImmutableMap<Locality, LocalityLbEndpoints>>
+      localityEndpointsMappingCaptor;
 
   private LookasideChannelLb lookasideChannelLb;
 
@@ -341,17 +341,17 @@ public class LookasideChannelLbTest {
         .setLoadBalancingWeight(UInt32Value.of(31))
         .build();
     ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
-            .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
                 .setLocality(localityProto1)
                 .addLbEndpoints(endpoint11)
                 .addLbEndpoints(endpoint12)
                 .setLoadBalancingWeight(UInt32Value.of(1)))
-            .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
                 .setLocality(localityProto2)
                 .addLbEndpoints(endpoint21)
                 .addLbEndpoints(endpoint22)
                 .setLoadBalancingWeight(UInt32Value.of(2)))
-            .addEndpoints(LocalityLbEndpoints.newBuilder()
+            .addEndpoints(io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
                 .setLocality(localityProto3)
                 .addLbEndpoints(endpoint3)
                 .setLoadBalancingWeight(UInt32Value.of(0)))
@@ -363,12 +363,12 @@ public class LookasideChannelLbTest {
             .build());
 
     Locality locality1 = Locality.fromEnvoyProtoLocality(localityProto1);
-    LocalityInfo localityInfo1 = new LocalityInfo(
+    LocalityLbEndpoints localityInfo1 = new LocalityLbEndpoints(
         ImmutableList.of(
             EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint11),
             EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint12)),
         1, 0);
-    LocalityInfo localityInfo2 = new LocalityInfo(
+    LocalityLbEndpoints localityInfo2 = new LocalityLbEndpoints(
         ImmutableList.of(
             EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint21),
             EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint22)),

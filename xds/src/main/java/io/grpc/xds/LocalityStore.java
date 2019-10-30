@@ -29,6 +29,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -45,8 +46,9 @@ import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
-import io.grpc.xds.EnvoyProtoData.LocalityInfo;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
@@ -70,7 +72,7 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(ImmutableMap<Locality, LocalityInfo> localityInfoMap);
+  void updateLocalityStore(ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap);
 
   void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
 
@@ -201,14 +203,19 @@ interface LocalityStore {
 
     // This is triggered by EDS response.
     @Override
-    public void updateLocalityStore(final ImmutableMap<Locality, LocalityInfo> localityInfoMap) {
+    public void updateLocalityStore(
+        final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
       for (Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
           final LocalityLbInfo localityLbInfo = localityMap.get(locality);
-          final LocalityInfo localityInfo = localityInfoMap.get(locality);
+          LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+          final List<EquivalentAddressGroup> eags = new ArrayList<>();
+          for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+            eags.add(endpoint.getAddress());
+          }
           // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
           // immediately, so execute handleResolvedAddresses() after all the setup in this method is
           // complete.
@@ -216,7 +223,7 @@ interface LocalityStore {
             @Override
             public void run() {
               localityLbInfo.childBalancer.handleResolvedAddresses(
-                  ResolvedAddresses.newBuilder().setAddresses(localityInfo.eags).build());
+                  ResolvedAddresses.newBuilder().setAddresses(eags).build());
             }
           });
         }
@@ -448,7 +455,7 @@ interface LocalityStore {
     private final class PriorityManager {
 
       private final List<List<Locality>> priorityTable = new ArrayList<>();
-      private Map<Locality, LocalityInfo> localityInfoMap = ImmutableMap.of();
+      private Map<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of();
       private int currentPriority = -1;
       private ScheduledHandle failOverTimer;
 
@@ -456,11 +463,11 @@ interface LocalityStore {
        * Updates the priority ordering of localities with the given collection of localities.
        * Recomputes the current ready localities to be used.
        */
-      void updateLocalities(Map<Locality, LocalityInfo> localityInfoMap) {
+      void updateLocalities(Map<Locality, LocalityLbEndpoints> localityInfoMap) {
         this.localityInfoMap = localityInfoMap;
         priorityTable.clear();
         for (Locality newLocality : localityInfoMap.keySet()) {
-          int priority = localityInfoMap.get(newLocality).priority;
+          int priority = localityInfoMap.get(newLocality).getPriority();
           while (priorityTable.size() <= priority) {
             priorityTable.add(new ArrayList<Locality>());
           }
@@ -495,7 +502,7 @@ interface LocalityStore {
 
           if (READY == childState) {
             childPickers.add(
-                new WeightedChildPicker(localityInfoMap.get(l).localityWeight, childPicker));
+                new WeightedChildPicker(localityInfoMap.get(l).getLocalityWeight(), childPicker));
           }
         }
 
@@ -526,7 +533,7 @@ interface LocalityStore {
 
       int getPriority(Locality locality) {
         if (localityInfoMap.containsKey(locality)) {
-          return localityInfoMap.get(locality).priority;
+          return localityInfoMap.get(locality).getPriority();
         }
         return -1;
       }
@@ -589,7 +596,11 @@ interface LocalityStore {
                 childHelper);
         localityMap.put(locality, localityLbInfo);
 
-        final LocalityInfo localityInfo = localityInfoMap.get(locality);
+        LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+        final List<EquivalentAddressGroup> eags = new ArrayList<>();
+        for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+          eags.add(endpoint.getAddress());
+        }
         // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
         // so execute handleResolvedAddresses() after all the setup in the caller is complete.
         helper.getSynchronizationContext().execute(new Runnable() {
@@ -598,7 +609,7 @@ interface LocalityStore {
             // TODO: put endPointWeights into attributes for WRR.
             localityLbInfo.childBalancer
                 .handleResolvedAddresses(ResolvedAddresses.newBuilder()
-                    .setAddresses(localityInfo.eags).build());
+                    .setAddresses(eags).build());
           }
         });
       }
