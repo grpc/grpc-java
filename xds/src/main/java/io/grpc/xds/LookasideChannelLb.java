@@ -176,7 +176,7 @@ final class LookasideChannelLb extends LoadBalancer {
         List<LbEndpoint> lbEndPoints = new ArrayList<>();
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {
-          lbEndPoints.add(new LbEndpoint(lbEndpoint));
+          lbEndPoints.add(LbEndpoint.fromEnvoyProtoLbEndpoint(lbEndpoint));
         }
         int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
         int priority = localityLbEndpoints.getPriority();

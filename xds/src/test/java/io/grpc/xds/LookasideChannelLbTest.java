@@ -365,13 +365,13 @@ public class LookasideChannelLbTest {
     Locality locality1 = Locality.fromEnvoyProtoLocality(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
-            new EnvoyProtoData.LbEndpoint(endpoint11),
-            new EnvoyProtoData.LbEndpoint(endpoint12)),
+            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint11),
+            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint12)),
         1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
-            new EnvoyProtoData.LbEndpoint(endpoint21),
-            new EnvoyProtoData.LbEndpoint(endpoint22)),
+            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint21),
+            EnvoyProtoData.LbEndpoint.fromEnvoyProtoLbEndpoint(endpoint22)),
         2, 0);
     Locality locality2 = Locality.fromEnvoyProtoLocality(localityProto2);
 

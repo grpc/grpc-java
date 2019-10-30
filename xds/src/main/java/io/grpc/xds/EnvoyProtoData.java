@@ -20,7 +20,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
-import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -130,7 +129,7 @@ final class EnvoyProtoData {
       List<Integer> endPointWeights = new ArrayList<>(lbEndPoints.size());
       for (LbEndpoint lbEndPoint : lbEndPoints) {
         eags.add(lbEndPoint.eag);
-        endPointWeights.add(lbEndPoint.endPointWeight);
+        endPointWeights.add(lbEndPoint.loadBalancingWeight);
       }
       this.eags = Collections.unmodifiableList(eags);
       this.endPointWeights = Collections.unmodifiableList(new ArrayList<>(endPointWeights));
@@ -159,27 +158,42 @@ final class EnvoyProtoData {
     }
   }
 
+  /**
+   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint}.
+   */
   static final class LbEndpoint {
-    final EquivalentAddressGroup eag;
-    final int endPointWeight;
+    private final EquivalentAddressGroup eag;
+    private final int loadBalancingWeight;
 
-    LbEndpoint(io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpointProto) {
-      this(
-          new EquivalentAddressGroup(ImmutableList.of(fromEnvoyProtoAddress(lbEndpointProto))),
-          lbEndpointProto.getLoadBalancingWeight().getValue());
-    }
-
+    /** Must only be used for testing. */
     @VisibleForTesting
-    LbEndpoint(EquivalentAddressGroup eag, int endPointWeight) {
+    LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight) {
       this.eag = eag;
-      this.endPointWeight = endPointWeight;
+      this.loadBalancingWeight = loadBalancingWeight;
     }
 
-    private static java.net.SocketAddress fromEnvoyProtoAddress(
-        io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpointProto) {
-      SocketAddress socketAddress = lbEndpointProto.getEndpoint().getAddress().getSocketAddress();
-      return new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
+    static LbEndpoint fromEnvoyProtoLbEndpoint(
+        io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint proto) {
+      io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress =
+          proto.getEndpoint().getAddress().getSocketAddress();
+      return
+          new LbEndpoint(
+              new EquivalentAddressGroup(
+                  ImmutableList.<java.net.SocketAddress>of(
+                      new InetSocketAddress(socketAddress.getAddress(),
+                          socketAddress.getPortValue()))),
+              proto.getLoadBalancingWeight().getValue());
     }
+
+    EquivalentAddressGroup getAddress() {
+      return eag;
+    }
+
+    int getLoadBalancingWeight() {
+      return loadBalancingWeight;
+    }
+
+    // TODO(chengyuanzhang): define equals()/hashCode()/toString() if necessary.
   }
 
   static final class DropOverload {
