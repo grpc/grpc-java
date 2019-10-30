@@ -16,10 +16,11 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.base.Preconditions;
 import java.util.HashMap;
+import java.util.Map;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -35,12 +36,11 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class ReferenceCountingSslContextProviderMap<K> {
 
-  private final HashMap<K, Instance> instances;
+  private final Map<K, Instance> instances = new HashMap<>();
   private final SslContextProviderFactory<K> sslContextProviderFactory;
 
   ReferenceCountingSslContextProviderMap(SslContextProviderFactory<K> sslContextProviderFactory) {
     checkNotNull(sslContextProviderFactory, "sslContextProviderFactory");
-    instances = new HashMap<>();
     this.sslContextProviderFactory = sslContextProviderFactory;
   }
 
@@ -78,20 +78,16 @@ final class ReferenceCountingSslContextProviderMap<K> {
       instance = new Instance(sslContextProviderFactory.createSslContextProvider(key));
       instances.put(key, instance);
     }
-    instance.refcount++;
-    return instance.sslContextProvider;
+    return instance.acquire();
   }
 
   private synchronized SslContextProvider releaseInternal(
       final K key, final SslContextProvider instance) {
     final Instance cached = instances.get(key);
-    if (cached == null) {
-      throw new IllegalArgumentException("No cached instance found for " + key);
-    }
-    Preconditions.checkArgument(
+    checkArgument(cached != null, "No cached instance found for " + key);
+    checkArgument(
         instance == cached.sslContextProvider, "Releasing the wrong instance");
-    cached.refcount--;
-    if (cached.refcount == 0) {
+    if (cached.release()) {
       try {
         cached.sslContextProvider.close();
       } finally {
@@ -109,11 +105,22 @@ final class ReferenceCountingSslContextProviderMap<K> {
 
   private static class Instance {
     final SslContextProvider sslContextProvider;
-    int refcount;
+    private int refCount;
+
+    /** Increment refCount and acquire a reference to sslContextProvider. */
+    SslContextProvider acquire() {
+      refCount++;
+      return sslContextProvider;
+    }
+
+    /** Decrement refCount and return true if it has reached 0. */
+    boolean release() {
+      return --refCount == 0;
+    }
 
     Instance(SslContextProvider sslContextProvider) {
       this.sslContextProvider = sslContextProvider;
-      this.refcount = 0;
+      this.refCount = 0;
     }
   }
 }
