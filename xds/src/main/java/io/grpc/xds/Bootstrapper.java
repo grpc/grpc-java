@@ -62,7 +62,7 @@ abstract class Bootstrapper {
     @Override
     BootstrapInfo readBootstrap() throws Exception {
       if (bootstrapInfo == null && failToBootstrapException == null) {
-        synchronized (Bootstrapper.FileBasedBootstrapper.class) {
+        synchronized (FileBasedBootstrapper.class) {
           if (bootstrapInfo == null && failToBootstrapException == null) {
             try {
               String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
