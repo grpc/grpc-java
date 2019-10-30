@@ -31,10 +31,10 @@ import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
-import io.grpc.xds.ClusterLoadAssignmentData.LbEndpoint;
-import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.LbEndpoint;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityInfo;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsComms2.AdsStreamCallback;
 import java.util.ArrayList;
@@ -167,12 +167,12 @@ final class LookasideChannelLb extends LoadBalancer {
       localityStore.updateDropPercentage(dropOverloads);
 
       List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-      ImmutableMap.Builder<XdsLocality, LocalityInfo> localityEndpointsMapping =
+      ImmutableMap.Builder<Locality, LocalityInfo> localityEndpointsMapping =
           new ImmutableMap.Builder<>();
       for (LocalityLbEndpoints localityLbEndpoints : localities) {
         io.envoyproxy.envoy.api.v2.core.Locality localityProto =
             localityLbEndpoints.getLocality();
-        XdsLocality locality = XdsLocality.fromLocalityProto(localityProto);
+        Locality locality = Locality.fromEnvoyProtoLocality(localityProto);
         List<LbEndpoint> lbEndPoints = new ArrayList<>();
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {

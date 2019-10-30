@@ -24,7 +24,7 @@ import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats.DroppedRequests;
 import io.envoyproxy.envoy.api.v2.endpoint.EndpointLoadMetricStats;
 import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.grpc.xds.ClientLoadCounter.MetricValue;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -44,11 +44,11 @@ import org.junit.runners.JUnit4;
 /** Unit tests for {@link LoadStatsStore}. */
 @RunWith(JUnit4.class)
 public class LoadStatsStoreImplTest {
-  private static final XdsLocality LOCALITY1 =
-      new XdsLocality("test_region1", "test_zone", "test_subzone");
-  private static final XdsLocality LOCALITY2 =
-      new XdsLocality("test_region2", "test_zone", "test_subzone");
-  private ConcurrentMap<XdsLocality, ClientLoadCounter> localityLoadCounters;
+  private static final Locality LOCALITY1 =
+      new Locality("test_region1", "test_zone", "test_subzone");
+  private static final Locality LOCALITY2 =
+      new Locality("test_region2", "test_zone", "test_subzone");
+  private ConcurrentMap<Locality, ClientLoadCounter> localityLoadCounters;
   private ConcurrentMap<String, AtomicLong> dropCounters;
   private LoadStatsStore loadStatsStore;
 
@@ -73,7 +73,7 @@ public class LoadStatsStoreImplTest {
   }
 
   private static UpstreamLocalityStats buildUpstreamLocalityStats(
-      XdsLocality locality,
+      Locality locality,
       long callsSucceed,
       long callsInProgress,
       long callsFailed,
@@ -81,7 +81,7 @@ public class LoadStatsStoreImplTest {
       @Nullable List<EndpointLoadMetricStats> metrics) {
     UpstreamLocalityStats.Builder builder =
         UpstreamLocalityStats.newBuilder()
-            .setLocality(locality.toLocalityProto())
+            .setLocality(locality.toEnvoyProtoLocality())
             .setTotalSuccessfulRequests(callsSucceed)
             .setTotalErrorRequests(callsFailed)
             .setTotalRequestsInProgress(callsInProgress)

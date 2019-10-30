@@ -37,7 +37,6 @@ import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Address;
-import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
@@ -56,9 +55,9 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
-import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityInfo;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import org.junit.Before;
@@ -117,7 +116,7 @@ public class LookasideChannelLbTest {
   private StreamObserver<DiscoveryResponse> serverResponseWriter;
 
   @Captor
-  private ArgumentCaptor<ImmutableMap<XdsLocality, LocalityInfo>> localityEndpointsMappingCaptor;
+  private ArgumentCaptor<ImmutableMap<Locality, LocalityInfo>> localityEndpointsMappingCaptor;
 
   private LookasideChannelLb lookasideChannelLb;
 
@@ -285,8 +284,13 @@ public class LookasideChannelLbTest {
 
   @Test
   public void handleLocalityAssignmentUpdates() {
-    Locality localityProto1 = Locality.newBuilder()
-        .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
+    io.envoyproxy.envoy.api.v2.core.Locality localityProto1 =
+        io.envoyproxy.envoy.api.v2.core.Locality
+            .newBuilder()
+            .setRegion("region1")
+            .setZone("zone1")
+            .setSubZone("subzone1")
+            .build();
     LbEndpoint endpoint11 = LbEndpoint.newBuilder()
         .setEndpoint(Endpoint.newBuilder()
             .setAddress(Address.newBuilder()
@@ -301,8 +305,13 @@ public class LookasideChannelLbTest {
                     .setAddress("addr12").setPortValue(12))))
         .setLoadBalancingWeight(UInt32Value.of(12))
         .build();
-    Locality localityProto2 = Locality.newBuilder()
-        .setRegion("region2").setZone("zone2").setSubZone("subzone2").build();
+    io.envoyproxy.envoy.api.v2.core.Locality localityProto2 =
+        io.envoyproxy.envoy.api.v2.core.Locality
+            .newBuilder()
+            .setRegion("region2")
+            .setZone("zone2")
+            .setSubZone("subzone2")
+            .build();
     LbEndpoint endpoint21 = LbEndpoint.newBuilder()
         .setEndpoint(Endpoint.newBuilder()
             .setAddress(Address.newBuilder()
@@ -317,8 +326,13 @@ public class LookasideChannelLbTest {
                     .setAddress("addr22").setPortValue(22))))
         .setLoadBalancingWeight(UInt32Value.of(22))
         .build();
-    Locality localityProto3 = Locality.newBuilder()
-        .setRegion("region3").setZone("zone3").setSubZone("subzone3").build();
+    io.envoyproxy.envoy.api.v2.core.Locality localityProto3 =
+        io.envoyproxy.envoy.api.v2.core.Locality
+            .newBuilder()
+            .setRegion("region3")
+            .setZone("zone3")
+            .setSubZone("subzone3")
+            .build();
     LbEndpoint endpoint3 = LbEndpoint.newBuilder()
         .setEndpoint(Endpoint.newBuilder()
             .setAddress(Address.newBuilder()
@@ -348,18 +362,18 @@ public class LookasideChannelLbTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build());
 
-    XdsLocality locality1 = XdsLocality.fromLocalityProto(localityProto1);
+    Locality locality1 = Locality.fromEnvoyProtoLocality(localityProto1);
     LocalityInfo localityInfo1 = new LocalityInfo(
         ImmutableList.of(
-            new ClusterLoadAssignmentData.LbEndpoint(endpoint11),
-            new ClusterLoadAssignmentData.LbEndpoint(endpoint12)),
+            new EnvoyProtoData.LbEndpoint(endpoint11),
+            new EnvoyProtoData.LbEndpoint(endpoint12)),
         1, 0);
     LocalityInfo localityInfo2 = new LocalityInfo(
         ImmutableList.of(
-            new ClusterLoadAssignmentData.LbEndpoint(endpoint21),
-            new ClusterLoadAssignmentData.LbEndpoint(endpoint22)),
+            new EnvoyProtoData.LbEndpoint(endpoint21),
+            new EnvoyProtoData.LbEndpoint(endpoint22)),
         2, 0);
-    XdsLocality locality2 = XdsLocality.fromLocalityProto(localityProto2);
+    Locality locality2 = Locality.fromEnvoyProtoLocality(localityProto2);
 
     InOrder inOrder = inOrder(localityStore);
     inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());

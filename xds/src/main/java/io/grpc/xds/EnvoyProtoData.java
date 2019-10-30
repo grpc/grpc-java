@@ -45,31 +45,29 @@ final class EnvoyProtoData {
   }
 
   /**
-   * An {@code XdsLocality} object is simply a POJO representation for {@link
-   * io.envoyproxy.envoy.api.v2.core.Locality}, with only details needed for {@link
-   * XdsLoadBalancer2}.
+   * See corresponding Envoy proto message {@link io.envoyproxy.envoy.api.v2.core.Locality}.
    */
-  static final class XdsLocality {
+  static final class Locality {
     private final String region;
     private final String zone;
     private final String subzone;
 
     /** Must only be used for testing. */
     @VisibleForTesting
-    XdsLocality(String region, String zone, String subzone) {
+    Locality(String region, String zone, String subzone) {
       this.region = region;
       this.zone = zone;
       this.subzone = subzone;
     }
 
-    static XdsLocality fromLocalityProto(io.envoyproxy.envoy.api.v2.core.Locality locality) {
-      return new XdsLocality(
+    static Locality fromEnvoyProtoLocality(io.envoyproxy.envoy.api.v2.core.Locality locality) {
+      return new Locality(
           /* region = */ locality.getRegion(),
           /* zone = */ locality.getZone(),
           /* subzone = */ locality.getSubZone());
     }
 
-    io.envoyproxy.envoy.api.v2.core.Locality toLocalityProto() {
+    io.envoyproxy.envoy.api.v2.core.Locality toEnvoyProtoLocality() {
       return io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
           .setRegion(region)
           .setZone(zone)
@@ -97,7 +95,7 @@ final class EnvoyProtoData {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      XdsLocality locality = (XdsLocality) o;
+      Locality locality = (Locality) o;
       return Objects.equal(region, locality.region)
           && Objects.equal(zone, locality.zone)
           && Objects.equal(subzone, locality.subzone);
