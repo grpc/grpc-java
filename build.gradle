@@ -49,7 +49,7 @@ subprojects {
         googleauthVersion = '0.17.1'
         protobufVersion = '3.10.0'
         protocVersion = protobufVersion
-        opencensusVersion = '0.21.0'
+        opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
