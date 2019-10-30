@@ -29,7 +29,7 @@ import io.grpc.netty.InternalProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiator.ProtocolNegotiator;
 import io.grpc.netty.InternalProtocolNegotiators;
 import io.grpc.netty.NettyChannelBuilder;
-import io.grpc.xds.sds.SecretProvider;
+import io.grpc.xds.sds.SslContextProvider;
 import io.grpc.xds.sds.TlsContextManager;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
@@ -192,11 +192,11 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SecretProvider<SslContext> sslContextProvider =
+      SslContextProvider sslContextProvider =
           TlsContextManager.getInstance().findOrCreateClientSslContextProvider(upstreamTlsContext);
 
       sslContextProvider.addCallback(
-          new SecretProvider.Callback<SslContext>() {
+          new SslContextProvider.Callback() {
 
             @Override
             public void updateSecret(SslContext sslContext) {
@@ -277,12 +277,12 @@ public final class SdsProtocolNegotiators {
       final BufferReadsHandler bufferReads = new BufferReadsHandler();
       ctx.pipeline().addBefore(ctx.name(), null, bufferReads);
 
-      SecretProvider<SslContext> sslContextProvider =
+      SslContextProvider sslContextProvider =
           TlsContextManager.getInstance()
               .findOrCreateServerSslContextProvider(downstreamTlsContext);
 
       sslContextProvider.addCallback(
-          new SecretProvider.Callback<SslContext>() {
+          new SslContextProvider.Callback() {
 
             @Override
             public void updateSecret(SslContext sslContext) {

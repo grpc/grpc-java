@@ -11,6 +11,7 @@ for general contribution guidelines.
 - [creamsoup](https://github.com/creamsoup), Google LLC
 - [dapengzhang0](https://github.com/dapengzhang0), Google LLC
 - [ejona86](https://github.com/ejona86), Google LLC
+- [ericgribkoff](https://github.com/ericgribkoff), Google LLC
 - [jiangtaoli2016](https://github.com/jiangtaoli2016), Google LLC
 - [ran-su](https://github.com/ran-su), Google LLC
 - [sanjaypujare](https://github.com/sanjaypujare), Google LLC
@@ -20,7 +21,6 @@ for general contribution guidelines.
 
 ## Emeritus Maintainers (in alphabetical order)
 - [carl-mastrangelo](https://github.com/carl-mastrangelo), Google LLC
-- [ericgribkoff](https://github.com/ericgribkoff), Google LLC
 - [jtattermusch](https://github.com/jtattermusch), Google LLC
 - [louiscryan](https://github.com/louiscryan), Google LLC
 - [nicolasnoble](https://github.com/nicolasnoble), Google LLC
