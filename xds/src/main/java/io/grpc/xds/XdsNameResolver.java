@@ -27,13 +27,11 @@ import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
+import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
@@ -46,61 +44,25 @@ import javax.annotation.Nullable;
  */
 final class XdsNameResolver extends NameResolver {
 
-  private static final Logger logger = Logger.getLogger(XdsNameResolver.class.getName());
-
+  // TODO(chengyuanzhang): delete this later, it was a workaround for demo.
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<Node> XDS_NODE = Attributes.Key.create("xds-node");
 
-  private static final String SERVICE_CONFIG_HARDCODED = "{"
-          + "\"loadBalancingConfig\": ["
-          + "{\"xds_experimental\" : {"
-          + "\"childPolicy\" : [{\"round_robin\" : {}}]"
-          + "}}"
-          + "]}";
-
   private final String authority;
-  private final String serviceConfig;
-  private final Node node;
+  private final Bootstrapper bootstrapper;
 
   XdsNameResolver(String name) {
-    this(name, createBootstrapper());
+    this(name, Bootstrapper.newInsatnce());
   }
 
   @VisibleForTesting
-  XdsNameResolver(String name, @Nullable Bootstrapper bootstrapper) {
+  XdsNameResolver(String name, Bootstrapper bootstrapper) {
     URI nameUri = URI.create("//" + checkNotNull(name, "name"));
     Preconditions.checkArgument(nameUri.getHost() != null, "Invalid hostname: %s", name);
     authority =
         Preconditions.checkNotNull(
             nameUri.getAuthority(), "nameUri (%s) doesn't have an authority", nameUri);
-
-    String serviceConfig = SERVICE_CONFIG_HARDCODED;
-    Node node = Node.getDefaultInstance();
-
-    if (bootstrapper != null) {
-      String serverUri = bootstrapper.getServerUri();
-      node = bootstrapper.getNode();
-      serviceConfig = "{"
-          + "\"loadBalancingConfig\": ["
-          + "{\"xds_experimental\" : {"
-          + "\"balancerName\" : \"" + serverUri + "\","
-          + "\"childPolicy\" : [{\"round_robin\" : {}}]"
-          + "}}"
-          + "]}";
-    }
-
-    this.serviceConfig = serviceConfig;
-    this.node = node;
-  }
-
-  @Nullable
-  private static Bootstrapper createBootstrapper() {
-    try {
-      return Bootstrapper.getInstance();
-    } catch (Exception e) {
-      logger.log(Level.FINE, "Unable to load XDS bootstrap config", e);
-    }
-    return null;
+    this.bootstrapper = Preconditions.checkNotNull(bootstrapper, "bootstrapper");
   }
 
   @Override
@@ -111,7 +73,21 @@ final class XdsNameResolver extends NameResolver {
   @SuppressWarnings("unchecked")
   @Override
   public void start(final Listener2 listener) {
+    BootstrapInfo bootstrapInfo = null;
+    try {
+      bootstrapInfo = bootstrapper.readBootstrap();
+    } catch (Exception e) {
+      listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
+      return;
+    }
 
+    String serviceConfig = "{"
+        + "\"loadBalancingConfig\": ["
+        + "{\"xds_experimental\" : {"
+        + "\"balancerName\" : \"" + bootstrapInfo.getServerUri() + "\","
+        + "\"childPolicy\" : [{\"round_robin\" : {}}]"
+        + "}}"
+        + "]}";
     Map<String, ?> config;
     try {
       config = (Map<String, ?>) JsonParser.parse(serviceConfig);
@@ -123,7 +99,7 @@ final class XdsNameResolver extends NameResolver {
     Attributes attrs =
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-            .set(XDS_NODE, node)
+            .set(XDS_NODE, bootstrapInfo.getNode())
             .build();
     ResolutionResult result =
         ResolutionResult.newBuilder()

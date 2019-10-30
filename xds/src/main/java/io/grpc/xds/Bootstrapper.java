@@ -35,89 +35,56 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Loads configuration information to bootstrap xDS load balancer.
+ * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
-@Immutable
+@ThreadSafe
 abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
-  static Bootstrapper getInstance() throws Exception {
-    if (FileBasedBootstrapper.defaultInstance == null) {
-      throw FileBasedBootstrapper.failToBootstrapException;
-    }
-    return FileBasedBootstrapper.defaultInstance;
+  static Bootstrapper newInsatnce() {
+    return new FileBasedBootstrapper();
   }
 
   /**
-   * Returns the URI the traffic director to be connected to.
+   * Returns configurations from bootstrap.
    */
-  abstract String getServerUri();
+  abstract BootstrapInfo readBootstrap() throws Exception;
 
-  /**
-   * Returns a {@link Node} message with project/network metadata in it to be included in
-   * xDS requests.
-   */
-  abstract Node getNode();
+  private static final class FileBasedBootstrapper extends Bootstrapper {
 
-  /**
-   * Returns the credentials to use when communicating with the xDS server.
-   */
-  abstract List<ChannelCreds> getChannelCredentials();
+    private static volatile Exception failToBootstrapException;
+    private static volatile BootstrapInfo bootstrapInfo;
 
-  @VisibleForTesting
-  static final class FileBasedBootstrapper extends Bootstrapper {
-
-    private static final Exception failToBootstrapException;
-    private static final Bootstrapper defaultInstance;
-
-    private final String serverUri;
-    private final Node node;
-    private final List<ChannelCreds> channelCredsList;
-
-    static {
-      Bootstrapper instance = null;
-      Exception exception = null;
-      try {
-        instance = new FileBasedBootstrapper(Bootstrapper.readConfig());
-      } catch (Exception e) {
-        exception = e;
+    @Override
+    BootstrapInfo readBootstrap() throws Exception {
+      if (bootstrapInfo == null && failToBootstrapException == null) {
+        synchronized (FileBasedBootstrapper.class) {
+          if (bootstrapInfo == null && failToBootstrapException == null) {
+            try {
+              String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
+              if (filePath == null) {
+                throw
+                    new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
+                        + " not found.");
+              }
+              bootstrapInfo =
+                  parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
+                      StandardCharsets.UTF_8));
+            } catch (Exception e) {
+              failToBootstrapException = e;
+            }
+          }
+        }
       }
-      defaultInstance = instance;
-      failToBootstrapException = exception;
+      if (failToBootstrapException != null) {
+        throw new RuntimeException(failToBootstrapException);
+      }
+      return bootstrapInfo;
     }
-
-    @VisibleForTesting
-    FileBasedBootstrapper(BootstrapInfo bootstrapInfo) {
-      this.serverUri = bootstrapInfo.serverConfig.uri;
-      this.node = bootstrapInfo.node;
-      this.channelCredsList = bootstrapInfo.serverConfig.channelCredsList;
-    }
-
-    @Override
-    String getServerUri() {
-      return serverUri;
-    }
-    
-    @Override
-    Node getNode() {
-      return node;
-    }
-
-    @Override
-    List<ChannelCreds> getChannelCredentials() {
-      return Collections.unmodifiableList(channelCredsList);
-    }
-  }
-
-  private static BootstrapInfo readConfig() throws IOException {
-    String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
-    if (filePath == null) {
-      throw new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
-    }
-    return parseConfig(new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
   }
 
   @VisibleForTesting
@@ -148,7 +115,6 @@ abstract class Bootstrapper {
         channelCredsOptions.add(creds);
       }
     }
-    ServerConfig serverConfig = new ServerConfig(serverUri, channelCredsOptions);
 
     Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
     if (rawNode == null) {
@@ -193,7 +159,7 @@ abstract class Bootstrapper {
       nodeBuilder.setBuildVersion(buildVersion);
     }
 
-    return new BootstrapInfo(serverConfig, nodeBuilder.build());
+    return new BootstrapInfo(serverUri, channelCredsOptions, nodeBuilder.build());
   }
 
   /**
@@ -233,7 +199,11 @@ abstract class Bootstrapper {
     return valueBuilder.build();
   }
 
+  /**
+   * Data class containing channel credentials configurations for xDS protocol communication.
+   */
   // TODO(chengyuanzhang): May need more complex structure for channel creds config representation.
+  @Immutable
   static class ChannelCreds {
     private final String type;
     @Nullable
@@ -251,31 +221,48 @@ abstract class Bootstrapper {
 
     @Nullable
     Map<String, ?> getConfig() {
-      return config;
+      if (config != null) {
+        return Collections.unmodifiableMap(config);
+      }
+      return null;
     }
   }
 
-  @VisibleForTesting
+  /**
+   * Data class containing the results of reading bootstrap.
+   */
+  @Immutable
   static class BootstrapInfo {
-    final ServerConfig serverConfig;
-    final Node node;
+    private final String serverUri;
+    private final List<ChannelCreds> channelCredsList;
+    private final Node node;
 
     @VisibleForTesting
-    BootstrapInfo(ServerConfig serverConfig, Node node) {
-      this.serverConfig = serverConfig;
+    BootstrapInfo(String serverUri, List<ChannelCreds> channelCredsList, Node node) {
+      this.serverUri = serverUri;
+      this.channelCredsList = channelCredsList;
       this.node = node;
     }
-  }
 
-  @VisibleForTesting
-  static class ServerConfig {
-    final String uri;
-    final List<ChannelCreds> channelCredsList;
+    /**
+     * Returns the URI the traffic director to be connected to.
+     */
+    String getServerUri() {
+      return serverUri;
+    }
 
-    @VisibleForTesting
-    ServerConfig(String uri, List<ChannelCreds> channelCredsList) {
-      this.uri = uri;
-      this.channelCredsList = channelCredsList;
+    /**
+     * Returns the node identifier to be included in xDS requests.
+     */
+    Node getNode() {
+      return node;
+    }
+
+    /**
+     * Returns the credentials to use when communicating with the xDS server.
+     */
+    List<ChannelCreds> getChannelCredentials() {
+      return Collections.unmodifiableList(channelCredsList);
     }
   }
 }

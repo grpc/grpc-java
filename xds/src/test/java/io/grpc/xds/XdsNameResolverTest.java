@@ -17,10 +17,8 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static io.grpc.xds.XdsNameResolver.XDS_NODE;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
@@ -29,9 +27,12 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
+import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
@@ -41,7 +42,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -73,7 +73,6 @@ public class XdsNameResolverTest {
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
 
   @Mock private NameResolver.Listener2 mockListener;
-  @Captor private ArgumentCaptor<ResolutionResult> resultCaptor;
 
   @Test
   public void validName_withAuthority() {
@@ -103,81 +102,56 @@ public class XdsNameResolverTest {
   }
 
   @Test
-  public void resolve_hardcodedResult() {
-    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", null);
-    resolver.start(mockListener);
-    verify(mockListener).onResult(resultCaptor.capture());
-    assertHardCodedServiceConfig(resultCaptor.getValue());
-
-    resolver = new XdsNameResolver("bar.googleapis.com", null);
-    resolver.start(mockListener);
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
-    assertHardCodedServiceConfig(resultCaptor.getValue());
-  }
-
-  @Test
   public void resolve_bootstrapResult() {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
-      String getServerUri() {
-        return "fake_server_uri";
+      BootstrapInfo readBootstrap() {
+        return new BootstrapInfo("trafficdirector.googleapis.com",
+            ImmutableList.<ChannelCreds>of(), FAKE_BOOTSTRAP_NODE);
       }
+    };
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    ArgumentCaptor<ResolutionResult> resultCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onResult(resultCaptor.capture());
+    ResolutionResult result = resultCaptor.getValue();
+    assertThat(result.getAddresses()).isEmpty();
 
-      @Override
-      Node getNode() {
-        return FAKE_BOOTSTRAP_NODE;
-      }
+    Map<String, ?> serviceConfig =
+        result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    @SuppressWarnings("unchecked")
+    List<Map<String, ?>> rawLbConfigs =
+        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
+    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
+    assertThat(rawConfigValues)
+        .containsExactly(
+            "balancerName",
+            "trafficdirector.googleapis.com",
+            "childPolicy",
+            Collections.singletonList(
+                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
+    assertThat(result.getAttributes().get(XdsNameResolver.XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
+  }
 
+  @Test
+  public void resolve_failToBootstrap() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
-      List<ChannelCreds> getChannelCredentials() {
-        return ImmutableList.of();
+      BootstrapInfo readBootstrap() throws Exception {
+        throw new IOException("Fail to read bootstrap file");
       }
     };
 
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
     resolver.start(mockListener);
-    verify(mockListener).onResult(resultCaptor.capture());
-    assertBootstrapServiceConfig(resultCaptor.getValue());
-
-    resolver = new XdsNameResolver("bar.googleapis.com", bootstrapper);
-    resolver.start(mockListener);
-    verify(mockListener, times(2)).onResult(resultCaptor.capture());
-    assertBootstrapServiceConfig(resultCaptor.getValue());
-  }
-
-  @SuppressWarnings("unchecked")
-  private static void assertHardCodedServiceConfig(ResolutionResult actualResult) {
-    assertThat(actualResult.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig =
-        actualResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
-    assertThat(rawConfigValues)
-        .containsExactly("childPolicy",
-            Collections.singletonList(
-                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
-  }
-
-  @SuppressWarnings("unchecked")
-  private static void assertBootstrapServiceConfig(ResolutionResult actualResult) {
-    assertThat(actualResult.getAddresses()).isEmpty();
-    Map<String, ?> serviceConfig =
-        actualResult.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
-    Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
-    assertThat(rawConfigValues)
-        .containsExactly(
-            "balancerName",
-            "fake_server_uri",
-            "childPolicy",
-            Collections.singletonList(
-                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
-    assertThat(actualResult.getAttributes().get(XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
+    ArgumentCaptor<Status> errorCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onError(errorCaptor.capture());
+    Status error = errorCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(error.getDescription()).isEqualTo("Failed to bootstrap");
+    assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
   }
 }
