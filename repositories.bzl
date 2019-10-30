@@ -182,18 +182,18 @@ def com_google_api_grpc_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.17.1",
+        artifact = "com.google.auth:google-auth-library-credentials:0.18.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "aaeea9333fff9b763715bca0174ec76c4f9551b5731c89a95f263cdc82b4b56e",
+        artifact_sha256 = "2377b149dbf63f000f96b66f5dc0f07b9da3928f5e3f31973f2d21fcb63ce6ff",
         licenses = ["notice"],  # BSD 3-clause
     )
 
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.17.1",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.18.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "fa9a1589c8bc279416988d437c2636967cd5e4eff70fbddc986b9c5a77b0231b",
+        artifact_sha256 = "2f13eff0105debe54a91851684b78dd5a0f3839fae5acaa8ba7959c004c050d0",
         licenses = ["notice"],  # BSD 3-clause
     )
 
