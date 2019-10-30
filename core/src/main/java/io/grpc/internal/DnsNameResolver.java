@@ -92,8 +92,6 @@ final class DnsNameResolver extends NameResolver {
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi", "true");
   private static final String JNDI_LOCALHOST_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_jndi_localhost", "false");
-  private static final String JNDI_SRV_PROPERTY =
-      System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_grpclb", "false");
   private static final String JNDI_TXT_PROPERTY =
       System.getProperty("io.grpc.internal.DnsNameResolverProvider.enable_service_config", "false");
 
@@ -117,8 +115,6 @@ final class DnsNameResolver extends NameResolver {
   @VisibleForTesting
   static boolean enableJndiLocalhost = Boolean.parseBoolean(JNDI_LOCALHOST_PROPERTY);
   @VisibleForTesting
-  static boolean enableSrv = Boolean.parseBoolean(JNDI_SRV_PROPERTY);
-  @VisibleForTesting
   static boolean enableTxt = Boolean.parseBoolean(JNDI_TXT_PROPERTY);
 
   private static final ResourceResolverFactory resourceResolverFactory =
@@ -138,6 +134,8 @@ final class DnsNameResolver extends NameResolver {
   private final String authority;
   private final String host;
   private final int port;
+
+  /** Executor that will be used if an Executor is not provide via {@link NameResolver.Args}. */
   private final Resource<Executor> executorResource;
   private final long cacheTtlNanos;
   private final SynchronizationContext syncContext;
@@ -147,14 +145,25 @@ final class DnsNameResolver extends NameResolver {
   private ResolutionResults cachedResolutionResults;
   private boolean shutdown;
   private Executor executor;
+
+  /** True if using an executor resource that should be released after use. */
+  private final boolean usingExecutorResource;
+  private final boolean enableSrv;
+
   private boolean resolving;
 
   // The field must be accessed from syncContext, although the methods on an Listener2 can be called
   // from any thread.
   private NameResolver.Listener2 listener;
 
-  DnsNameResolver(@Nullable String nsAuthority, String name, Args args,
-      Resource<Executor> executorResource, Stopwatch stopwatch, boolean isAndroid) {
+  DnsNameResolver(
+      @Nullable String nsAuthority,
+      String name,
+      Args args,
+      Resource<Executor> executorResource,
+      Stopwatch stopwatch,
+      boolean isAndroid,
+      boolean enableSrv) {
     Preconditions.checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
@@ -176,6 +185,9 @@ final class DnsNameResolver extends NameResolver {
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
     this.syncContext =
         Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
+    this.executor = args.getBlockingExecutor();
+    this.usingExecutorResource = executor == null;
+    this.enableSrv = enableSrv;
   }
 
   @Override
@@ -186,7 +198,9 @@ final class DnsNameResolver extends NameResolver {
   @Override
   public void start(Listener2 listener) {
     Preconditions.checkState(this.listener == null, "already started");
-    executor = SharedResourceHolder.get(executorResource);
+    if (usingExecutorResource) {
+      executor = SharedResourceHolder.get(executorResource);
+    }
     this.listener = Preconditions.checkNotNull(listener, "listener");
     resolve();
   }
@@ -361,7 +375,7 @@ final class DnsNameResolver extends NameResolver {
       return;
     }
     shutdown = true;
-    if (executor != null) {
+    if (executor != null && usingExecutorResource) {
       executor = SharedResourceHolder.release(executorResource, executor);
     }
   }
@@ -437,7 +451,6 @@ final class DnsNameResolver extends NameResolver {
    *
    * @throws IOException if one of the txt records contains improperly formatted JSON.
    */
-  @SuppressWarnings("unchecked")
   @VisibleForTesting
   static List<Map<String, ?>> parseTxtResults(List<String> txtRecords) throws IOException {
     List<Map<String, ?>> possibleServiceConfigChoices = new ArrayList<>();

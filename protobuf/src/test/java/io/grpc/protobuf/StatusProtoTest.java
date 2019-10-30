@@ -126,20 +126,25 @@ public class StatusProtoTest {
   }
 
   @Test
-  public void fromThrowable_shouldReturnNullIfTrailersAreNull() {
-    Status status = Status.fromCodeValue(0);
+  public void fromThrowable_runtimeException_shouldReturnDerivedStatusIfTrailersAreNull() {
+    Status status = Status.UNAVAILABLE.withDescription("not available");
 
-    assertNull(StatusProto.fromThrowable(status.asRuntimeException()));
-    assertNull(StatusProto.fromThrowable(status.asException()));
+    com.google.rpc.Status statusFromThrowable =
+        StatusProto.fromThrowable(status.asRuntimeException());
+
+    assertEquals(statusFromThrowable.getCode(), status.getCode().value());
+    assertEquals(statusFromThrowable.getMessage(), status.getDescription());
   }
 
   @Test
-  public void fromThrowable_shouldReturnNullIfStatusDetailsKeyIsMissing() {
-    Status status = Status.fromCodeValue(0);
-    Metadata emptyMetadata = new Metadata();
+  public void fromThrowable_exception_shouldReturnDerivedStatusIfTrailersAreNull() {
+    Status status = Status.UNAVAILABLE.withDescription("not available");
 
-    assertNull(StatusProto.fromThrowable(status.asRuntimeException(emptyMetadata)));
-    assertNull(StatusProto.fromThrowable(status.asException(emptyMetadata)));
+    com.google.rpc.Status statusFromThrowable =
+        StatusProto.fromThrowable(status.asException());
+
+    assertEquals(statusFromThrowable.getCode(), status.getCode().value());
+    assertEquals(statusFromThrowable.getMessage(), status.getDescription());
   }
 
   @Test

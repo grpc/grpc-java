@@ -25,11 +25,7 @@ import io.grpc.okhttp.internal.framed.FrameWriter;
 import io.grpc.okhttp.internal.framed.Header;
 import io.grpc.okhttp.internal.framed.Settings;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import okio.Buffer;
@@ -38,10 +34,6 @@ import okio.ByteString;
 final class ExceptionHandlingFrameWriter implements FrameWriter {
 
   private static final Logger log = Logger.getLogger(OkHttpClientTransport.class.getName());
-
-  // Some exceptions are not very useful and add too much noise to the log
-  private static final Set<String> QUIET_ERRORS =
-      Collections.unmodifiableSet(new HashSet<>(Arrays.asList("Socket closed")));
 
   private final TransportExceptionHandler transportExceptionHandler;
 
@@ -231,9 +223,7 @@ final class ExceptionHandlingFrameWriter implements FrameWriter {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t instanceof IOException
-        && t.getMessage() != null
-        && QUIET_ERRORS.contains(t.getMessage())) {
+    if (t.getClass().equals(IOException.class)) {
       return Level.FINE;
     }
     return Level.INFO;

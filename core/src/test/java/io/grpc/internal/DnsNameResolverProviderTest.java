@@ -16,9 +16,12 @@
 
 package io.grpc.internal;
 
+import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.internal.BaseDnsNameResolverProvider.ENABLE_GRPCLB_PROPERTY_NAME;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.Mockito.mock;
 
 import io.grpc.NameResolver;
@@ -59,5 +62,12 @@ public class DnsNameResolverProviderTest {
         provider.newNameResolver(URI.create("dns:///localhost:443"), args).getClass());
     assertNull(
         provider.newNameResolver(URI.create("notdns:///localhost:443"), args));
+  }
+
+  @Test
+  public void isSrvEnabled_falseByDefault() {
+    assumeTrue(System.getProperty(ENABLE_GRPCLB_PROPERTY_NAME) == null);
+
+    assertThat(provider.isSrvEnabled()).isFalse();
   }
 }

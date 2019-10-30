@@ -22,8 +22,8 @@ import static io.grpc.internal.ClientStreamListener.RpcProgress.PROCESSED;
 import static io.grpc.internal.ClientStreamListener.RpcProgress.REFUSED;
 import static io.grpc.internal.GrpcUtil.DEFAULT_MAX_MESSAGE_SIZE;
 import static io.grpc.okhttp.Headers.CONTENT_TYPE_HEADER;
+import static io.grpc.okhttp.Headers.HTTP_SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.METHOD_HEADER;
-import static io.grpc.okhttp.Headers.SCHEME_HEADER;
 import static io.grpc.okhttp.Headers.TE_HEADER;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -650,7 +650,7 @@ public class OkHttpClientTransportTest {
     stream.start(listener);
     Header userAgentHeader = new Header(GrpcUtil.USER_AGENT_KEY.name(),
             GrpcUtil.getGrpcUserAgent("okhttp", null));
-    List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
+    List<Header> expectedHeaders = Arrays.asList(HTTP_SCHEME_HEADER, METHOD_HEADER,
             new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
             new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
             userAgentHeader, CONTENT_TYPE_HEADER, TE_HEADER);
@@ -667,7 +667,7 @@ public class OkHttpClientTransportTest {
     OkHttpClientStream stream =
         clientTransport.newStream(method, new Metadata(), CallOptions.DEFAULT);
     stream.start(listener);
-    List<Header> expectedHeaders = Arrays.asList(SCHEME_HEADER, METHOD_HEADER,
+    List<Header> expectedHeaders = Arrays.asList(HTTP_SCHEME_HEADER, METHOD_HEADER,
         new Header(Header.TARGET_AUTHORITY, "notarealauthority:80"),
         new Header(Header.TARGET_PATH, "/" + method.getFullMethodName()),
         new Header(GrpcUtil.USER_AGENT_KEY.name(),

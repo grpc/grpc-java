@@ -102,7 +102,7 @@ For protobuf-based codegen integrated with the Maven build system, you can use
       <artifactId>protobuf-maven-plugin</artifactId>
       <version>0.6.1</version>
       <configuration>
-        <protocArtifact>com.google.protobuf:protoc:3.9.0:exe:${os.detected.classifier}</protocArtifact>
+        <protocArtifact>com.google.protobuf:protoc:3.10.0:exe:${os.detected.classifier}</protocArtifact>
         <pluginId>grpc-java</pluginId>
         <pluginArtifact>io.grpc:protoc-gen-grpc-java:1.24.0:exe:${os.detected.classifier}</pluginArtifact>
       </configuration>
@@ -130,7 +130,7 @@ plugins {
 
 protobuf {
   protoc {
-    artifact = "com.google.protobuf:protoc:3.9.0"
+    artifact = "com.google.protobuf:protoc:3.10.0"
   }
   plugins {
     grpc {
@@ -165,7 +165,7 @@ We recommend using the
 [grpc-java-api-checker](https://github.com/grpc/grpc-java-api-checker)
 (an [Error Prone](https://github.com/google/error-prone) plugin)
 to check for usages of `@ExperimentalApi` and `@Internal` in any library code
-that depends on gRPC. It may also be used to check for `@Internal` usage or 
+that depends on gRPC. It may also be used to check for `@Internal` usage or
 unintended `@ExperimentalApi` consumption in non-library code.
 
 How to Build

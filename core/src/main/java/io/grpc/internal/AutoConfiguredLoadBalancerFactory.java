@@ -273,7 +273,7 @@ public final class AutoConfiguredLoadBalancerFactory {
             // We don't log the warning every time we have an update.
             roundRobinDueToGrpclbDepMissing = true;
             String errorMsg = "Found balancer addresses but grpclb runtime is missing."
-                + " Will use round_robin. Please include grpc-grpclb in your runtime depedencies.";
+                + " Will use round_robin. Please include grpc-grpclb in your runtime dependencies.";
             helper.getChannelLogger().log(ChannelLogLevel.ERROR, errorMsg);
             logger.warning(errorMsg);
           }

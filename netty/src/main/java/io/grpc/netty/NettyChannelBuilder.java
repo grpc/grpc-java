@@ -286,6 +286,23 @@ public final class NettyChannelBuilder
   }
 
   /**
+   * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT} or
+   * {@code PLAINTEXT_UPGRADE}.
+   *
+   * @deprecated use {@link #usePlaintext()} instead.
+   */
+  @Override
+  @Deprecated
+  public NettyChannelBuilder usePlaintext(boolean skipNegotiation) {
+    if (skipNegotiation) {
+      negotiationType(NegotiationType.PLAINTEXT);
+    } else {
+      negotiationType(NegotiationType.PLAINTEXT_UPGRADE);
+    }
+    return this;
+  }
+
+  /**
    * Equivalent to using {@link #negotiationType(NegotiationType)} with {@code PLAINTEXT}.
    */
   @Override

@@ -1,3 +1,4 @@
+load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//:java_grpc_library.bzl", "java_grpc_library")
 
 java_library(

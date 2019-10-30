@@ -147,14 +147,16 @@ public final class StatusProto {
   }
 
   /**
-   * Extracts the google.rpc.Status from trailers, and makes sure they match the gRPC
-   * {@code status}.
+   * Extracts the {@code google.rpc.Status} from trailers, and makes sure they match the gRPC
+   * {@code status}. If the trailers do not contain a {@code google.rpc.Status}, it uses
+   * {@code status} param to generate a {@code google.rpc.Status}.
    *
-   * @return the embedded google.rpc.Status or {@code null} if it is not present.
+   * @return the embedded google.rpc.Status
    * @since 1.11.0
    */
-  @Nullable
-  public static com.google.rpc.Status fromStatusAndTrailers(Status status, Metadata trailers) {
+  public static com.google.rpc.Status fromStatusAndTrailers(
+      Status status, @Nullable Metadata trailers) {
+    checkNotNull(status, "status");
     if (trailers != null) {
       com.google.rpc.Status statusProto = trailers.get(STATUS_DETAILS_KEY);
       if (statusProto != null) {
@@ -164,6 +166,12 @@ public final class StatusProto {
         return statusProto;
       }
     }
-    return null;
+    // fall-back to status, this is useful if the error is local. e.g. Server is unavailable.
+    com.google.rpc.Status.Builder statusBuilder = com.google.rpc.Status.newBuilder()
+        .setCode(status.getCode().value());
+    if (status.getDescription() != null) {
+      statusBuilder.setMessage(status.getDescription());
+    }
+    return statusBuilder.build();
   }
 }

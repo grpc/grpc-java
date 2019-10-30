@@ -72,6 +72,12 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   }
 
   @Override
+  public T blockingExecutor(Executor executor) {
+    delegate().blockingExecutor(executor);
+    return thisT();
+  }
+
+  @Override
   public T intercept(List<ClientInterceptor> interceptors) {
     delegate().intercept(interceptors);
     return thisT();
@@ -92,6 +98,16 @@ public abstract class ForwardingChannelBuilder<T extends ForwardingChannelBuilde
   @Override
   public T overrideAuthority(String authority) {
     delegate().overrideAuthority(authority);
+    return thisT();
+  }
+
+  /**
+   * @deprecated use {@link #usePlaintext()} instead.
+   */
+  @Override
+  @Deprecated
+  public T usePlaintext(boolean skipNegotiation) {
+    delegate().usePlaintext(skipNegotiation);
     return thisT();
   }
 

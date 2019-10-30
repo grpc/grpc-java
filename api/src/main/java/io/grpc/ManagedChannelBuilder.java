@@ -104,6 +104,24 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T executor(Executor executor);
 
   /**
+   * Provides a custom executor that will be used for operations that block.
+   *
+   * <p>It's an optional parameter. If the user has not provided an executor when the channel is
+   * built, the builder will use a static cached thread pool.
+   *
+   * <p>The channel won't take ownership of the given executor. It's caller's responsibility to shut
+   * down the executor when it's desired.
+   *
+   * @return this
+   * @throws UnsupportedOperationException if unsupported
+   * @since 1.25.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+  public T blockingExecutor(Executor executor) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Adds interceptors that will be called before the channel performs its real work. This is
    * functionally equivalent to using {@link ClientInterceptors#intercept(Channel, List)}, but while
    * still having access to the original {@code ManagedChannel}. Interceptors run in the reverse
@@ -149,6 +167,27 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.0.0
    */
   public abstract T overrideAuthority(String authority);
+
+  /**
+   * Use of a plaintext connection to the server. By default a secure connection mechanism
+   * such as TLS will be used.
+   *
+   * <p>Should only be used for testing or for APIs where the use of such API or the data
+   * exchanged is not sensitive.
+   *
+   * @param skipNegotiation @{code true} if there is a priori knowledge that the endpoint supports
+   *                        plaintext, {@code false} if plaintext use must be negotiated.
+   * @deprecated Use {@link #usePlaintext()} instead.
+   *
+   * @throws UnsupportedOperationException if plaintext mode is not supported.
+   * @return this
+   * @since 1.0.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1772")
+  @Deprecated
+  public T usePlaintext(boolean skipNegotiation) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Use of a plaintext connection to the server. By default a secure connection mechanism

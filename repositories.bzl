@@ -38,7 +38,6 @@ IO_GRPC_GRPC_JAVA_OVERRIDE_TARGETS = {
 }
 
 def grpc_java_repositories(
-        omit_bazel_skylib = False,
         omit_com_google_android_annotations = False,
         omit_com_google_api_grpc_google_common_protos = False,
         omit_com_google_auth_google_auth_library_credentials = False,
@@ -73,12 +72,9 @@ def grpc_java_repositories(
         omit_io_perfmark = False,
         omit_javax_annotation = False,
         omit_junit_junit = False,
-        omit_net_zlib = False,
         omit_org_apache_commons_lang3 = False,
         omit_org_codehaus_mojo_animal_sniffer_annotations = False):
     """Imports dependencies for grpc-java."""
-    if not omit_bazel_skylib:
-        bazel_skylib()
     if not omit_com_google_android_annotations:
         com_google_android_annotations()
     if not omit_com_google_api_grpc_google_common_protos:
@@ -147,8 +143,6 @@ def grpc_java_repositories(
         javax_annotation()
     if not omit_junit_junit:
         junit_junit()
-    if not omit_net_zlib:
-        net_zlib()
     if not omit_org_apache_commons_lang3:
         org_apache_commons_lang3()
     if not omit_org_codehaus_mojo_animal_sniffer_annotations:
@@ -165,14 +159,6 @@ def grpc_java_repositories(
     native.bind(
         name = "error_prone_annotations",
         actual = "@com_google_errorprone_error_prone_annotations//jar",
-    )
-
-def bazel_skylib():
-    http_archive(
-        name = "bazel_skylib",
-        sha256 = "bce240a0749dfc52fab20dce400b4d5cf7c28b239d64f8fd1762b3c9470121d8",
-        strip_prefix = "bazel-skylib-0.7.0",
-        urls = ["https://github.com/bazelbuild/bazel-skylib/archive/0.7.0.zip"],
     )
 
 def com_google_android_annotations():
@@ -223,9 +209,9 @@ def com_google_code_findbugs_jsr305():
 def com_google_code_gson():
     jvm_maven_import_external(
         name = "com_google_code_gson_gson",
-        artifact = "com.google.code.gson:gson:jar:2.7",
+        artifact = "com.google.code.gson:gson:jar:2.8.5",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "2d43eb5ea9e133d2ee2405cc14f5ee08951b8361302fdd93494a3a997b508d32",
+        artifact_sha256 = "233a0149fc365c9f6edbd683cfe266b19bdc773be98eabdaf6b3c924b48e7d81",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -272,9 +258,9 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "8eb5ca331ab8ca0da2baea7fc0607d86c46c80845deca57109a5d637ccb93bb4",
-        strip_prefix = "protobuf-3.9.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.9.0.zip"],
+        sha256 = "33cba8b89be6c81b1461f1c438424f7a1aa4e31998dbe9ed6f8319583daac8c7",
+        strip_prefix = "protobuf-3.10.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.10.0.zip"],
     )
 
 def com_google_protobuf_javalite():
@@ -316,9 +302,9 @@ def com_squareup_okio():
 def io_grpc_grpc_proto():
     http_archive(
         name = "io_grpc_grpc_proto",
-        sha256 = "873f3fdec7ed052f899aef83fc897926729713d96d7ccdb2df22843dc702ef3a",
-        strip_prefix = "grpc-proto-96ecba6941c67b1da2af598330c60cf9b0336051",
-        urls = ["https://github.com/grpc/grpc-proto/archive/96ecba6941c67b1da2af598330c60cf9b0336051.zip"],
+        sha256 = "9d96f861f01ed9e3d805024e72a6b218b626da2114c69c1cad5d0e967c8e23be",
+        strip_prefix = "grpc-proto-435d723289d348e1bc420d420b364369d565182a",
+        urls = ["https://github.com/grpc/grpc-proto/archive/435d723289d348e1bc420d420b364369d565182a.zip"],
     )
 
 def io_netty_buffer():
@@ -450,9 +436,9 @@ def io_opencensus_grpc_metrics():
 def io_perfmark():
     jvm_maven_import_external(
         name = "io_perfmark_perfmark_api",
-        artifact = "io.perfmark:perfmark-api:0.17.0",
+        artifact = "io.perfmark:perfmark-api:0.19.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "816c11409b8a0c6c9ce1cda14bed526e7b4da0e772da67c5b7b88eefd41520f9",
+        artifact_sha256 = "b734ba2149712409a44eabdb799f64768578fee0defe1418bb108fe32ea43e1a",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -473,15 +459,6 @@ def junit_junit():
         server_urls = ["http://central.maven.org/maven2"],
         artifact_sha256 = "59721f0805e223d84b90677887d9ff567dc534d7c502ca903c0c2b17f05c116a",
         licenses = ["notice"],  # EPL 1.0
-    )
-
-def net_zlib():
-    http_archive(
-        name = "net_zlib",
-        build_file = "@com_google_protobuf//:third_party/zlib.BUILD",
-        sha256 = "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1",
-        strip_prefix = "zlib-1.2.11",
-        urls = ["https://zlib.net/zlib-1.2.11.tar.gz"],
     )
 
 def org_apache_commons_lang3():

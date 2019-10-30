@@ -38,17 +38,6 @@ obtained at:
   * LOCATION_IN_GRPC:
     * xds/third_party/envoy
 
-This product contains a modified portion of 'gogoprotobuf',
-an open source Protocol Buffers support for Go with Gadgets,
-which can be obtained at:
-
-  * LICENSE:
-    * xds/third_party/gogoproto/LICENSE
-  * HOMEPAGE:
-    * https://github.com/gogo/protobuf
-  * LOCATION_IN_GRPC:
-    * xds/third_party/gogoproto
-
 This product contains a modified portion of 'udpa',
 an open source universal data plane API, which can be obtained at:
 
