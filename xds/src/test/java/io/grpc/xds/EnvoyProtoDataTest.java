@@ -28,10 +28,10 @@ import org.junit.runners.JUnit4;
  * Unit tests for {@link EnvoyProtoData}.
  */
 @RunWith(JUnit4.class)
-public class ClusterLoadAssignmentDataTest {
+public class EnvoyProtoDataTest {
 
   @Test
-  public void xdsLocality_convertToAndFromLocalityProto() {
+  public void locality_convertToAndFromLocalityProto() {
     io.envoyproxy.envoy.api.v2.core.Locality locality =
         io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
             .setRegion("test_region")
@@ -50,7 +50,7 @@ public class ClusterLoadAssignmentDataTest {
   }
 
   @Test
-  public void xdsLocality_equal() {
+  public void locality_equal() {
     new EqualsTester()
         .addEqualityGroup(
             new Locality("region-a", "zone-a", "subzone-a"),
@@ -65,8 +65,10 @@ public class ClusterLoadAssignmentDataTest {
   }
 
   @Test
-  public void xdsLocality_hash() {
+  public void locality_hash() {
     assertThat(new Locality("region", "zone", "subzone").hashCode())
         .isEqualTo(new Locality("region", "zone","subzone").hashCode());
   }
+
+  // TODO(chengyuanzhang): add test for other data types.
 }
