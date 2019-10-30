@@ -28,6 +28,7 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.Status;
+import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
@@ -149,7 +150,7 @@ public class XdsNameResolverTest {
     ArgumentCaptor<Status> errorCaptor = ArgumentCaptor.forClass(null);
     verify(mockListener).onError(errorCaptor.capture());
     Status error = errorCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Status.Code.UNKNOWN);
+    assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to bootstrap");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
   }
