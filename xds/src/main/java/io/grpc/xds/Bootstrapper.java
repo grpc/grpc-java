@@ -81,7 +81,7 @@ abstract class Bootstrapper {
         }
       }
       if (failToBootstrapException != null) {
-        throw failToBootstrapException;
+        throw new RuntimeException(failToBootstrapException);
       }
       return bootstrapInfo;
     }
