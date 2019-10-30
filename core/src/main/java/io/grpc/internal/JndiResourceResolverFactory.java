@@ -249,12 +249,7 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
       checkAvailable();
       String[] rrType = new String[]{recordType};
       List<String> records = new ArrayList<>();
-
-      @SuppressWarnings("JdkObsolete")
-      Hashtable<String, String> env = new Hashtable<>();
-      env.put("com.sun.jndi.dns.timeout.initial", "1000");
-      env.put("com.sun.jndi.dns.timeout.retries", "4");
-      DirContext dirContext = new InitialDirContext(env);
+      DirContext dirContext = new InitialDirContext();
 
       try {
         javax.naming.directory.Attributes attrs = dirContext.getAttributes(name, rrType);
