@@ -252,8 +252,8 @@ final class JndiResourceResolverFactory implements DnsNameResolver.ResourceResol
 
       @SuppressWarnings("JdkObsolete")
       Hashtable<String, String> env = new Hashtable<>();
-      env.put("com.sun.jndi.ldap.connect.timeout", "5000");
-      env.put("com.sun.jndi.ldap.read.timeout", "5000");
+      env.put("com.sun.jndi.dns.timeout.initial", "1000");
+      env.put("com.sun.jndi.dns.timeout.retries", "4");
       DirContext dirContext = new InitialDirContext(env);
 
       try {
