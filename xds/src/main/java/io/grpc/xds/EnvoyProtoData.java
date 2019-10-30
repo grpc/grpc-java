@@ -20,6 +20,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -196,13 +198,52 @@ final class EnvoyProtoData {
     // TODO(chengyuanzhang): define equals()/hashCode()/toString() if necessary.
   }
 
+  /**
+   * See corresponding Enovy proto message {@link
+   * io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload}.
+   */
   static final class DropOverload {
-    final String category;
-    final int dropsPerMillion;
+    private final String category;
+    private final int dropsPerMillion;
 
+    /** Must only be used for testing. */
+    @VisibleForTesting
     DropOverload(String category, int dropsPerMillion) {
       this.category = category;
       this.dropsPerMillion = dropsPerMillion;
+    }
+
+    static DropOverload fromEnvoyProtoDropOverload(
+        io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload proto) {
+      FractionalPercent percent = proto.getDropPercentage();
+      int numerator = percent.getNumerator();
+      DenominatorType type = percent.getDenominator();
+      switch (type) {
+        case TEN_THOUSAND:
+          numerator *= 100;
+          break;
+        case HUNDRED:
+          numerator *= 100_00;
+          break;
+        case MILLION:
+          break;
+        default:
+          throw new IllegalArgumentException("Unknown denominator type of " + percent);
+      }
+
+      if (numerator > 1_000_000) {
+        numerator = 1_000_000;
+      }
+
+      return new DropOverload(proto.getCategory(), numerator);
+    }
+
+    String getCategory() {
+      return category;
+    }
+
+    int getDropsPerMillion() {
+      return dropsPerMillion;
     }
 
     @Override

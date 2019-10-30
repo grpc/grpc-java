@@ -16,16 +16,12 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
@@ -90,31 +86,6 @@ final class LookasideChannelLb extends LoadBalancer {
         GrpcUtil.STOPWATCH_SUPPLIER, node);
   }
 
-  private static int rateInMillion(FractionalPercent fractionalPercent) {
-    int numerator = fractionalPercent.getNumerator();
-    checkArgument(numerator >= 0, "numerator shouldn't be negative in %s", fractionalPercent);
-
-    DenominatorType type = fractionalPercent.getDenominator();
-    switch (type) {
-      case TEN_THOUSAND:
-        numerator *= 100;
-        break;
-      case HUNDRED:
-        numerator *= 100_00;
-        break;
-      case MILLION:
-        break;
-      default:
-        throw new IllegalArgumentException("unknown denominator type of " + fractionalPercent);
-    }
-
-    if (numerator > 1000_000) {
-      numerator = 1000_000;
-    }
-
-    return numerator;
-  }
-
   @Override
   public void handleNameResolutionError(Status error) {
     // NO-OP?
@@ -155,10 +126,10 @@ final class LookasideChannelLb extends LoadBalancer {
       List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
           clusterLoadAssignment.getPolicy().getDropOverloadsList();
       ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
-      for (ClusterLoadAssignment.Policy.DropOverload dropOverload : dropOverloadsProto) {
-        int rateInMillion = rateInMillion(dropOverload.getDropPercentage());
-        dropOverloadsBuilder.add(new DropOverload(dropOverload.getCategory(), rateInMillion));
-        if (rateInMillion == 1000_000) {
+      for (ClusterLoadAssignment.Policy.DropOverload drop : dropOverloadsProto) {
+        DropOverload dropOverload = DropOverload.fromEnvoyProtoDropOverload(drop);
+        dropOverloadsBuilder.add(dropOverload);
+        if (dropOverload.getDropsPerMillion() == 1_000_000) {
           lookasideChannelCallback.onAllDrop();
           break;
         }

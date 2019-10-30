@@ -148,8 +148,8 @@ interface LocalityStore {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
-          if (rand < dropOverload.dropsPerMillion) {
-            loadStatsStore.recordDroppedRequest(dropOverload.category);
+          if (rand < dropOverload.getDropsPerMillion()) {
+            loadStatsStore.recordDroppedRequest(dropOverload.getCategory());
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
