@@ -29,9 +29,20 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Contains data types for ClusterLoadAssignment.
+ * Defines gRPC data types for Envoy protobuf messages used in xDS protocol. Each data type has
+ * the same name as Envoy's corresponding protobuf message, but only with fields used by gRPC.
+ *
+ * <p>Each data type should define a {@code fromEnvoyProtoXXX} static method to convert an Envoy
+ * proto message to an instance of that data type.
+ *
+ * <p>For data types that need to be sent as protobuf messages, a {@code toEnvoyProtoXXX} instance
+ * method is defined to convert an instance to Envoy proto message.
  */
-final class ClusterLoadAssignmentData {
+final class EnvoyProtoData {
+
+  // Prevent instantiation.
+  private EnvoyProtoData() {
+  }
 
   /**
    * An {@code XdsLocality} object is simply a POJO representation for {@link
