@@ -357,14 +357,17 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
 
   private ScheduledFuture<?> startDeadlineSendCancelToServerTimer(
       final long remainingNanos, final InsightBuilder insight) {
+
+    class DeadlineExceededSendCancelToServerTimer implements Runnable {
+      @Override
+      public void run() {
+        stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
+            "deadline exceeded after " + remainingNanos + "ns. " + insight));
+      }
+    }
+
     return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new Runnable() {
-          @Override
-          public void run() {
-            stream.cancel(DEADLINE_EXCEEDED.augmentDescription(
-                "deadline exceeded after " + remainingNanos + "ns. " + insight));
-          }
-        }),
+        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
         DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
         TimeUnit.NANOSECONDS);
   }
@@ -372,34 +375,37 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private ScheduledFuture<?> startDeadlineNotifyApplicationTimer(Deadline deadline,
       final Listener<RespT> observer) {
     final long remainingNanos = deadline.timeRemaining(TimeUnit.NANOSECONDS);
-    return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new Runnable() {
-          @Override
-          public void run() {
-            final InsightBuilder insight = new InsightBuilder();
-            stream.appendTimeoutInsight(insight);
-            deadlineCancellationSendToServerFuture =
-                startDeadlineSendCancelToServerTimer(remainingNanos, insight);
-            // DelayedStream.cancel() is safe to call from a thread that is different from where the
-            // stream is created.
-            class CloseInContext extends ContextRunnable {
-              CloseInContext() {
-                super(context);
-              }
 
-              @Override
-              public void runInContext() {
-                closeObserver(
-                    observer,
-                    DEADLINE_EXCEEDED.augmentDescription(
-                        "deadline exceeded after " + remainingNanos + "ns. " + insight),
-                    new Metadata());
-              }
-            }
-
-            callExecutor.execute(new CloseInContext());
+    class DeadlineExceededNotifyApplicationTimer implements Runnable {
+      @Override
+      public void run() {
+        final InsightBuilder insight = new InsightBuilder();
+        stream.appendTimeoutInsight(insight);
+        deadlineCancellationSendToServerFuture =
+            startDeadlineSendCancelToServerTimer(remainingNanos, insight);
+        // DelayedStream.cancel() is safe to call from a thread that is different from where the
+        // stream is created.
+        class CloseInContext extends ContextRunnable {
+          CloseInContext() {
+            super(context);
           }
-        }),
+
+          @Override
+          public void runInContext() {
+            closeObserver(
+                observer,
+                DEADLINE_EXCEEDED.augmentDescription(
+                    "deadline exceeded after " + remainingNanos + "ns. " + insight),
+                new Metadata());
+          }
+        }
+
+        callExecutor.execute(new CloseInContext());
+      }
+    }
+
+    return deadlineCancellationExecutor.schedule(
+        new LogExceptionRunnable(new DeadlineExceededNotifyApplicationTimer()),
         remainingNanos,
         TimeUnit.NANOSECONDS);
   }
