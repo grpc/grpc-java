@@ -18,9 +18,11 @@ package io.grpc.xds.sds;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import java.util.HashMap;
 import java.util.Map;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
@@ -48,6 +50,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * Gets an existing instance of {@link SslContextProvider}. If it doesn't exist, creates a new one
    * using the provided {@link SslContextProviderFactory&lt;K&gt;}
    */
+  @CheckReturnValue
   public SslContextProvider get(K key) {
     checkNotNull(key, "key");
     return getInternal(key);
@@ -117,6 +120,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
 
     /** Decrement refCount and return true if it has reached 0. */
     boolean release() {
+      checkState(refCount > 0, "refCount has to be > 0");
       return --refCount == 0;
     }
 
