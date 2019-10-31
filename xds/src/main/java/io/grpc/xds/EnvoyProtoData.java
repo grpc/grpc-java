@@ -227,6 +227,10 @@ final class EnvoyProtoData {
       return loadBalancingWeight;
     }
 
+    boolean isHealthy() {
+      return isHealthy;
+    }
+
     @Override
     public boolean equals(Object o) {
       if (this == o) {
