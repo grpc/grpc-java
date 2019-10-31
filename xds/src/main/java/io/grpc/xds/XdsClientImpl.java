@@ -523,13 +523,11 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static boolean matchHostName(String hostName, String pattern) {
     // Basic sanity checks
-    if (hostName == null || hostName.length() == 0 || hostName.startsWith(".")
-        || hostName.endsWith(".")) {
-      // Invalid domain name
+    if (hostName.length() == 0 || hostName.startsWith(".") || hostName.endsWith(".")) {
+      // Invalid host name
       return false;
     }
-    if (pattern == null || pattern.length() == 0 || pattern.startsWith(".")
-        || pattern.endsWith(".")) {
+    if (pattern.length() == 0 || pattern.startsWith(".") || pattern.endsWith(".")) {
       // Invalid pattern/domain name
       return false;
     }
