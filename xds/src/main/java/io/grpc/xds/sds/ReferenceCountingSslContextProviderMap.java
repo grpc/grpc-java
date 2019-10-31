@@ -77,8 +77,10 @@ final class ReferenceCountingSslContextProviderMap<K> {
     if (instance == null) {
       instance = new Instance(sslContextProviderFactory.createSslContextProvider(key));
       instances.put(key, instance);
+      return instance.sslContextProvider;
+    } else {
+      return instance.acquire();
     }
-    return instance.acquire();
   }
 
   private synchronized SslContextProvider releaseInternal(
@@ -120,7 +122,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
 
     Instance(SslContextProvider sslContextProvider) {
       this.sslContextProvider = sslContextProvider;
-      this.refCount = 0;
+      this.refCount = 1;
     }
   }
 }
