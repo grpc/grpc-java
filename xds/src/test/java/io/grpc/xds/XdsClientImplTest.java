@@ -53,6 +53,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import java.io.IOException;
@@ -154,7 +155,7 @@ public class XdsClientImplTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     xdsClient =
-        new XdsClientImpl(serverName, NODE, null, syncContext,
+        new XdsClientImpl(serverName, NODE, ImmutableList.<ChannelCreds>of(), syncContext,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier().get(), HOSTNAME, PORT, configWatcher);
     xdsClient.startDiscoveryRpc(channel);

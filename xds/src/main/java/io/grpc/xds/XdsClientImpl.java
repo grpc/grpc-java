@@ -71,6 +71,9 @@ final class XdsClientImpl extends XdsClient {
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private final Node node;
+  // List of channel credential configurations for the channel to management server.
+  // Should pick the first supported one.
+  private final List<ChannelCreds> channelCredsList;
   private final ConfigWatcher configWatcher;
 
   // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
@@ -88,7 +91,7 @@ final class XdsClientImpl extends XdsClient {
   XdsClientImpl(
       String serverUri,
       Node node,
-      @Nullable ChannelCreds channelCreds,
+      List<ChannelCreds> channelCredsList,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
@@ -103,6 +106,7 @@ final class XdsClientImpl extends XdsClient {
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
     this.hostName = checkNotNull(hostName, "hostName");
     this.node = checkNotNull(node, "node");
+    this.channelCredsList = checkNotNull(channelCredsList, "channelCredsList");
     this.configWatcher = checkNotNull(configWatcher, "configWatcher");
     if (port == -1) {
       targetName = hostName;
@@ -113,6 +117,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void start() {
+    // TODO(chengyuanzhang): build channel with the first supported channel creds config.
     ManagedChannel channel = ManagedChannelBuilder.forTarget(serverUri).build();
     startDiscoveryRpc(channel);
   }
