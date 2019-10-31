@@ -120,3 +120,12 @@ applicationDistribution.into("bin") {
     from(grpclb_long_lived_affinity_test_client)
     fileMode = 0755
 }
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
+    }
+}
