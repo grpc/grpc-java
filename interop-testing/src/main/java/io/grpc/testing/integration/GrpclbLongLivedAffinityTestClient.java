@@ -21,7 +21,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import com.google.protobuf.ByteString;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
-import io.grpc.alts.ComputeEngineChannelBuilder;
+import io.grpc.alts.GoogleComputeEngineChannelBuilder;
 import io.grpc.testing.integration.Messages.Payload;
 import io.grpc.testing.integration.Messages.SimpleRequest;
 import io.grpc.testing.integration.Messages.SimpleResponse;
@@ -214,7 +214,7 @@ public final class GrpclbLongLivedAffinityTestClient {
   }
 
   private ManagedChannel createChannel() {
-    return ComputeEngineChannelBuilder.forTarget(target).build();
+    return GoogleComputeEngineChannelBuilder.forTarget(target).build();
   }
 }
 

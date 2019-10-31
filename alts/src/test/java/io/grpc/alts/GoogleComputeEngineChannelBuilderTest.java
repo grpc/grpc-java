@@ -24,11 +24,12 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 @RunWith(JUnit4.class)
-public final class ComputeEngineChannelBuilderTest {
+public final class GoogleComputeEngineChannelBuilderTest {
 
   @Test
   public void buildsNettyChannel() throws Exception {
-    ComputeEngineChannelBuilder builder = ComputeEngineChannelBuilder.forTarget("localhost:8080");
+    GoogleComputeEngineChannelBuilder builder =
+        GoogleComputeEngineChannelBuilder.forTarget("localhost:8080");
     builder.build();
 
     ProtocolNegotiator protocolNegotiator = builder.getProtocolNegotiatorForTest();

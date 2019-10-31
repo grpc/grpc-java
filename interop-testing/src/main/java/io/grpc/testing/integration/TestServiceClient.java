@@ -20,7 +20,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Files;
 import io.grpc.ManagedChannel;
 import io.grpc.alts.AltsChannelBuilder;
-import io.grpc.alts.ComputeEngineChannelBuilder;
+import io.grpc.alts.GoogleComputeEngineChannelBuilder;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.AbstractManagedChannelImplBuilder;
 import io.grpc.internal.GrpcUtil;
@@ -280,7 +280,7 @@ public class TestServiceClient {
         break;
 
       case COMPUTE_ENGINE_CHANNEL_CREDENTIALS: {
-        ManagedChannel channel = ComputeEngineChannelBuilder
+        ManagedChannel channel = GoogleComputeEngineChannelBuilder
             .forAddress(serverHost, serverPort).build();
         try {
           TestServiceGrpc.TestServiceBlockingStub computeEngineStub =
@@ -396,7 +396,7 @@ public class TestServiceClient {
       }
       if (customCredentialsType != null
           && customCredentialsType.equals("compute_engine_channel_creds")) {
-        return ComputeEngineChannelBuilder.forAddress(serverHost, serverPort).build();
+        return GoogleComputeEngineChannelBuilder.forAddress(serverHost, serverPort).build();
       }
       if (useAlts) {
         return AltsChannelBuilder.forAddress(serverHost, serverPort).build();

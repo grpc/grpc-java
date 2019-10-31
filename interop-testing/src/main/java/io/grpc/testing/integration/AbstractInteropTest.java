@@ -1719,7 +1719,7 @@ public abstract class AbstractInteropTest {
     assertResponse(goldenResponse, response);
   }
 
-  /** Sends an unary rpc with ComputeEngineChannelBuilder. */
+  /** Sends an unary rpc with GoogleComputeEngineChannelBuilder. */
   public void computeEngineChannelCredentials(
       String defaultServiceAccount,
       TestServiceGrpc.TestServiceBlockingStub computeEngineStub) throws Exception {

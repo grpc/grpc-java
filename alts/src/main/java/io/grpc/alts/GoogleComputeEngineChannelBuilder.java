@@ -38,16 +38,14 @@ import javax.net.ssl.SSLException;
  * {@code ManagedChannelBuilder} for Google Compute Engine. This class sets up a secure channel
  * using ALTS if applicable and using TLS as fallback.
  *
- * @deprecated Please use {@link GoogleComputeEngineChannelBuilder} instead. See the bug
- *             https://github.com/grpc/grpc-java/issues/6367 for more information.
+ * @since 1.25.0
  */
-@Deprecated
-public final class ComputeEngineChannelBuilder
-    extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
+public final class GoogleComputeEngineChannelBuilder
+    extends ForwardingChannelBuilder<GoogleComputeEngineChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
 
-  private ComputeEngineChannelBuilder(String target) {
+  private GoogleComputeEngineChannelBuilder(String target) {
     delegate = NettyChannelBuilder.forTarget(target);
     SslContext sslContext;
     try {
@@ -72,12 +70,12 @@ public final class ComputeEngineChannelBuilder
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
-  public static final ComputeEngineChannelBuilder forTarget(String target) {
-    return new ComputeEngineChannelBuilder(target);
+  public static final GoogleComputeEngineChannelBuilder forTarget(String target) {
+    return new GoogleComputeEngineChannelBuilder(target);
   }
 
   /** "Overrides" the static method in {@link ManagedChannelBuilder}. */
-  public static ComputeEngineChannelBuilder forAddress(String name, int port) {
+  public static GoogleComputeEngineChannelBuilder forAddress(String name, int port) {
     return forTarget(GrpcUtil.authorityFromHostAndPort(name, port));
   }
 
