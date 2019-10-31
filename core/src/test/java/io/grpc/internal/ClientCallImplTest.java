@@ -813,7 +813,8 @@ public class ClientCallImplTest {
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
         method,
         MoreExecutors.directExecutor(),
-        baseCallOptions.withDeadline(Deadline.after(1, TimeUnit.SECONDS)),
+        baseCallOptions.withDeadline(
+            Deadline.after(1, TimeUnit.SECONDS, fakeClock.getDeadlineTicker())),
         provider,
         deadlineCancellationExecutor,
         channelCallTracer,
@@ -821,13 +822,10 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1));
+    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
 
     // Verify cancel sent to application when deadline just past
-    verify(callListener).onClose(statusArgumentCaptor.capture(),
-        ArgumentMatchers.isA(Metadata.class));
-    verify(callListener, times(1))
-        .onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
+    verify(callListener).onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
     assertThat(statusCaptor.getValue().getDescription())
         .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
@@ -836,39 +834,18 @@ public class ClientCallImplTest {
     fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
 
     // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
-    verify(stream, times(1)).cancel(statusCaptor.capture());
+    verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
         .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test
-  public void expiredDeadlineWithoutExtraWaitingDoNotReceiveCancel() {
-    fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
-    // The deadline needs to be a number large enough to get encompass the call to start, otherwise
-    // the scheduled cancellation won't be created, and the call will fail early.
-    ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
-        method,
-        MoreExecutors.directExecutor(),
-        baseCallOptions.withDeadline(Deadline.after(1000, TimeUnit.NANOSECONDS)),
-        provider,
-        deadlineCancellationExecutor,
-        channelCallTracer,
-        /* retryEnabled= */ false);
-
-    call.start(callListener, new Metadata());
-
-    fakeClock.forwardNanos(950L + DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
-
-    verify(stream, never()).cancel(statusCaptor.capture());
-  }
-
-  @Test
   public void expiredDeadlineCancelsStream_Context() {
     fakeClock.forwardTime(System.nanoTime(), TimeUnit.NANOSECONDS);
 
-    Context context = Context.current()
-        .withDeadlineAfter(1, TimeUnit.SECONDS, deadlineCancellationExecutor);
+    Deadline deadline = Deadline.after(1, TimeUnit.SECONDS, fakeClock.getDeadlineTicker());
+    Context context = Context.current().withDeadline(deadline, deadlineCancellationExecutor);
     Context origContext = context.attach();
 
     ClientCallImpl<Void, Void> call = new ClientCallImpl<>(
@@ -884,8 +861,10 @@ public class ClientCallImplTest {
 
     call.start(callListener, new Metadata());
 
-    fakeClock.forwardNanos(TimeUnit.SECONDS.toNanos(1) + 1);
+    fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
+    verify(stream, never()).cancel(statusCaptor.capture());
 
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
     verify(stream, times(1)).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
