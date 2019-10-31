@@ -206,6 +206,9 @@ final class SecretVolumeSslContextProvider implements SslContextProvider {
         });
   }
 
+  @Override
+  public void close() {}
+
   @VisibleForTesting
   SslContext buildSslContextFromSecrets()
       throws IOException, CertificateException, CertStoreException {
