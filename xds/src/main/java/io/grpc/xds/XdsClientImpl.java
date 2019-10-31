@@ -200,7 +200,6 @@ final class XdsClientImpl extends XdsClient {
         canProceed = true;
         adsStream.sendPendingAckRequest();
         String rcName = connManager.getRds().getRouteConfigName();
-        adsStream.rdsResourceName = rcName;
         adsStream.sendRdsRequest(rcName);
       } else {
         configWatcher.onError(
@@ -441,6 +440,7 @@ final class XdsClientImpl extends XdsClient {
 
     private void sendRdsRequest(String resourceName) {
       checkState(requestWriter != null, "ADS stream has not been started");
+      rdsResourceName = resourceName;
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
