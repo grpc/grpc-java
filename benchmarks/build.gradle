@@ -100,3 +100,12 @@ applicationDistribution.into("bin") {
     from(benchmark_worker)
     fileMode = 0755
 }
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            artifact distZip
+            artifact distTar
+        }
+    }
+}
