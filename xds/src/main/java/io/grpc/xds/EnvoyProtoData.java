@@ -193,12 +193,14 @@ final class EnvoyProtoData {
   static final class LbEndpoint {
     private final EquivalentAddressGroup eag;
     private final int loadBalancingWeight;
+    private final boolean isHealthy;
 
     /** Must only be used for testing. */
     @VisibleForTesting
-    LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight) {
+    LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight, boolean isHealthy) {
       this.eag = eag;
       this.loadBalancingWeight = loadBalancingWeight;
+      this.isHealthy = isHealthy;
     }
 
     static LbEndpoint fromEnvoyProtoLbEndpoint(
@@ -211,7 +213,10 @@ final class EnvoyProtoData {
                   ImmutableList.<java.net.SocketAddress>of(
                       new InetSocketAddress(socketAddress.getAddress(),
                           socketAddress.getPortValue()))),
-              proto.getLoadBalancingWeight().getValue());
+              proto.getLoadBalancingWeight().getValue(),
+              proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
+                  || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN
+              );
     }
 
     EquivalentAddressGroup getAddress() {
@@ -232,12 +237,13 @@ final class EnvoyProtoData {
       }
       LbEndpoint that = (LbEndpoint) o;
       return loadBalancingWeight == that.loadBalancingWeight
-          && Objects.equal(eag, that.eag);
+          && Objects.equal(eag, that.eag)
+          && isHealthy == that.isHealthy;
     }
 
     @Override
     public int hashCode() {
-      return Objects.hashCode(eag, loadBalancingWeight);
+      return Objects.hashCode(eag, loadBalancingWeight, isHealthy);
     }
 
     @Override
@@ -245,6 +251,7 @@ final class EnvoyProtoData {
       return MoreObjects.toStringHelper(this)
           .add("eag", eag)
           .add("loadBalancingWeight", loadBalancingWeight)
+          .add("isHealthy", isHealthy)
           .toString();
     }
   }
