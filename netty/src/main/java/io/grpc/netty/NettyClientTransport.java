@@ -225,6 +225,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.option(ALLOCATOR, SharedResourceHolder.get(Utils.BYTE_BUF_ALLOCATOR));
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);

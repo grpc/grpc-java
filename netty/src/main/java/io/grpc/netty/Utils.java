@@ -82,6 +82,17 @@ class Utils {
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
+  public static final Resource<ByteBufAllocator> BYTE_BUF_ALLOCATOR =
+      new Resource<ByteBufAllocator>() {
+        @Override
+        public ByteBufAllocator create() {
+          return PooledByteBufAllocator()
+          // TODO(zhangkun): find out how to copy the default values of most parameters from:
+          // https://github.com/netty/netty/blob/4.1/buffer/src/main/java/io/netty/buffer/PooledByteBufAllocator.java
+          // And https://github.com/netty/netty/blob/4.1/common/src/main/java/io/netty/util/internal/PlatformDependent.java#L199
+          // for whether to prefer direct byte bufs
+        }
+      }
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;
