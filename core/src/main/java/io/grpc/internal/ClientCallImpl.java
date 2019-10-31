@@ -125,24 +125,30 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     PerfMark.event("ClientCall.<init>", tag);
   }
 
-  private ScheduledFuture<?> startDeadlineSendCancelToServerTimer(final Status status) {
-
-    class DeadlineExceededSendCancelToServerTimer implements Runnable {
-      @Override
-      public void run() {
-        if (!streamCancelledByDeadline) {
-          streamCancelledByDeadline = true;
-          // DelayedStream.cancel() is safe to call from a thread that is different from where the
-          // stream is created.
-          stream.cancel(status);
+  private final class ContextCancellationListener implements CancellationListener {
+    @Override
+    public void cancelled(final Context context) {
+      if (streamCancelledByDeadline) {
+        return;
+      }
+      if (context.getDeadline() == null || !context.getDeadline().isExpired()) {
+        stream.cancel(statusFromCancelled(context));
+      } else {
+        if (deadlineCancellationSendToServerFuture != null) {
+          deadlineCancellationSendToServerFuture.cancel(false);
         }
+        deadlineCancellationSendToServerFuture = deadlineCancellationExecutor.schedule(
+            new Runnable() {
+              @Override
+              public void run() {
+                streamCancelledByDeadline = true;
+                stream.cancel(statusFromCancelled(context));
+              }
+            },
+            DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
+            TimeUnit.NANOSECONDS);
       }
     }
-
-    return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
-        DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
-        TimeUnit.NANOSECONDS);
   }
 
   /**
@@ -411,30 +417,24 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
-  private final class ContextCancellationListener implements CancellationListener {
-    @Override
-    public void cancelled(final Context context) {
-      if (streamCancelledByDeadline) {
-        return;
-      }
-      if (context.getDeadline() == null || !context.getDeadline().isExpired()) {
-        stream.cancel(statusFromCancelled(context));
-      } else {
-        if (deadlineCancellationSendToServerFuture != null) {
-          deadlineCancellationSendToServerFuture.cancel(false);
+  private ScheduledFuture<?> startDeadlineSendCancelToServerTimer(final Status status) {
+
+    class DeadlineExceededSendCancelToServerTimer implements Runnable {
+      @Override
+      public void run() {
+        if (!streamCancelledByDeadline) {
+          streamCancelledByDeadline = true;
+          // DelayedStream.cancel() is safe to call from a thread that is different from where the
+          // stream is created.
+          stream.cancel(status);
         }
-        deadlineCancellationSendToServerFuture = deadlineCancellationExecutor.schedule(
-            new Runnable() {
-              @Override
-              public void run() {
-                streamCancelledByDeadline = true;
-                stream.cancel(statusFromCancelled(context));
-              }
-            },
-            DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
-            TimeUnit.NANOSECONDS);
       }
     }
+
+    return deadlineCancellationExecutor.schedule(
+        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
+        DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
+        TimeUnit.NANOSECONDS);
   }
 
   @Nullable
