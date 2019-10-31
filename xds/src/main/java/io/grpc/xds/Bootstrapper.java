@@ -21,8 +21,6 @@ import com.google.protobuf.ListValue;
 import com.google.protobuf.NullValue;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import java.io.IOException;
@@ -121,7 +119,8 @@ abstract class Bootstrapper {
       throw new IOException("Invalid bootstrap: 'node' does not exist.");
     }
     // Fields in "node" are not checked.
-    Node.Builder nodeBuilder = Node.newBuilder();
+    io.envoyproxy.envoy.api.v2.core.Node.Builder nodeBuilder =
+        io.envoyproxy.envoy.api.v2.core.Node.newBuilder();
     String id = JsonUtil.getString(rawNode, "id");
     if (id != null) {
       nodeBuilder.setId(id);
@@ -140,7 +139,8 @@ abstract class Bootstrapper {
     }
     Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
     if (rawLocality != null) {
-      Locality.Builder localityBuilder = Locality.newBuilder();
+      io.envoyproxy.envoy.api.v2.core.Locality.Builder localityBuilder =
+          io.envoyproxy.envoy.api.v2.core.Locality.newBuilder();
       String region = JsonUtil.getString(rawLocality, "region");
       if (region == null) {
         throw new IOException("Invalid bootstrap: malformed 'node : locality'.");
@@ -235,10 +235,11 @@ abstract class Bootstrapper {
   static class BootstrapInfo {
     private final String serverUri;
     private final List<ChannelCreds> channelCredsList;
-    private final Node node;
+    private final io.envoyproxy.envoy.api.v2.core.Node node;
 
     @VisibleForTesting
-    BootstrapInfo(String serverUri, List<ChannelCreds> channelCredsList, Node node) {
+    BootstrapInfo(String serverUri, List<ChannelCreds> channelCredsList,
+        io.envoyproxy.envoy.api.v2.core.Node node) {
       this.serverUri = serverUri;
       this.channelCredsList = channelCredsList;
       this.node = node;
@@ -254,7 +255,7 @@ abstract class Bootstrapper {
     /**
      * Returns the node identifier to be included in xDS requests.
      */
-    Node getNode() {
+    io.envoyproxy.envoy.api.v2.core.Node getNode() {
       return node;
     }
 

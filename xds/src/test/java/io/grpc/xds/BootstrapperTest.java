@@ -20,8 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import java.io.IOException;
 import org.junit.Rule;
@@ -65,11 +63,11 @@ public class BootstrapperTest {
     assertThat(info.getChannelCredentials().get(1).getType()).isEqualTo("LOAS");
     assertThat(info.getChannelCredentials().get(1).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
-        Node.newBuilder()
+        io.envoyproxy.envoy.api.v2.core.Node.newBuilder()
             .setId("ENVOY_NODE_ID")
             .setCluster("ENVOY_CLUSTER")
             .setLocality(
-                Locality.newBuilder()
+                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
                     .setRegion("ENVOY_REGION").setZone("ENVOY_ZONE").setSubZone("ENVOY_SUBZONE"))
             .setMetadata(
                 Struct.newBuilder()
@@ -100,7 +98,7 @@ public class BootstrapperTest {
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.getNode()).isEqualTo(Node.getDefaultInstance());
+    assertThat(info.getNode()).isEqualTo(io.envoyproxy.envoy.api.v2.core.Node.getDefaultInstance());
   }
 
   @Test
