@@ -28,9 +28,11 @@ import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -47,6 +49,12 @@ final class XdsNameResolver extends NameResolver {
   // TODO(chengyuanzhang): delete this later, it was a workaround for demo.
   @NameResolver.ResolutionResultAttr
   static final Attributes.Key<Node> XDS_NODE = Attributes.Key.create("xds-node");
+  // TODO(chengyuanzhang): delete this later, XdsClient (to be implemented) constructed here
+  //  should take channel credentials config. This workaround is passing channel credentials
+  //  config to xDS load balancer, which is doing the xDS RPC communication for now.
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<List<ChannelCreds>> XDS_CHANNEL_CREDS_LIST =
+      Attributes.Key.create("xds-channel-creds-list");
 
   private final String authority;
   private final Bootstrapper bootstrapper;
@@ -100,6 +108,7 @@ final class XdsNameResolver extends NameResolver {
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
             .set(XDS_NODE, bootstrapInfo.getNode())
+            .set(XDS_CHANNEL_CREDS_LIST, bootstrapInfo.getChannelCredentials())
             .build();
     ResolutionResult result =
         ResolutionResult.newBuilder()
