@@ -213,12 +213,11 @@ final class EnvoyProtoData {
         io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint proto) {
       io.envoyproxy.envoy.api.v2.core.SocketAddress socketAddress =
           proto.getEndpoint().getAddress().getSocketAddress();
+      InetSocketAddress addr =
+          new InetSocketAddress(socketAddress.getAddress(), socketAddress.getPortValue());
       return
           new LbEndpoint(
-              new EquivalentAddressGroup(
-                  ImmutableList.<java.net.SocketAddress>of(
-                      new InetSocketAddress(socketAddress.getAddress(),
-                          socketAddress.getPortValue()))),
+              new EquivalentAddressGroup(ImmutableList.<java.net.SocketAddress>of(addr)),
               proto.getLoadBalancingWeight().getValue(),
               proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.HEALTHY
                   || proto.getHealthStatus() == io.envoyproxy.envoy.api.v2.core.HealthStatus.UNKNOWN
