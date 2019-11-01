@@ -208,13 +208,15 @@ interface LocalityStore {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
-      for (Locality locality : newLocalities) {
+      for (final Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
           final LocalityLbInfo localityLbInfo = localityMap.get(locality);
-          LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+          final LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
           final List<EquivalentAddressGroup> eags = new ArrayList<>();
           for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
-            eags.add(endpoint.getAddress());
+            if (endpoint.isHealthy()) {
+              eags.add(endpoint.getAddress());
+            }
           }
           // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
           // immediately, so execute handleResolvedAddresses() after all the setup in this method is
@@ -222,6 +224,12 @@ interface LocalityStore {
           helper.getSynchronizationContext().execute(new Runnable() {
             @Override
             public void run() {
+              if (eags.isEmpty()) {
+                localityLbInfo.childBalancer.handleNameResolutionError(
+                    Status.UNAVAILABLE.withDescription(
+                        "No healthy address available from EDS update '" + localityInfo
+                            + "' for locality '" + locality + "'"));
+              }
               localityLbInfo.childBalancer.handleResolvedAddresses(
                   ResolvedAddresses.newBuilder().setAddresses(eags).build());
             }
