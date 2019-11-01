@@ -45,7 +45,7 @@ import javax.annotation.Nullable;
  * An SslContext provider that uses file-based secrets (secret volume). Used for both server and
  * client SslContexts
  */
-final class SecretVolumeSslContextProvider implements SslContextProvider {
+final class SecretVolumeSslContextProvider extends SslContextProvider {
 
   private static final Logger logger =
       Logger.getLogger(SecretVolumeSslContextProvider.class.getName());
@@ -61,7 +61,9 @@ final class SecretVolumeSslContextProvider implements SslContextProvider {
       @Nullable String privateKeyPassword,
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
-      boolean server) {
+      boolean server,
+      Object key) {
+    super(key);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;
@@ -130,7 +132,8 @@ final class SecretVolumeSslContextProvider implements SslContextProvider {
         privateKeyPassword,
         tlsCertificate.getCertificateChain().getFilename(),
         certificateValidationContext,
-        /* server= */ true);
+        /* server= */ true,
+        downstreamTlsContext);
   }
 
   static SecretVolumeSslContextProvider getProviderForClient(
@@ -164,7 +167,8 @@ final class SecretVolumeSslContextProvider implements SslContextProvider {
         privateKeyPassword,
         certificateChain,
         certificateValidationContext,
-        /* server= */ false);
+        /* server= */ false,
+        upstreamTlsContext);
   }
 
   private static CertificateValidationContext getCertificateValidationContext(

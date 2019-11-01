@@ -462,7 +462,7 @@ public class SecretVolumeSslContextProviderTest {
   /**
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
-  private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
+  static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
     DownstreamTlsContext downstreamTlsContext =
         DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return downstreamTlsContext;
@@ -471,7 +471,7 @@ public class SecretVolumeSslContextProviderTest {
   /**
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
-  private static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
+  static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
     UpstreamTlsContext upstreamTlsContext =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return upstreamTlsContext;
