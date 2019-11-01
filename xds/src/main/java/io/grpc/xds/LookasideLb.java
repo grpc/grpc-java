@@ -184,6 +184,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
         // Use the first supported channel credentials configuration.
         // Currently, only "google_default" is supported.
+        // TODO(chengyuanzhang): make "google_default" a reserved keyword.
         for (ChannelCreds creds : channelCredsList) {
           if (creds.getType().equals("google_default")) {
             channel = GoogleDefaultChannelBuilder.forTarget(balancerName).build();
