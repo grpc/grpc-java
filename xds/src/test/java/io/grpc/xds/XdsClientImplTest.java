@@ -743,7 +743,6 @@ public class XdsClientImplTest {
     assertThat(XdsClientImpl.matchHostName("foo-bar", pattern)).isTrue();
   }
 
-  // https://www.envoyproxy.io/docs/envoy/latest/api-v2/api/v2/discovery.proto#discoveryresponse
   private static DiscoveryResponse buildDiscoveryResponse(String versionInfo,
       List<com.google.protobuf.Any> resources, String typeUrl, String nonce) {
     return
@@ -755,7 +754,6 @@ public class XdsClientImplTest {
             .build();
   }
 
-  // https://www.envoyproxy.io/docs/envoy/latest/api-v2/api/v2/discovery.proto#discoveryrequest
   private static DiscoveryRequest buildDiscoveryRequest(String versionInfo,
       String resourceName, String typeUrl, String nonce) {
     return
@@ -768,7 +766,6 @@ public class XdsClientImplTest {
             .build();
   }
 
-  // https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v2/lds.proto
   private static Listener buildListener(String name, com.google.protobuf.Any apiListener) {
     return
         Listener.newBuilder()
@@ -779,7 +776,6 @@ public class XdsClientImplTest {
             .build();
   }
 
-  // https://www.envoyproxy.io/docs/envoy/latest/api-v2/api/v2/rds.proto#routeconfiguration
   private static RouteConfiguration buildRouteConfiguration(String name,
       List<VirtualHost> virtualHosts) {
     return
@@ -789,7 +785,6 @@ public class XdsClientImplTest {
             .build();
   }
 
-  // https://www.envoyproxy.io/docs/envoy/v1.5.0/api-v1/route_config/vhost#virtual-host
   private static VirtualHost buildVirtualHost(List<String> domains, String clusterName) {
     return
         VirtualHost.newBuilder()
