@@ -143,8 +143,8 @@ final class AesGcmAeadCrypter implements AeadCrypter {
       // Note that on Java 7, we're likely to crash later because GCM is unsupported.
       logger.log(
           Level.WARNING,
-          "Could not load Conscrypt. Will try slower JDK implementation. This is may be because "
-          + "the JDK is older than Java 7 update 121 or Java 8 update 111. If so, please update",
+          "Could not load Conscrypt. Will try slower JDK implementation. This may be because the "
+          + "JDK is older than Java 7 update 121 or Java 8 update 111. If so, please update",
           t);
       return null;
     } catch (Throwable t) {
