@@ -62,7 +62,9 @@ import javax.net.ssl.SSLException;
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1784")
 @CanIgnoreReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
-  /** 1MiB */
+  /**
+   * 1MiB
+   */
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   static final long MAX_CONNECTION_IDLE_NANOS_DISABLED = Long.MAX_VALUE;
