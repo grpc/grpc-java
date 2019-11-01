@@ -63,7 +63,7 @@ import javax.net.ssl.SSLException;
 @CanIgnoreReturnValue
 public final class NettyServerBuilder extends AbstractServerImplBuilder<NettyServerBuilder> {
   /**
-   * 1MiB
+   * 1MiB.
    */
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 

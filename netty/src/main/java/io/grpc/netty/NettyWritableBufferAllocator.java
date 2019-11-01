@@ -39,7 +39,7 @@ class NettyWritableBufferAllocator implements WritableBufferAllocator {
   private static final int MIN_BUFFER = 4 * 1024;
 
   /**
-   * Set the maximum buffer size to 1MB
+   * Set the maximum buffer size to 1MB.
    */
   private static final int MAX_BUFFER = 1024 * 1024;
 

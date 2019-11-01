@@ -65,7 +65,7 @@ import javax.net.ssl.SSLException;
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
   /**
-   * 1MiB
+   * 1MiB.
    */
   public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
