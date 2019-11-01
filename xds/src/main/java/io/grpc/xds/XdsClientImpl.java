@@ -172,6 +172,9 @@ final class XdsClientImpl extends XdsClient {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
     adsStream.ldsRespNonce = ldsResponse.getNonce();
     List<Any> respResources = ldsResponse.getResourcesList();
+    // Prepare an ACK/NACK request.
+    adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, targetName, ldsResponse.getVersionInfo(),
+        ldsResponse.getNonce());
     HttpConnectionManager connManager = null;
     try {
       for (com.google.protobuf.Any res : respResources) {
@@ -187,30 +190,35 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid LDS response"));
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
+      adsStream.nackPendingAckRequest();
+      return;
     }
-    // Prepare an ACK/NACK request.
-    adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, targetName, ldsResponse.getVersionInfo(),
-        ldsResponse.getNonce());
-    boolean canProceed = false;  // true if current LDS response contains valid information
+
+    // True if current LDS response contains a valid in Listener for gRPC's usage.
+    boolean validInfo = false;
     if (connManager != null) {
+      // The HttpConnectionManager message should either contains an RouteConfiguration message
+      // (which contains VirtualHost message) directly in-line or an Rds message for dynamic
+      // resolution. All the other cases are considered invalid data.
       if (connManager.hasRouteConfig()) {
-        canProceed = true;
+        validInfo = true;
         processRouteConfig(connManager.getRouteConfig());
       } else if (connManager.hasRds()) {
-        canProceed = true;
+        validInfo = true;
         adsStream.sendPendingAckRequest();
         String rcName = connManager.getRds().getRouteConfigName();
         adsStream.sendRdsRequest(rcName);
-      } else {
-        configWatcher.onError(
-            Status.UNKNOWN.withDescription(
-                "Cannot proceed to resolve routes based on listener " + connManager));
       }
     }
-    if (!canProceed) {
+    if (!validInfo) {
+      // Either the HttpConnectionManager message does not exist or contains invalid data.
       adsStream.nackPendingAckRequest();
+      configWatcher.onError(
+          Status.NOT_FOUND.withDescription(
+              "Cannot proceed to resolve routes based on listener: " + connManager));
     }
+    // Otherwise, the pending ACK LDS request has been sent.
     checkState(adsStream.pendingAckRequest == null,
         "LDS response %s has not been ACKed/NACKed", ldsResponse);
   }

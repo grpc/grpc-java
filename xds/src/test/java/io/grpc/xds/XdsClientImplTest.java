@@ -180,7 +180,7 @@ public class XdsClientImplTest {
    * listener for the requested resource.
    *
    * <p>This is the case when an LDS response does not contain the info for the requested resource.
-   * Client should silently wait for future updates.
+   * An error is returned to the watching party.
    */
   @Test
   public void nackLdsResponseWithoutMatchingResource() {
@@ -209,8 +209,14 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(error.getDescription())
+        .isEqualTo("Cannot proceed to resolve routes based on listener: null");
+
     verifyNoMoreInteractions(requestObserver);
-    verifyZeroInteractions(configWatcher);
   }
 
   /**
