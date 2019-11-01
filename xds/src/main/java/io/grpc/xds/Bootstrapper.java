@@ -56,11 +56,11 @@ abstract class Bootstrapper {
 
   private static final class FileBasedBootstrapper extends Bootstrapper {
 
-    private static volatile Exception failToBootstrapException;
+    private static volatile IOException failToBootstrapException;
     private static volatile BootstrapInfo bootstrapInfo;
 
     @Override
-    BootstrapInfo readBootstrap() throws Exception {
+    BootstrapInfo readBootstrap() throws IOException {
       if (bootstrapInfo == null && failToBootstrapException == null) {
         synchronized (FileBasedBootstrapper.class) {
           if (bootstrapInfo == null && failToBootstrapException == null) {
@@ -74,14 +74,18 @@ abstract class Bootstrapper {
               bootstrapInfo =
                   parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
                       StandardCharsets.UTF_8));
-            } catch (Exception e) {
+            } catch (IOException e) {
               failToBootstrapException = e;
+              throw e;
             }
           }
         }
       }
       if (failToBootstrapException != null) {
-        throw new RuntimeException(failToBootstrapException);
+        throw new IOException(
+            "Failed to read bootstrap. A previous attempt has failed. See the cause for the "
+                + "original failure",
+            failToBootstrapException);
       }
       return bootstrapInfo;
     }
