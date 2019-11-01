@@ -64,7 +64,7 @@ class KeepAliveEnforcer {
     }
     if (!valid) {
       pingStrikes++;
-      return !(pingStrikes > MAX_PING_STRIKES);
+      return pingStrikes <= MAX_PING_STRIKES;
     } else {
       lastValidPingTime = now;
       return true;
