@@ -73,6 +73,7 @@ final class XdsClientImpl extends XdsClient {
   private final Node node;
   // List of channel credential configurations for the channel to management server.
   // Should pick the first supported one.
+  @SuppressWarnings("unused")
   private final List<ChannelCreds> channelCredsList;
   private final ConfigWatcher configWatcher;
 
