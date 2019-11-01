@@ -17,6 +17,8 @@
 package io.grpc.xds;
 
 import io.grpc.Status;
+import java.util.List;
+import java.util.Map;
 
 /**
  * An {@link XdsClient} instance encapsulates all of the logic for communicating with the xDS
@@ -83,7 +85,9 @@ abstract class XdsClient {
    */
   // TODO(zdapeng): content TBD.
   static final class EndpointUpdate {
-
+    // TODO(zdapeng): merge with @voidzcy's integration of EDS into XdsClient.
+    Map<EnvoyProtoData.Locality, EnvoyProtoData.LocalityLbEndpoints> localityInfoMap;
+    List<EnvoyProtoData.DropOverload> dropOverloads;
   }
 
   /**
