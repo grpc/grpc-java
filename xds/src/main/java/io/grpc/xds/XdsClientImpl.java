@@ -233,6 +233,9 @@ final class XdsClientImpl extends XdsClient {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
     adsStream.rdsRespNonce = rdsResponse.getNonce();
     List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
+    // Prepare an ACK/NACK request.
+    adsStream.prepareAckRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
+        rdsResponse.getVersionInfo(), rdsResponse.getNonce());
     RouteConfiguration routeConfig = null;
     try {
       for (com.google.protobuf.Any res : respResources) {
@@ -244,15 +247,18 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Invalid RDS response"));
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken RDS response"));
+      adsStream.nackPendingAckRequest();
+      return;
     }
-    // Prepare an ACK/NACK request.
-    adsStream.prepareAckRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
-        rdsResponse.getVersionInfo(), rdsResponse.getNonce());
+
     if (routeConfig != null) {
       processRouteConfig(routeConfig);
     } else {
       adsStream.nackPendingAckRequest();
+      configWatcher.onError(
+          Status.NOT_FOUND.withDescription(
+              "Cannot proceed to resolve virtual hosts based on route config: " + routeConfig));
     }
     checkState(adsStream.pendingAckRequest == null,
         "RDS response %s has not been ACKed/NACKed", rdsResponse);
@@ -266,6 +272,8 @@ final class XdsClientImpl extends XdsClient {
    * Otherwise, forwards an error message to the config watcher.
    */
   private void processRouteConfig(RouteConfiguration config) {
+    checkState(adsStream.pendingAckRequest != null,
+        "ACK/NACK should have not been sent before RouteConfiguration message is processed");
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     String clusterName = null;
     // Proceed with the virtual host that has longest wildcard matched domain name with the

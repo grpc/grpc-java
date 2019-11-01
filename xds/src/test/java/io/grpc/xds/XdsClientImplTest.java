@@ -22,7 +22,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -386,8 +385,14 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(error.getDescription())
+        .isEqualTo("Cannot proceed to resolve virtual hosts based on route config: null");
+
     verifyNoMoreInteractions(requestObserver);
-    verifyZeroInteractions(configWatcher);
   }
 
   /**
