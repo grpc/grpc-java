@@ -56,11 +56,11 @@ abstract class Bootstrapper {
 
   private static final class FileBasedBootstrapper extends Bootstrapper {
 
-    private static volatile IOException failToBootstrapException;
+    private static volatile Exception failToBootstrapException;
     private static volatile BootstrapInfo bootstrapInfo;
 
     @Override
-    BootstrapInfo readBootstrap() throws IOException {
+    BootstrapInfo readBootstrap() throws Exception {
       if (bootstrapInfo == null && failToBootstrapException == null) {
         synchronized (FileBasedBootstrapper.class) {
           if (bootstrapInfo == null && failToBootstrapException == null) {
@@ -74,7 +74,7 @@ abstract class Bootstrapper {
               bootstrapInfo =
                   parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
                       StandardCharsets.UTF_8));
-            } catch (IOException e) {
+            } catch (Exception e) {
               failToBootstrapException = e;
               throw e;
             }
