@@ -413,10 +413,12 @@ final class XdsClientImpl extends XdsClient {
       long delayNanos = 0;
       if (!responseReceived) {
         delayNanos =
-            retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS);
+            Math.max(
+                0,
+                retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
-      if (delayNanos <= 0) {
+      if (delayNanos == 0) {
         startDiscoveryRpc();
       } else {
         rpcRetryTimer =
