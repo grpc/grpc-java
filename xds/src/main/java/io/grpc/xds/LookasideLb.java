@@ -179,10 +179,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
               FINEST,
               "createResolvingOobChannel() not supported by the helper: " + helper,
               uoe);
-          logger.log(
-              FINEST,
-              "creating oob channel for target {0} normally",
-              balancerName);
+          logger.log(FINEST, "creating oob channel for target {0}", balancerName);
         }
 
         // Use the first supported channel credentials configuration.
