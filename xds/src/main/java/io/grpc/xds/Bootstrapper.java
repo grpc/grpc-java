@@ -76,16 +76,12 @@ abstract class Bootstrapper {
                       StandardCharsets.UTF_8));
             } catch (Exception e) {
               failToBootstrapException = e;
-              throw e;
             }
           }
         }
       }
       if (failToBootstrapException != null) {
-        throw new IOException(
-            "Failed to read bootstrap. A previous attempt has failed. See the cause for the "
-                + "original failure",
-            failToBootstrapException);
+        throw new IOException(failToBootstrapException);
       }
       return bootstrapInfo;
     }
