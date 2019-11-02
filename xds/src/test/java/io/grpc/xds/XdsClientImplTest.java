@@ -722,6 +722,66 @@ public class XdsClientImplTest {
   }
 
   @Test
+  public void cancelledWatcherDoesNotReceiveUpdates() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sent an LDS request for the host name (with port) to management server. (Omitted)
+
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "do not care",  // don't care route config name when in-lined
+            ImmutableList.of(
+                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    "cluster.googleapis.com")));
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+
+    // Cancel the ConfigWatcher.
+    xdsClient.cancelConfigDataWatch();
+
+    // Management server sends another LDS response with new in-lined virtual host data.
+    routeConfig =
+        buildRouteConfiguration(
+            "do not care",  // don't care route config name when in-lined
+            ImmutableList.of(
+                buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                    "another-cluster.googleapis.com")));
+
+    listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
+    );
+    response =
+        buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an NACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
+
+    // The cancelled watcher does not received this update.
+    verifyNoMoreInteractions(configWatcher);
+  }
+
+  @Test
   public void matchHostName_exactlyMatch() {
     String pattern = "foo.googleapis.com";
     assertThat(XdsClientImpl.matchHostName("bar.googleapis.com", pattern)).isFalse();
