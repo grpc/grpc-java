@@ -64,9 +64,6 @@ final class XdsClientImpl extends XdsClient {
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
   private final Stopwatch stopwatch;
-  // The host name part of the "xds:" URI for the server name that the gRPC client targets for.
-  // Must NOT contain port.
-  private final String hostName;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
@@ -75,10 +72,6 @@ final class XdsClientImpl extends XdsClient {
   // Should pick the first supported one.
   @SuppressWarnings("unused")
   private final List<ChannelCreds> channelCredsList;
-  private final ConfigWatcher configWatcher;
-
-  // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
-  private final String targetName;
 
   @Nullable
   private ManagedChannel channel;
@@ -89,6 +82,16 @@ final class XdsClientImpl extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
+  // Following fields are set only when there is a ConfigWatcher registered.
+  @Nullable
+  private ConfigWatcher configWatcher;
+  // The host name portion of "xds:" URI that the gRPC client targets for.
+  @Nullable
+  private String hostName;
+  // The "xds:" URI (including port suffix if present) that the gRPC client targets for.
+  @Nullable
+  private String ldsResourceName;
+
   XdsClientImpl(
       String serverUri,
       Node node,
@@ -96,63 +99,84 @@ final class XdsClientImpl extends XdsClient {
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch,
-      String hostName,
-      int port,
-      ConfigWatcher configWatcher) {
+      Stopwatch stopwatch) {
     this.serverUri = checkNotNull(serverUri, "serverUri");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
-    this.hostName = checkNotNull(hostName, "hostName");
     this.node = checkNotNull(node, "node");
     this.channelCredsList = checkNotNull(channelCredsList, "channelCredsList");
-    this.configWatcher = checkNotNull(configWatcher, "configWatcher");
-    if (port == -1) {
-      targetName = hostName;
-    } else {
-      targetName = hostName + ":" + port;
-    }
   }
 
   @Override
   void start() {
     // TODO(chengyuanzhang): build channel with the first supported channel creds config.
     ManagedChannel channel = ManagedChannelBuilder.forTarget(serverUri).build();
-    startDiscoveryRpc(channel);
+    start(channel);
+  }
+
+  @VisibleForTesting
+  void start(ManagedChannel channel) {
+    checkState(this.channel == null, "previous channel has not been cleared yet");
+    this.channel = checkNotNull(channel, "channel");
   }
 
   @Override
   void shutdown() {
     channel.shutdown();
     channel = null;
-    shutdownDiscoveryRpc();
+    shutdownRpcStream();
+  }
+
+  @Override
+  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
+    checkState(configWatcher == null, "Another ConfigWatcher is already registered");
+    checkState(channel != null, "XdsClient has not started.");
+    configWatcher = checkNotNull(watcher, "watcher");
+    this.hostName = checkNotNull(hostName, "hostName");
+    if (port == -1) {
+      ldsResourceName = hostName;
+    } else {
+      ldsResourceName = hostName + ":" + port;
+    }
+    if (rpcRetryTimer != null) {
+      // Currently in retry backoff.
+      return;
+    }
+    if (adsStream == null) {
+      startRpcStream();
+    }
+    adsStream.sendLdsRequest(ldsResourceName);
+  }
+
+  @Override
+  void cancelConfigDataWatch() {
+    if (configWatcher == null) {
+      logger.log(Level.WARNING, "No ConfigWatcher exists");
+    }
+    configWatcher = null;
+    // Do NOT clear ldsResourceName as we may still need to NACK LDS responses.
   }
 
   /**
-   * Creates a new RPC stream on the given channel for xDS protocol communication
-   * and starts with a LDS request.
+   * Establishes the RPC connection by creating a new RPC stream on the given channel for
+   * xDS protocol communication.
    */
-  @VisibleForTesting
-  void startDiscoveryRpc(ManagedChannel channel) {
-    checkState(this.channel == null, "previous channel has not been cleared yet");
-    this.channel = checkNotNull(channel, "channel");
-    startDiscoveryRpc();
-  }
-
-  private void startDiscoveryRpc() {
-    checkState(adsStream == null, "previous adsStream has not been cleared yet");
+  private void startRpcStream() {
+    checkState(adsStream == null, "Previous adsStream has not been cleared yet");
     AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub =
         AggregatedDiscoveryServiceGrpc.newStub(channel);
     adsStream = new AdsStream(stub);
     adsStream.start();
     stopwatch.reset().start();
-    adsStream.sendLdsRequest(targetName);
   }
 
+  /**
+   * Terminates the RPC connection.
+   */
   @VisibleForTesting
-  void shutdownDiscoveryRpc() {
+  void shutdownRpcStream() {
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
@@ -170,16 +194,22 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
+    checkState(ldsResourceName != null,
+        "No LDS request was ever sent. Management server is broken");
     adsStream.ldsRespNonce = ldsResponse.getNonce();
-    List<Any> respResources = ldsResponse.getResourcesList();
     // Prepare an ACK/NACK request.
-    adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, targetName, ldsResponse.getVersionInfo(),
+    adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getVersionInfo(),
         ldsResponse.getNonce());
+    if (configWatcher == null) {
+      adsStream.nackPendingAckRequest();
+      return;
+    }
+    List<Any> respResources = ldsResponse.getResourcesList();
     HttpConnectionManager connManager = null;
     try {
       for (com.google.protobuf.Any res : respResources) {
         Listener listener = res.unpack(Listener.class);
-        if (listener.getName().equals(targetName)) {
+        if (listener.getName().equals(ldsResourceName)) {
           HttpConnectionManager httpConnManager =
               listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
           if (httpConnManager.hasRouteConfig() || httpConnManager.hasRds()) {
@@ -231,11 +261,17 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
+    checkState(ldsResourceName != null,
+        "No LDS request was ever sent. Management server is broken");
     adsStream.rdsRespNonce = rdsResponse.getNonce();
-    List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
     // Prepare an ACK/NACK request.
     adsStream.prepareAckRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
         rdsResponse.getVersionInfo(), rdsResponse.getNonce());
+    if (configWatcher == null) {
+      adsStream.nackPendingAckRequest();
+      return;
+    }
+    List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
     RouteConfiguration routeConfig = null;
     try {
       for (com.google.protobuf.Any res : respResources) {
@@ -302,7 +338,8 @@ final class XdsClientImpl extends XdsClient {
     if (clusterName == null) {
       adsStream.nackPendingAckRequest();
       configWatcher.onError(
-          Status.NOT_FOUND.withDescription("Virtual host for target " + targetName + " not found"));
+          Status.NOT_FOUND
+              .withDescription("Virtual host for target " + ldsResourceName + " not found"));
     } else {
       adsStream.sendPendingAckRequest();
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
@@ -314,7 +351,11 @@ final class XdsClientImpl extends XdsClient {
   final class RpcRetryTask implements Runnable {
     @Override
     public void run() {
-      startDiscoveryRpc();
+      startRpcStream();
+      if (configWatcher != null) {
+        adsStream.sendLdsRequest(ldsResourceName);
+      }
+      // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
     }
   }
 
@@ -419,7 +460,11 @@ final class XdsClientImpl extends XdsClient {
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
       if (delayNanos == 0) {
-        startDiscoveryRpc();
+        startRpcStream();
+        if (configWatcher != null) {
+          adsStream.sendLdsRequest(ldsResourceName);
+        }
+        // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
       } else {
         rpcRetryTimer =
             syncContext.schedule(

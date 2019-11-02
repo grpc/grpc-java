@@ -156,15 +156,16 @@ public class XdsClientImplTest {
     xdsClient =
         new XdsClientImpl(serverName, NODE, ImmutableList.<ChannelCreds>of(), syncContext,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get(), HOSTNAME, PORT, configWatcher);
-    xdsClient.startDiscoveryRpc(channel);
-    assertThat(responseObservers).hasSize(1);
-    assertThat(requestObservers).hasSize(1);
+            fakeClock.getStopwatchSupplier().get());
+    xdsClient.start(channel);
+    // Starting the XdsClient only establishes the connection, no RPC request is sent.
+    assertThat(responseObservers).isEmpty();
+    assertThat(requestObservers).isEmpty();
   }
 
   @After
   public void tearDown() {
-    xdsClient.shutdownDiscoveryRpc();
+    xdsClient.shutdownRpcStream();
     channel.shutdown();
   }
 
@@ -183,6 +184,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void nackLdsResponseWithoutMatchingResource() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -225,6 +227,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -276,6 +279,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInLdsResponse() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -329,6 +333,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void nackRdsResponseWithoutMatchingResource() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -401,6 +406,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void resolveVirtualHostInRdsResponse() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -458,6 +464,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -519,6 +526,7 @@ public class XdsClientImplTest {
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
@@ -578,6 +586,7 @@ public class XdsClientImplTest {
   // TODO(chengyuanzhang): integrated retry test for LDS/RDS/CDS/EDS.
   @Test
   public void streamClosedAndRetry() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
     InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
