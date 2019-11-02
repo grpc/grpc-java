@@ -65,13 +65,14 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    *
-   * @param key the key that identifies the shared resource
    * @param value the instance to be released
    * @return a null which the caller can use to clear the reference to that instance.
    */
-  public SslContextProvider release(final K key, final SslContextProvider value) {
-    checkNotNull(key, "key");
+  public SslContextProvider release(final SslContextProvider value) {
     checkNotNull(value, "value");
+    @SuppressWarnings("unchecked")
+    K key = (K) value.getKey();
+    checkNotNull(key, "key");
     return releaseInternal(key, value);
   }
 
@@ -90,8 +91,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
       final K key, final SslContextProvider instance) {
     final Instance cached = instances.get(key);
     checkArgument(cached != null, "No cached instance found for %s", key);
-    checkArgument(
-        instance == cached.sslContextProvider, "Releasing the wrong instance");
+    checkArgument(instance == cached.sslContextProvider, "Releasing the wrong instance");
     if (cached.release()) {
       try {
         cached.sslContextProvider.close();

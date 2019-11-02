@@ -49,26 +49,24 @@ public class ClientSslContextProviderFactoryTest {
   static CommonTlsContext buildCommonTlsContextFromSdsConfigForTlsCertificate(
       String name, String targetUri, String trustCa) {
 
+    ApiConfigSource apiConfigSource =
+        ApiConfigSource.newBuilder()
+            .setApiType(ApiType.GRPC)
+            .addGrpcServices(
+                GrpcService.newBuilder()
+                    .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri).build())
+                    .build())
+            .build();
+
+    SdsSecretConfig sdsSecretConfig =
+        SdsSecretConfig.newBuilder()
+            .setName(name)
+            .setSdsConfig(ConfigSource.newBuilder().setApiConfigSource(apiConfigSource).build())
+            .build();
+
     CommonTlsContext.Builder builder =
         CommonTlsContext.newBuilder()
-            .addTlsCertificateSdsSecretConfigs(
-                SdsSecretConfig.newBuilder()
-                    .setName(name)
-                    .setSdsConfig(
-                        ConfigSource.newBuilder()
-                            .setApiConfigSource(
-                                ApiConfigSource.newBuilder()
-                                    .setApiType(ApiType.GRPC)
-                                    .addGrpcServices(
-                                        GrpcService.newBuilder()
-                                            .setGoogleGrpc(
-                                                GoogleGrpc.newBuilder()
-                                                    .setTargetUri(targetUri)
-                                                    .build())
-                                            .build())
-                                    .build())
-                            .build())
-                    .build());
+            .addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
 
     if (!Strings.isNullOrEmpty(trustCa)) {
       builder.setValidationContext(
@@ -82,25 +80,25 @@ public class ClientSslContextProviderFactoryTest {
   static CommonTlsContext buildCommonTlsContextFromSdsConfigForValidationContext(
       String name, String targetUri, String privateKey, String certChain) {
 
+    ApiConfigSource apiConfigSource =
+        ApiConfigSource.newBuilder()
+            .setApiType(ApiType.GRPC)
+            .addGrpcServices(
+                GrpcService.newBuilder()
+                    .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri).build())
+                    .build())
+            .build();
+
+    SdsSecretConfig sdsSecretConfig =
+        SdsSecretConfig.newBuilder()
+            .setName(name)
+            .setSdsConfig(ConfigSource.newBuilder().setApiConfigSource(apiConfigSource).build())
+            .build();
+
     CommonTlsContext.Builder builder =
         CommonTlsContext.newBuilder()
             .setValidationContextSdsSecretConfig(
-                SdsSecretConfig.newBuilder()
-                    .setName(name)
-                    .setSdsConfig(
-                        ConfigSource.newBuilder()
-                            .setApiConfigSource(
-                                ApiConfigSource.newBuilder()
-                                    .setApiType(ApiType.GRPC)
-                                    .addGrpcServices(
-                                        GrpcService.newBuilder()
-                                            .setGoogleGrpc(
-                                                GoogleGrpc.newBuilder()
-                                                    .setTargetUri(targetUri)
-                                                    .build())
-                                            .build())
-                                    .build())
-                            .build()));
+                    sdsSecretConfig);
 
     if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
       builder.addTlsCertificates(
