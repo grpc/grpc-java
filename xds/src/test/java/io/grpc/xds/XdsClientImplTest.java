@@ -52,7 +52,6 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import java.io.IOException;
@@ -154,11 +153,10 @@ public class XdsClientImplTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     xdsClient =
-        new XdsClientImpl(serverName, NODE, ImmutableList.<ChannelCreds>of(), syncContext,
-            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get());
-    xdsClient.start(channel);
-    // Starting the XdsClient only establishes the connection, no RPC request is sent.
+        new XdsClientImpl(channel, NODE, syncContext, fakeClock.getScheduledExecutorService(),
+            backoffPolicyProvider, fakeClock.getStopwatchSupplier().get());
+    // Only the connection to management server is established, no RPC request is sent until at
+    // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
   }

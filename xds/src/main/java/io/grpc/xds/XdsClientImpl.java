@@ -58,8 +58,7 @@ final class XdsClientImpl extends XdsClient {
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
 
-  // URI of the management server to be connected to.
-  private final String serverUri;
+  private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -68,13 +67,7 @@ final class XdsClientImpl extends XdsClient {
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
   private final Node node;
-  // List of channel credential configurations for the channel to management server.
-  // Should pick the first supported one.
-  @SuppressWarnings("unused")
-  private final List<ChannelCreds> channelCredsList;
 
-  @Nullable
-  private ManagedChannel channel;
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -93,46 +86,51 @@ final class XdsClientImpl extends XdsClient {
   private String ldsResourceName;
 
   XdsClientImpl(
+      // URI of the management server to be connected to.
       String serverUri,
       Node node,
+      // List of channel credential configurations for the channel to management server.
+      // Should pick the first supported one.
       List<ChannelCreds> channelCredsList,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
-    this.serverUri = checkNotNull(serverUri, "serverUri");
+    this(
+        buildChannel(checkNotNull(serverUri, "serverUri"),
+            checkNotNull(channelCredsList, "channelCredsList")),
+        node,
+        syncContext,
+        timeService,
+        backoffPolicyProvider,
+        stopwatch);
+  }
+
+  @VisibleForTesting
+  XdsClientImpl(
+      ManagedChannel channel,
+      Node node,
+      SynchronizationContext syncContext,
+      ScheduledExecutorService timeService,
+      BackoffPolicy.Provider backoffPolicyProvider,
+      Stopwatch stopwatch) {
+    this.channel = checkNotNull(channel, "channel");
+    this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatch = checkNotNull(stopwatch, "stopwatch");
-    this.node = checkNotNull(node, "node");
-    this.channelCredsList = checkNotNull(channelCredsList, "channelCredsList");
-  }
-
-  @Override
-  void start() {
-    // TODO(chengyuanzhang): build channel with the first supported channel creds config.
-    ManagedChannel channel = ManagedChannelBuilder.forTarget(serverUri).build();
-    start(channel);
-  }
-
-  @VisibleForTesting
-  void start(ManagedChannel channel) {
-    checkState(this.channel == null, "previous channel has not been cleared yet");
-    this.channel = checkNotNull(channel, "channel");
   }
 
   @Override
   void shutdown() {
     channel.shutdown();
-    channel = null;
     shutdownRpcStream();
   }
 
   @Override
   void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
     checkState(configWatcher == null, "Another ConfigWatcher is already registered");
-    checkState(channel != null, "XdsClient has not started.");
     configWatcher = checkNotNull(watcher, "watcher");
     this.hostName = checkNotNull(hostName, "hostName");
     if (port == -1) {
@@ -157,6 +155,11 @@ final class XdsClientImpl extends XdsClient {
     }
     configWatcher = null;
     // Do NOT clear ldsResourceName as we may still need to NACK LDS responses.
+  }
+
+  private static ManagedChannel buildChannel(String serverUri,List<ChannelCreds> channelCredsList) {
+    // TODO(chengyuanzhang): build channel with the first supported channel creds config.
+    return ManagedChannelBuilder.forTarget(serverUri).build();
   }
 
   /**
