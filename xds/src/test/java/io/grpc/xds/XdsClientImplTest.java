@@ -719,6 +719,9 @@ public class XdsClientImplTest {
     verifyNoMoreInteractions(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
   }
 
+  // TODO(chengyuanzhang): test for race between stream closed and watcher changes. Should only
+  //  for ClusterWatchers and EndpointWatchers.
+
   @Test
   public void cancelledWatcherDoesNotReceiveUpdates() {
     xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
