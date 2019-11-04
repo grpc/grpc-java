@@ -43,7 +43,7 @@ abstract class XdsClient {
    * be used to generate a service config.
    */
   static final class ConfigUpdate {
-    private String clusterName;
+    private final String clusterName;
 
     private ConfigUpdate(String clusterName) {
       this.clusterName = clusterName;
@@ -78,11 +78,11 @@ abstract class XdsClient {
    * type, load balancing policy, connection timeout and etc.
    */
   static final class ClusterUpdate {
-    private String clusterName;
-    private String edsServiceName;
-    private String lbPolicy;
-    private boolean enableLrs;
-    private String lrsServerName;
+    private final String clusterName;
+    private final String edsServiceName;
+    private final String lbPolicy;
+    private final boolean enableLrs;
+    private final String lrsServerName;
 
     private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
         boolean enableLrs, @Nullable String lrsServerName) {
@@ -185,9 +185,9 @@ abstract class XdsClient {
    * policy and etc.
    */
   static final class EndpointUpdate {
-    private String clusterName;
-    private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
-    private List<DropOverload> dropPolicies;
+    private final String clusterName;
+    private final Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
+    private final List<DropOverload> dropPolicies;
 
     private EndpointUpdate(
         String clusterName, Map<Locality,
