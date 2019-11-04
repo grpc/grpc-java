@@ -185,7 +185,7 @@ final class DnsNameResolver extends NameResolver {
     this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
     this.syncContext =
         Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
-    this.executor = args.getBlockingExecutor();
+    this.executor = args.getOffloadExecutor();
     this.usingExecutorResource = executor == null;
     this.enableSrv = enableSrv;
   }
