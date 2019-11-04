@@ -114,8 +114,7 @@ final class ProtocolNegotiators {
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler handler) {
         ChannelHandler gnh = new GrpcNegotiationHandler(handler);
         ChannelHandler sth = new ServerTlsHandler(gnh, sslContext);
-        ChannelHandler wauh = new WaitUntilActiveHandler(sth);
-        return wauh;
+        return new WaitUntilActiveHandler(sth);
       }
 
       @Override
@@ -195,9 +194,8 @@ final class ProtocolNegotiators {
       @Override
       public ChannelHandler newHandler(GrpcHttp2ConnectionHandler http2Handler) {
         ChannelHandler protocolNegotiationHandler = negotiator.newHandler(http2Handler);
-        ChannelHandler ppnh = new ProxyProtocolNegotiationHandler(
+        return new ProxyProtocolNegotiationHandler(
             proxyAddress, proxyUsername, proxyPassword, protocolNegotiationHandler);
-        return ppnh;
       }
 
       @Override
@@ -276,8 +274,7 @@ final class ProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler gnh = new GrpcNegotiationHandler(grpcHandler);
       ChannelHandler cth = new ClientTlsHandler(gnh, sslContext, grpcHandler.getAuthority());
-      WaitUntilActiveHandler wuah = new WaitUntilActiveHandler(cth);
-      return wuah;
+      return new WaitUntilActiveHandler(cth);
     }
 
     @Override
@@ -405,8 +402,7 @@ final class ProtocolNegotiators {
     public ChannelHandler newHandler(GrpcHttp2ConnectionHandler grpcHandler) {
       ChannelHandler upgradeHandler =
           new Http2UpgradeAndGrpcHandler(grpcHandler.getAuthority(), grpcHandler);
-      ChannelHandler wuah = new WaitUntilActiveHandler(upgradeHandler);
-      return wuah;
+      return new WaitUntilActiveHandler(upgradeHandler);
     }
 
     @Override
