@@ -29,9 +29,9 @@ import java.util.concurrent.Executor;
  * secret(s) that are dynamic.
  */
 @Internal
-public abstract class SslContextProvider {
+public abstract class SslContextProvider<K> {
 
-  private final Object key;
+  private final K key;
 
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
@@ -41,12 +41,12 @@ public abstract class SslContextProvider {
     void onException(Throwable throwable);
   }
 
-  protected SslContextProvider(Object key) {
+  protected SslContextProvider(K key) {
     checkNotNull(key, "key");
     this.key = key;
   }
 
-  Object getKey() {
+  K getKey() {
     return key;
   }
 

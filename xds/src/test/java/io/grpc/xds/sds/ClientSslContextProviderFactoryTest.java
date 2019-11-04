@@ -65,8 +65,7 @@ public class ClientSslContextProviderFactoryTest {
             .build();
 
     CommonTlsContext.Builder builder =
-        CommonTlsContext.newBuilder()
-            .addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
+        CommonTlsContext.newBuilder().addTlsCertificateSdsSecretConfigs(sdsSecretConfig);
 
     if (!Strings.isNullOrEmpty(trustCa)) {
       builder.setValidationContext(
@@ -96,9 +95,7 @@ public class ClientSslContextProviderFactoryTest {
             .build();
 
     CommonTlsContext.Builder builder =
-        CommonTlsContext.newBuilder()
-            .setValidationContextSdsSecretConfig(
-                    sdsSecretConfig);
+        CommonTlsContext.newBuilder().setValidationContextSdsSecretConfig(sdsSecretConfig);
 
     if (!Strings.isNullOrEmpty(privateKey) && !Strings.isNullOrEmpty(certChain)) {
       builder.addTlsCertificates(
@@ -116,7 +113,7 @@ public class ClientSslContextProviderFactoryTest {
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContextFromFilenames(
             CLIENT_KEY_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
 
-    SslContextProvider sslContextProvider =
+    SslContextProvider<UpstreamTlsContext> sslContextProvider =
         clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
     assertThat(sslContextProvider).isNotNull();
   }
@@ -130,7 +127,7 @@ public class ClientSslContextProviderFactoryTest {
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 
     try {
-      SslContextProvider unused =
+      SslContextProvider<UpstreamTlsContext> unused =
           clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {
@@ -147,7 +144,7 @@ public class ClientSslContextProviderFactoryTest {
         SecretVolumeSslContextProviderTest.buildUpstreamTlsContext(commonTlsContext);
 
     try {
-      SslContextProvider unused =
+      SslContextProvider<UpstreamTlsContext> unused =
           clientSslContextProviderFactory.createSslContextProvider(upstreamTlsContext);
       Assert.fail("no exception thrown");
     } catch (UnsupportedOperationException expected) {

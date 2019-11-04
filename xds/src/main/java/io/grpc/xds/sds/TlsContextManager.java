@@ -61,14 +61,14 @@ public final class TlsContextManager {
   }
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
-  public SslContextProvider findOrCreateServerSslContextProvider(
+  public SslContextProvider<DownstreamTlsContext> findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     return mapForServers.get(downstreamTlsContext);
   }
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
-  public SslContextProvider findOrCreateClientSslContextProvider(
+  public SslContextProvider<UpstreamTlsContext> findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
     checkNotNull(upstreamTlsContext, "upstreamTlsContext");
     return mapForClients.get(upstreamTlsContext);
@@ -83,7 +83,8 @@ public final class TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
-  public SslContextProvider releaseClientSslContextProvider(SslContextProvider sslContextProvider) {
+  public SslContextProvider<UpstreamTlsContext> releaseClientSslContextProvider(
+      SslContextProvider<UpstreamTlsContext> sslContextProvider) {
     checkNotNull(sslContextProvider, "sslContextProvider");
     return mapForClients.release(sslContextProvider);
   }
@@ -97,7 +98,8 @@ public final class TlsContextManager {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    */
-  public SslContextProvider releaseServerSslContextProvider(SslContextProvider sslContextProvider) {
+  public SslContextProvider<DownstreamTlsContext> releaseServerSslContextProvider(
+      SslContextProvider<DownstreamTlsContext> sslContextProvider) {
     checkNotNull(sslContextProvider, "sslContextProvider");
     return mapForServers.release(sslContextProvider);
   }

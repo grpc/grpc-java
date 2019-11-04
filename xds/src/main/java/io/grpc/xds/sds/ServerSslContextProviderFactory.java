@@ -28,7 +28,8 @@ final class ServerSslContextProviderFactory
 
   /** Creates an SslContextProvider from the given DownstreamTlsContext. */
   @Override
-  public SslContextProvider createSslContextProvider(DownstreamTlsContext downstreamTlsContext) {
+  public SslContextProvider<DownstreamTlsContext> createSslContextProvider(
+      DownstreamTlsContext downstreamTlsContext) {
     checkNotNull(downstreamTlsContext, "downstreamTlsContext");
     checkArgument(
         downstreamTlsContext.hasCommonTlsContext(),
