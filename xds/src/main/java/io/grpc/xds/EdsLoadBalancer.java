@@ -31,25 +31,27 @@ import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import javax.annotation.CheckForNull;
+import javax.annotation.Nullable;
 
 /**
  * Load balancer for experimental_eds LB policy.
  */
 final class EdsLoadBalancer extends LoadBalancer {
 
-  private final String clusterName;
   // TODO(zdapeng): merge LocalityStore implementation inside this class after migration to
   // XdsClient is done.
   private final LocalityStore localityStore;
   private final XdsClient xdsClient;
   private final ChannelLogger channelLogger;
 
+  @Nullable
+  private String edsServiceName;
+
   @CheckForNull
   private EndpointWatcher endpointWatcher;
 
-  EdsLoadBalancer(String clusterName, Helper helper, XdsClient xdsClient) {
+  EdsLoadBalancer(Helper helper, XdsClient xdsClient) {
     this(
-        clusterName,
         new LocalityStoreImpl(
             checkNotNull(helper, "helper"), LoadBalancerRegistry.getDefaultRegistry()),
         xdsClient,
@@ -58,9 +60,7 @@ final class EdsLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   EdsLoadBalancer(
-      String clusterName, LocalityStore localityStore, XdsClient xdsClient,
-      ChannelLogger channelLogger) {
-    this.clusterName = checkNotNull(clusterName, "clusterName");
+      LocalityStore localityStore, XdsClient xdsClient, ChannelLogger channelLogger) {
     this.localityStore = checkNotNull(localityStore, "localityStore");
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.channelLogger = checkNotNull(channelLogger, "channelLogger");
@@ -77,19 +77,20 @@ final class EdsLoadBalancer extends LoadBalancer {
         lbConfig);
 
     EdsConfig edsConfig = (EdsConfig) lbConfig;
+    String edsServiceName = edsConfig.name;
 
-    checkArgument(
-        clusterName.equals(edsConfig.name),
-        "The cluster name '%s' from EDS LB config does not match the name '%s' provided by CDS",
-        edsConfig.name,
-        clusterName);
-
-    // TODO(zdapeng): if localityPickingPolicy is changed for the same cluster, swap to new policy.
-    // Right now we have only one default localityPickingPolicy (hardcoded in LocalityStore),
+    // TODO(zdapeng): If localityPickingPolicy is changed, swap to new policy.
+    // Right now we have only one default localityPickingPolicy (hardcoded RoundRobin),
     // so ignoring localityPickingPolicy for now.
-    if (endpointWatcher == null) {
+
+    if (!edsServiceName.equals(this.edsServiceName)) {
+      if (endpointWatcher != null) {
+        // TODO(zdapeng): Maybe gracefully swap until the localities for the new watcher is READY?
+        xdsClient.cancelEndpointDataWatch(endpointWatcher);
+      }
       endpointWatcher = new EndpointWatcherImpl(localityStore);
-      xdsClient.watchEndpointData(clusterName, endpointWatcher);
+      xdsClient.watchEndpointData(edsServiceName, endpointWatcher);
+      this.edsServiceName = edsServiceName;
     }
   }
 

@@ -18,8 +18,10 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
@@ -46,7 +48,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class EdsLoadBalancerTest {
-  private static final String FAKE_CLUSTER_NAME = "cluster1";
 
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
@@ -64,8 +65,7 @@ public class EdsLoadBalancerTest {
   public void setUp() {
     MockitoAnnotations.initMocks(this);
 
-    edsLoadBalancer = new EdsLoadBalancer(
-        FAKE_CLUSTER_NAME, localityStore, xdsClient, channelLogger);
+    edsLoadBalancer = new EdsLoadBalancer(localityStore, xdsClient, channelLogger);
   }
 
   @Test
@@ -99,30 +99,16 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void invalidClusterNameInEdsConfig() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("wrongCluster", new Object()))
-        .build();
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage(
-        "The cluster name 'wrongCluster' from EDS LB config does not match the name '"
-            + FAKE_CLUSTER_NAME + "' provided by CDS");
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-  }
-
-  @Test
   public void validEdsConfig_watcherUpdate_shutdown() {
     // handle valid EdsConfig
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig(FAKE_CLUSTER_NAME, new Object()))
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
         .build();
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
-    verify(xdsClient).watchEndpointData(eq(FAKE_CLUSTER_NAME), endpointWatcherCaptor.capture());
+    verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
 
     // watcher receives EndpointUpdate
     EnvoyProtoData.Locality xdsLocality =
@@ -145,6 +131,40 @@ public class EdsLoadBalancerTest {
     edsLoadBalancer.shutdown();
     verify(xdsClient).cancelEndpointDataWatch(endpointWatcherCaptor.getValue());
     verify(localityStore).reset();
+  }
+
+  @Test
+  public void edsServiceNameChangeInEdsConfig_() {
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
+        .build();
+
+    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher1 = endpointWatcherCaptor.getValue();
+
+    // same edsServiceName
+    ResolvedAddresses resolvedAddresses2 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
+        .build();
+    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
+    // no new watcher registered
+    verify(xdsClient, times(1)).watchEndpointData(anyString(), any(EndpointWatcher.class));
+
+    // new edsServiceName
+    ResolvedAddresses resolvedAddresses3 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService3", new Object()))
+        .build();
+    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses3);
+    verify(xdsClient).cancelEndpointDataWatch(endpointWatcher1);
+    verify(xdsClient).watchEndpointData(eq("edsService3"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher2 = endpointWatcherCaptor.getValue();
+    assertThat(endpointWatcher2).isNotEqualTo(endpointWatcher1);
   }
 
   @Test
