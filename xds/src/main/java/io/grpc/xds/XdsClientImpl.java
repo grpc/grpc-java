@@ -38,6 +38,7 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
+import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
@@ -157,9 +158,23 @@ final class XdsClientImpl extends XdsClient {
     // Do NOT clear ldsResourceName as we may still need to NACK LDS responses.
   }
 
+  /**
+   * Builds a channel to the given server URI with the first supported channel creds config.
+   */
   private static ManagedChannel buildChannel(String serverUri,List<ChannelCreds> channelCredsList) {
-    // TODO(chengyuanzhang): build channel with the first supported channel creds config.
-    return ManagedChannelBuilder.forTarget(serverUri).build();
+    ManagedChannel ch = null;
+    // Use the first supported channel credentials configuration.
+    // Currently, only "google_default" is supported.
+    for (ChannelCreds creds : channelCredsList) {
+      if (creds.getType().equals("google_default")) {
+        ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
+        break;
+      }
+    }
+    if (ch == null) {
+      ch = ManagedChannelBuilder.forTarget(serverUri).build();
+    }
+    return ch;
   }
 
   /**
