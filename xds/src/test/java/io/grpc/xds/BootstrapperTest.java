@@ -53,17 +53,19 @@ public class BootstrapperTest {
         + "\"xds_server\": {"
         + "\"server_uri\": \"trafficdirector.googleapis.com:443\","
         + "\"channel_creds\": "
-        + "[ {\"type\": \"TLS\"}, {\"type\": \"LOAS\"} ]"
+        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"} ]"
         + "} "
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.getChannelCredentials()).hasSize(2);
-    assertThat(info.getChannelCredentials().get(0).getType()).isEqualTo("TLS");
+    assertThat(info.getChannelCredentials()).hasSize(3);
+    assertThat(info.getChannelCredentials().get(0).getType()).isEqualTo("tls");
     assertThat(info.getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(info.getChannelCredentials().get(1).getType()).isEqualTo("LOAS");
+    assertThat(info.getChannelCredentials().get(1).getType()).isEqualTo("loas");
     assertThat(info.getChannelCredentials().get(1).getConfig()).isNull();
+    assertThat(info.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
+    assertThat(info.getChannelCredentials().get(2).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
         Node.newBuilder()
             .setId("ENVOY_NODE_ID")
@@ -109,7 +111,7 @@ public class BootstrapperTest {
         + "\"xds_server\": {"
         + "\"server_uri\": \"trafficdirector.googleapis.com:443\","
         + "\"channel_creds\": "
-        + "[ {\"type\": \"TLS\"}, {\"type\": \"LOAS\"} ]"
+        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"} ]"
         + "} "
         + "}";
 
@@ -155,7 +157,7 @@ public class BootstrapperTest {
         + "},"
         + "\"xds_server\": {"
         + "\"channel_creds\": "
-        + "[ {\"type\": \"TLS\"}, {\"type\": \"LOAS\"} ]"
+        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"} ]"
         + "} "
         + "}";
 
