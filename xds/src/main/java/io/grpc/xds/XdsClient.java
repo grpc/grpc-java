@@ -284,15 +284,32 @@ abstract class XdsClient {
   }
 
   /**
-   * Starts resource discovery with xDS protocol. This should be the first method to be called in
-   * this class. It should only be called once.
-   */
-  abstract void start();
-
-  /**
-   * Stops resource discovery. No method in this class should be called after this point.
+   * Shutdown this {@link XdsClient} and release resources.
    */
   abstract void shutdown();
+
+  /**
+   * Registers a watcher to receive {@link ConfigUpdate} for service with the given hostname and
+   * port.
+   *
+   * <p>Unlike watchers for cluster data and endpoint data, at any point of time at most one config
+   * watcher is allowed.
+   *
+   * @param hostName the host name part of the "xds:" URI for the server name that the gRPC client
+   *     targets for. Must NOT contain port.
+   * @param port the port part of the "xds:" URI for the server name that the gRPC client targets
+   *     for. -1 if not specified.
+   * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
+   */
+  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
+  }
+
+  /**
+   * Unregisters the existing config watcher. The previously registered config watcher will no
+   * longer receive {@link ConfigUpdate}. Noop if no config watcher has been registered.
+   */
+  void cancelConfigDataWatch() {
+  }
 
   /**
    * Registers a data watcher for the given cluster.
@@ -301,9 +318,10 @@ abstract class XdsClient {
   }
 
   /**
-   * Unregisters the given cluster watcher.
+   * Unregisters the given cluster watcher, which was registered to receive updates for the
+   * given cluster.
    */
-  void cancelClusterDataWatch(ClusterWatcher watcher) {
+  void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
   }
 
   /**
@@ -313,8 +331,9 @@ abstract class XdsClient {
   }
 
   /**
-   * Unregisters the given endpoints watcher.
+   * Unregisters the given endpoints watcher, which was registered to receive updates for
+   * endpoints information in the given cluster.
    */
-  void cancelEndpointDataWatch(EndpointWatcher watcher) {
+  void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
   }
 }
