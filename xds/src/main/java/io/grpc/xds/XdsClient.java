@@ -16,7 +16,17 @@
 
 package io.grpc.xds;
 
+import com.google.common.base.Preconditions;
 import io.grpc.Status;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * An {@link XdsClient} instance encapsulates all of the logic for communicating with the xDS
@@ -35,9 +45,12 @@ abstract class XdsClient {
    * traffic mirroring, retry or hedging, default timeouts and load balancing policy that will
    * be used to generate a service config.
    */
-  // TODO(chengyuanzhang): content TBD, most information comes from VirtualHost proto.
   static final class ConfigUpdate {
     private String clusterName;
+
+    private ConfigUpdate(String clusterName) {
+      this.clusterName = clusterName;
+    }
 
     String getClusterName() {
       return clusterName;
@@ -48,19 +61,16 @@ abstract class XdsClient {
     }
 
     static final class Builder {
-      private ConfigUpdate base;
-
-      private Builder() {
-        base = new ConfigUpdate();
-      }
+      private String clusterName;
 
       Builder setClusterName(String clusterName) {
-        base.clusterName = clusterName;
+        this.clusterName = clusterName;
         return this;
       }
 
       ConfigUpdate build() {
-        return base;
+        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        return new ConfigUpdate(clusterName);
       }
     }
   }
@@ -70,9 +80,105 @@ abstract class XdsClient {
    * The results include configurations for a single upstream cluster, such as endpoint discovery
    * type, load balancing policy, connection timeout and etc.
    */
-  // TODO(zdapeng): content TBD.
   static final class ClusterUpdate {
+    private String clusterName;
+    private String edsServiceName;
+    private String lbPolicy;
+    private boolean enableLrs;
+    private String lrsServerName;
 
+    private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
+        boolean enableLrs, @Nullable String lrsServerName) {
+      this.clusterName = clusterName;
+      this.edsServiceName = edsServiceName;
+      this.lbPolicy = lbPolicy;
+      this.enableLrs = enableLrs;
+      this.lrsServerName = lrsServerName;
+    }
+
+    String getClusterName() {
+      return clusterName;
+    }
+
+    /**
+     * Returns the resource name for EDS requests.
+     */
+    String getEdsServiceName() {
+      return edsServiceName;
+    }
+
+    /**
+     * Returns the policy of balancing loads to endpoints. Always returns "round_robin".
+     */
+    String getLbPolicy() {
+      return lbPolicy;
+    }
+
+    /**
+     * Returns true if LRS is enabled.
+     */
+    boolean isEnableLrs() {
+      return enableLrs;
+    }
+
+    /**
+     * Returns the server name to send client load reports to if LRS is enabled. {@code null} if
+     * {@link #isEnableLrs()} returns {@code false}.
+     */
+    @Nullable
+    String getLrsServerName() {
+      return lrsServerName;
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    static final class Builder {
+      private String clusterName;
+      private String edsServiceName;
+      private String lbPolicy;
+      private boolean enableLrs;
+      @Nullable
+      private String lrsServerName;
+
+      Builder setClusterName(String clusterName) {
+        this.clusterName = clusterName;
+        return this;
+      }
+
+      Builder setEdsServiceName(String edsServiceName) {
+        this.edsServiceName = edsServiceName;
+        return this;
+      }
+
+      Builder setLbPolicy(String lbPolicy) {
+        this.lbPolicy = lbPolicy;
+        return this;
+      }
+
+      Builder setEnableLrs(boolean enableLrs) {
+        this.enableLrs = enableLrs;
+        return this;
+      }
+
+      Builder setLrsServerName(String lrsServerName) {
+        this.lrsServerName = lrsServerName;
+        return this;
+      }
+
+      ClusterUpdate build() {
+        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
+        Preconditions.checkState(
+            (enableLrs && lrsServerName != null) || (!enableLrs && lrsServerName == null),
+            "lrsServerName is not set while LRS is enabled "
+                + "OR lrsServerName is set while LRS is not enabled");
+        return
+            new ClusterUpdate(clusterName, edsServiceName == null ? clusterName : edsServiceName,
+                lbPolicy, enableLrs, lrsServerName);
+      }
+    }
   }
 
   /**
@@ -81,9 +187,67 @@ abstract class XdsClient {
    * configurations for traffic control such as drop overloads, inter-cluster load balancing
    * policy and etc.
    */
-  // TODO(zdapeng): content TBD.
   static final class EndpointUpdate {
+    private String clusterName;
+    private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap;
+    private List<DropOverload> dropPolicies;
 
+    private EndpointUpdate(
+        String clusterName, Map<Locality,
+        LocalityLbEndpoints> localityLbEndpoints,
+        List<DropOverload> dropPolicies) {
+      this.clusterName = clusterName;
+      this.localityLbEndpointsMap = localityLbEndpoints;
+      this.dropPolicies = dropPolicies;
+    }
+
+    static Builder newBuilder() {
+      return new Builder();
+    }
+
+    String getClusterName() {
+      return clusterName;
+    }
+
+    /**
+     * Returns a map of localities with endpoints load balancing information in each locality.
+     */
+    Map<Locality, LocalityLbEndpoints> getLocalityLbEndpointsMap() {
+      return Collections.unmodifiableMap(localityLbEndpointsMap);
+    }
+
+    /**
+     * Returns a list of drop policies to be applied to outgoing requests.
+     */
+    List<DropOverload> getDropPolicies() {
+      return Collections.unmodifiableList(dropPolicies);
+    }
+
+    static final class Builder {
+      private String clusterName;
+      private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new HashMap<>();
+      private List<DropOverload> dropPolicies = new ArrayList<>();
+
+      Builder setClusterName(String clusterName) {
+        this.clusterName = clusterName;
+        return this;
+      }
+
+      Builder addLocalityLbEndpoints(Locality locality, LocalityLbEndpoints info) {
+        localityLbEndpointsMap.put(locality, info);
+        return this;
+      }
+
+      Builder addDropPolicy(DropOverload policy) {
+        dropPolicies.add(policy);
+        return this;
+      }
+
+      EndpointUpdate build() {
+        Preconditions.checkState(clusterName != null, "clusterName is not set");
+        return new EndpointUpdate(clusterName, localityLbEndpointsMap, dropPolicies);
+      }
+    }
   }
 
   /**
