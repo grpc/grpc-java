@@ -1,16 +1,16 @@
 # AndroidChannelBuilder
 
-Since gRPC's 1.12 release, the `grpc-android` package provides access to the
-`AndroidChannelBuilder` class. Given an Android Context, this builder will
-register a network event listener upon channel construction.  The listener is
-used to automatically respond to changes in the device's network state, avoiding
+ The `grpc-android` package provides access to the
+`AndroidChannelBuilder` class. Given an Android Context, this builder
+registers a network event listener upon channel construction.  The listener
+automatically responds to changes in the device's network state, avoiding
 delays and interrupted RPCs that may otherwise occur.
 
 By default, gRPC uses exponential backoff to recover from connection failures.
 Depending on the scheduled backoff delay when the device regains connectivity,
 this could result in a  one minute or longer delay before gRPC re-establishes
 the connection. This delay is removed when `AndroidChannelBuilder` is provided
-with the app's Android Context.  Notifications from the network listener will
+with the app's Android Context.  Notifications from the network listener
 cause the channel to immediately reconnect upon network recovery.
 
 On Android API levels 24+, `AndroidChannelBuilder`'s network listener mechanism
@@ -36,11 +36,11 @@ In your `build.gradle` file, include a dependency on both `grpc-android` and
 `grpc-okhttp`:
 
 ```
-implementation 'io.grpc:grpc-android:1.24.0'
-implementation 'io.grpc:grpc-okhttp:1.24.0'
+implementation 'io.grpc:grpc-android:1.24.1'
+implementation 'io.grpc:grpc-okhttp:1.24.1'
 ```
 
-You will also need permission to access the device's network state in your
+You also need permission to access the device's network state in your
 `AndroidManifest.xml`:
 
 ```
