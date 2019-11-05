@@ -31,7 +31,6 @@ import com.google.common.collect.ImmutableSet;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -68,14 +67,6 @@ import javax.annotation.Nullable;
  */
 final class EdsLoadBalancer extends LoadBalancer {
 
-  private static final EndpointWatcherImpl.PickerFactory pickerFactoryImpl =
-      new EndpointWatcherImpl.PickerFactory() {
-        @Override
-        public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
-          return new InterLocalityPicker(childPickers);
-        }
-      };
-
   private final Helper helper;
   private final XdsClient xdsClient;
   private final ChannelLogger channelLogger;
@@ -94,10 +85,12 @@ final class EdsLoadBalancer extends LoadBalancer {
   @CheckForNull
   private EndpointWatcherImpl endpointWatcher;
 
+  // TODO(zdapeng): Pass in a nullable LoadStatsStore for LRS.
   EdsLoadBalancer(Helper helper, XdsClient xdsClient) {
-    this(helper, xdsClient, pickerFactoryImpl, LoadBalancerRegistry.getDefaultRegistry(),
-        ThreadSafeRandom.ThreadSafeRandomImpl.instance, new LoadStatsStoreImpl(),
-        OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+    this(
+        helper, xdsClient, EndpointWatcherImpl.pickerFactoryImpl,
+        LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandom.ThreadSafeRandomImpl.instance,
+        new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
   }
 
   @VisibleForTesting
@@ -113,11 +106,13 @@ final class EdsLoadBalancer extends LoadBalancer {
     this.helper = checkNotNull(helper, "helper");
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.channelLogger = helper.getChannelLogger();
+    // TODO(zdapeng): Allow it be null when enableLrs from ClusterUpdate is false.
+    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
 
+    // The following fields are injected for testing
     this.pickerFactory = checkNotNull(pickerFactory, "pickerFactory");
     this.lbRegistry = checkNotNull(lbRegistry, "lbRegistry");
     this.random = checkNotNull(random, "random");
-    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
     this.orcaPerRequestUtil = checkNotNull(orcaPerRequestUtil, "orcaPerRequestUtil");
     this.orcaOobUtil = checkNotNull(orcaOobUtil, "orcaOobUtil");
   }
@@ -193,6 +188,13 @@ final class EdsLoadBalancer extends LoadBalancer {
 
     private static final String ROUND_ROBIN = "round_robin";
     private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;
+    private static final EndpointWatcherImpl.PickerFactory pickerFactoryImpl =
+        new EndpointWatcherImpl.PickerFactory() {
+          @Override
+          public SubchannelPicker picker(List<WeightedChildPicker> childPickers) {
+            return new InterLocalityPicker(childPickers);
+          }
+        };
 
     private final Helper helper;
     private final PickerFactory pickerFactory;
@@ -240,16 +242,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       // ADS stream error, no known endpoint specific error yet.
     }
 
-    // This is triggered by xdsLoadbalancer.handleSubchannelState
-    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        // This will probably trigger childHelper.updateBalancingState
-        localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
-      }
-    }
-
-    public void reset() {
+    private void reset() {
       for (Locality locality : localityMap.keySet()) {
         localityMap.get(locality).shutdown();
       }
@@ -264,7 +257,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     }
 
     // This is triggered by EDS response.
-    public void updateLocalityStore(
+    private void updateLocalityStore(
         final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
@@ -325,7 +318,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       }
     }
 
-    public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
+    private void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
@@ -354,11 +347,12 @@ final class EdsLoadBalancer extends LoadBalancer {
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
     }
 
-    public LoadStatsStore getLoadStatsStore() {
+    // TODO(zdapeng): Decide how to work with LRS client.
+    LoadStatsStore getLoadStatsStore() {
       return loadStatsStore;
     }
 
-    public void updateOobMetricsReportInterval(long reportIntervalNano) {
+    void updateOobMetricsReportInterval(long reportIntervalNano) {
       metricsReportIntervalNano = reportIntervalNano;
       for (LocalityLbInfo lbInfo : localityMap.values()) {
         lbInfo.childHelper.updateMetricsReportInterval(reportIntervalNano);
@@ -453,7 +447,7 @@ final class EdsLoadBalancer extends LoadBalancer {
      * State of a single Locality.
      */
     // TODO(zdapeng): rename it to LocalityLbState
-    static final class LocalityLbInfo {
+    private static final class LocalityLbInfo {
 
       final LoadBalancer childBalancer;
       final ChildHelper childHelper;
@@ -487,7 +481,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       }
     }
 
-    class ChildHelper extends ForwardingLoadBalancerHelper {
+    private class ChildHelper extends ForwardingLoadBalancerHelper {
 
       private final OrcaReportingHelperWrapper orcaReportingHelperWrapper;
 
