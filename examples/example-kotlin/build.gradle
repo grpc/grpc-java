@@ -37,7 +37,7 @@ dependencies {
 
     testImplementation "io.grpc:grpc-testing:${grpcVersion}" // gRCP testing utilities
     testImplementation "junit:junit:4.12"
-    testImplementation "org.mockito:mockito-core:2.25.1"
+    testImplementation "org.mockito:mockito-core:2.28.2"
 }
 
 protobuf {

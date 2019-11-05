@@ -46,10 +46,10 @@ subprojects {
 
         nettyVersion = '4.1.42.Final'
         guavaVersion = '28.1-android'
-        googleauthVersion = '0.17.1'
+        googleauthVersion = '0.18.0'
         protobufVersion = '3.10.0'
         protocVersion = protobufVersion
-        opencensusVersion = '0.21.0'
+        opencensusVersion = '0.24.0'
 
         configureProtoCompilation = {
             String generatedSourcePath = "${projectDir}/src/generated"
@@ -157,7 +157,7 @@ subprojects {
 
             // Test dependencies.
             junit: 'junit:junit:4.12',
-            mockito: 'org.mockito:mockito-core:2.25.1',
+            mockito: 'org.mockito:mockito-core:2.28.2',
             truth: 'com.google.truth:truth:1.0',
             guava_testlib: "com.google.guava:guava-testlib:${guavaVersion}",
 

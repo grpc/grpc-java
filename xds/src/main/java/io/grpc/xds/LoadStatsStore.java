@@ -17,7 +17,7 @@
 package io.grpc.xds;
 
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import javax.annotation.Nullable;
 
 /**
@@ -32,11 +32,11 @@ import javax.annotation.Nullable;
  *
  * <ol>
  *   <li>Let {@link LoadStatsStore} track the locality newly exposed by traffic director by
- *       calling {@link #addLocality(XdsLocality)}.
- *   <li>Use the locality counter returned by {@link #getLocalityCounter(XdsLocality)} to record
+ *       calling {@link #addLocality(Locality)}.
+ *   <li>Use the locality counter returned by {@link #getLocalityCounter(Locality)} to record
  *       load stats for the corresponding locality.
  *   <li>Tell {@link LoadStatsStore} to stop tracking the locality no longer exposed by traffic
- *       director by calling {@link #removeLocality(XdsLocality)}.
+ *       director by calling {@link #removeLocality(Locality)}.
  * </ol>
  *
  * <p>No locality information is needed for recording dropped calls since they are aggregated in
@@ -75,7 +75,7 @@ interface LoadStatsStore {
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
-  void addLocality(XdsLocality locality);
+  void addLocality(Locality locality);
 
   /**
    * Stops tracking load stats for endpoints in the provided locality. gRPC clients are expected not
@@ -90,7 +90,7 @@ interface LoadStatsStore {
    * <p>This method is not thread-safe and should be called from the same synchronized context
    * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
-  void removeLocality(XdsLocality locality);
+  void removeLocality(Locality locality);
 
   /**
    * Returns the locality counter that does locality level stats aggregation for the provided
@@ -99,7 +99,7 @@ interface LoadStatsStore {
    * <p>This method is thread-safe.
    */
   @Nullable
-  ClientLoadCounter getLocalityCounter(XdsLocality locality);
+  ClientLoadCounter getLocalityCounter(Locality locality);
 
   /**
    * Records a drop decision made by a {@link io.grpc.LoadBalancer.SubchannelPicker} instance

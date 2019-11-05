@@ -142,7 +142,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
   private final ExecutorHolder balancerRpcExecutorHolder;
-  private final ExecutorHolder blockingExecutorHolder;
+  private final ExecutorHolder offloadExecutorHolder;
   private final TimeProvider timeProvider;
   private final int maxTraceEvents;
 
@@ -566,9 +566,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
     this.retryEnabled = builder.retryEnabled && !builder.temporarilyDisableRetry;
     this.loadBalancerFactory = new AutoConfiguredLoadBalancerFactory(builder.defaultLbPolicy);
-    this.blockingExecutorHolder =
+    this.offloadExecutorHolder =
         new ExecutorHolder(
-            checkNotNull(builder.blockingExecutorPool, "blockingExecutorPool"));
+            checkNotNull(builder.offloadExecutorPool, "offloadExecutorPool"));
     this.nameResolverRegistry = builder.nameResolverRegistry;
     this.nameResolverArgs =
         NameResolver.Args.newBuilder()
@@ -581,12 +581,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     builder.maxRetryAttempts,
                     builder.maxHedgedAttempts,
                     loadBalancerFactory))
-            .setBlockingExecutor(
-                // Avoid creating the blockingExecutor until it is first used
+            .setOffloadExecutor(
+                // Avoid creating the offloadExecutor until it is first used
                 new Executor() {
                   @Override
                   public void execute(Runnable command) {
-                    blockingExecutorHolder.getExecutor().execute(command);
+                    offloadExecutorHolder.getExecutor().execute(command);
                   }
                 })
             .build();
@@ -900,7 +900,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
       terminatedLatch.countDown();
       executorPool.returnObject(executor);
       balancerRpcExecutorHolder.release();
-      blockingExecutorHolder.release();
+      offloadExecutorHolder.release();
       // Release the transport factory so that it can deallocate any resources.
       transportFactory.close();
     }
