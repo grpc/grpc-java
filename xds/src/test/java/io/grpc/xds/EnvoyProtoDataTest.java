@@ -19,55 +19,56 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.testing.EqualsTester;
-import io.envoyproxy.envoy.api.v2.core.Locality;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.Locality;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
 /**
- * Unit tests for {@link ClusterLoadAssignmentData}.
+ * Unit tests for {@link EnvoyProtoData}.
  */
 @RunWith(JUnit4.class)
-public class ClusterLoadAssignmentDataTest {
+public class EnvoyProtoDataTest {
 
   @Test
-  public void xdsLocality_convertToAndFromLocalityProto() {
-    Locality locality =
-        Locality.newBuilder()
+  public void locality_convertToAndFromLocalityProto() {
+    io.envoyproxy.envoy.api.v2.core.Locality locality =
+        io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
             .setRegion("test_region")
             .setZone("test_zone")
             .setSubZone("test_subzone")
             .build();
-    XdsLocality xdsLocality = XdsLocality.fromLocalityProto(locality);
+    Locality xdsLocality = Locality.fromEnvoyProtoLocality(locality);
     assertThat(xdsLocality.getRegion()).isEqualTo("test_region");
     assertThat(xdsLocality.getZone()).isEqualTo("test_zone");
     assertThat(xdsLocality.getSubzone()).isEqualTo("test_subzone");
 
-    Locality convertedLocality = xdsLocality.toLocalityProto();
+    io.envoyproxy.envoy.api.v2.core.Locality convertedLocality = xdsLocality.toEnvoyProtoLocality();
     assertThat(convertedLocality.getRegion()).isEqualTo("test_region");
     assertThat(convertedLocality.getZone()).isEqualTo("test_zone");
     assertThat(convertedLocality.getSubZone()).isEqualTo("test_subzone");
   }
 
   @Test
-  public void xdsLocality_equal() {
+  public void locality_equal() {
     new EqualsTester()
         .addEqualityGroup(
-            new XdsLocality("region-a", "zone-a", "subzone-a"),
-            new XdsLocality("region-a", "zone-a", "subzone-a"))
+            new Locality("region-a", "zone-a", "subzone-a"),
+            new Locality("region-a", "zone-a", "subzone-a"))
         .addEqualityGroup(
-            new XdsLocality("region", "zone", "subzone")
+            new Locality("region", "zone", "subzone")
         )
         .addEqualityGroup(
-            new XdsLocality("", "", ""),
-            new XdsLocality("", "", ""))
+            new Locality("", "", ""),
+            new Locality("", "", ""))
         .testEquals();
   }
 
   @Test
-  public void xdsLocality_hash() {
-    assertThat(new XdsLocality("region", "zone", "subzone").hashCode())
-        .isEqualTo(new XdsLocality("region", "zone","subzone").hashCode());
+  public void locality_hash() {
+    assertThat(new Locality("region", "zone", "subzone").hashCode())
+        .isEqualTo(new Locality("region", "zone","subzone").hashCode());
   }
+
+  // TODO(chengyuanzhang): add test for other data types.
 }

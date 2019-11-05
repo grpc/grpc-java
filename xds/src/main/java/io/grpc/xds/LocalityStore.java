@@ -29,6 +29,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
+import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
@@ -44,9 +45,10 @@ import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.xds.ClientLoadCounter.LoadRecordingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsObservingSubchannelPicker;
 import io.grpc.xds.ClientLoadCounter.MetricsRecordingListener;
-import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
-import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.LbEndpoint;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.InterLocalityPicker.WeightedChildPicker;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingConfig;
 import io.grpc.xds.OrcaOobUtil.OrcaReportingHelperWrapper;
@@ -70,7 +72,7 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap);
+  void updateLocalityStore(ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap);
 
   void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
 
@@ -92,9 +94,9 @@ interface LocalityStore {
     private final OrcaPerRequestUtil orcaPerRequestUtil;
     private final OrcaOobUtil orcaOobUtil;
     private final PriorityManager priorityManager = new PriorityManager();
-    private final Map<XdsLocality, LocalityLbInfo> localityMap = new HashMap<>();
+    private final Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     // Most current set of localities instructed by traffic director
-    private Set<XdsLocality> localities = ImmutableSet.of();
+    private Set<Locality> localities = ImmutableSet.of();
     private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
@@ -148,8 +150,8 @@ interface LocalityStore {
       public PickResult pickSubchannel(PickSubchannelArgs args) {
         for (DropOverload dropOverload : dropOverloads) {
           int rand = random.nextInt(1000_000);
-          if (rand < dropOverload.dropsPerMillion) {
-            loadStatsStore.recordDroppedRequest(dropOverload.category);
+          if (rand < dropOverload.getDropsPerMillion()) {
+            loadStatsStore.recordDroppedRequest(dropOverload.getCategory());
             return PickResult.withDrop(Status.UNAVAILABLE.withDescription(
                 "dropped by loadbalancer: " + dropOverload.toString()));
           }
@@ -186,12 +188,12 @@ interface LocalityStore {
 
     @Override
     public void reset() {
-      for (XdsLocality locality : localityMap.keySet()) {
+      for (Locality locality : localityMap.keySet()) {
         localityMap.get(locality).shutdown();
       }
       localityMap.clear();
 
-      for (XdsLocality locality : localities) {
+      for (Locality locality : localities) {
         loadStatsStore.removeLocality(locality);
       }
       localities = ImmutableSet.of();
@@ -201,14 +203,19 @@ interface LocalityStore {
 
     // This is triggered by EDS response.
     @Override
-    public void updateLocalityStore(final ImmutableMap<XdsLocality, LocalityInfo> localityInfoMap) {
+    public void updateLocalityStore(
+        final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
 
-      Set<XdsLocality> newLocalities = localityInfoMap.keySet();
+      Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
-      for (XdsLocality locality : newLocalities) {
+      for (Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
           final LocalityLbInfo localityLbInfo = localityMap.get(locality);
-          final LocalityInfo localityInfo = localityInfoMap.get(locality);
+          LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+          final List<EquivalentAddressGroup> eags = new ArrayList<>();
+          for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+            eags.add(endpoint.getAddress());
+          }
           // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
           // immediately, so execute handleResolvedAddresses() after all the setup in this method is
           // complete.
@@ -216,24 +223,24 @@ interface LocalityStore {
             @Override
             public void run() {
               localityLbInfo.childBalancer.handleResolvedAddresses(
-                  ResolvedAddresses.newBuilder().setAddresses(localityInfo.eags).build());
+                  ResolvedAddresses.newBuilder().setAddresses(eags).build());
             }
           });
         }
       }
 
-      for (XdsLocality newLocality : newLocalities) {
+      for (Locality newLocality : newLocalities) {
         if (!localities.contains(newLocality)) {
           loadStatsStore.addLocality(newLocality);
         }
       }
-      final Set<XdsLocality> toBeRemovedFromStatsStore = new HashSet<>();
+      final Set<Locality> toBeRemovedFromStatsStore = new HashSet<>();
       // There is a race between picking a subchannel and updating localities, which leads to
       // the possibility that RPCs will be sent to a removed locality. As a result, those RPC
       // loads will not be recorded. We consider this to be natural. By removing locality counters
       // after updating subchannel pickers, we eliminate the race and conservatively record loads
       // happening in that period.
-      for (XdsLocality oldLocality : localities) {
+      for (Locality oldLocality : localities) {
         if (!localityInfoMap.containsKey(oldLocality)) {
           toBeRemovedFromStatsStore.add(oldLocality);
         }
@@ -241,7 +248,7 @@ interface LocalityStore {
       helper.getSynchronizationContext().execute(new Runnable() {
         @Override
         public void run() {
-          for (XdsLocality locality : toBeRemovedFromStatsStore) {
+          for (Locality locality : toBeRemovedFromStatsStore) {
             loadStatsStore.removeLocality(locality);
           }
         }
@@ -250,7 +257,7 @@ interface LocalityStore {
 
       priorityManager.updateLocalities(localityInfoMap);
 
-      for (XdsLocality oldLocality : localityMap.keySet()) {
+      for (Locality oldLocality : localityMap.keySet()) {
         if (!newLocalities.contains(oldLocality)) {
           deactivate(oldLocality);
         }
@@ -262,7 +269,7 @@ interface LocalityStore {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
-    private void deactivate(final XdsLocality locality) {
+    private void deactivate(final Locality locality) {
       if (!localityMap.containsKey(locality) || localityMap.get(locality).isDeactivated()) {
         return;
       }
@@ -386,7 +393,7 @@ interface LocalityStore {
       private SubchannelPicker currentChildPicker = XdsSubchannelPickers.BUFFER_PICKER;
       private ConnectivityState currentChildState = CONNECTING;
 
-      ChildHelper(final XdsLocality locality, final ClientLoadCounter counter,
+      ChildHelper(final Locality locality, final ClientLoadCounter counter,
           OrcaOobUtil orcaOobUtil) {
         checkNotNull(locality, "locality");
         checkNotNull(counter, "counter");
@@ -447,8 +454,8 @@ interface LocalityStore {
 
     private final class PriorityManager {
 
-      private final List<List<XdsLocality>> priorityTable = new ArrayList<>();
-      private Map<XdsLocality, LocalityInfo> localityInfoMap = ImmutableMap.of();
+      private final List<List<Locality>> priorityTable = new ArrayList<>();
+      private Map<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of();
       private int currentPriority = -1;
       private ScheduledHandle failOverTimer;
 
@@ -456,13 +463,13 @@ interface LocalityStore {
        * Updates the priority ordering of localities with the given collection of localities.
        * Recomputes the current ready localities to be used.
        */
-      void updateLocalities(Map<XdsLocality, LocalityInfo> localityInfoMap) {
+      void updateLocalities(Map<Locality, LocalityLbEndpoints> localityInfoMap) {
         this.localityInfoMap = localityInfoMap;
         priorityTable.clear();
-        for (XdsLocality newLocality : localityInfoMap.keySet()) {
-          int priority = localityInfoMap.get(newLocality).priority;
+        for (Locality newLocality : localityInfoMap.keySet()) {
+          int priority = localityInfoMap.get(newLocality).getPriority();
           while (priorityTable.size() <= priority) {
-            priorityTable.add(new ArrayList<XdsLocality>());
+            priorityTable.add(new ArrayList<Locality>());
           }
           priorityTable.get(priority).add(newLocality);
         }
@@ -482,7 +489,7 @@ interface LocalityStore {
         List<WeightedChildPicker> childPickers = new ArrayList<>();
 
         ConnectivityState overallState = null;
-        for (XdsLocality l : priorityTable.get(priority)) {
+        for (Locality l : priorityTable.get(priority)) {
           if (!localityMap.containsKey(l)) {
             initLocality(l);
           }
@@ -495,7 +502,7 @@ interface LocalityStore {
 
           if (READY == childState) {
             childPickers.add(
-                new WeightedChildPicker(localityInfoMap.get(l).localityWeight, childPicker));
+                new WeightedChildPicker(localityInfoMap.get(l).getLocalityWeight(), childPicker));
           }
         }
 
@@ -517,16 +524,16 @@ interface LocalityStore {
 
         if (overallState == READY) {
           for (int p = priority + 1; p < priorityTable.size(); p++) {
-            for (XdsLocality xdsLocality : priorityTable.get(p)) {
+            for (Locality xdsLocality : priorityTable.get(p)) {
               deactivate(xdsLocality);
             }
           }
         }
       }
 
-      int getPriority(XdsLocality locality) {
+      int getPriority(Locality locality) {
         if (localityInfoMap.containsKey(locality)) {
-          return localityInfoMap.get(locality).priority;
+          return localityInfoMap.get(locality).getPriority();
         }
         return -1;
       }
@@ -552,9 +559,9 @@ interface LocalityStore {
 
         currentPriority++;
 
-        List<XdsLocality> localities = priorityTable.get(currentPriority);
+        List<Locality> localities = priorityTable.get(currentPriority);
         boolean initializedBefore = false;
-        for (XdsLocality locality : localities) {
+        for (Locality locality : localities) {
           if (localityMap.containsKey(locality)) {
             initializedBefore = true;
             localityMap.get(locality).reactivate();
@@ -579,7 +586,7 @@ interface LocalityStore {
         updatePriorityState(currentPriority);
       }
 
-      private void initLocality(final XdsLocality locality) {
+      private void initLocality(final Locality locality) {
         ChildHelper childHelper =
             new ChildHelper(locality, loadStatsStore.getLocalityCounter(locality),
                 orcaOobUtil);
@@ -589,7 +596,11 @@ interface LocalityStore {
                 childHelper);
         localityMap.put(locality, localityLbInfo);
 
-        final LocalityInfo localityInfo = localityInfoMap.get(locality);
+        LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+        final List<EquivalentAddressGroup> eags = new ArrayList<>();
+        for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+          eags.add(endpoint.getAddress());
+        }
         // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
         // so execute handleResolvedAddresses() after all the setup in the caller is complete.
         helper.getSynchronizationContext().execute(new Runnable() {
@@ -598,7 +609,7 @@ interface LocalityStore {
             // TODO: put endPointWeights into attributes for WRR.
             localityLbInfo.childBalancer
                 .handleResolvedAddresses(ResolvedAddresses.newBuilder()
-                    .setAddresses(localityInfo.eags).build());
+                    .setAddresses(eags).build());
           }
         });
       }

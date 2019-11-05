@@ -16,28 +16,21 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
-import io.envoyproxy.envoy.type.FractionalPercent;
-import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
-import io.grpc.xds.ClusterLoadAssignmentData.DropOverload;
-import io.grpc.xds.ClusterLoadAssignmentData.LbEndpoint;
-import io.grpc.xds.ClusterLoadAssignmentData.LocalityInfo;
-import io.grpc.xds.ClusterLoadAssignmentData.XdsLocality;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsComms2.AdsStreamCallback;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -90,31 +83,6 @@ final class LookasideChannelLb extends LoadBalancer {
         GrpcUtil.STOPWATCH_SUPPLIER, node);
   }
 
-  private static int rateInMillion(FractionalPercent fractionalPercent) {
-    int numerator = fractionalPercent.getNumerator();
-    checkArgument(numerator >= 0, "numerator shouldn't be negative in %s", fractionalPercent);
-
-    DenominatorType type = fractionalPercent.getDenominator();
-    switch (type) {
-      case TEN_THOUSAND:
-        numerator *= 100;
-        break;
-      case HUNDRED:
-        numerator *= 100_00;
-        break;
-      case MILLION:
-        break;
-      default:
-        throw new IllegalArgumentException("unknown denominator type of " + fractionalPercent);
-    }
-
-    if (numerator > 1000_000) {
-      numerator = 1000_000;
-    }
-
-    return numerator;
-  }
-
   @Override
   public void handleNameResolutionError(Status error) {
     // NO-OP?
@@ -155,10 +123,10 @@ final class LookasideChannelLb extends LoadBalancer {
       List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
           clusterLoadAssignment.getPolicy().getDropOverloadsList();
       ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
-      for (ClusterLoadAssignment.Policy.DropOverload dropOverload : dropOverloadsProto) {
-        int rateInMillion = rateInMillion(dropOverload.getDropPercentage());
-        dropOverloadsBuilder.add(new DropOverload(dropOverload.getCategory(), rateInMillion));
-        if (rateInMillion == 1000_000) {
+      for (ClusterLoadAssignment.Policy.DropOverload drop : dropOverloadsProto) {
+        DropOverload dropOverload = DropOverload.fromEnvoyProtoDropOverload(drop);
+        dropOverloadsBuilder.add(dropOverload);
+        if (dropOverload.getDropsPerMillion() == 1_000_000) {
           lookasideChannelCallback.onAllDrop();
           break;
         }
@@ -166,24 +134,18 @@ final class LookasideChannelLb extends LoadBalancer {
       ImmutableList<DropOverload> dropOverloads = dropOverloadsBuilder.build();
       localityStore.updateDropPercentage(dropOverloads);
 
-      List<LocalityLbEndpoints> localities = clusterLoadAssignment.getEndpointsList();
-      ImmutableMap.Builder<XdsLocality, LocalityInfo> localityEndpointsMapping =
+      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localities =
+          clusterLoadAssignment.getEndpointsList();
+      ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
           new ImmutableMap.Builder<>();
-      for (LocalityLbEndpoints localityLbEndpoints : localities) {
-        io.envoyproxy.envoy.api.v2.core.Locality localityProto =
-            localityLbEndpoints.getLocality();
-        XdsLocality locality = XdsLocality.fromLocalityProto(localityProto);
-        List<LbEndpoint> lbEndPoints = new ArrayList<>();
-        for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
-            : localityLbEndpoints.getLbEndpointsList()) {
-          lbEndPoints.add(new LbEndpoint(lbEndpoint));
-        }
+      for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
+          : localities) {
+        Locality locality = Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality());
         int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
-        int priority = localityLbEndpoints.getPriority();
 
         if (localityWeight != 0) {
           localityEndpointsMapping.put(
-              locality, new LocalityInfo(lbEndPoints, localityWeight, priority));
+              locality, LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
         }
       }
 

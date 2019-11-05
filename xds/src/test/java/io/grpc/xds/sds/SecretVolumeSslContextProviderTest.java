@@ -361,7 +361,7 @@ public class SecretVolumeSslContextProviderTest {
   }
 
   /** Helper method to build SecretVolumeSslContextProvider from given files. */
-  private static SecretVolumeSslContextProvider getSslContextSecretVolumeSecretProvider(
+  private static SecretVolumeSslContextProvider<?> getSslContextSecretVolumeSecretProvider(
       boolean server, String certChainFilename, String privateKeyFilename, String trustedCaFilename)
       throws IOException {
 
@@ -391,7 +391,7 @@ public class SecretVolumeSslContextProviderTest {
   private static void sslContextForEitherWithBothCertAndTrust(
       boolean server, String pemFile, String keyFile, String caFile)
       throws IOException, CertificateException, CertStoreException {
-    SecretVolumeSslContextProvider provider =
+    SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(server, pemFile, keyFile, caFile);
 
     SslContext sslContext = provider.buildSslContextFromSecrets();
@@ -462,7 +462,7 @@ public class SecretVolumeSslContextProviderTest {
   /**
    * Helper method to build DownstreamTlsContext for above tests. Called from other classes as well.
    */
-  private static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
+  static DownstreamTlsContext buildDownstreamTlsContext(CommonTlsContext commonTlsContext) {
     DownstreamTlsContext downstreamTlsContext =
         DownstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return downstreamTlsContext;
@@ -471,7 +471,7 @@ public class SecretVolumeSslContextProviderTest {
   /**
    * Helper method to build UpstreamTlsContext for above tests. Called from other classes as well.
    */
-  private static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
+  static UpstreamTlsContext buildUpstreamTlsContext(CommonTlsContext commonTlsContext) {
     UpstreamTlsContext upstreamTlsContext =
         UpstreamTlsContext.newBuilder().setCommonTlsContext(commonTlsContext).build();
     return upstreamTlsContext;
@@ -531,8 +531,7 @@ public class SecretVolumeSslContextProviderTest {
    * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
    * a synchronous callback - so need to provide a listener.
    */
-  private static TestCallback getValueThruCallback(
-      SslContextProvider provider) {
+  private static TestCallback getValueThruCallback(SslContextProvider<?> provider) {
     TestCallback testCallback = new TestCallback();
     provider.addCallback(testCallback, MoreExecutors.directExecutor());
     return testCallback;
@@ -540,7 +539,7 @@ public class SecretVolumeSslContextProviderTest {
 
   @Test
   public void getProviderForServer_both_callsback() throws IOException {
-    SecretVolumeSslContextProvider provider =
+    SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
             true, SERVER_1_PEM_FILE, SERVER_1_KEY_FILE, CA_PEM_FILE);
 
@@ -550,7 +549,7 @@ public class SecretVolumeSslContextProviderTest {
 
   @Test
   public void getProviderForClient_both_callsback() throws IOException {
-    SecretVolumeSslContextProvider provider =
+    SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_KEY_FILE, CA_PEM_FILE);
 
@@ -561,7 +560,7 @@ public class SecretVolumeSslContextProviderTest {
   // note this test generates stack-trace but can be safely ignored
   @Test
   public void getProviderForClient_both_callsback_setException() throws IOException {
-    SecretVolumeSslContextProvider provider =
+    SecretVolumeSslContextProvider<?> provider =
         getSslContextSecretVolumeSecretProvider(
             false, CLIENT_PEM_FILE, CLIENT_PEM_FILE, CA_PEM_FILE);
     TestCallback testCallback = getValueThruCallback(provider);

@@ -41,6 +41,7 @@ import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
 import io.netty.channel.local.LocalServerChannel;
 import java.net.ConnectException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -69,14 +70,14 @@ public class WriteBufferingAndExceptionHandlerTest {
   private Channel server;
 
   @After
-  public void tearDown() {
+  public void tearDown() throws InterruptedException {
     if (server != null) {
-      server.close();
+      server.close().sync();
     }
     if (chan != null) {
-      chan.close();
+      chan.close().sync();
     }
-    group.shutdownGracefully();
+    group.shutdownGracefully(0, 10, TimeUnit.SECONDS).sync();
   }
 
   @Test
