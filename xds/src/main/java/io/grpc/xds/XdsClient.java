@@ -17,6 +17,8 @@
 package io.grpc.xds;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -242,7 +244,11 @@ abstract class XdsClient {
 
       EndpointUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
-        return new EndpointUpdate(clusterName, localityLbEndpointsMap, dropPolicies);
+        return
+            new EndpointUpdate(
+                clusterName,
+                ImmutableMap.copyOf(localityLbEndpointsMap),
+                ImmutableList.copyOf(dropPolicies));
       }
     }
   }
