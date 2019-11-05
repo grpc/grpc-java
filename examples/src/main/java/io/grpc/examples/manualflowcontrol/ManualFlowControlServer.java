@@ -55,6 +55,7 @@ public class ManualFlowControlServer {
         // from being processed by the incoming StreamObserver. The onReadyHandler must return in a timely manor or else
         // message processing throughput will suffer.
         serverCallStreamObserver.setOnReadyHandler(new Runnable() {
+          @Override
           public void run() {
             if (serverCallStreamObserver.isReady() && wasReady.compareAndSet(false, true)) {
               logger.info("READY");

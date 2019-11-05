@@ -182,18 +182,18 @@ def com_google_api_grpc_google_common_protos():
 def com_google_auth_google_auth_library_credentials():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_credentials",
-        artifact = "com.google.auth:google-auth-library-credentials:0.17.1",
+        artifact = "com.google.auth:google-auth-library-credentials:0.18.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "aaeea9333fff9b763715bca0174ec76c4f9551b5731c89a95f263cdc82b4b56e",
+        artifact_sha256 = "2377b149dbf63f000f96b66f5dc0f07b9da3928f5e3f31973f2d21fcb63ce6ff",
         licenses = ["notice"],  # BSD 3-clause
     )
 
 def com_google_auth_google_auth_library_oauth2_http():
     jvm_maven_import_external(
         name = "com_google_auth_google_auth_library_oauth2_http",
-        artifact = "com.google.auth:google-auth-library-oauth2-http:0.17.1",
+        artifact = "com.google.auth:google-auth-library-oauth2-http:0.18.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "fa9a1589c8bc279416988d437c2636967cd5e4eff70fbddc986b9c5a77b0231b",
+        artifact_sha256 = "2f13eff0105debe54a91851684b78dd5a0f3839fae5acaa8ba7959c004c050d0",
         licenses = ["notice"],  # BSD 3-clause
     )
 
@@ -418,18 +418,18 @@ def io_netty_transport_native_epoll():
 def io_opencensus_api():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_api",
-        artifact = "io.opencensus:opencensus-api:0.21.0",
+        artifact = "io.opencensus:opencensus-api:0.24.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "8e2cb0f6391d8eb0a1bcd01e7748883f0033b1941754f4ed3f19d2c3e4276fc8",
+        artifact_sha256 = "f561b1cc2673844288e596ddf5bb6596868a8472fd2cb8993953fc5c034b2352",
         licenses = ["notice"],  # Apache 2.0
     )
 
 def io_opencensus_grpc_metrics():
     jvm_maven_import_external(
         name = "io_opencensus_opencensus_contrib_grpc_metrics",
-        artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.21.0",
+        artifact = "io.opencensus:opencensus-contrib-grpc-metrics:0.24.0",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "29fc79401082301542cab89d7054d2f0825f184492654c950020553ef4ff0ef8",
+        artifact_sha256 = "875582e093f11950ad3f4a50b5fee33a008023f7d1e47820a1bef05d23b9ed42",
         licenses = ["notice"],  # Apache 2.0
     )
 

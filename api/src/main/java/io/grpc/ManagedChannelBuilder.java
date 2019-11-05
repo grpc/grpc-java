@@ -104,7 +104,7 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
   public abstract T executor(Executor executor);
 
   /**
-   * Provides a custom executor that will be used for operations that block.
+   * Provides a custom executor that will be used for operations that block or are expensive.
    *
    * <p>It's an optional parameter. If the user has not provided an executor when the channel is
    * built, the builder will use a static cached thread pool.
@@ -117,8 +117,14 @@ public abstract class ManagedChannelBuilder<T extends ManagedChannelBuilder<T>> 
    * @since 1.25.0
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
-  public T blockingExecutor(Executor executor) {
+  public T offloadExecutor(Executor executor) {
     throw new UnsupportedOperationException();
+  }
+
+  @Deprecated
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
+  public T blockingExecutor(Executor executor) {
+    return offloadExecutor(executor);
   }
 
   /**

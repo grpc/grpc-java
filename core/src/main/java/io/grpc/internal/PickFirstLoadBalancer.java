@@ -25,15 +25,14 @@ import io.grpc.ConnectivityState;
 import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancer.SubchannelStateListener;
 import io.grpc.Status;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A {@link LoadBalancer} that provides no load-balancing over the addresses from the {@link
- * NameResolver}.  The channel's default behavior is used, which is walking down the address list
- * and sticking to the first that works.
+ * io.grpc.NameResolver}.  The channel's default behavior is used, which is walking down the address
+ * list and sticking to the first that works.
  */
 final class PickFirstLoadBalancer extends LoadBalancer {
   private final Helper helper;

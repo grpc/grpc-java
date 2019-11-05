@@ -50,6 +50,7 @@ envoy/config/filter/accesslog/v2/accesslog.proto
 envoy/config/filter/network/http_connection_manager/v2/http_connection_manager.proto
 envoy/config/listener/v2/api_listener.proto
 envoy/service/discovery/v2/ads.proto
+envoy/service/discovery/v2/sds.proto
 envoy/service/load_stats/v2/lrs.proto
 envoy/type/matcher/regex.proto
 envoy/type/matcher/string.proto
