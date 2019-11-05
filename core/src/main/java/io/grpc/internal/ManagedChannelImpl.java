@@ -130,6 +130,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
+  private static final Map<String, Object> EMPTY_SERVICE_CONFIG = Collections.emptyMap();
+
   private final InternalLogId logId;
   private final String target;
   private final NameResolverRegistry nameResolverRegistry;
@@ -1333,19 +1335,24 @@ final class ManagedChannelImpl extends ManagedChannel implements
             if (serviceConfig != null) {
               effectiveServiceConfig = serviceConfig;
             } else {
-              effectiveServiceConfig = defaultServiceConfig;
+              effectiveServiceConfig = defaultServiceConfig != null
+                  ? defaultServiceConfig : EMPTY_SERVICE_CONFIG;
               if (defaultServiceConfig != null) {
                 channelLogger.log(
                     ChannelLogLevel.INFO,
                     "Received no service config, using default service config");
+              } else {
+                channelLogger.log(
+                    ChannelLogLevel.INFO,
+                    "Received no service config and default service config is not provided. "
+                        + "Falling back to empty service config");
               }
             }
 
             // FIXME(notcarl): reference equality is not right (although not harmful) right now.
             //                 Name resolver should return the same config if txt record is the same
             if (effectiveServiceConfig != lastServiceConfig) {
-              channelLogger.log(ChannelLogLevel.INFO,
-                  "Service config changed{0}", effectiveServiceConfig == null ? " to null" : "");
+              channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
               lastServiceConfig = effectiveServiceConfig;
             }
 
@@ -1369,9 +1376,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
             }
             Status handleResult = helper.lb.tryHandleResolvedAddresses(
                 ResolvedAddresses.newBuilder()
-                .setAddresses(servers)
-                .setAttributes(effectiveAttrs)
-                .build());
+                    .setAddresses(servers)
+                    .setAttributes(effectiveAttrs)
+                    .build());
             if (!handleResult.isOk()) {
               handleErrorInSyncContext(handleResult.augmentDescription(resolver + " was used"));
             }
@@ -1380,6 +1387,16 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new NamesResolved());
+    }
+
+    @Override
+    public void handleError(ResolutionResult resolutionResult) {
+      boolean nrReplied = haveBackends == null;
+      if (!nrReplied) {
+        onResult(
+            ResolutionResult.newBuilder().setAddresses(resolutionResult.getAddresses()).build());
+      }
+      super.handleError(resolutionResult);
     }
 
     @Override
@@ -1400,13 +1417,20 @@ final class ManagedChannelImpl extends ManagedChannel implements
           new Object[] {getLogId(), error});
       if (haveBackends == null || haveBackends) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
-        haveBackends = false;
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
       if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
       }
+      boolean nameResolverReplied = haveBackends == null;
+      if (nameResolverReplied) {
+        lastServiceConfig = defaultServiceConfig != null
+            ? defaultServiceConfig : EMPTY_SERVICE_CONFIG;
+        haveBackends = false;
+      }
+
       helper.lb.handleNameResolutionError(error);
+
       if (scheduledNameResolverRefresh != null && scheduledNameResolverRefresh.isPending()) {
         // The name resolver may invoke onError multiple times, but we only want to
         // schedule one backoff attempt

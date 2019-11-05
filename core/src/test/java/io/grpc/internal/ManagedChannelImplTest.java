@@ -154,6 +154,7 @@ import org.mockito.stubbing.Answer;
 /** Unit tests for {@link ManagedChannelImpl}. */
 @RunWith(JUnit4.class)
 public class ManagedChannelImplTest {
+
   private static final int DEFAULT_PORT = 447;
 
   private static final MethodDescriptor<String, Integer> method =
@@ -175,6 +176,10 @@ public class ManagedChannelImplTest {
           .setUserAgent(USER_AGENT);
   private static final String TARGET = "fake://" + SERVICE_NAME;
   private static final String MOCK_POLICY_NAME = "mock_lb";
+  private static final Attributes EMPTY_SERVICE_CONFIG_ATTRIBUTES =
+      Attributes.newBuilder()
+          .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, new HashMap<String, Object>())
+          .build();
   private URI expectedUri;
   private final SocketAddress socketAddress =
       new SocketAddress() {
@@ -751,7 +756,7 @@ public class ManagedChannelImplTest {
     verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Arrays.asList(addressGroup))
-            .setAttributes(Attributes.EMPTY)
+            .setAttributes(EMPTY_SERVICE_CONFIG_ATTRIBUTES)
             .build());
 
     SubchannelStateListener stateListener1 = mock(SubchannelStateListener.class);
@@ -1101,6 +1106,7 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Arrays.asList(addressGroup))
+            .setAttributes(EMPTY_SERVICE_CONFIG_ATTRIBUTES)
             .build());
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -1250,6 +1256,7 @@ public class ManagedChannelImplTest {
     inOrder.verify(mockLoadBalancer).handleResolvedAddresses(
         ResolvedAddresses.newBuilder()
             .setAddresses(Arrays.asList(addressGroup))
+            .setAttributes(EMPTY_SERVICE_CONFIG_ATTRIBUTES)
             .build());
     Subchannel subchannel =
         createSubchannelSafely(helper, addressGroup, Attributes.EMPTY, subchannelStateListener);
@@ -2762,7 +2769,7 @@ public class ManagedChannelImplTest {
         .setAttributes(Attributes.EMPTY)
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
@@ -2770,7 +2777,7 @@ public class ManagedChannelImplTest {
 
     prevSize = getStats(channel).channelTrace.events.size();
     nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
 
     prevSize = getStats(channel).channelTrace.events.size();
     ResolutionResult resolutionResult2 = ResolutionResult.newBuilder()
@@ -3886,7 +3893,7 @@ public class ManagedChannelImplTest {
       verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
       assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
       Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
+      assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isEmpty();
       verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     } finally {
       LoadBalancerRegistry.getDefaultRegistry().deregister(mockLoadBalancerProvider);

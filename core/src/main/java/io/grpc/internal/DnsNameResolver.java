@@ -303,26 +303,29 @@ final class DnsNameResolver extends NameResolver {
         return;
       }
 
-      Attributes.Builder attrs = Attributes.newBuilder();
+      ResolutionResult.Builder resultBuilder = ResolutionResult.newBuilder().setAddresses(servers);
       if (!resolutionResults.txtRecords.isEmpty()) {
         ConfigOrError serviceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
           if (serviceConfig.getError() != null) {
-            savedListener.onError(serviceConfig.getError());
+            savedListener.handleError(resultBuilder.setServiceConfig(serviceConfig).build());
             return;
           } else {
             @SuppressWarnings("unchecked")
             Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
-            attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
+            resultBuilder
+                .setAttributes(
+                    Attributes.newBuilder()
+                        .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
+                        .build())
+                .setServiceConfig(serviceConfig);
           }
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-      ResolutionResult resolutionResult =
-          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
-      savedListener.onResult(resolutionResult);
+      savedListener.onResult(resultBuilder.build());
     }
   }
 

@@ -18,6 +18,7 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
@@ -316,6 +317,7 @@ public abstract class NameResolver {
     @Deprecated
     public final void onAddresses(
         List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+      // TODO(jihuncho) need to promote Listener2 if we want to use ConfigOrError
       onResult(
           ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
     }
@@ -338,6 +340,23 @@ public abstract class NameResolver {
      */
     @Override
     public abstract void onError(Status error);
+
+    /**
+     * Handles an error from the resolver. If the error is not recoverable, it calls {@link
+     * #onError(Status)}.
+     *
+     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @since 1.26.0
+     */
+    public void handleError(ResolutionResult resolutionResult) {
+      checkNotNull(
+          resolutionResult.getServiceConfig(),
+          "Resolution result should have a ServiceConfig with error");
+      Status error = resolutionResult.getServiceConfig().getError();
+      checkState(error != null && !error.isOk(), "ServiceConfig has no error");
+
+      onError(error);
+    }
   }
 
   /**
