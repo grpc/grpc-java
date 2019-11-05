@@ -1,7 +1,7 @@
 gRPC Cronet Transport
 ========================
 
-**EXPERIMENTAL:**  *gRPC's Cronet transport is an experimental API, its stability
+**EXPERIMENTAL:**  *gRPC's Cronet transport is an experimental API. Its stability
 depends on upstream Cronet's implementation, which involves some experimental features.*
 
 This code enables using the [Chromium networking stack
@@ -26,7 +26,7 @@ In your app module's `build.gradle` file, include a dependency on both `grpc-cro
 Google Play Services Client Library for Cronet
 
 ```
-implementation 'io.grpc:grpc-cronet:1.24.0'
+implementation 'io.grpc:grpc-cronet:1.24.1'
 implementation 'com.google.android.gms:play-services-cronet:16.0.0'
 ```
 
