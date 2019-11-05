@@ -59,7 +59,7 @@ public class ReferenceCountingSslContextProviderMapTest {
     val = map.get(3);
     assertThat(val).isSameInstanceAs(valueFor3);
     // at this point ref-count is 2
-    when(valueFor3.getKey()).thenReturn(3);
+    when(valueFor3.getSource()).thenReturn(3);
     assertThat(map.release(val)).isNull();
     verify(valueFor3, never()).close();
     assertThat(map.release(val)).isNull(); // after this ref-count is 0
@@ -75,8 +75,8 @@ public class ReferenceCountingSslContextProviderMapTest {
   public void referenceCountingMap_distinctElements() throws InterruptedException {
     SslContextProvider<Integer> valueFor3 = getTypedMock();
     SslContextProvider<Integer> valueFor4 = getTypedMock();
-    when(valueFor3.getKey()).thenReturn(3);
-    when(valueFor4.getKey()).thenReturn(4);
+    when(valueFor3.getSource()).thenReturn(3);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(3)).thenReturn(valueFor3);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
     SslContextProvider<Integer> val3 = map.get(3);
@@ -95,14 +95,14 @@ public class ReferenceCountingSslContextProviderMapTest {
       throws InterruptedException {
     SslContextProvider<Integer> valueFor3 = getTypedMock();
     SslContextProvider<Integer> valueFor4 = getTypedMock();
-    when(valueFor3.getKey()).thenReturn(3);
-    when(valueFor4.getKey()).thenReturn(4);
+    when(valueFor3.getSource()).thenReturn(3);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(3)).thenReturn(valueFor3);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
     SslContextProvider<Integer> unused = map.get(3);
     SslContextProvider<Integer> val4 = map.get(4);
     // now provide wrong key (3) and value (val4) combination
-    when(valueFor4.getKey()).thenReturn(3);
+    when(valueFor4.getSource()).thenReturn(3);
     try {
       map.release(val4);
       fail("exception expected");
@@ -114,7 +114,7 @@ public class ReferenceCountingSslContextProviderMapTest {
   @Test
   public void referenceCountingMap_excessRelease_expectException() throws InterruptedException {
     SslContextProvider<Integer> valueFor4 = getTypedMock();
-    when(valueFor4.getKey()).thenReturn(4);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
     SslContextProvider<Integer> val = map.get(4);
     assertThat(val).isSameInstanceAs(valueFor4);
@@ -132,7 +132,7 @@ public class ReferenceCountingSslContextProviderMapTest {
   @Test
   public void referenceCountingMap_releaseAndGet_differentInstance() throws InterruptedException {
     SslContextProvider<Integer> valueFor4 = getTypedMock();
-    when(valueFor4.getKey()).thenReturn(4);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
     SslContextProvider<Integer> val = map.get(4);
     assertThat(val).isSameInstanceAs(valueFor4);

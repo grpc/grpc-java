@@ -31,7 +31,7 @@ import java.util.concurrent.Executor;
 @Internal
 public abstract class SslContextProvider<K> {
 
-  private final K key;
+  private final K source;
 
   public interface Callback {
     /** Informs callee of new/updated SslContext. */
@@ -41,13 +41,13 @@ public abstract class SslContextProvider<K> {
     void onException(Throwable throwable);
   }
 
-  protected SslContextProvider(K key) {
-    checkNotNull(key, "key");
-    this.key = key;
+  protected SslContextProvider(K source) {
+    checkNotNull(source, "source");
+    this.source = source;
   }
 
-  K getKey() {
-    return key;
+  K getSource() {
+    return source;
   }
 
   /** Closes this provider and releases any resources. */

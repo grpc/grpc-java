@@ -152,7 +152,7 @@ public class TlsContextManagerTest {
         tlsContextManager.findOrCreateServerSslContextProvider(downstreamTlsContext);
     assertThat(serverSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
-    when(mockProvider.getKey()).thenReturn(downstreamTlsContext);
+    when(mockProvider.getSource()).thenReturn(downstreamTlsContext);
     tlsContextManager.releaseServerSslContextProvider(mockProvider);
     verify(mockProvider, times(1)).close();
   }
@@ -172,7 +172,7 @@ public class TlsContextManagerTest {
         tlsContextManager.findOrCreateClientSslContextProvider(upstreamTlsContext);
     assertThat(clientSecretProvider).isSameInstanceAs(mockProvider);
     verify(mockProvider, never()).close();
-    when(mockProvider.getKey()).thenReturn(upstreamTlsContext);
+    when(mockProvider.getSource()).thenReturn(upstreamTlsContext);
     tlsContextManager.releaseClientSslContextProvider(mockProvider);
     verify(mockProvider, times(1)).close();
   }

@@ -62,8 +62,8 @@ final class SecretVolumeSslContextProvider<K> extends SslContextProvider<K> {
       @Nullable String certificateChain,
       @Nullable CertificateValidationContext certContext,
       boolean server,
-      K key) {
-    super(key);
+      K source) {
+    super(source);
     this.privateKey = privateKey;
     this.privateKeyPassword = privateKeyPassword;
     this.certificateChain = certificateChain;

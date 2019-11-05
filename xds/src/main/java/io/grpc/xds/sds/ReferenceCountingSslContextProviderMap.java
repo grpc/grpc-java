@@ -70,8 +70,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
    */
   public SslContextProvider<K> release(final SslContextProvider<K> value) {
     checkNotNull(value, "value");
-    K key = value.getKey();
-    checkNotNull(key, "key");
+    K key = value.getSource();
     return releaseInternal(key, value);
   }
 
