@@ -34,6 +34,8 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
@@ -82,15 +84,27 @@ class Utils {
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
+
   public static final Resource<ByteBufAllocator> BYTE_BUF_ALLOCATOR =
       new Resource<ByteBufAllocator>() {
         @Override
         public ByteBufAllocator create() {
-          return PooledByteBufAllocator()
-          // TODO(zhangkun): find out how to copy the default values of most parameters from:
-          // https://github.com/netty/netty/blob/4.1/buffer/src/main/java/io/netty/buffer/PooledByteBufAllocator.java
-          // And https://github.com/netty/netty/blob/4.1/common/src/main/java/io/netty/util/internal/PlatformDependent.java#L199
-          // for whether to prefer direct byte bufs
+          int maxOrder;
+          if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+            maxOrder = 7;
+          } else {
+            maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+          }
+          return PooledByteBufAllocator(
+              PooledByteBufAllocator.defaultPreferDirect(),
+              PooledByteBufAllocator.defaultNumHeapArena(),
+              PooledByteBufAllocator.defaultNumDirectArena(),
+              PooledByteBufAllocator.defaultPageSize(),
+              maxOrder,
+              PooledByteBufAllocator.defaultTinyCacheSize(),
+              PooledByteBufAllocator.defaultSmallCacheSize(),
+              PooledByteBufAllocator.defaultNormalCacheSize(),
+              PooledByteBufAllocator.defaultUseCacheForAllThreads());
         }
       }
 

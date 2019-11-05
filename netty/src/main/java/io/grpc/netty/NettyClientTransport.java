@@ -101,6 +101,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final LocalSocketPicker localSocketPicker;
   private final ChannelLogger channelLogger;
   private final boolean useGetForSafeMethods;
+  private PooledByteBufAllocator allocator;
 
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
@@ -225,7 +226,8 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
-    b.option(ALLOCATOR, SharedResourceHolder.get(Utils.BYTE_BUF_ALLOCATOR));
+    allocator = SharedResourceHolder.get(Utils.BYTE_BUF_ALLOCATOR);
+    b.option(ALLOCATOR, allocator);
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);
