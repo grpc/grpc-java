@@ -25,7 +25,7 @@ import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -233,7 +233,7 @@ abstract class XdsClient {
 
     static final class Builder {
       private String clusterName;
-      private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new HashMap<>();
+      private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new LinkedHashMap<>();
       private List<DropOverload> dropPolicies = new ArrayList<>();
 
       // Use EndpointUpdate.newBuilder().
