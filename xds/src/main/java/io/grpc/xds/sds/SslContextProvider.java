@@ -16,6 +16,8 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import io.grpc.Internal;
 import io.netty.handler.ssl.SslContext;
 import java.util.concurrent.Executor;
@@ -27,9 +29,11 @@ import java.util.concurrent.Executor;
  * secret(s) that are dynamic.
  */
 @Internal
-public interface SslContextProvider {
+public abstract class SslContextProvider<K> {
 
-  interface Callback {
+  private final K source;
+
+  public interface Callback {
     /** Informs callee of new/updated SslContext. */
     void updateSecret(SslContext sslContext);
 
@@ -37,12 +41,21 @@ public interface SslContextProvider {
     void onException(Throwable throwable);
   }
 
+  protected SslContextProvider(K source) {
+    checkNotNull(source, "source");
+    this.source = source;
+  }
+
+  K getSource() {
+    return source;
+  }
+
   /** Closes this provider and releases any resources. */
-  public void close();
+  void close() {}
 
   /**
    * Registers a callback on the given executor. The callback will run when SslContext becomes
    * available or immediately if the result is already available.
    */
-  void addCallback(Callback callback, Executor executor);
+  public abstract void addCallback(Callback callback, Executor executor);
 }

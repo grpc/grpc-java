@@ -38,7 +38,7 @@ import javax.annotation.concurrent.ThreadSafe;
 @ThreadSafe
 final class ReferenceCountingSslContextProviderMap<K> {
 
-  private final Map<K, Instance> instances = new HashMap<>();
+  private final Map<K, Instance<K>> instances = new HashMap<>();
   private final SslContextProviderFactory<K> sslContextProviderFactory;
 
   ReferenceCountingSslContextProviderMap(SslContextProviderFactory<K> sslContextProviderFactory) {
@@ -51,7 +51,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * using the provided {@link SslContextProviderFactory&lt;K&gt;}
    */
   @CheckReturnValue
-  public SslContextProvider get(K key) {
+  public SslContextProvider<K> get(K key) {
     checkNotNull(key, "key");
     return getInternal(key);
   }
@@ -65,20 +65,19 @@ final class ReferenceCountingSslContextProviderMap<K> {
    * <p>Caller must not release a reference more than once. It's advised that you clear the
    * reference to the instance with the null returned by this method.
    *
-   * @param key the key that identifies the shared resource
    * @param value the instance to be released
    * @return a null which the caller can use to clear the reference to that instance.
    */
-  public SslContextProvider release(final K key, final SslContextProvider value) {
-    checkNotNull(key, "key");
+  public SslContextProvider<K> release(final SslContextProvider<K> value) {
     checkNotNull(value, "value");
+    K key = value.getSource();
     return releaseInternal(key, value);
   }
 
-  private synchronized SslContextProvider getInternal(K key) {
-    Instance instance = instances.get(key);
+  private synchronized SslContextProvider<K> getInternal(K key) {
+    Instance<K> instance = instances.get(key);
     if (instance == null) {
-      instance = new Instance(sslContextProviderFactory.createSslContextProvider(key));
+      instance = new Instance<>(sslContextProviderFactory.createSslContextProvider(key));
       instances.put(key, instance);
       return instance.sslContextProvider;
     } else {
@@ -86,12 +85,11 @@ final class ReferenceCountingSslContextProviderMap<K> {
     }
   }
 
-  private synchronized SslContextProvider releaseInternal(
-      final K key, final SslContextProvider instance) {
-    final Instance cached = instances.get(key);
+  private synchronized SslContextProvider<K> releaseInternal(
+      final K key, final SslContextProvider<K> instance) {
+    final Instance<K> cached = instances.get(key);
     checkArgument(cached != null, "No cached instance found for %s", key);
-    checkArgument(
-        instance == cached.sslContextProvider, "Releasing the wrong instance");
+    checkArgument(instance == cached.sslContextProvider, "Releasing the wrong instance");
     if (cached.release()) {
       try {
         cached.sslContextProvider.close();
@@ -105,15 +103,15 @@ final class ReferenceCountingSslContextProviderMap<K> {
 
   /** A factory to create an SslContextProvider from the given key. */
   public interface SslContextProviderFactory<K> {
-    SslContextProvider createSslContextProvider(K key);
+    SslContextProvider<K> createSslContextProvider(K key);
   }
 
-  private static class Instance {
-    final SslContextProvider sslContextProvider;
+  private static class Instance<K> {
+    final SslContextProvider<K> sslContextProvider;
     private int refCount;
 
     /** Increment refCount and acquire a reference to sslContextProvider. */
-    SslContextProvider acquire() {
+    SslContextProvider<K> acquire() {
       refCount++;
       return sslContextProvider;
     }
@@ -124,7 +122,7 @@ final class ReferenceCountingSslContextProviderMap<K> {
       return --refCount == 0;
     }
 
-    Instance(SslContextProvider sslContextProvider) {
+    Instance(SslContextProvider<K> sslContextProvider) {
       this.sslContextProvider = sslContextProvider;
       this.refCount = 1;
     }

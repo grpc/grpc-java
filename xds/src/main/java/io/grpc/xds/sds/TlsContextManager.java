@@ -16,25 +16,43 @@
 
 package io.grpc.xds.sds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
+import com.google.common.annotations.VisibleForTesting;
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Internal;
+import io.grpc.xds.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
 
 /**
- * Class to manage secrets used to create SSL contexts - this effectively manages SSL contexts
- * (aka TlsContexts) based on inputs we get from xDS. This is used by gRPC-xds to access the
- * SSL contexts/secrets and is not public API.
- * Currently it just creates a new SslContextProvider for each call.
+ * Class to manage {@link SslContextProvider} objects created from inputs we get from xDS. Used by
+ * gRPC-xds to access the SslContext's and is not public API. This manager manages the life-cycle of
+ * {@link SslContextProvider} objects as shared resources via ref-counting as described in {@link
+ * ReferenceCountingSslContextProviderMap}.
  */
-// TODO(sanjaypujare): implement a Map and ref-counting
 @Internal
 public final class TlsContextManager {
 
   private static TlsContextManager instance;
 
-  private TlsContextManager() {}
+  private final ReferenceCountingSslContextProviderMap<UpstreamTlsContext> mapForClients;
+  private final ReferenceCountingSslContextProviderMap<DownstreamTlsContext> mapForServers;
 
-  /** Gets the ContextManager singleton. */
+  private TlsContextManager() {
+    this(new ClientSslContextProviderFactory(), new ServerSslContextProviderFactory());
+  }
+
+  @VisibleForTesting
+  TlsContextManager(
+      SslContextProviderFactory<UpstreamTlsContext> clientFactory,
+      SslContextProviderFactory<DownstreamTlsContext> serverFactory) {
+    checkNotNull(clientFactory, "clientFactory");
+    checkNotNull(serverFactory, "serverFactory");
+    mapForClients = new ReferenceCountingSslContextProviderMap<>(clientFactory);
+    mapForServers = new ReferenceCountingSslContextProviderMap<>(serverFactory);
+  }
+
+  /** Gets the TlsContextManager singleton. */
   public static synchronized TlsContextManager getInstance() {
     if (instance == null) {
       instance = new TlsContextManager();
@@ -43,14 +61,46 @@ public final class TlsContextManager {
   }
 
   /** Creates a SslContextProvider. Used for retrieving a server-side SslContext. */
-  public SslContextProvider findOrCreateServerSslContextProvider(
+  public SslContextProvider<DownstreamTlsContext> findOrCreateServerSslContextProvider(
       DownstreamTlsContext downstreamTlsContext) {
-    return SecretVolumeSslContextProvider.getProviderForServer(downstreamTlsContext);
+    checkNotNull(downstreamTlsContext, "downstreamTlsContext");
+    return mapForServers.get(downstreamTlsContext);
   }
 
   /** Creates a SslContextProvider. Used for retrieving a client-side SslContext. */
-  public SslContextProvider findOrCreateClientSslContextProvider(
+  public SslContextProvider<UpstreamTlsContext> findOrCreateClientSslContextProvider(
       UpstreamTlsContext upstreamTlsContext) {
-    return SecretVolumeSslContextProvider.getProviderForClient(upstreamTlsContext);
+    checkNotNull(upstreamTlsContext, "upstreamTlsContext");
+    return mapForClients.get(upstreamTlsContext);
+  }
+
+  /**
+   * Releases an instance of the given client-side {@link SslContextProvider}.
+   *
+   * <p>The instance must have been obtained from {@link #findOrCreateClientSslContextProvider}.
+   * Otherwise will throw IllegalArgumentException.
+   *
+   * <p>Caller must not release a reference more than once. It's advised that you clear the
+   * reference to the instance with the null returned by this method.
+   */
+  public SslContextProvider<UpstreamTlsContext> releaseClientSslContextProvider(
+      SslContextProvider<UpstreamTlsContext> sslContextProvider) {
+    checkNotNull(sslContextProvider, "sslContextProvider");
+    return mapForClients.release(sslContextProvider);
+  }
+
+  /**
+   * Releases an instance of the given server-side {@link SslContextProvider}.
+   *
+   * <p>The instance must have been obtained from {@link #findOrCreateServerSslContextProvider}.
+   * Otherwise will throw IllegalArgumentException.
+   *
+   * <p>Caller must not release a reference more than once. It's advised that you clear the
+   * reference to the instance with the null returned by this method.
+   */
+  public SslContextProvider<DownstreamTlsContext> releaseServerSslContextProvider(
+      SslContextProvider<DownstreamTlsContext> sslContextProvider) {
+    checkNotNull(sslContextProvider, "sslContextProvider");
+    return mapForServers.release(sslContextProvider);
   }
 }
