@@ -190,8 +190,8 @@ abstract class XdsClient {
     private final List<DropOverload> dropPolicies;
 
     private EndpointUpdate(
-        String clusterName, Map<Locality,
-        LocalityLbEndpoints> localityLbEndpoints,
+        String clusterName,
+        Map<Locality, LocalityLbEndpoints> localityLbEndpoints,
         List<DropOverload> dropPolicies) {
       this.clusterName = clusterName;
       this.localityLbEndpointsMap = localityLbEndpoints;
