@@ -111,7 +111,8 @@ abstract class XdsClient {
     }
 
     /**
-     * Returns the policy of balancing loads to endpoints. Always returns "round_robin".
+     * Returns the policy of balancing loads to endpoints. Only "round_robin" is supported
+     * as of now.
      */
     String getLbPolicy() {
       return lbPolicy;
