@@ -62,6 +62,10 @@ abstract class XdsClient {
     static final class Builder {
       private String clusterName;
 
+      // Use ConfigUpdate.newBuilder().
+      private Builder() {
+      }
+
       Builder setClusterName(String clusterName) {
         this.clusterName = clusterName;
         return this;
@@ -140,6 +144,10 @@ abstract class XdsClient {
       private boolean enableLrs;
       @Nullable
       private String lrsServerName;
+
+      // Use ClusterUpdate.newBuilder().
+      private Builder() {
+      }
 
       Builder setClusterName(String clusterName) {
         this.clusterName = clusterName;
@@ -226,6 +234,10 @@ abstract class XdsClient {
       private String clusterName;
       private Map<Locality, LocalityLbEndpoints> localityLbEndpointsMap = new HashMap<>();
       private List<DropOverload> dropPolicies = new ArrayList<>();
+
+      // Use EndpointUpdate.newBuilder().
+      private Builder() {
+      }
 
       Builder setClusterName(String clusterName) {
         this.clusterName = clusterName;
