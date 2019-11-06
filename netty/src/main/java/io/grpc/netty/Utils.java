@@ -95,7 +95,7 @@ class Utils {
           } else {
             maxOrder = PooledByteBufAllocator.defaultMaxOrder();
           }
-          return PooledByteBufAllocator(
+          return new PooledByteBufAllocator(
               PooledByteBufAllocator.defaultPreferDirect(),
               PooledByteBufAllocator.defaultNumHeapArena(),
               PooledByteBufAllocator.defaultNumDirectArena(),
@@ -106,7 +106,12 @@ class Utils {
               PooledByteBufAllocator.defaultNormalCacheSize(),
               PooledByteBufAllocator.defaultUseCacheForAllThreads());
         }
-      }
+
+        @Override
+        public void close(ByteBufAllocator allocator) {
+          // TODO(zhangkun83): do anything?
+        }
+      };
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;

@@ -62,9 +62,11 @@ import io.grpc.internal.ServerStream;
 import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
+import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelDuplexHandler;
@@ -123,6 +125,7 @@ public class NettyClientTransportTest {
   private final LinkedBlockingQueue<Attributes> serverTransportAttributesList =
       new LinkedBlockingQueue<>();
   private final NioEventLoopGroup group = new NioEventLoopGroup(1);
+  private final ByteBufAllocator allocator = SharedResourceHolder.get(Utils.BYTE_BUF_ALLOCATOR);
   private final EchoServerListener serverListener = new EchoServerListener();
   private final InternalChannelz channelz = new InternalChannelz();
   private Runnable tooManyPingsRunnable = new Runnable() {
@@ -153,6 +156,7 @@ public class NettyClientTransportTest {
     }
 
     group.shutdownGracefully(0, 10, TimeUnit.SECONDS);
+    SharedResourceHolder.release(Utils.BYTE_BUF_ALLOCATOR, allocator);
   }
 
   @Test
@@ -190,7 +194,7 @@ public class NettyClientTransportTest {
     channelOptions.put(ChannelOption.SO_LINGER, soLinger);
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(NioSocketChannel.class), channelOptions, group,
-        newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
+        allocator, newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1L, false, authority,
         null /* user agent */, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY,
         new SocketPicker(), new FakeChannelLogger(), false);
@@ -435,7 +439,7 @@ public class NettyClientTransportTest {
     authority = GrpcUtil.authorityFromHostAndPort(address.getHostString(), address.getPort());
     NettyClientTransport transport = new NettyClientTransport(
         address, new ReflectiveChannelFactory<>(CantConstructChannel.class),
-        new HashMap<ChannelOption<?>, Object>(), group,
+        new HashMap<ChannelOption<?>, Object>(), group, allocator,
         newNegotiator(), DEFAULT_WINDOW_SIZE, DEFAULT_MAX_MESSAGE_SIZE,
         GrpcUtil.DEFAULT_MAX_HEADER_LIST_SIZE, KEEPALIVE_TIME_NANOS_DISABLED, 1, false, authority,
         null, tooManyPingsRunnable, new TransportTracer(), Attributes.EMPTY, new SocketPicker(),
@@ -705,7 +709,7 @@ public class NettyClientTransportTest {
       keepAliveTimeNano = KEEPALIVE_TIME_NANOS_DISABLED;
     }
     NettyClientTransport transport = new NettyClientTransport(
-        address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group,
+        address, channelFactory, new HashMap<ChannelOption<?>, Object>(), group, allocator,
         negotiator, DEFAULT_WINDOW_SIZE, maxMsgSize, maxHeaderListSize,
         keepAliveTimeNano, keepAliveTimeoutNano,
         false, authority, userAgent, tooManyPingsRunnable,
