@@ -149,7 +149,8 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos) {
-    Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
+    Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
+        maxHeaderListSize);
     Http2FrameLogger frameLogger = new Http2FrameLogger(LogLevel.DEBUG, NettyServerHandler.class);
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ServerHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new Http2InboundFrameLogger(
@@ -195,10 +196,13 @@ class NettyServerHandler extends AbstractNettyHandler {
       long maxConnectionAgeGraceInNanos,
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos) {
-    Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive");
-    Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive");
-    Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive");
-    Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive");
+    Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
+    Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
+        flowControlWindow);
+    Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
+        maxHeaderListSize);
+    Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive: %s",
+        maxMessageSize);
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);
@@ -293,7 +297,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       }
     });
 
-    checkArgument(maxMessageSize >= 0, "maxMessageSize must be >= 0");
+    checkArgument(maxMessageSize >= 0, "maxMessageSize must be non-negative: %s", maxMessageSize);
     this.maxMessageSize = maxMessageSize;
     this.keepAliveTimeInNanos = keepAliveTimeInNanos;
     this.keepAliveTimeoutInNanos = keepAliveTimeoutInNanos;
