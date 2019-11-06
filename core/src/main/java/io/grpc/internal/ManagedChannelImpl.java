@@ -1857,7 +1857,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public ConfigOrError parseServiceConfig(Map<String, ?> rawServiceConfig) {
       try {
         Object loadBalancingPolicySelection;

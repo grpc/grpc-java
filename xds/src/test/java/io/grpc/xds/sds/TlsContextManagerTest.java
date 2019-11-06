@@ -50,11 +50,9 @@ public class TlsContextManagerTest {
 
   @Rule public final MockitoRule mockitoRule = MockitoJUnit.rule();
 
-  @SuppressWarnings("unchecked")
   @Mock
   SslContextProviderFactory<UpstreamTlsContext> mockClientFactory;
 
-  @SuppressWarnings("unchecked")
   @Mock
   SslContextProviderFactory<DownstreamTlsContext> mockServerFactory;
 
