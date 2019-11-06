@@ -87,13 +87,6 @@ public class SdsClientTest {
     return new String(Files.readAllBytes(Paths.get(tempFile)), StandardCharsets.UTF_8);
   }
 
-  @Test
-  public void configSourceUdsTarget() {
-    ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path");
-    String targetUri = SdsClient.extractUdsTarget(configSource);
-    assertThat(targetUri).isEqualTo("unix:/tmp/uds_path");
-  }
-
   @Before
   public void setUp() throws IOException {
     secretGetter = mock(TestSdsServer.SecretGetter.class);
@@ -110,6 +103,13 @@ public class SdsClientTest {
   public void teardown() {
     sdsClient.shutdown();
     server.shutdown();
+  }
+
+  @Test
+  public void configSourceUdsTarget() {
+    ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path");
+    String targetUri = SdsClient.extractUdsTarget(configSource);
+    assertThat(targetUri).isEqualTo("unix:/tmp/uds_path");
   }
 
   @Test
