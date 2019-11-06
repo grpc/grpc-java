@@ -453,7 +453,6 @@ public class ManagedChannelImplTest {
   }
 
   @Test
-  @SuppressWarnings("unchecked")
   public void idleModeDisabled() {
     channelBuilder.nameResolverFactory(
         new FakeNameResolverFactory.Builder(expectedUri)
