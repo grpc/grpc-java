@@ -625,9 +625,9 @@ public final class NettyChannelBuilder
       }
       closed = true;
 
+      allocatorPool.returnObject(allocator);
       protocolNegotiator.close();
       groupPool.returnObject(group);
-      allocatorPool.returnObject(allocator);
     }
   }
 }

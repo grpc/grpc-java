@@ -63,6 +63,7 @@ import io.grpc.internal.ServerStreamListener;
 import io.grpc.internal.ServerTransport;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourcePool;
 import io.grpc.internal.TransportTracer;
 import io.grpc.internal.testing.TestUtils;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
@@ -727,7 +728,8 @@ public class NettyClientTransportTest {
         TestUtils.testServerAddress(new InetSocketAddress(0)),
         new ReflectiveChannelFactory<>(NioServerSocketChannel.class),
         new HashMap<ChannelOption<?>, Object>(),
-        new FixedObjectPool<>(group), new FixedObjectPool<>(group), negotiator,
+        new FixedObjectPool<>(group), new FixedObjectPool<>(group),
+        SharedResourcePool.forResource(Utils.BYTE_BUF_ALLOCATOR), negotiator,
         Collections.<ServerStreamTracer.Factory>emptyList(),
         TransportTracer.getDefaultFactory(),
         maxStreamsPerConnection,
