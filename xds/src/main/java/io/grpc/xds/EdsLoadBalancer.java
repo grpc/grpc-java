@@ -239,7 +239,9 @@ final class EdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
-      // ADS stream error, no known endpoint specific error yet.
+      reset();
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+
     }
 
     private void reset() {

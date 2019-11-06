@@ -328,7 +328,7 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void edsServiceNameChangeInEdsConfig_() {
+  public void edsServiceNameChangeInEdsConfig() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
@@ -359,6 +359,57 @@ public class EdsLoadBalancerTest {
     verify(xdsClient).watchEndpointData(eq("edsService3"), endpointWatcherCaptor.capture());
     EndpointWatcher endpointWatcher2 = endpointWatcherCaptor.getValue();
     assertThat(endpointWatcher2).isNotEqualTo(endpointWatcher1);
+  }
+
+  @Test
+  public void watcherOnError() {
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
+        .build();
+
+    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher1 = endpointWatcherCaptor.getValue();
+
+    LocalityLbEndpoints localityInfo1 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint11, lbEndpoint12), 1, 0);
+    LocalityLbEndpoints localityInfo2 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
+    LocalityLbEndpoints localityInfo3 =
+        new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
+    ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
+        locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
+
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
+    endpointUpdate1.localityInfoMap = localityInfoMap;
+    endpointUpdate1.dropOverloads = new ArrayList<>();
+    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+
+    verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    assertThat(loadBalancers).hasSize(3);
+
+    endpointWatcher1.onError(UNAVAILABLE);
+    verify(loadBalancers.get("sz1")).shutdown();
+    verify(loadBalancers.get("sz2")).shutdown();
+    verify(loadBalancers.get("sz3")).shutdown();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    // Regression test for same locality added back.
+    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    verify(helper, times(2)).updateBalancingState(CONNECTING, BUFFER_PICKER);
+    assertThat(loadBalancers).hasSize(3);
+    verify(loadBalancers.get("sz1"), never()).shutdown();
+    verify(loadBalancers.get("sz2"), never()).shutdown();
+    verify(loadBalancers.get("sz3"), never()).shutdown();
+    endpointWatcher1.onError(UNAVAILABLE);
+    verify(helper, times(2)).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    verify(loadBalancers.get("sz1")).shutdown();
+    verify(loadBalancers.get("sz2")).shutdown();
+    verify(loadBalancers.get("sz3")).shutdown();
   }
 
   @Test
