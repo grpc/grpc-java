@@ -97,7 +97,7 @@ class GrpcHttp2HeadersUtils {
 
     GrpcHttp2InboundHeaders(int numHeadersGuess) {
       checkArgument(numHeadersGuess > 0, "numHeadersGuess needs to be positive: %s",
-              numHeadersGuess);
+          numHeadersGuess);
       namesAndValues = new byte[numHeadersGuess * 2][];
       values = new AsciiString[numHeadersGuess];
     }

@@ -150,7 +150,7 @@ class NettyServerHandler extends AbstractNettyHandler {
       boolean permitKeepAliveWithoutCalls,
       long permitKeepAliveTimeInNanos) {
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
-            maxHeaderListSize);
+        maxHeaderListSize);
     Http2FrameLogger frameLogger = new Http2FrameLogger(LogLevel.DEBUG, NettyServerHandler.class);
     Http2HeadersDecoder headersDecoder = new GrpcHttp2ServerHeadersDecoder(maxHeaderListSize);
     Http2FrameReader frameReader = new Http2InboundFrameLogger(
@@ -198,11 +198,11 @@ class NettyServerHandler extends AbstractNettyHandler {
       long permitKeepAliveTimeInNanos) {
     Preconditions.checkArgument(maxStreams > 0, "maxStreams must be positive: %s", maxStreams);
     Preconditions.checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
-            flowControlWindow);
+        flowControlWindow);
     Preconditions.checkArgument(maxHeaderListSize > 0, "maxHeaderListSize must be positive: %s",
-            maxHeaderListSize);
+        maxHeaderListSize);
     Preconditions.checkArgument(maxMessageSize > 0, "maxMessageSize must be positive: %s",
-            maxMessageSize);
+        maxMessageSize);
 
     final Http2Connection connection = new DefaultHttp2Connection(true);
     WeightedFairQueueByteDistributor dist = new WeightedFairQueueByteDistributor(connection);

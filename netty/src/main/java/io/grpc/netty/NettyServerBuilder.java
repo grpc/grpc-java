@@ -330,7 +330,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder flowControlWindow(int flowControlWindow) {
     checkArgument(flowControlWindow > 0, "flowControlWindow must be positive: %s",
-            flowControlWindow);
+        flowControlWindow);
     this.flowControlWindow = flowControlWindow;
     return this;
   }
@@ -418,7 +418,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder keepAliveTimeout(long keepAliveTimeout, TimeUnit timeUnit) {
     checkArgument(keepAliveTimeout > 0L, "keepalive timeout must be positive: %s",
-            keepAliveTimeout);
+        keepAliveTimeout);
     keepAliveTimeoutInNanos = timeUnit.toNanos(keepAliveTimeout);
     keepAliveTimeoutInNanos =
         KeepAliveManager.clampKeepAliveTimeoutInNanos(keepAliveTimeoutInNanos);
@@ -440,7 +440,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder maxConnectionIdle(long maxConnectionIdle, TimeUnit timeUnit) {
     checkArgument(maxConnectionIdle > 0L, "max connection idle must be positive: %s",
-            maxConnectionIdle);
+        maxConnectionIdle);
     maxConnectionIdleInNanos = timeUnit.toNanos(maxConnectionIdle);
     if (maxConnectionIdleInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionIdleInNanos = MAX_CONNECTION_IDLE_NANOS_DISABLED;
@@ -461,7 +461,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder maxConnectionAge(long maxConnectionAge, TimeUnit timeUnit) {
     checkArgument(maxConnectionAge > 0L, "max connection age must be positive: %s",
-            maxConnectionAge);
+        maxConnectionAge);
     maxConnectionAgeInNanos = timeUnit.toNanos(maxConnectionAge);
     if (maxConnectionAgeInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeInNanos = MAX_CONNECTION_AGE_NANOS_DISABLED;
@@ -483,7 +483,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder maxConnectionAgeGrace(long maxConnectionAgeGrace, TimeUnit timeUnit) {
     checkArgument(maxConnectionAgeGrace >= 0L, "max connection age grace must be non-negative: %s",
-            maxConnectionAgeGrace);
+        maxConnectionAgeGrace);
     maxConnectionAgeGraceInNanos = timeUnit.toNanos(maxConnectionAgeGrace);
     if (maxConnectionAgeGraceInNanos >= AS_LARGE_AS_INFINITE) {
       maxConnectionAgeGraceInNanos = MAX_CONNECTION_AGE_GRACE_NANOS_INFINITE;
@@ -507,7 +507,7 @@ public final class NettyServerBuilder extends AbstractServerImplBuilder<NettySer
    */
   public NettyServerBuilder permitKeepAliveTime(long keepAliveTime, TimeUnit timeUnit) {
     checkArgument(keepAliveTime >= 0, "permit keepalive time must be non-negative: %s",
-            keepAliveTime);
+        keepAliveTime);
     permitKeepAliveTimeInNanos = timeUnit.toNanos(keepAliveTime);
     return this;
   }
