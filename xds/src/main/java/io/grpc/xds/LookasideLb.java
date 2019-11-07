@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.xds.XdsNameResolver.XDS_CHANNEL_CREDS_LIST;
 import static io.grpc.xds.XdsNameResolver.XDS_NODE;
 import static java.util.logging.Level.FINEST;
 
@@ -31,11 +32,15 @@ import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.ConfigOrError;
+import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -98,13 +103,19 @@ final class LookasideLb extends ForwardingLoadBalancer {
                     Value.newBuilder().setBoolValue(true).build()))
             .build();
       }
-      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(newBalancerName, node));
+      List<ChannelCreds> channelCredsList =
+          resolvedAddresses.getAttributes().get(XDS_CHANNEL_CREDS_LIST);
+      if (channelCredsList == null) {
+        channelCredsList = Collections.emptyList();
+      }
+      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(
+          newBalancerName, node, channelCredsList));
     }
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
   }
 
   private LoadBalancerProvider newLookasideChannelLbProvider(
-      final String balancerName, final Node node) {
+      final String balancerName, final Node node, final List<ChannelCreds> channelCredsList) {
     return new LoadBalancerProvider() {
       @Override
       public boolean isAvailable() {
@@ -128,7 +139,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
       @Override
       public LoadBalancer newLoadBalancer(Helper helper) {
         return lookasideChannelLbFactory.newLoadBalancer(
-            helper, lookasideChannelCallback, balancerName, node);
+            helper, lookasideChannelCallback, balancerName, node, channelCredsList);
       }
     };
   }
@@ -137,7 +148,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
   interface LookasideChannelLbFactory {
     LoadBalancer newLoadBalancer(
         Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
-        Node node);
+        Node node, List<ChannelCreds> channelCredsList);
   }
 
   private static final class LookasideChannelLbFactoryImpl implements LookasideChannelLbFactory {
@@ -145,15 +156,18 @@ final class LookasideLb extends ForwardingLoadBalancer {
     @Override
     public LoadBalancer newLoadBalancer(
         Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
-        Node node) {
+        Node node, List<ChannelCreds> channelCredsList) {
       return new LookasideChannelLb(
-          helper, lookasideChannelCallback, initLbChannel(helper, balancerName),
+          helper, lookasideChannelCallback, initLbChannel(helper, balancerName, channelCredsList),
           new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()),
           node);
     }
 
-    private static ManagedChannel initLbChannel(Helper helper, String balancerName) {
-      ManagedChannel channel;
+    private static ManagedChannel initLbChannel(
+        Helper helper,
+        String balancerName,
+        List<ChannelCreds> channelCredsList) {
+      ManagedChannel channel = null;
       try {
         channel = helper.createResolvingOobChannel(balancerName);
       } catch (UnsupportedOperationException uoe) {
@@ -165,12 +179,20 @@ final class LookasideLb extends ForwardingLoadBalancer {
               FINEST,
               "createResolvingOobChannel() not supported by the helper: " + helper,
               uoe);
-          logger.log(
-              FINEST,
-              "creating oob channel for target {0} using default ManagedChannelBuilder",
-              balancerName);
+          logger.log(FINEST, "creating oob channel for target {0}", balancerName);
         }
-        channel = ManagedChannelBuilder.forTarget(balancerName).build();
+
+        // Use the first supported channel credentials configuration.
+        // Currently, only "google_default" is supported.
+        for (ChannelCreds creds : channelCredsList) {
+          if (creds.getType().equals("google_default")) {
+            channel = GoogleDefaultChannelBuilder.forTarget(balancerName).build();
+            break;
+          }
+        }
+        if (channel == null) {
+          channel = ManagedChannelBuilder.forTarget(balancerName).build();
+        }
       }
       return channel;
     }

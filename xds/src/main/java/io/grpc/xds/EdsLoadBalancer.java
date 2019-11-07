@@ -137,7 +137,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     if (!edsServiceName.equals(this.edsServiceName)) {
       if (endpointWatcher != null) {
         // TODO(zdapeng): Maybe gracefully swap until the localities for the new watcher is READY?
-        xdsClient.cancelEndpointDataWatch(endpointWatcher);
+        xdsClient.cancelEndpointDataWatch(this.edsServiceName, endpointWatcher);
         endpointWatcher.reset();
       }
       endpointWatcher = new EndpointWatcherImpl(
@@ -164,7 +164,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
 
     if (endpointWatcher != null) {
-      xdsClient.cancelEndpointDataWatch(endpointWatcher);
+      xdsClient.cancelEndpointDataWatch(edsServiceName, endpointWatcher);
       endpointWatcher.reset();
     }
   }
@@ -233,8 +233,8 @@ final class EdsLoadBalancer extends LoadBalancer {
     public void onEndpointChanged(EndpointUpdate update) {
       checkNotNull(update, "update");
 
-      updateDropPercentage(ImmutableList.copyOf(update.dropOverloads));
-      updateLocalityStore(ImmutableMap.copyOf(update.localityInfoMap));
+      updateDropPercentage(ImmutableList.copyOf(update.getDropPolicies()));
+      updateLocalityStore(ImmutableMap.copyOf(update.getLocalityLbEndpointsMap()));
     }
 
     @Override

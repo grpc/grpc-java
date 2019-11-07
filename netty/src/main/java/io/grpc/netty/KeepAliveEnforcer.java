@@ -43,7 +43,7 @@ class KeepAliveEnforcer {
 
   @VisibleForTesting
   KeepAliveEnforcer(boolean permitWithoutCalls, long minTime, TimeUnit unit, Ticker ticker) {
-    Preconditions.checkArgument(minTime >= 0, "minTime must be non-negative");
+    Preconditions.checkArgument(minTime >= 0, "minTime must be non-negative: %s", minTime);
 
     this.permitWithoutCalls = permitWithoutCalls;
     this.minTimeNanos = Math.min(unit.toNanos(minTime), IMPLICIT_PERMIT_TIME_NANOS);

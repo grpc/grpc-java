@@ -23,7 +23,8 @@ dependencies {
             project(':grpc-stub'),
             project(':grpc-core'),
             project(':grpc-netty'),
-            project(':grpc-services')
+            project(':grpc-services'),
+            project(':grpc-alts')
     
     compile (libraries.pgv) {
         // PGV depends on com.google.protobuf:protobuf-java 3.6.1 conflicting with :grpc-protobuf

@@ -32,6 +32,7 @@ import io.grpc.Status.Code;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.GrpcUtil;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
@@ -103,11 +104,13 @@ public class XdsNameResolverTest {
 
   @Test
   public void resolve_bootstrapResult() {
+    final ChannelCreds loasCreds = new ChannelCreds("loas2", null);
+    final ChannelCreds googleDefaultCreds = new ChannelCreds("google_default", null);
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       BootstrapInfo readBootstrap() {
         return new BootstrapInfo("trafficdirector.googleapis.com",
-            ImmutableList.<ChannelCreds>of(), FAKE_BOOTSTRAP_NODE);
+            ImmutableList.of(loasCreds, googleDefaultCreds), FAKE_BOOTSTRAP_NODE);
       }
     };
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
@@ -134,6 +137,8 @@ public class XdsNameResolverTest {
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
     assertThat(result.getAttributes().get(XdsNameResolver.XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
+    assertThat(result.getAttributes().get(XdsNameResolver.XDS_CHANNEL_CREDS_LIST))
+        .containsExactly(loasCreds, googleDefaultCreds);
   }
 
   @Test

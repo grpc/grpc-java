@@ -317,14 +317,13 @@ public class EdsLoadBalancerTest {
         ImmutableMap.of(xdsLocality, localityLbEndpoints);
     ImmutableList<EnvoyProtoData.DropOverload> dropOverloads =
         ImmutableList.of(new EnvoyProtoData.DropOverload("cat1", 10));
-    EndpointUpdate endpointUpdate = new EndpointUpdate();
-    endpointUpdate.localityInfoMap = localityInfoMap;
-    endpointUpdate.dropOverloads = dropOverloads;
+    EndpointUpdate endpointUpdate =
+        new EndpointUpdate("edsService1", localityInfoMap, dropOverloads);
     endpointWatcherCaptor.getValue().onEndpointChanged(endpointUpdate);
 
     // shutdown
     edsLoadBalancer.shutdown();
-    verify(xdsClient).cancelEndpointDataWatch(endpointWatcherCaptor.getValue());
+    verify(xdsClient).cancelEndpointDataWatch("edsService1", endpointWatcherCaptor.getValue());
   }
 
   @Test
@@ -355,10 +354,10 @@ public class EdsLoadBalancerTest {
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService3", new Object()))
         .build();
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses3);
-    verify(xdsClient).cancelEndpointDataWatch(endpointWatcher1);
+    verify(xdsClient).cancelEndpointDataWatch("edsService1", endpointWatcher1);
     verify(xdsClient).watchEndpointData(eq("edsService3"), endpointWatcherCaptor.capture());
-    EndpointWatcher endpointWatcher2 = endpointWatcherCaptor.getValue();
-    assertThat(endpointWatcher2).isNotEqualTo(endpointWatcher1);
+    EndpointWatcher endpointWatcher3 = endpointWatcherCaptor.getValue();
+    assertThat(endpointWatcher3).isNotEqualTo(endpointWatcher1);
   }
 
   @Test
@@ -383,9 +382,8 @@ public class EdsLoadBalancerTest {
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -434,9 +432,8 @@ public class EdsLoadBalancerTest {
         .put(locality2,
             new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0));
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     verify(loadStatsStore).addLocality(locality1);
@@ -448,17 +445,21 @@ public class EdsLoadBalancerTest {
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
     verify(loadStatsStore).addLocality(locality3);
 
-    endpointUpdate1.localityInfoMap = ImmutableMap
+    localityInfoMap = ImmutableMap
         .of(locality4,
             new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0));
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    EndpointUpdate endpointUpdate2 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate2);
     verify(loadStatsStore).removeLocality(locality1);
     verify(loadStatsStore).removeLocality(locality2);
     verify(loadStatsStore).removeLocality(locality3);
     verify(loadStatsStore).addLocality(locality4);
 
-    endpointUpdate1.localityInfoMap = Collections.EMPTY_MAP;
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    localityInfoMap = Collections.EMPTY_MAP;
+    EndpointUpdate endpointUpdate3 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate3);
     verify(loadStatsStore).removeLocality(locality4);
   }
 
@@ -481,10 +482,10 @@ public class EdsLoadBalancerTest {
     LocalityLbEndpoints localityInfo2 =
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = ImmutableMap.of(
-        locality1, localityInfo1, locality2, localityInfo2);
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1",
+        ImmutableMap.of(locality1, localityInfo1, locality2, localityInfo2),
+        new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     // Two child balancers are created.
@@ -567,10 +568,10 @@ public class EdsLoadBalancerTest {
     LocalityLbEndpoints localityInfo2 =
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = ImmutableMap.of(
-        locality1, localityInfo1, locality2, localityInfo2);
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1",
+        ImmutableMap.of(locality1, localityInfo1, locality2, localityInfo2),
+        new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     // Two child balancers are created.
@@ -640,10 +641,10 @@ public class EdsLoadBalancerTest {
     LocalityLbEndpoints localityInfo2 =
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = ImmutableMap.of(
-        locality1, localityInfo1, locality2, localityInfo2);
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1",
+        ImmutableMap.of(locality1, localityInfo1, locality2, localityInfo2),
+        new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     // Two child balancers are created.
@@ -677,9 +678,8 @@ public class EdsLoadBalancerTest {
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     verify(helper).updateBalancingState(CONNECTING, BUFFER_PICKER);
@@ -758,7 +758,8 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41, lbEndpoint42), 4, 0);
     localityInfoMap = ImmutableMap.of(
         locality2, localityInfo2, locality4, localityInfo4, locality1, localityInfo1);
-    endpointUpdate1.localityInfoMap = localityInfoMap;
+    endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     assertThat(loadBalancers).hasSize(4);
@@ -804,9 +805,8 @@ public class EdsLoadBalancerTest {
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
@@ -838,8 +838,9 @@ public class EdsLoadBalancerTest {
     localityInfoMap = ImmutableMap.of(locality3, localityInfo3, locality4, localityInfo4);
 
 
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    EndpointUpdate endpointUpdate2 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate2);
 
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3", "sz4");
 
@@ -874,8 +875,9 @@ public class EdsLoadBalancerTest {
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality3, localityInfo3, locality4, localityInfo4);
 
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    EndpointUpdate endpointUpdate3 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate3);
     verify(helper, atLeastOnce()).updateBalancingState(
         same(READY), subchannelPickerCaptor.capture());
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(2);
@@ -895,9 +897,9 @@ public class EdsLoadBalancerTest {
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
 
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    EndpointUpdate endpointUpdate4 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate4);
 
     LoadBalancer newLb2 = loadBalancers.get("sz2");
     assertThat(newLb2).isNotSameInstanceAs(lb2);
@@ -951,11 +953,10 @@ public class EdsLoadBalancerTest {
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
 
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = ImmutableList.of(
-        new DropOverload("throttle", 365),
-        new DropOverload("lb", 1234));
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1",
+        localityInfoMap,
+        ImmutableList.of(new DropOverload("throttle", 365), new DropOverload("lb", 1234)));
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     assertThat(loadBalancers).hasSize(3);
@@ -1061,11 +1062,10 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = ImmutableList.of(
-        new DropOverload("throttle", 365),
-        new DropOverload("lb", 1000_000));
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1",
+        localityInfoMap,
+        ImmutableList.of(new DropOverload("throttle", 365), new DropOverload("lb", 1000_000)));
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     ArgumentCaptor<SubchannelPicker> subchannelPickerCaptor =
@@ -1097,9 +1097,8 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 3, 0);
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
     assertThat(loadBalancers).hasSize(3);
     assertThat(loadBalancers.keySet()).containsExactly("sz1", "sz2", "sz3");
@@ -1111,8 +1110,9 @@ public class EdsLoadBalancerTest {
     localityInfo3 = new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31, lbEndpoint32), 6, 0);
     localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3);
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointWatcher1.onEndpointChanged(endpointUpdate1);
+    EndpointUpdate endpointUpdate2 =
+        new EndpointUpdate("edsService1", localityInfoMap, new ArrayList<DropOverload>());
+    endpointWatcher1.onEndpointChanged(endpointUpdate2);
 
     assertThat(pickerFactory.totalReadyLocalities).isEqualTo(0);
 
@@ -1158,9 +1158,8 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint21, lbEndpoint22), 2, 0);
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2);
-    EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
     endpointWatcher1.onEndpointChanged(endpointUpdate1);
 
     assertThat(loadBalancers).hasSize(2);
@@ -1221,9 +1220,8 @@ public class EdsLoadBalancerTest {
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap = ImmutableMap.of(
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
-    final EndpointUpdate endpointUpdate1 = new EndpointUpdate();
-    endpointUpdate1.localityInfoMap = localityInfoMap;
-    endpointUpdate1.dropOverloads = new ArrayList<>();
+    final EndpointUpdate endpointUpdate1 = new EndpointUpdate(
+        "edsService1", localityInfoMap, new ArrayList<DropOverload>());
 
     syncContext.execute(new Runnable() {
       @Override
@@ -1461,9 +1459,8 @@ public class EdsLoadBalancerTest {
         locality1, localityInfo1, locality2, localityInfo2, locality3, localityInfo3, locality4,
         localityInfo4);
 
-    final EndpointUpdate endpointUpdate2 = new EndpointUpdate();
-    endpointUpdate2.localityInfoMap = localityInfoMap2;
-    endpointUpdate2.dropOverloads = new ArrayList<>();
+    final EndpointUpdate endpointUpdate2 = new EndpointUpdate(
+        "edsService1", localityInfoMap2, new ArrayList<DropOverload>());
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
@@ -1505,9 +1502,8 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint31), 3, 0);
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap3 = ImmutableMap.of(
         locality1, localityInfo1,locality3, localityInfo3);
-    final EndpointUpdate endpointUpdate3 = new EndpointUpdate();
-    endpointUpdate3.localityInfoMap = localityInfoMap3;
-    endpointUpdate3.dropOverloads = new ArrayList<>();
+    final EndpointUpdate endpointUpdate3 = new EndpointUpdate(
+        "edsService1", localityInfoMap3, new ArrayList<DropOverload>());
     syncContext.execute(new Runnable() {
       @Override
       public void run() {
@@ -1558,9 +1554,8 @@ public class EdsLoadBalancerTest {
         new LocalityLbEndpoints(ImmutableList.of(lbEndpoint41), 4, 1);
     ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap4 = ImmutableMap.of(
         locality1, localityInfo1,locality4, localityInfo4);
-    final EndpointUpdate endpointUpdate4 = new EndpointUpdate();
-    endpointUpdate4.localityInfoMap = localityInfoMap4;
-    endpointUpdate4.dropOverloads = new ArrayList<>();
+    final EndpointUpdate endpointUpdate4 = new EndpointUpdate(
+        "edsService1", localityInfoMap4, new ArrayList<DropOverload>());
     syncContext.execute(new Runnable() {
       @Override
       public void run() {

@@ -51,49 +51,60 @@ public class ReferenceCountingSslContextProviderMapTest {
 
   @Test
   public void referenceCountingMap_getAndRelease_closeCalled() throws InterruptedException {
-    SslContextProvider valueFor3 = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor3 = getTypedMock();
     when(mockFactory.createSslContextProvider(3)).thenReturn(valueFor3);
-    SslContextProvider val = map.get(3);
+    SslContextProvider<Integer> val = map.get(3);
     assertThat(val).isSameInstanceAs(valueFor3);
     verify(valueFor3, never()).close();
     val = map.get(3);
     assertThat(val).isSameInstanceAs(valueFor3);
     // at this point ref-count is 2
-    assertThat(map.release(3, val)).isNull();
+    when(valueFor3.getSource()).thenReturn(3);
+    assertThat(map.release(val)).isNull();
     verify(valueFor3, never()).close();
-    assertThat(map.release(3, val)).isNull(); // after this ref-count is 0
+    assertThat(map.release(val)).isNull(); // after this ref-count is 0
     verify(valueFor3, times(1)).close();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static SslContextProvider<Integer> getTypedMock() {
+    return mock(SslContextProvider.class);
   }
 
   @Test
   public void referenceCountingMap_distinctElements() throws InterruptedException {
-    SslContextProvider valueFor3 = mock(SslContextProvider.class);
-    SslContextProvider valueFor4 = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor3 = getTypedMock();
+    SslContextProvider<Integer> valueFor4 = getTypedMock();
+    when(valueFor3.getSource()).thenReturn(3);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(3)).thenReturn(valueFor3);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
-    SslContextProvider val3 = map.get(3);
+    SslContextProvider<Integer> val3 = map.get(3);
     assertThat(val3).isSameInstanceAs(valueFor3);
-    SslContextProvider val4 = map.get(4);
+    SslContextProvider<Integer> val4 = map.get(4);
     assertThat(val4).isSameInstanceAs(valueFor4);
-    assertThat(map.release(3, val3)).isNull();
+    assertThat(map.release(val3)).isNull();
     verify(valueFor3, times(1)).close();
     verify(valueFor4, never()).close();
-    assertThat(map.release(4, val4)).isNull();
+    assertThat(map.release(val4)).isNull();
     verify(valueFor4, times(1)).close();
   }
 
   @Test
   public void referenceCountingMap_releaseWrongElement_expectException()
       throws InterruptedException {
-    SslContextProvider valueFor3 = mock(SslContextProvider.class);
-    SslContextProvider valueFor4 = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor3 = getTypedMock();
+    SslContextProvider<Integer> valueFor4 = getTypedMock();
+    when(valueFor3.getSource()).thenReturn(3);
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(3)).thenReturn(valueFor3);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
-    SslContextProvider unused = map.get(3);
-    SslContextProvider val4 = map.get(4);
+    SslContextProvider<Integer> unused = map.get(3);
+    SslContextProvider<Integer> val4 = map.get(4);
     // now provide wrong key (3) and value (val4) combination
+    when(valueFor4.getSource()).thenReturn(3);
     try {
-      map.release(3, val4);
+      map.release(val4);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("Releasing the wrong instance");
@@ -102,15 +113,16 @@ public class ReferenceCountingSslContextProviderMapTest {
 
   @Test
   public void referenceCountingMap_excessRelease_expectException() throws InterruptedException {
-    SslContextProvider valueFor4 = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor4 = getTypedMock();
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
-    SslContextProvider val = map.get(4);
+    SslContextProvider<Integer> val = map.get(4);
     assertThat(val).isSameInstanceAs(valueFor4);
     // at this point ref-count is 1
-    map.release(4, val);
+    map.release(val);
     // at this point ref-count is 0
     try {
-      map.release(4, val);
+      map.release(val);
       fail("exception expected");
     } catch (IllegalArgumentException expected) {
       assertThat(expected).hasMessageThat().contains("No cached instance found for 4");
@@ -119,15 +131,16 @@ public class ReferenceCountingSslContextProviderMapTest {
 
   @Test
   public void referenceCountingMap_releaseAndGet_differentInstance() throws InterruptedException {
-    SslContextProvider valueFor4 = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor4 = getTypedMock();
+    when(valueFor4.getSource()).thenReturn(4);
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4);
-    SslContextProvider val = map.get(4);
+    SslContextProvider<Integer> val = map.get(4);
     assertThat(val).isSameInstanceAs(valueFor4);
     // at this point ref-count is 1
-    map.release(4, val);
+    map.release(val);
     // at this point ref-count is 0 and val is removed
     // should get another instance for 4
-    SslContextProvider valueFor4a = mock(SslContextProvider.class);
+    SslContextProvider<Integer> valueFor4a = getTypedMock();
     when(mockFactory.createSslContextProvider(4)).thenReturn(valueFor4a);
     val = map.get(4);
     assertThat(val).isSameInstanceAs(valueFor4a);
