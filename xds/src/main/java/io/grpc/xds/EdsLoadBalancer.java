@@ -207,7 +207,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     private final Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     // Most current set of localities instructed by traffic director
     private Set<Locality> localities = ImmutableSet.of();
-    private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
+    private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
     EndpointWatcherImpl(
@@ -260,7 +260,7 @@ final class EdsLoadBalancer extends LoadBalancer {
 
     // This is triggered by EDS response.
     private void updateLocalityStore(
-        final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
+        final Map<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
@@ -320,7 +320,7 @@ final class EdsLoadBalancer extends LoadBalancer {
       }
     }
 
-    private void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
+    private void updateDropPercentage(List<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
@@ -409,13 +409,13 @@ final class EdsLoadBalancer extends LoadBalancer {
 
     private static final class DroppablePicker extends SubchannelPicker {
 
-      final ImmutableList<DropOverload> dropOverloads;
+      final List<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
       final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
-          ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
+          List<DropOverload> dropOverloads, SubchannelPicker delegate,
           ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
