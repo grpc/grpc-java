@@ -306,6 +306,10 @@ final class XdsClientImpl extends XdsClient {
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
     } else {
+      // Update the RDS resource we wish to request. An RDS request may not be necessary, but
+      // we need to keep what we request updated in case of notifying watcher upon receiving
+      // an RDS response for updating the requested resource.
+      adsStream.rdsResourceName = routeConfigName;
       // First look up the RDS cache to see if we had received an RDS response containing the
       // desired RouteConfiguration previously. Otherwise, send an RDS request for dynamic
       // resolution.
@@ -362,7 +366,8 @@ final class XdsClientImpl extends XdsClient {
 
     adsStream.sendPendingAckRequest();
 
-    // Notify the ConfigWatcher if this RDS response contains requested RDS resource.
+    // Notify the ConfigWatcher if this RDS response contains the most recently requested
+    // RDS resource.
     if (clusterNames.containsKey(adsStream.rdsResourceName)) {
       ConfigUpdate configUpdate =
           ConfigUpdate.newBuilder()
