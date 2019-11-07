@@ -72,10 +72,16 @@ final class XdsClientImpl extends XdsClient {
   // more than once.
   private final Node node;
 
-  // We are requesting for a singleton Listener resource, every LDS response gives the state of
-  // the world. So we do not need to cache data for LDS responses as we will never change the
-  // LDS resource we are requesting.
+  // Each Listener received in LDS responses indicates an RouteConfiguration. Since we are
+  // always requesting for a singleton Listener resource, we only need to remember the
+  // a single Listener information.
+  // Upon receiving an LDS response, the entry for the RouteConfiguration indicated by the
+  // previous LDS response is deleted from RDS cache.
+  // Upon receiving an RDS response, each RouteConfiguration is inserted into RDS cache.
 
+  // Cached data for LDS responses, it is the RouteConfiguration name indicated by the requested
+  // Listener.
+  private String routeConfigNameInListener;
   // Cached data for RDS responses, keyed by RouteConfiguration names.
   // LDS responses indicate absent of RouteConfigurations and RDS responses indicate present
   // of RouteConfigurations.
@@ -243,6 +249,12 @@ final class XdsClientImpl extends XdsClient {
 
     // No Listener for the requested resource. But we still ACK the response.
     if (requestedListener == null) {
+      // LDS response indicates the state of the world. If a Listener becomes absent, cache
+      // information indicated by that Listener needs to be invalidated.
+      if (routeConfigNameInListener != null) {
+        routeConfigNamesToClusterNames.remove(routeConfigNameInListener);
+        routeConfigNameInListener = null;
+      }
       adsStream.sendPendingAckRequest();
       configWatcher.onError(
           Status.NOT_FOUND.withDescription(
@@ -291,13 +303,11 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    // Purge cached clusterNames, retain the entry for the only RouteConfiguration that
-    // appears in the requested Listener.
-    String cachedClusterName = routeConfigNamesToClusterNames.get(routeConfigName);
-    routeConfigNamesToClusterNames.clear();
-    if (cachedClusterName != null) {
-      routeConfigNamesToClusterNames.put(routeConfigName, cachedClusterName);
+    // Invalidate the RDS cache entry indicated by the Listener in previous LDS response.
+    if (routeConfigNameInListener != null && !routeConfigNameInListener.equals(routeConfigName)) {
+      routeConfigNamesToClusterNames.remove(routeConfigNameInListener);
     }
+    routeConfigNameInListener = routeConfigName;
 
     adsStream.sendPendingAckRequest();
 
