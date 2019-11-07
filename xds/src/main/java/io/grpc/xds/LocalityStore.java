@@ -72,9 +72,9 @@ interface LocalityStore {
 
   void reset();
 
-  void updateLocalityStore(ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap);
+  void updateLocalityStore(Map<Locality, LocalityLbEndpoints> localityInfoMap);
 
-  void updateDropPercentage(ImmutableList<DropOverload> dropOverloads);
+  void updateDropPercentage(List<DropOverload> dropOverloads);
 
   void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
 
@@ -97,7 +97,7 @@ interface LocalityStore {
     private final Map<Locality, LocalityLbInfo> localityMap = new HashMap<>();
     // Most current set of localities instructed by traffic director
     private Set<Locality> localities = ImmutableSet.of();
-    private ImmutableList<DropOverload> dropOverloads = ImmutableList.of();
+    private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
     LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
@@ -132,13 +132,13 @@ interface LocalityStore {
 
     private static final class DroppablePicker extends SubchannelPicker {
 
-      final ImmutableList<DropOverload> dropOverloads;
+      final List<DropOverload> dropOverloads;
       final SubchannelPicker delegate;
       final ThreadSafeRandom random;
       final LoadStatsStore loadStatsStore;
 
       DroppablePicker(
-          ImmutableList<DropOverload> dropOverloads, SubchannelPicker delegate,
+          List<DropOverload> dropOverloads, SubchannelPicker delegate,
           ThreadSafeRandom random, LoadStatsStore loadStatsStore) {
         this.dropOverloads = dropOverloads;
         this.delegate = delegate;
@@ -204,7 +204,7 @@ interface LocalityStore {
     // This is triggered by EDS response.
     @Override
     public void updateLocalityStore(
-        final ImmutableMap<Locality, LocalityLbEndpoints> localityInfoMap) {
+        final Map<Locality, LocalityLbEndpoints> localityInfoMap) {
 
       Set<Locality> newLocalities = localityInfoMap.keySet();
       // TODO: put endPointWeights into attributes for WRR.
@@ -265,7 +265,7 @@ interface LocalityStore {
     }
 
     @Override
-    public void updateDropPercentage(ImmutableList<DropOverload> dropOverloads) {
+    public void updateDropPercentage(List<DropOverload> dropOverloads) {
       this.dropOverloads = checkNotNull(dropOverloads, "dropOverloads");
     }
 
