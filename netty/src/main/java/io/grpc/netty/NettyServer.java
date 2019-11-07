@@ -164,6 +164,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
 
     ServerBootstrap b = new ServerBootstrap();
     b.option(ALLOCATOR, allocator);
+    b.childOption(ALLOCATOR, allocator);
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
