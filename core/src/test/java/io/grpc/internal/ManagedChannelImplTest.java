@@ -3488,11 +3488,10 @@ public class ManagedChannelImplTest {
       assertThat(Throwables.getStackTraceAsString(e.getCause())).contains("deadline");
     }
 
-    // run the delayed cancel request task for deadline exceeded.
-    timer.forwardTime(5, TimeUnit.SECONDS);
-    executor.runDueTasks();
-
     mychannel.shutdownNow();
+    // Now for Deadline_exceeded, stream shutdown is delayed, calling shutdownNow() on a open stream
+    // will add a task to executor. Cleaning that task here.
+    executor.runDueTasks();
   }
 
   @Deprecated

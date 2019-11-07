@@ -831,9 +831,11 @@ public class ClientCallImplTest {
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     verify(stream, never()).cancel(statusCaptor.capture());
 
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS - 1);
+    verify(stream, never()).cancel(any(Status.class));
 
     // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
+    fakeClock.forwardNanos(1);
     verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
@@ -864,8 +866,12 @@ public class ClientCallImplTest {
     fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
     verify(stream, never()).cancel(statusCaptor.capture());
 
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
-    verify(stream, times(1)).cancel(statusCaptor.capture());
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS - 1);
+    verify(stream, never()).cancel(statusCaptor.capture());
+
+    // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
+    fakeClock.forwardNanos(1);
+    verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");
   }
