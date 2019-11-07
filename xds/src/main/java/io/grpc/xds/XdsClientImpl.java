@@ -22,7 +22,6 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
-import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -32,6 +31,7 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
+import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -42,8 +42,11 @@ import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -69,6 +72,17 @@ final class XdsClientImpl extends XdsClient {
   // more than once.
   private final Node node;
 
+  // We are requesting for a singleton Listener resource, every LDS response gives the state of
+  // the world. So we do not need to cache data for LDS responses as we will never change the
+  // LDS resource we are requesting.
+
+  // Cached data for RDS responses, keyed by RouteConfiguration names.
+  // LDS responses indicate absent of RouteConfigurations and RDS responses indicate present
+  // of RouteConfigurations.
+  // Optimization: only cache clusterName filed in the RouteConfiguration messages of RDS
+  // responses.
+  private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
+
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -76,7 +90,8 @@ final class XdsClientImpl extends XdsClient {
   @Nullable
   private ScheduledHandle rpcRetryTimer;
 
-  // Following fields are set only when there is a ConfigWatcher registered.
+  // Following fields are set only after the ConfigWatcher registered. Once set, they should
+  // never change.
   @Nullable
   private ConfigWatcher configWatcher;
   // The host name portion of "xds:" URI that the gRPC client targets for.
@@ -131,7 +146,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
-    checkState(configWatcher == null, "Another ConfigWatcher is already registered");
+    checkState(configWatcher == null, "ConfigWatcher is already registered");
     configWatcher = checkNotNull(watcher, "watcher");
     this.hostName = checkNotNull(hostName, "hostName");
     if (port == -1) {
@@ -147,15 +162,6 @@ final class XdsClientImpl extends XdsClient {
       startRpcStream();
     }
     adsStream.sendLdsRequest(ldsResourceName);
-  }
-
-  @Override
-  void cancelConfigDataWatch() {
-    if (configWatcher == null) {
-      logger.log(Level.WARNING, "No ConfigWatcher exists");
-    }
-    configWatcher = null;
-    // Do NOT clear ldsResourceName as we may still need to NACK LDS responses.
   }
 
   /**
@@ -206,135 +212,188 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
    * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
-   * listener, if exists, to find the VirtualHost configuration for the "xds:" * URI
+   * listener, if exists, to find the VirtualHost configuration for the "xds:" URI
    * (with the port, if any, stripped off). Or sends an RDS request if configured for dynamic
-   * resolution. Otherwise, sends back a NACK request.
+   * resolution. The response is NACKed if contains invalid data for gRPC's usage. Otherwise, an
+   * ACK request is sent to management server.
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
     logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
-    checkState(ldsResourceName != null,
-        "No LDS request was ever sent. Management server is broken");
+    checkState(ldsResourceName != null && configWatcher != null,
+        "No LDS request was ever sent. Management server is doing something wrong");
     adsStream.ldsRespNonce = ldsResponse.getNonce();
     // Prepare an ACK/NACK request.
     adsStream.prepareAckRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getVersionInfo(),
         ldsResponse.getNonce());
-    if (configWatcher == null) {
-      adsStream.nackPendingAckRequest();
-      return;
-    }
-    List<Any> respResources = ldsResponse.getResourcesList();
-    HttpConnectionManager connManager = null;
+
+    // Unpack Listener messages.
+    Listener requestedListener = null;
     try {
-      for (com.google.protobuf.Any res : respResources) {
-        Listener listener = res.unpack(Listener.class);
-        if (listener.getName().equals(ldsResourceName)) {
-          HttpConnectionManager httpConnManager =
-              listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
-          if (httpConnManager.hasRouteConfig() || httpConnManager.hasRds()) {
-            connManager = httpConnManager;
-          }
-          // Ignore remaining listeners once the requested one is found.
-          break;
+      for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
+        Listener l = res.unpack(Listener.class);
+        if (l.getName().equals(ldsResourceName)) {
+          requestedListener = l;
         }
       }
     } catch (InvalidProtocolBufferException e) {
+      adsStream.nackPendingAckRequest();
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
+      return;
+    }
+
+    // No Listener for the requested resource. But we still ACK the response.
+    if (requestedListener == null) {
+      adsStream.sendPendingAckRequest();
+      configWatcher.onError(
+          Status.NOT_FOUND.withDescription(
+              "Listener for requested resource [" + ldsResourceName + "] does not exist"));
+      return;
+    }
+
+    // Unpack the HttpConnectionManager message.
+    HttpConnectionManager httpConnManager;
+    try {
+      httpConnManager =
+          requestedListener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
+    } catch (InvalidProtocolBufferException e) {
+      adsStream.nackPendingAckRequest();
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
+      return;
+    }
+
+    boolean invalidData = false;
+    // Name of RouteConfiguration info (either directly in-line or in RDS config) carried
+    // by this Listener.
+    String routeConfigName = null;
+    // Field clusterName found in the in-lined RouteConfiguration, if exists.
+    String clusterName = null;
+    // The HttpConnectionManager message must either provide the RouteConfiguration directly
+    // in-line or tell the client to use RDS to obtain it.
+    if (httpConnManager.hasRouteConfig()) {
+      RouteConfiguration rc = httpConnManager.getRouteConfig();
+      routeConfigName = rc.getName();
+      clusterName = processRouteConfig(rc);
+      if (clusterName == null) {
+        invalidData = true;
+      }
+    } else if (httpConnManager.hasRds()) {
+      Rds rds = httpConnManager.getRds();
+      routeConfigName = rds.getRouteConfigName();
+      // For using RDS, it must be set to use ADS.
+      if (!rds.getConfigSource().hasAds()) {
+        invalidData = true;
+      }
+    } else {
+      invalidData = true;
+    }
+    if (invalidData) {
       adsStream.nackPendingAckRequest();
       return;
     }
 
-    // True if current LDS response contains a valid in Listener for gRPC's usage.
-    boolean validInfo = false;
-    if (connManager != null) {
-      // The HttpConnectionManager message should either contains an RouteConfiguration message
-      // (which contains VirtualHost message) directly in-line or an Rds message for dynamic
-      // resolution. All the other cases are considered invalid data.
-      if (connManager.hasRouteConfig()) {
-        validInfo = true;
-        processRouteConfig(connManager.getRouteConfig());
-      } else if (connManager.hasRds()) {
-        validInfo = true;
-        adsStream.sendPendingAckRequest();
-        String rcName = connManager.getRds().getRouteConfigName();
-        adsStream.sendRdsRequest(rcName);
+    // Purge cached clusterNames, retain the entry for the only RouteConfiguration that
+    // appears in the requested Listener.
+    String cachedClusterName = routeConfigNamesToClusterNames.get(routeConfigName);
+    routeConfigNamesToClusterNames.clear();
+    if (cachedClusterName != null) {
+      routeConfigNamesToClusterNames.put(routeConfigName, cachedClusterName);
+    }
+
+    adsStream.sendPendingAckRequest();
+
+    if (clusterName != null) {
+      // Found clusterName in the in-lined RouteConfiguration.
+      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
+      configWatcher.onConfigChanged(configUpdate);
+    } else {
+      // First look up the RDS cache to see if we had received an RDS response containing the
+      // desired RouteConfiguration previously. Otherwise, send an RDS request for dynamic
+      // resolution.
+      if (routeConfigNamesToClusterNames.containsKey(routeConfigName)) {
+        ConfigUpdate configUpdate =
+            ConfigUpdate.newBuilder()
+                .setClusterName(routeConfigNamesToClusterNames.get(routeConfigName))
+                .build();
+        configWatcher.onConfigChanged(configUpdate);
+      } else {
+        adsStream.sendRdsRequest(routeConfigName);
       }
     }
-    if (!validInfo) {
-      // Either the HttpConnectionManager message does not exist or contains invalid data.
-      adsStream.nackPendingAckRequest();
-      configWatcher.onError(
-          Status.NOT_FOUND.withDescription(
-              "Cannot proceed to resolve routes based on listener: " + connManager));
-    }
-    // Otherwise, the pending ACK LDS request has been sent.
-    checkState(adsStream.pendingAckRequest == null,
-        "LDS response %s has not been ACKed/NACKed", ldsResponse);
   }
 
   /**
    * Handles RDS response to find the RouteConfiguration message for the requested resource name.
-   * Proceed with the resolved RouteConfiguration if exists to find the VirtualHost
-   * configuration for the "xds:" * URI (with the port, if any, stripped off).
-   * Otherwise, sends back an NACK request.
+   * Proceed with the resolved RouteConfiguration if exists to find the VirtualHost configuration
+   * for the "xds:" URI (with the port, if any, stripped off). The response is NACKed if contains
+   * invalid data for gRPC's usage. Otherwise, an ACK request is sent to management server.
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
-    checkState(ldsResourceName != null,
-        "No LDS request was ever sent. Management server is broken");
+    checkState(ldsResourceName != null && configWatcher != null,
+        "No LDS request was ever sent. Management server is doing something wrong");
     adsStream.rdsRespNonce = rdsResponse.getNonce();
     // Prepare an ACK/NACK request.
     adsStream.prepareAckRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
         rdsResponse.getVersionInfo(), rdsResponse.getNonce());
-    if (configWatcher == null) {
-      adsStream.nackPendingAckRequest();
-      return;
-    }
-    List<com.google.protobuf.Any> respResources = rdsResponse.getResourcesList();
-    RouteConfiguration routeConfig = null;
+
+    // Unpack RouteConfiguration messages.
+    List<RouteConfiguration> routeConfigs = new ArrayList<>(rdsResponse.getResourcesCount());
     try {
-      for (com.google.protobuf.Any res : respResources) {
-        RouteConfiguration conf = res.unpack(RouteConfiguration.class);
-        if (conf.getName().equals(adsStream.rdsResourceName)) {
-          routeConfig = conf;
-          // Ignore remaining route configs once the requested one is found.
-          break;
-        }
+      for (com.google.protobuf.Any res : rdsResponse.getResourcesList()) {
+        routeConfigs.add(res.unpack(RouteConfiguration.class));
       }
     } catch (InvalidProtocolBufferException e) {
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken RDS response"));
       adsStream.nackPendingAckRequest();
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken RDS response"));
       return;
     }
 
-    if (routeConfig != null) {
-      processRouteConfig(routeConfig);
-    } else {
-      adsStream.nackPendingAckRequest();
-      configWatcher.onError(
-          Status.NOT_FOUND.withDescription(
-              "Cannot proceed to resolve virtual hosts based on route config: " + routeConfig));
+    // Validate and cache information from each RouteConfiguration message.
+    Map<String, String> clusterNames = new HashMap<>();
+    for (RouteConfiguration routeConfig : routeConfigs) {
+      String clusterName = processRouteConfig(routeConfig);
+      if (clusterName == null) {
+        adsStream.nackPendingAckRequest();
+        return;
+      }
+      clusterNames.put(routeConfig.getName(), clusterName);
     }
-    checkState(adsStream.pendingAckRequest == null,
-        "RDS response %s has not been ACKed/NACKed", rdsResponse);
+    routeConfigNamesToClusterNames.putAll(clusterNames);
+
+    adsStream.sendPendingAckRequest();
+
+    // Notify the ConfigWatcher if this RDS response contains requested RDS resource.
+    if (clusterNames.containsKey(adsStream.rdsResourceName)) {
+      ConfigUpdate configUpdate =
+          ConfigUpdate.newBuilder()
+              .setClusterName(clusterNames.get(adsStream.rdsResourceName))
+              .build();
+      configWatcher.onConfigChanged(configUpdate);
+    }
+    // Do not notify an error to the ConfigWatcher. RDS protocol is incremental, not receiving
+    // requested RouteConfiguration in this response does not imply absence.
   }
 
   /**
-   * Processes RouteConfiguration message, which may either contain a VirtualHost with domains
-   * matching the "xds:" URI directly in-line or contain the configuration to send VHDS requests
-   * for dynamic resolution (currently not implemented). Forwards the resolved VirtualHost
-   * configuration as a {@link io.grpc.xds.XdsClient.ConfigUpdate} to the registered config watcher.
-   * Otherwise, forwards an error message to the config watcher.
+   * Processes RouteConfiguration message (from an resource information in an LDS or RDS
+   * response), which may contain a VirtualHost with domains matching the "xds:"
+   * URI hostname directly in-line. Returns the clusterName found in the VirtualHost
+   * message with domains matching the "xds:" URI hostname. Returns {@code null} if such a
+   * clusterName cannot be resolved.
+   *
+   * <p>Note we only validate VirtualHosts with domains matching the "xds:" URI hostname as we
+   * never care about others.
    */
-  private void processRouteConfig(RouteConfiguration config) {
-    checkState(adsStream.pendingAckRequest != null,
-        "ACK/NACK should have not been sent before RouteConfiguration message is processed");
+  @Nullable
+  private String processRouteConfig(RouteConfiguration config) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
     String clusterName = null;
     // Proceed with the virtual host that has longest wildcard matched domain name with the
-    // original "xds:" URI.
+    // hostname in original "xds:" URI.
     int matchingLen = -1;  // longest length of wildcard pattern that matches host name
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
+        // We only validate data for VirtualHosts that matches hostname.
         if (matchHostName(hostName, domain) && domain.length() > matchingLen) {
           matchingLen = domain.length();
           // The client will look only at the last route in the list (the default route),
@@ -345,24 +404,12 @@ final class XdsClientImpl extends XdsClient {
             // TODO(chengyuanzhang): check the match field must be empty.
             if (route.hasRoute()) {
               clusterName = route.getRoute().getCluster();
-              // Ignore remaining routes once a matched one is found.
-              break;
             }
           }
         }
       }
     }
-    // TODO(chengyuanzhang): check VHDS config and perform VHDS if set.
-    if (clusterName == null) {
-      adsStream.nackPendingAckRequest();
-      configWatcher.onError(
-          Status.NOT_FOUND
-              .withDescription("Virtual host for target " + ldsResourceName + " not found"));
-    } else {
-      adsStream.sendPendingAckRequest();
-      ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
-      configWatcher.onConfigChanged(configUpdate);
-    }
+    return clusterName;
   }
 
   @VisibleForTesting

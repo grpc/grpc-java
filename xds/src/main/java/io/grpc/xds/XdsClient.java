@@ -328,8 +328,8 @@ abstract class XdsClient {
    * Registers a watcher to receive {@link ConfigUpdate} for service with the given hostname and
    * port.
    *
-   * <p>Unlike watchers for cluster data and endpoint data, at any point of time at most one config
-   * watcher is allowed.
+   * <p>Unlike watchers for cluster data and endpoint data, at most one ConfigWatcher can be
+   * registered. Once it is registered, it cannot be unregistered.
    *
    * @param hostName the host name part of the "xds:" URI for the server name that the gRPC client
    *     targets for. Must NOT contain port.
@@ -338,35 +338,6 @@ abstract class XdsClient {
    * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
    */
   void watchConfigData(String hostName, int port, ConfigWatcher watcher) {
-  }
-
-  /**
-   * Unregisters the existing config watcher. The previously registered config watcher will no
-   * longer receive {@link ConfigUpdate}. Noop if no config watcher has been registered.
-   */
-  void cancelConfigDataWatch() {
-  }
-
-  /**
-   * Registers a watcher to receive {@link ConfigUpdate} for service with the given hostname and
-   * port.
-   *
-   * <p>Unlike watchers for cluster data and endpoint data, at any point of time at most one config
-   * watcher is allowed.
-   *
-   * @param hostName the host name part of the "xds:" URI for the server name that the gRPC client
-   *     targets for. Must NOT contain port.
-   * @param port the port part of the "xds:" URI for the server name that the gRPC client targets
-   *     for. -1 if not specified.
-   * @param watcher the {@link ConfigWatcher} to receive {@link ConfigUpdate}.
-   */
-  void watchConfigData(String hostName, int port, ConfigWatcher watcher) {}
-
-  /**
-   * Unregisters the existing config watcher. The previously registered config watcher will no
-   * longer receive {@link ConfigUpdate}. Noop if no config watcher has been registered.
-   */
-  void cancelConfigDataWatch() {
   }
 
   /**

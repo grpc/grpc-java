@@ -22,6 +22,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -31,6 +32,7 @@ import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
 import io.envoyproxy.envoy.api.v2.core.Address;
+import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
@@ -174,14 +176,12 @@ public class XdsClientImplTest {
   // https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol.
 
   /**
-   * Client sends back a NACK LDS request when receiving an LDS response that does not contain a
-   * listener for the requested resource.
-   *
-   * <p>This is the case when an LDS response does not contain the info for the requested resource.
-   * An error is returned to the watching party.
+   * Client receives an LDS response that does not contain a Listener for the requested resource.
+   * The LDS response is ACKed.
+   * The config watcher is notified with an error.
    */
   @Test
-  public void nackLdsResponseWithoutMatchingResource() {
+  public void ldsResponseWithoutMatchingResource() {
     xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -203,9 +203,9 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
     responseObserver.onNext(response);
 
-    // Client sends an NACK LDS request.
+    // Client sends an ACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
@@ -213,15 +213,17 @@ public class XdsClientImplTest {
     Status error = errorStatusCaptor.getValue();
     assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
     assertThat(error.getDescription())
-        .isEqualTo("Cannot proceed to resolve routes based on listener: null");
+        .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
 
     verifyNoMoreInteractions(requestObserver);
   }
 
   /**
    * An LDS response contains the requested listener and an in-lined RouteConfiguration message for
-   * that listener. But VirtualHost information for the cluster cannot be resolved.
-   * An error is returned to the watching party.
+   * that listener. But the RouteConfiguration message is invalid as it does not contain any
+   * VirtualHost with domains matching the requested hostname.
+   * The LDS response is NACKed, as if the XdsClient has not received this response.
+   * The config watcher is NOT notified with an error.
    */
   @Test
   public void failToFindVirtualHostInLdsResponseInLineRouteConfig() {
@@ -236,7 +238,7 @@ public class XdsClientImplTest {
 
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
-            "do not care",  // don't care route config name when in-lined
+            "route.googleapis.com",
             ImmutableList.of(
                 buildVirtualHost(ImmutableList.of("something does not match"),
                     "some cluster"),
@@ -260,20 +262,15 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
-
+    verifyZeroInteractions(configWatcher);
     verifyNoMoreInteractions(requestObserver);
   }
 
   /**
    * Client resolves the virtual host config from an LDS response that contains a
    * RouteConfiguration message directly in-line for the requested resource. No RDS is needed.
-   * Config is returned to the watching party.
+   * The LDS response is ACKed.
+   * The config watcher is notified with an update.
    */
   @Test
   public void resolveVirtualHostInLdsResponse() {
@@ -288,7 +285,7 @@ public class XdsClientImplTest {
 
     RouteConfiguration routeConfig =
         buildRouteConfiguration(
-            "do not care",  // don't care route config name when in-lined
+            "route-foo.googleapis.com",
             ImmutableList.of(
                 buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
                     "cluster.googleapis.com"),
@@ -320,17 +317,14 @@ public class XdsClientImplTest {
   }
 
   /**
-   * Client sends back a NACK RDS request when receiving an RDS response that does not contain a
-   * route for the requested resource.
-   *
-   * <p>This is the case when an RDS response does not contain the info for the requested resource.
-   * Client should silently wait for future updates. For the case of handling an RDS response
-   * containing the info for the requested resource but no matching VirtualHost can be found,
-   * see {@link #failToFindVirtualHostInRdsResponse}.
-   *
+   * Client receives an RDS response (after a previous LDS request-response) that does not contain a
+   * RouteConfiguration for the requested resource while each received RouteConfiguration is valid.
+   * The RDS response is ACKed.
+   * The config watcher is NOT notified with an error (RDS protocol is incremental, responses
+   * not containing requested resources does not indicate absence).
    */
   @Test
-  public void nackRdsResponseWithoutMatchingResource() {
+  public void rdsResponseWithoutMatchingResource() {
     xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
@@ -342,7 +336,9 @@ public class XdsClientImplTest {
 
     Rds rdsConfig =
         Rds.newBuilder()
-            .setConfigSource(ConfigSource.getDefaultInstance())
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
     List<Any> listeners = ImmutableList.of(
@@ -367,40 +363,36 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "")));
 
+    // Management server should only sends RouteConfiguration messages with at least one
+    // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("whatever"),
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
                         "whatever cluster")))),
         Any.pack(
             buildRouteConfiguration(
                 "some other resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("also whatever"),
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
                         "some more whatever cluster")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
-    // Client sends an NACK RDS request.
+    // Client sends an ACK RDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Cannot proceed to resolve virtual hosts based on route config: null");
-
-    verifyNoMoreInteractions(requestObserver);
+    verifyZeroInteractions(configWatcher);
   }
 
   /**
-   * Client resolves the virtual host config from an RDS response for the requested resource.
-   * Config is returned to the watching party.
+   * Client resolves the virtual host config from an RDS response for the requested resource. The
+   * RDS response is ACKed.
+   * The config watcher is notified with an update.
    */
   @Test
   public void resolveVirtualHostInRdsResponse() {
@@ -410,7 +402,9 @@ public class XdsClientImplTest {
 
     Rds rdsConfig =
         Rds.newBuilder()
-            .setConfigSource(ConfigSource.getDefaultInstance())
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
 
@@ -428,6 +422,8 @@ public class XdsClientImplTest {
 
     // Client sends an ACK LDS request and an RDS request for "route-foo.googleapis.com". (Omitted)
 
+    // Management server should only sends RouteConfiguration messages with at least one
+    // VirtualHost with domains matching requested hostname. Otherwise, it is invalid data.
     List<Any> routeConfigs = ImmutableList.of(
         Any.pack(
             buildRouteConfiguration(
@@ -441,15 +437,15 @@ public class XdsClientImplTest {
             buildRouteConfiguration(
                 "some resource name does not match route-foo.googleapis.com",
                 ImmutableList.of(
-                    buildVirtualHost(ImmutableList.of("something also does not match"),
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
                         "some more cluster")))));
     response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK RDS request.
-    verify(requestObserver).onNext(
-        buildDiscoveryRequest("0", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
@@ -457,8 +453,12 @@ public class XdsClientImplTest {
   }
 
   /**
-   * Client cannot find the virtual host config in the RDS response for the requested resource.
-   * An error is returned to the watching party.
+   * Client receives an RDS response (after a previous LDS request-response) containing a
+   * RouteConfiguration message for the requested resource. But the RouteConfiguration message
+   * is invalid as it does not contain any VirtualHost with domains matching the requested
+   * hostname.
+   * The LDS response is NACKed, as if the XdsClient has not received this response.
+   * The config watcher is NOT notified with an error.
    */
   @Test
   public void failToFindVirtualHostInRdsResponse() {
@@ -468,7 +468,9 @@ public class XdsClientImplTest {
 
     Rds rdsConfig =
         Rds.newBuilder()
-            .setConfigSource(ConfigSource.getDefaultInstance())
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
 
@@ -506,21 +508,20 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Client sent an NACK RDS request.
-    verify(requestObserver).onNext(
-        buildDiscoveryRequest("", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Status.Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
+    verifyZeroInteractions(configWatcher);
   }
 
   /**
-   * The VirtualHost message in RDS response contains a VirtualHost with domain matching the
-   * requested host name, but cannot be resolved to find a cluster name in the RouteAction message.
+   * Client receives an RDS response (after a previous LDS request-response) containing a
+   * RouteConfiguration message for the requested resource. But the RouteConfiguration message
+   * is invalid as the VirtualHost with domains matching the requested hostname contains invalid
+   * data, its RouteAction message is absent.
+   * The LDS response is NACKed, as if the XdsClient has not received this response.
+   * The config watcher is NOT notified with an error.
    */
   @Test
   public void matchingVirtualHostDoesNotContainRouteAction() {
@@ -530,7 +531,9 @@ public class XdsClientImplTest {
 
     Rds rdsConfig =
         Rds.newBuilder()
-            .setConfigSource(ConfigSource.getDefaultInstance())
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
 
@@ -569,17 +572,16 @@ public class XdsClientImplTest {
     responseObserver.onNext(response);
 
     // Client sent an NACK RDS request.
-    verify(requestObserver).onNext(
-        buildDiscoveryRequest("", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000"));
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onError(errorStatusCaptor.capture());
-    Status error = errorStatusCaptor.getValue();
-    assertThat(error.getCode()).isEqualTo(Status.Code.NOT_FOUND);
-    assertThat(error.getDescription())
-        .isEqualTo("Virtual host for target foo.googleapis.com:8080 not found");
+    verifyZeroInteractions(configWatcher);
   }
+
+  // TODO(chengyuanzhang): tests for reflecting incremental protocol behaviors.
+
+  // TODO(chengyuanzhang): tests for cache behaviors.
   
   // TODO(chengyuanzhang): integrated retry test for LDS/RDS/CDS/EDS.
   @Test
@@ -608,7 +610,7 @@ public class XdsClientImplTest {
     responseObserver = responseObservers.poll();
     requestObserver = requestObservers.poll();
 
-    // Client retied by sending an LDS request.
+    // Client retried by sending an LDS request.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
@@ -627,7 +629,7 @@ public class XdsClientImplTest {
     responseObserver = responseObservers.poll();
     requestObserver = requestObservers.poll();
 
-    // Client retied again by sending an LDS.
+    // Client retried again by sending an LDS.
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
@@ -635,7 +637,8 @@ public class XdsClientImplTest {
     // Management server responses with a listener for the requested resource.
     Rds rdsConfig =
         Rds.newBuilder()
-            .setConfigSource(ConfigSource.getDefaultInstance())
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
 
@@ -721,66 +724,6 @@ public class XdsClientImplTest {
 
   // TODO(chengyuanzhang): test for race between stream closed and watcher changes. Should only
   //  for ClusterWatchers and EndpointWatchers.
-
-  @Test
-  public void cancelledWatcherDoesNotReceiveUpdates() {
-    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-
-    // Client sent an LDS request for the host name (with port) to management server. (Omitted)
-
-    RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "do not care",  // don't care route config name when in-lined
-            ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
-                    "cluster.googleapis.com")));
-
-    List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
-    );
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK LDS request.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
-
-    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
-    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
-    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
-
-    // Cancel the ConfigWatcher.
-    xdsClient.cancelConfigDataWatch();
-
-    // Management server sends another LDS response with new in-lined virtual host data.
-    routeConfig =
-        buildRouteConfiguration(
-            "do not care",  // don't care route config name when in-lined
-            ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
-                    "another-cluster.googleapis.com")));
-
-    listeners = ImmutableList.of(
-        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
-    );
-    response =
-        buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
-    responseObserver.onNext(response);
-
-    // Client sent an NACK LDS request.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
-
-    // The cancelled watcher does not received this update.
-    verifyNoMoreInteractions(configWatcher);
-  }
 
   @Test
   public void matchHostName_exactlyMatch() {
