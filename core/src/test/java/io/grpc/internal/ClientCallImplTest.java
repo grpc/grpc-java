@@ -827,7 +827,7 @@ public class ClientCallImplTest {
     // Verify cancel sent to application when deadline just past
     verify(callListener).onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
     assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
     verify(stream, never()).cancel(statusCaptor.capture());
 
@@ -839,7 +839,7 @@ public class ClientCallImplTest {
     verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription())
-        .matches("deadline exceeded after [0-9]+ns. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
+        .matches("deadline exceeded after [0-9]+\\.[0-9]+s. \\[remote_addr=127\\.0\\.0\\.1:443\\]");
   }
 
   @Test
