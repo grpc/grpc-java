@@ -106,7 +106,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     this.helper = checkNotNull(helper, "helper");
     this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.channelLogger = helper.getChannelLogger();
-    // TODO(zdapeng): Allow it be null when enableLrs from ClusterUpdate is false.
+    // TODO(zdapeng): TBD: handle enableLrs from ClusterUpdate is false/changed.
     this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
 
     // The following fields are injected for testing
