@@ -91,6 +91,9 @@ class Utils {
         public ByteBufAllocator create() {
           int maxOrder;
           if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+            // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+            // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+            // 1MiB, thus reducing the maxOrder to 7.
             maxOrder = 7;
           } else {
             maxOrder = PooledByteBufAllocator.defaultMaxOrder();
