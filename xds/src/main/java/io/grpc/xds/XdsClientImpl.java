@@ -159,7 +159,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    adsStream.sendLdsRequest(ldsResourceName);
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
   }
 
   /**
@@ -326,7 +326,7 @@ final class XdsClientImpl extends XdsClient {
                 .build();
         configWatcher.onConfigChanged(configUpdate);
       } else {
-        adsStream.sendRdsRequest(rdsRouteConfigName);
+        adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, rdsRouteConfigName);
       }
     } else {
       // The requested Listener does not exist.
@@ -434,7 +434,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendLdsRequest(ldsResourceName);
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
       }
       // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
     }
@@ -537,7 +537,7 @@ final class XdsClientImpl extends XdsClient {
       if (delayNanos == 0) {
         startRpcStream();
         if (configWatcher != null) {
-          adsStream.sendLdsRequest(ldsResourceName);
+          adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
         }
         // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
       } else {
@@ -562,31 +562,32 @@ final class XdsClientImpl extends XdsClient {
       }
     }
 
-    private void sendLdsRequest(String resourceName) {
+    /**
+     * Sends a DiscoveryRequest for the given resource name to management server. Memories the
+     * requested resource name (except for LDS as we always request for the singleton Listener)
+     * as we need it to find resources in responses.
+     */
+    private void sendXdsRequest(String typeUrl, String resourceName) {
       checkState(requestWriter != null, "ADS stream has not been started");
+      String version = "";
+      String nonce = "";
+      if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+        version = ldsVersion;
+        nonce = ldsRespNonce;
+      } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+        version = rdsVersion;
+        nonce = rdsRespNonce;
+        rdsResourceName = resourceName;
+      }
+      // TODO(chengyuanzhang): cases for CDS/EDS.
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
-              .setVersionInfo(ldsVersion)
+              .setVersionInfo(version)
               .setNode(node)
               .addResourceNames(resourceName)
-              .setTypeUrl(ADS_TYPE_URL_LDS)
-              .setResponseNonce(ldsRespNonce)
-              .build();
-      requestWriter.onNext(request);
-    }
-
-    private void sendRdsRequest(String resourceName) {
-      checkState(requestWriter != null, "ADS stream has not been started");
-      rdsResourceName = resourceName;
-      DiscoveryRequest request =
-          DiscoveryRequest
-              .newBuilder()
-              .setVersionInfo(rdsVersion)
-              .setNode(node)
-              .addResourceNames(resourceName)
-              .setTypeUrl(ADS_TYPE_URL_RDS)
-              .setResponseNonce(rdsRespNonce)
+              .setTypeUrl(typeUrl)
+              .setResponseNonce(nonce)
               .build();
       requestWriter.onNext(request);
     }
