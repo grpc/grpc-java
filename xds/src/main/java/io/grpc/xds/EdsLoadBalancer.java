@@ -25,6 +25,7 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -59,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
 
@@ -68,7 +70,6 @@ import javax.annotation.Nullable;
 final class EdsLoadBalancer extends LoadBalancer {
 
   private final Helper helper;
-  private final XdsClient xdsClient;
   private final ChannelLogger channelLogger;
 
   private final EndpointWatcherImpl.PickerFactory pickerFactory;
@@ -80,15 +81,17 @@ final class EdsLoadBalancer extends LoadBalancer {
 
 
   @Nullable
+  private XdsClient xdsClient;
+  @Nullable
   private String edsServiceName;
 
   @CheckForNull
   private EndpointWatcherImpl endpointWatcher;
 
   // TODO(zdapeng): Pass in a nullable LoadStatsStore for LRS.
-  EdsLoadBalancer(Helper helper, XdsClient xdsClient) {
+  EdsLoadBalancer(Helper helper) {
     this(
-        helper, xdsClient, EndpointWatcherImpl.pickerFactoryImpl,
+        helper, EndpointWatcherImpl.pickerFactoryImpl,
         LoadBalancerRegistry.getDefaultRegistry(), ThreadSafeRandom.ThreadSafeRandomImpl.instance,
         new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
   }
@@ -96,7 +99,6 @@ final class EdsLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   EdsLoadBalancer(
       Helper helper,
-      XdsClient xdsClient,
       EndpointWatcherImpl.PickerFactory pickerFactory,
       LoadBalancerRegistry lbRegistry,
       ThreadSafeRandom random,
@@ -104,7 +106,6 @@ final class EdsLoadBalancer extends LoadBalancer {
       OrcaPerRequestUtil orcaPerRequestUtil,
       OrcaOobUtil orcaOobUtil) {
     this.helper = checkNotNull(helper, "helper");
-    this.xdsClient = checkNotNull(xdsClient, "xdsClient");
     this.channelLogger = helper.getChannelLogger();
     // TODO(zdapeng): TBD: handle enableLrs from ClusterUpdate is false/changed.
     this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
@@ -120,6 +121,27 @@ final class EdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
+
+    AtomicReference<XdsClient> xdsClientRef = resolvedAddresses.getAttributes()
+            .get(XdsAttributes.XDS_CLIENT_REF);
+    if (xdsClientRef == null) {
+      // TODO(zdapeng): create a new xdsClient if no one exists.
+      throw new UnsupportedOperationException(
+          "XDS_CLIENT_REF attributes not available in resolvedAddresses " + resolvedAddresses);
+    }
+
+    if (xdsClientRef.get() == null) {
+      // The XdsClient has been shutdown. The balancer will soon shutdown.
+      return;
+    }
+
+    if (xdsClient != null) {
+      Preconditions.checkState(
+          xdsClient == xdsClientRef.get(),
+          "The XdsClient is changed");
+    } else {
+      xdsClient = xdsClientRef.get();
+    }
 
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     checkArgument(

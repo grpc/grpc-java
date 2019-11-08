@@ -43,6 +43,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ClientStreamTracer;
 import io.grpc.ConnectivityState;
@@ -87,6 +88,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
@@ -112,8 +114,13 @@ public class EdsLoadBalancerTest {
   @Rule
   public final ExpectedException thrown = ExpectedException.none();
 
-  @Mock
-  private XdsClient xdsClient;
+  private final XdsClient xdsClient = mock(XdsClient.class);
+  private final ResolvedAddresses defaultResolvedAddresses = ResolvedAddresses.newBuilder()
+      .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+      .setAttributes(Attributes.newBuilder()
+          .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
+      .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
+      .build();
 
   private EdsLoadBalancer edsLoadBalancer;
 
@@ -262,7 +269,7 @@ public class EdsLoadBalancerTest {
         });
     lbRegistry.register(lbProvider);
     edsLoadBalancer =
-        new EdsLoadBalancer(helper, xdsClient, pickerFactory, lbRegistry, random, loadStatsStore,
+        new EdsLoadBalancer(helper, pickerFactory, lbRegistry, random, loadStatsStore,
             orcaPerRequestUtil, orcaOobUtil);
   }
 
@@ -275,6 +282,8 @@ public class EdsLoadBalancerTest {
   public void missingEdsConfig() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .build();
 
     thrown.expect(IllegalArgumentException.class);
@@ -287,6 +296,8 @@ public class EdsLoadBalancerTest {
     Object invalidConfig = new Object();
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(invalidConfig)
         .build();
 
@@ -301,6 +312,8 @@ public class EdsLoadBalancerTest {
     // handle valid EdsConfig
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
         .build();
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
@@ -330,6 +343,8 @@ public class EdsLoadBalancerTest {
   public void edsServiceNameChangeInEdsConfig() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
         .build();
 
@@ -342,6 +357,8 @@ public class EdsLoadBalancerTest {
     // same edsServiceName
     ResolvedAddresses resolvedAddresses2 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
         .build();
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
@@ -351,6 +368,8 @@ public class EdsLoadBalancerTest {
     // new edsServiceName
     ResolvedAddresses resolvedAddresses3 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService3", new Object()))
         .build();
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses3);
@@ -361,13 +380,32 @@ public class EdsLoadBalancerTest {
   }
 
   @Test
-  public void watcherOnError() {
+  public void xdsClientRefChangeInResolvedAddresses() {
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(xdsClient)).build())
         .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
         .build();
 
     edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    verify(xdsClient).watchEndpointData(eq("edsService1"), any(EndpointWatcher.class));
+
+    // XdsClient Ref changed
+    ResolvedAddresses resolvedAddresses2 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, new AtomicReference<>(mock(XdsClient.class)))
+            .build())
+        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
+        .build();
+    thrown.expect(IllegalStateException.class);
+    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
+  }
+
+  @Test
+  public void watcherOnError() {
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -413,12 +451,7 @@ public class EdsLoadBalancerTest {
   @Test
   @SuppressWarnings("unchecked")
   public void updateLocalityStore_updateStatsStoreLocalityTracking() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -465,12 +498,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLocalityStore_pickResultInterceptedForLoadRecordingWhenSubchannelReady() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -551,12 +579,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void childLbPerformOobBackendMetricsAggregation() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -619,12 +642,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateOobMetricsReportIntervalBeforeChildLbCreated() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -658,12 +676,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLoaclityStore_withEmptyDropList() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -785,12 +798,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLoaclityStore_deactivateAndReactivate() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -933,12 +941,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLoaclityStore_withDrop() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -1044,11 +1047,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLoaclityStore_withAllDropBeforeLocalityUpdateConnectivityState() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -1079,11 +1078,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void updateLocalityStore_OnlyUpdatingWeightsStillUpdatesPicker() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -1142,11 +1137,7 @@ public class EdsLoadBalancerTest {
 
   @Test
   public void reset() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
@@ -1198,11 +1189,7 @@ public class EdsLoadBalancerTest {
    */
   @Test
   public void multipriority() {
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setLoadBalancingPolicyConfig(new EdsConfig("edsService1", new Object()))
-        .build();
-    edsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    edsLoadBalancer.handleResolvedAddresses(defaultResolvedAddresses);
 
     ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchEndpointData(eq("edsService1"), endpointWatcherCaptor.capture());
