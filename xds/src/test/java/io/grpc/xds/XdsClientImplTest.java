@@ -194,12 +194,23 @@ public class XdsClientImplTest {
 
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+            Any.pack(HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    buildRouteConfiguration("route-bar.googleapis.com",
+                        ImmutableList.of(
+                            buildVirtualHost(
+                                ImmutableList.of("bar.googleapis.com"),
+                                "cluster-bar.googleapis.com"))))
+                .build()))),
         Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("foo.googleapis.com:443",
-            Any.pack(HttpConnectionManager.getDefaultInstance())))
-    );
+            Any.pack(HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    buildRouteConfiguration("route-baz.googleapis.com",
+                        ImmutableList.of(
+                            buildVirtualHost(
+                                ImmutableList.of("baz.googleapis.com"),
+                                "cluster-baz.googleapis.com"))))
+                .build()))));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
     responseObserver.onNext(response);
@@ -247,13 +258,8 @@ public class XdsClientImplTest {
                     "some other cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
-    );
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build()))));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
     responseObserver.onNext(response);
@@ -284,23 +290,38 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
             XdsClientImpl.ADS_TYPE_URL_LDS, "")));
 
-    RouteConfiguration routeConfig =
-        buildRouteConfiguration(
-            "route-foo.googleapis.com",
-            ImmutableList.of(
-                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
-                    "cluster.googleapis.com"),
-                buildVirtualHost(ImmutableList.of("something does not match"),
-                    "some cluster")));
-
     List<Any> listeners = ImmutableList.of(
         Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+            Any.pack(HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    buildRouteConfiguration("route-bar.googleapis.com",
+                        ImmutableList.of(
+                            buildVirtualHost(
+                                ImmutableList.of("bar.googleapis.com"),
+                                "cluster-bar.googleapis.com"))))
+                .build()))),
         Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+            Any.pack(HttpConnectionManager.newBuilder()
+                .setRouteConfig(
+                    buildRouteConfiguration("route-baz.googleapis.com",
+                        ImmutableList.of(
+                            buildVirtualHost(
+                                ImmutableList.of("baz.googleapis.com"),
+                                "cluster-baz.googleapis.com"))))
+                .build()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
-            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
-    );
+            Any.pack(
+                HttpConnectionManager.newBuilder()
+                    .setRouteConfig(
+                        buildRouteConfiguration("route-foo.googleapis.com",
+                            ImmutableList.of(
+                                buildVirtualHost(
+                                    ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                                    "cluster.googleapis.com"),
+                                buildVirtualHost(
+                                    ImmutableList.of("something does not match"),
+                                    "some cluster"))))
+                    .build()))));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
     responseObserver.onNext(response);
@@ -343,10 +364,6 @@ public class XdsClientImplTest {
             .setRouteConfigName("route-foo.googleapis.com")
             .build();
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -410,10 +427,6 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -476,10 +489,6 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -539,10 +548,6 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -608,10 +613,6 @@ public class XdsClientImplTest {
                     "some cluster")));
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
     );
@@ -743,10 +744,6 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );
@@ -842,10 +839,6 @@ public class XdsClientImplTest {
             .build();
 
     List<Any> listeners = ImmutableList.of(
-        Any.pack(buildListener("bar.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
-        Any.pack(buildListener("baz.googleapis.com",
-            Any.pack(HttpConnectionManager.getDefaultInstance()))),
         Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
             Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
     );

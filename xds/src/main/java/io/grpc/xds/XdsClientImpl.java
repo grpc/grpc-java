@@ -44,9 +44,11 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -72,18 +74,8 @@ final class XdsClientImpl extends XdsClient {
   // more than once.
   private final Node node;
 
-  // Each Listener received in LDS responses indicates an RouteConfiguration. Since we are
-  // always requesting for a singleton Listener resource, we only need to remember the
-  // a single Listener information.
-  // Upon receiving an LDS response, the entry for the RouteConfiguration indicated by the
-  // previous LDS response is deleted from RDS cache.
-  // Upon receiving an RDS response, each RouteConfiguration is inserted into RDS cache.
-
-  // Cached data for LDS responses, it is the RouteConfiguration name indicated by the requested
-  // Listener.
-  private String routeConfigNameInListener;
   // Cached data for RDS responses, keyed by RouteConfiguration names.
-  // LDS responses indicate absent of RouteConfigurations and RDS responses indicate present
+  // LDS responses indicate absence of RouteConfigurations and RDS responses indicate presence
   // of RouteConfigurations.
   // Optimization: only cache clusterName filed in the RouteConfiguration messages of RDS
   // responses.
@@ -233,12 +225,28 @@ final class XdsClientImpl extends XdsClient {
         ldsResponse.getNonce());
 
     // Unpack Listener messages.
-    Listener requestedListener = null;
+    Map<String, Listener> listeners = new HashMap<>(ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
         Listener l = res.unpack(Listener.class);
-        if (l.getName().equals(ldsResourceName)) {
-          requestedListener = l;
+        listeners.put(l.getName(), l);
+      }
+    } catch (InvalidProtocolBufferException e) {
+      adsStream.nackPendingAckRequest();
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
+      return;
+    }
+
+    // Unpack HttpConnectionManager messages
+    HttpConnectionManager requestedHttpConnManager = null;
+    List<HttpConnectionManager> httpConnectionManagers = new ArrayList<>();
+    try {
+      for (Map.Entry<String, Listener> entry : listeners.entrySet()) {
+        HttpConnectionManager hm =
+            entry.getValue().getApiListener().getApiListener().unpack(HttpConnectionManager.class);
+        httpConnectionManagers.add(hm);
+        if (entry.getKey().equals(ldsResourceName)) {
+          requestedHttpConnManager = hm;
         }
       }
     } catch (InvalidProtocolBufferException e) {
@@ -247,91 +255,86 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    // No Listener for the requested resource. But we still ACK the response.
-    if (requestedListener == null) {
-      // LDS response indicates the state of the world. If a Listener becomes absent, cache
-      // information indicated by that Listener needs to be invalidated.
-      if (routeConfigNameInListener != null) {
-        routeConfigNamesToClusterNames.remove(routeConfigNameInListener);
-        routeConfigNameInListener = null;
-      }
-      adsStream.sendPendingAckRequest();
-      configWatcher.onError(
-          Status.NOT_FOUND.withDescription(
-              "Listener for requested resource [" + ldsResourceName + "] does not exist"));
-      return;
-    }
-
-    // Unpack the HttpConnectionManager message.
-    HttpConnectionManager httpConnManager;
-    try {
-      httpConnManager =
-          requestedListener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
-    } catch (InvalidProtocolBufferException e) {
-      adsStream.nackPendingAckRequest();
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
-      return;
-    }
-
     boolean invalidData = false;
-    // Name of RouteConfiguration info (either directly in-line or in RDS config) carried
-    // by this Listener.
-    String routeConfigName = null;
+    // All RouteConfigurations referenced by this LDS response, either in in-lined
+    // RouteConfiguration message or in RDS config.
+    Set<String> routeConfigs = new HashSet<>();
+    for (HttpConnectionManager hm : httpConnectionManagers) {
+      // The HttpConnectionManager message must either provide the RouteConfiguration directly
+      // in-line or tell the client to use RDS to obtain it.
+      if (hm.hasRouteConfig()) {
+        routeConfigs.add(hm.getRouteConfig().getName());
+      } else if (hm.hasRds()) {
+        Rds rds = hm.getRds();
+        // For using RDS, it must be set to use ADS.
+        if (!rds.getConfigSource().hasAds()) {
+          invalidData = true;
+          break;
+        }
+        routeConfigs.add(rds.getRouteConfigName());
+      } else {
+        invalidData = true;
+        break;
+      }
+    }
+
     // Field clusterName found in the in-lined RouteConfiguration, if exists.
     String clusterName = null;
-    // The HttpConnectionManager message must either provide the RouteConfiguration directly
-    // in-line or tell the client to use RDS to obtain it.
-    if (httpConnManager.hasRouteConfig()) {
-      RouteConfiguration rc = httpConnManager.getRouteConfig();
-      routeConfigName = rc.getName();
-      clusterName = processRouteConfig(rc);
-      if (clusterName == null) {
-        invalidData = true;
+    // RouteConfiguration name to be used as the resource name for RDS request.
+    String rdsRouteConfigName = null;
+    if (requestedHttpConnManager != null) {
+      if (requestedHttpConnManager.hasRouteConfig()) {
+        RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
+        clusterName = processRouteConfig(rc);
+        if (clusterName == null) {
+          invalidData = true;
+        }
+      } else if (requestedHttpConnManager.hasRds()) {
+        Rds rds = requestedHttpConnManager.getRds();
+        rdsRouteConfigName = rds.getRouteConfigName();
       }
-    } else if (httpConnManager.hasRds()) {
-      Rds rds = httpConnManager.getRds();
-      routeConfigName = rds.getRouteConfigName();
-      // For using RDS, it must be set to use ADS.
-      if (!rds.getConfigSource().hasAds()) {
-        invalidData = true;
-      }
-    } else {
-      invalidData = true;
+      // Else impossible as we have already validated all HttpConnectionManager messages.
     }
+
     if (invalidData) {
       adsStream.nackPendingAckRequest();
       return;
     }
-
-    // Invalidate the RDS cache entry indicated by the Listener in previous LDS response.
-    if (routeConfigNameInListener != null && !routeConfigNameInListener.equals(routeConfigName)) {
-      routeConfigNamesToClusterNames.remove(routeConfigNameInListener);
-    }
-    routeConfigNameInListener = routeConfigName;
-
     adsStream.sendPendingAckRequest();
 
+    // Remove RDS cache entries for RouteConfigurations not referenced by this LDS response.
+    // LDS responses represents the state of the world, RouteConfigurations not referenced
+    // by this LDS response are those no longer exist.
+    routeConfigNamesToClusterNames.keySet().retainAll(routeConfigs);
+
+    // Process the requested Listener if exists, either extract cluster information from in-lined
+    // RouteConfiguration message or send an RDS request for dynamic resolution.
     if (clusterName != null) {
       // Found clusterName in the in-lined RouteConfiguration.
       ConfigUpdate configUpdate = ConfigUpdate.newBuilder().setClusterName(clusterName).build();
       configWatcher.onConfigChanged(configUpdate);
-    } else {
+    } else if (rdsRouteConfigName != null) {
       // Update the RDS resource we wish to request. An RDS request may not be necessary, but
       // we need to keep what we request updated in case of notifying watcher upon receiving
       // an RDS response for updating the requested resource.
-      adsStream.rdsResourceName = routeConfigName;
+      adsStream.rdsResourceName = rdsRouteConfigName;
       // First look up the RDS cache to see if we had received an RDS response containing the
       // desired RouteConfiguration previously. Otherwise, send an RDS request for dynamic
       // resolution.
-      if (routeConfigNamesToClusterNames.containsKey(routeConfigName)) {
+      if (routeConfigNamesToClusterNames.containsKey(rdsRouteConfigName)) {
         ConfigUpdate configUpdate =
             ConfigUpdate.newBuilder()
-                .setClusterName(routeConfigNamesToClusterNames.get(routeConfigName))
+                .setClusterName(routeConfigNamesToClusterNames.get(rdsRouteConfigName))
                 .build();
         configWatcher.onConfigChanged(configUpdate);
       } else {
-        adsStream.sendRdsRequest(routeConfigName);
+        adsStream.sendRdsRequest(rdsRouteConfigName);
       }
+    } else {
+      // The requested Listener does not exist.
+      configWatcher.onError(
+          Status.NOT_FOUND.withDescription(
+              "Listener for requested resource [" + ldsResourceName + "] does not exist"));
     }
   }
 
