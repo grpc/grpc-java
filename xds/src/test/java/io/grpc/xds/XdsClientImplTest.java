@@ -975,8 +975,90 @@ public class XdsClientImplTest {
     assertThat(configUpdateCaptor.getValue().getClusterName())
         .isEqualTo("a-new-cluster.googleapis.com");
   }
-  
-  // TODO(chengyuanzhang): integrated retry test for LDS/RDS/CDS/EDS.
+
+  /**
+   * An RouteConfiguration is removed by server by sending client an LDS response removing the
+   * corresponding Listener.
+   */
+  @Test
+  public void routeConfigurationRemovedNotifiedToWatcher() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management sends back an LDS response telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    // Client sends an (first) RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    // Management server sends back an RDS response containing RouteConfiguration requested.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    // Resolved cluster name is notified to config watcher.
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+
+    // Management server sends back another LDS response with the previous Listener (currently
+    // in-use by client) removed as the RouteConfiguration it references to is absent.
+    response =
+        buildDiscoveryResponse("1", ImmutableList.<com.google.protobuf.Any>of(), // empty
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
+
+    // Notify config watcher with an error.
+    ArgumentCaptor<Status> errorStatusCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onError(errorStatusCaptor.capture());
+    Status error = errorStatusCaptor.getValue();
+    assertThat(error.getCode()).isEqualTo(Code.NOT_FOUND);
+    assertThat(error.getDescription())
+        .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
+  }
 
   @Test
   public void streamClosedAndRetry() {
