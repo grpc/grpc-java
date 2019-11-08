@@ -229,7 +229,8 @@ final class XdsClientImpl extends XdsClient {
         listeners.put(l.getName(), l);
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce());
+      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce(),
+          "Broken LDS response");
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
       return;
     }
@@ -247,7 +248,8 @@ final class XdsClientImpl extends XdsClient {
         }
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce());
+      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce(),
+          "Broken LDS response");
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
       return;
     }
@@ -294,7 +296,8 @@ final class XdsClientImpl extends XdsClient {
     }
 
     if (invalidData) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce());
+      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getNonce(),
+          "HttpConnectionManager contains invalid information for gRPC's usage");
       return;
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ldsResourceName, ldsResponse.getVersionInfo(),
@@ -355,8 +358,8 @@ final class XdsClientImpl extends XdsClient {
         routeConfigs.add(res.unpack(RouteConfiguration.class));
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream
-          .sendNackRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName, rdsResponse.getNonce());
+      adsStream.sendNackRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName, rdsResponse.getNonce(),
+          "Broken RDS response");
       configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken RDS response"));
       return;
     }
@@ -366,8 +369,9 @@ final class XdsClientImpl extends XdsClient {
     for (RouteConfiguration routeConfig : routeConfigs) {
       String clusterName = processRouteConfig(routeConfig);
       if (clusterName == null) {
-        adsStream
-            .sendNackRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName, rdsResponse.getNonce());
+        adsStream.sendNackRequest(ADS_TYPE_URL_RDS, adsStream.rdsResourceName,
+            rdsResponse.getNonce(),
+            "Received RouteConfigurations without cluster information for requested hostname");
         return;
       }
       clusterNames.put(routeConfig.getName(), clusterName);
@@ -623,7 +627,8 @@ final class XdsClientImpl extends XdsClient {
      * Sends a DiscoveryRequest with the given information as an NACK. NACK takes the previous
      * accepted version.
      */
-    private void sendNackRequest(String typeUrl, String resourceName, String nonce) {
+    private void sendNackRequest(String typeUrl, String resourceName, String nonce,
+        String message) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String versionInfo = "";
       if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
@@ -640,6 +645,7 @@ final class XdsClientImpl extends XdsClient {
               .addResourceNames(resourceName)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
+              .setErrorDetail(com.google.rpc.Status.newBuilder().setMessage(message))
               .build();
       requestWriter.onNext(request);
     }

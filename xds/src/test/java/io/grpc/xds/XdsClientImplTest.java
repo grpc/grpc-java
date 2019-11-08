@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -66,6 +67,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -266,8 +268,9 @@ public class XdsClientImplTest {
 
     // Client sends an NACK LDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
-            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+        .onNext(
+            argThat(new DiscoveryRequestMatcher("", "foo.googleapis.com:8080",
+                XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
     verifyNoMoreInteractions(requestObserver);
@@ -519,8 +522,9 @@ public class XdsClientImplTest {
 
     // Client sent an NACK RDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+        .onNext(
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
   }
@@ -579,8 +583,9 @@ public class XdsClientImplTest {
 
     // Client sent an NACK RDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+        .onNext(
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+                XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
   }
@@ -1297,5 +1302,46 @@ public class XdsClientImplTest {
                 Route.newBuilder()
                     .setRoute(RouteAction.newBuilder().setCluster(clusterName)))
             .build();
+  }
+
+  /**
+   * Matcher for DiscoveryRequest used to verify NACK requests. Eliminates the comparison of
+   * error_details for DiscoveryRequests if they are expected to be an NACK request.
+   */
+  private static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
+    private final String versionInfo;
+    private final String typeUrl;
+    private final List<String> resourceNames;
+    private final String responseNonce;
+
+    private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
+        String responseNonce) {
+      this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
+    }
+
+    private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
+        String responseNonce) {
+      this.versionInfo = versionInfo;
+      this.resourceNames = resourceNames;
+      this.typeUrl = typeUrl;
+      this.responseNonce = responseNonce;
+    }
+
+    @Override
+    public boolean matches(DiscoveryRequest argument) {
+      if (!typeUrl.equals(argument.getTypeUrl())) {
+        return false;
+      }
+      if (!versionInfo.equals(argument.getVersionInfo())) {
+        return false;
+      }
+      if (!responseNonce.equals(argument.getResponseNonce())) {
+        return false;
+      }
+      if (!resourceNames.equals(argument.getResourceNamesList())) {
+        return false;
+      }
+      return NODE.equals(argument.getNode());
+    }
   }
 }
