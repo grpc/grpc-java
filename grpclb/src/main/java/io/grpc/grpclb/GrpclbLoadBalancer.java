@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -52,11 +51,7 @@ import javax.annotation.Nullable;
 class GrpclbLoadBalancer extends LoadBalancer {
   private static final Mode DEFAULT_MODE = Mode.ROUND_ROBIN;
   private static final Logger logger = Logger.getLogger(GrpclbLoadBalancer.class.getName());
-  private static final AtomicInteger pickFirstGlobalIndex = new AtomicInteger();
 
-  /** Backend list for pick_first will be picked from this index. */
-  // & 0xFFFFFF to avoid overflow
-  private final int pickFirstIndex = pickFirstGlobalIndex.getAndIncrement() & 0xFFFFFF;
   private final Helper helper;
   private final TimeProvider time;
   private final Stopwatch stopwatch;
@@ -172,8 +167,8 @@ class GrpclbLoadBalancer extends LoadBalancer {
   private void recreateStates() {
     resetStates();
     checkState(grpclbState == null, "Should've been cleared");
-    grpclbState = new GrpclbState(
-        mode, helper, subchannelPool, time, stopwatch, backoffPolicyProvider, pickFirstIndex);
+    grpclbState = new GrpclbState(mode, helper, subchannelPool, time, stopwatch,
+        backoffPolicyProvider);
   }
 
   @Override
