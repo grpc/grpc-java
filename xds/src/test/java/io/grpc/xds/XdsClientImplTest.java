@@ -20,6 +20,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -579,11 +580,388 @@ public class XdsClientImplTest {
     verifyZeroInteractions(configWatcher);
   }
 
-  // TODO(chengyuanzhang): tests for reflecting incremental protocol behaviors.
+  /**
+   * Client receives LDS/RDS responses for updating resources previously received.
+   *
+   * <p>Tests for streaming behavior.
+   */
+  @Test
+  public void notifyUpdatedResources() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
 
-  // TODO(chengyuanzhang): tests for cache behaviors.
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management server sends back an LDS response containing a RouteConfiguration for the
+    // requested Listener directly in-line.
+    RouteConfiguration routeConfig =
+        buildRouteConfiguration(
+            "route-foo.googleapis.com",
+            ImmutableList.of(
+                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    "cluster.googleapis.com"),
+                buildVirtualHost(ImmutableList.of("something does not match"),
+                    "some cluster")));
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("bar.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("baz.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    // Cluster name is resolved and notified to config watcher.
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster.googleapis.com");
+
+    // Management sends back another LDS response containing updates for the requested Listener.
+    routeConfig =
+        buildRouteConfiguration(
+            "another-route-foo.googleapis.com",
+            ImmutableList.of(
+                buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                    "another-cluster.googleapis.com"),
+                buildVirtualHost(ImmutableList.of("something does not match"),
+                    "some cluster")));
+
+    listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRouteConfig(routeConfig).build())))
+    );
+    response =
+        buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
+
+    // Updated cluster name is notified to config watcher.
+    configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher, times(2)).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName())
+        .isEqualTo("another-cluster.googleapis.com");
+
+    // Management server sends back another LDS response containing updates for the requested
+    // Listener and telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("some-route-to-foo.googleapis.com")
+            .build();
+
+    listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    response =
+        buildDiscoveryResponse("2", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0002");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("2", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0002")));
+
+    // Client sends an (first) RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "some-route-to-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    // Management server sends back an RDS response containing the RouteConfiguration
+    // for the requested resource.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "some-route-to-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("something does not match"),
+                        "some cluster"),
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                        "some-other-cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "some-route-to-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    // Updated cluster name is notified to config watcher again.
+    configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher, times(3)).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName())
+        .isEqualTo("some-other-cluster.googleapis.com");
+  }
+
+  // TODO(chengyuanzhang): tests for timeout waiting for responses for incremental
+  //  protocols (RDS/EDS).
+
+  /**
+   * Client receives multiple RDS responses without RouteConfiguration for the requested
+   * resource. It should continue waiting until such an RDS response arrives, as RDS
+   * protocol is incremental.
+   *
+   * <p>Tests for RDS incremental protocol behavior.
+   */
+  @Test
+  public void waitRdsResponsesForRequestedResource() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management sends back an LDS response telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("bar.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("baz.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    // Client sends an (first) RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    // Management server sends back an RDS response that does not contain RouteConfiguration
+    // for the requested resource.
+    List<Any> routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "some resource name does not match route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "some more cluster")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    // Client waits for future RDS responses silently.
+    verifyNoMoreInteractions(configWatcher);
+
+    // Management server sends back another RDS response containing the RouteConfiguration
+    // for the requested resource.
+    routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("something does not match"),
+                        "some cluster"),
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                        "another-cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0001")));
+
+    // Updated cluster name is notified to config watcher.
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName())
+        .isEqualTo("another-cluster.googleapis.com");
+  }
+
+  /**
+   * Client receives RDS responses containing RouteConfigurations for resources that were
+   * not requested (management server sends them proactively). Later client receives an LDS
+   * response with the requested Listener containing Rds config pointing to do RDS for one of
+   * the previously received RouteConfigurations. No RDS request needs to be sent for that
+   * RouteConfiguration as it can be found in local cache (management server will not send
+   * RDS responses for that RouteConfiguration again). A future RDS response update for
+   * that RouteConfiguration should be notified to config watcher.
+   *
+   * <p>Tests for caching RDS response data behavior.
+   */
+  @Test
+  public void receiveRdsResponsesForRouteConfigurationsToBeUsedLater() {
+    xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an LDS request for the host name (with port) to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "")));
+
+    // Management sends back an LDS response telling client to do RDS.
+    Rds rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo1.googleapis.com")
+            .build();
+
+    List<Any> listeners = ImmutableList.of(
+        Any.pack(buildListener("bar.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("baz.googleapis.com",
+            Any.pack(HttpConnectionManager.getDefaultInstance()))),
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sends an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
+
+    // Client sends an (first) RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "route-foo1.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "")));
+
+    // Management server sends back an RDS response containing RouteConfigurations
+    // more than requested.
+    List<Any> routeConfigs = ImmutableList.of(
+        // Currently wanted resource.
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo1.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster1.googleapis.com")))),
+        // Resources currently not wanted.
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo2.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster2.googleapis.com")))),
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo3.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "cluster3.googleapis.com")))));
+    response = buildDiscoveryResponse("0", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo1.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    // Resolved cluster name is notified to config watcher.
+    ArgumentCaptor<ConfigUpdate> configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster1.googleapis.com");
+
+    // Management server sends back another LDS response containing updates for the requested
+    // Listener and telling client to do RDS for a RouteConfiguration which had previously
+    // sent to client.
+    rdsConfig =
+        Rds.newBuilder()
+            // Must set to use ADS.
+            .setConfigSource(
+                ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()))
+            .setRouteConfigName("route-foo2.googleapis.com")
+            .build();
+
+    listeners = ImmutableList.of(
+        Any.pack(buildListener("foo.googleapis.com:8080", /* matching resource */
+            Any.pack(HttpConnectionManager.newBuilder().setRds(rdsConfig).build())))
+    );
+    response = buildDiscoveryResponse("1", listeners, XdsClientImpl.ADS_TYPE_URL_LDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK LDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "foo.googleapis.com:8080",
+            XdsClientImpl.ADS_TYPE_URL_LDS, "0001")));
+
+    // Updated cluster name is notified to config watcher.
+    configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher, times(2)).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster2.googleapis.com");
+
+    // At this time, no RDS request is sent as the result can be found in local cache (even if
+    // a request is sent for it, management server will not reply).
+    verify(requestObserver, times(0))
+        .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
+
+    verifyNoMoreInteractions(requestObserver);
+
+    // Management server sends back another RDS response containing updates for the
+    // RouteConfiguration that the client was pointed to most recently (i.e.,
+    // "route-foo2.googleapis.com").
+    routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "route-foo2.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com"),
+                        "a-new-cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "route-foo2.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0001")));
+
+    // Updated cluster name is notified to config watcher.
+    configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher, times(3)).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName())
+        .isEqualTo("a-new-cluster.googleapis.com");
+  }
   
   // TODO(chengyuanzhang): integrated retry test for LDS/RDS/CDS/EDS.
+
   @Test
   public void streamClosedAndRetry() {
     xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
