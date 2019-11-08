@@ -711,6 +711,29 @@ public class XdsClientImplTest {
     verify(configWatcher, times(3)).onConfigChanged(configUpdateCaptor.capture());
     assertThat(configUpdateCaptor.getValue().getClusterName())
         .isEqualTo("some-other-cluster.googleapis.com");
+
+    // Management server sends back another RDS response containing updated information for the
+    // RouteConfiguration currently in-use by client.
+    routeConfigs = ImmutableList.of(
+        Any.pack(
+            buildRouteConfiguration(
+                "some-route-to-foo.googleapis.com",
+                ImmutableList.of(
+                    buildVirtualHost(ImmutableList.of("foo.googleapis.com", "bar.googleapis.com"),
+                        "an-updated-cluster.googleapis.com")))));
+    response = buildDiscoveryResponse("1", routeConfigs, XdsClientImpl.ADS_TYPE_URL_RDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK RDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "some-route-to-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_RDS, "0001")));
+
+    // Updated cluster name is notified to config watcher again.
+    configUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(configWatcher, times(4)).onConfigChanged(configUpdateCaptor.capture());
+    assertThat(configUpdateCaptor.getValue().getClusterName())
+        .isEqualTo("an-updated-cluster.googleapis.com");
   }
 
   // TODO(chengyuanzhang): tests for timeout waiting for responses for incremental
