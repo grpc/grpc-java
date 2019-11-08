@@ -19,7 +19,6 @@ package io.grpc.netty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import io.grpc.InternalChannelz.SocketStats;
@@ -50,11 +49,6 @@ class NettyServerTransport implements ServerTransport {
   // connectionLog is for connection related messages only
   private static final Logger connectionLog = Logger.getLogger(
       String.format("%s.connections", NettyServerTransport.class.getName()));
-  // Some exceptions are not very useful and add too much noise to the log
-  private static final ImmutableList<String> QUIET_ERRORS = ImmutableList.of(
-      "Connection reset by peer",
-      "An existing connection was forcibly closed by the remote host",
-      "An established connection was aborted by the software in your host machine");
 
   private final InternalLogId logId;
   private final Channel channel;
@@ -184,12 +178,8 @@ class NettyServerTransport implements ServerTransport {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t instanceof IOException && t.getMessage() != null) {
-      for (String msg : QUIET_ERRORS) {
-        if (t.getMessage().contains(msg)) {
-          return Level.FINE;
-        }
-      }
+    if (t.getClass().equals(IOException.class)) {
+      return Level.FINE;
     }
     return Level.INFO;
   }

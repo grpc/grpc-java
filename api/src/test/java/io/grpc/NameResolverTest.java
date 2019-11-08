@@ -61,14 +61,14 @@ public class NameResolverTest {
     assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args.getServiceConfigParser()).isSameInstanceAs(parser);
-    assertThat(args.getBlockingExecutor()).isSameInstanceAs(executor);
+    assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
 
     NameResolver.Args args2 = args.toBuilder().build();
     assertThat(args2.getDefaultPort()).isEqualTo(defaultPort);
     assertThat(args2.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args2.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args2.getServiceConfigParser()).isSameInstanceAs(parser);
-    assertThat(args2.getBlockingExecutor()).isSameInstanceAs(executor);
+    assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
 
     assertThat(args2).isNotSameInstanceAs(args);
     assertThat(args2).isNotEqualTo(args);
@@ -251,7 +251,7 @@ public class NameResolverTest {
         .setProxyDetector(proxyDetector)
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(parser)
-        .setBlockingExecutor(executor)
+        .setOffloadExecutor(executor)
         .build();
   }
 }

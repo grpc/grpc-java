@@ -39,7 +39,7 @@ import javax.net.ssl.SSLException;
  * using ALTS if applicable and using TLS as fallback.
  */
 public final class ComputeEngineChannelBuilder
-    extends ForwardingChannelBuilder<GoogleDefaultChannelBuilder> {
+    extends ForwardingChannelBuilder<ComputeEngineChannelBuilder> {
 
   private final NettyChannelBuilder delegate;
 

@@ -16,6 +16,7 @@
 
 package io.grpc.netty;
 
+import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.netty.NettyServerTransport.getLogLevel;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -34,27 +35,25 @@ public class NettyServerTransportTest {
   }
 
   @Test
-  public void quiet() {
+  public void ioException() {
     assertEquals(Level.FINE, getLogLevel(new IOException("Connection reset by peer")));
     assertEquals(Level.FINE, getLogLevel(new IOException(
         "An existing connection was forcibly closed by the remote host")));
   }
 
   @Test
-  public void quiet_prefixed() {
-    assertEquals(Level.FINE, getLogLevel(new IOException(
-        "syscall:read(..) failed: Connection reset by peer")));
-  }
-
-  @Test
-  public void nonquiet() {
-    assertEquals(Level.INFO, getLogLevel(new IOException("foo")));
-  }
-
-  @Test
-  public void nullMessage() {
+  public void ioException_nullMessage() {
     IOException e = new IOException();
     assertNull(e.getMessage());
-    assertEquals(Level.INFO, getLogLevel(e));
+    assertEquals(Level.FINE, getLogLevel(e));
+  }
+
+  @Test
+  public void extendedIoException() {
+    class ExtendedIoException extends IOException {}
+
+    ExtendedIoException e = new ExtendedIoException();
+    assertThat(e.getMessage()).isNull();
+    assertThat(getLogLevel(e)).isEqualTo(Level.INFO);
   }
 }

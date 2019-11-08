@@ -121,11 +121,36 @@ final class AesGcmAeadCrypter implements AeadCrypter {
     //
     // While we could use Conscrypt.version() to check compatibility, that is _very_ verbose via
     // reflection. In practice, old conscrypts are probably not much of a problem.
+    Provider provider;
     try {
-      return ConscryptLoader.newProvider();
+      provider = ConscryptLoader.newProvider();
     } catch (Throwable t) {
       logger.log(Level.INFO, "Could not load Conscrypt. Will use slower JDK implementation", t);
       return null;
     }
+    try {
+      Cipher.getInstance(AES_GCM, CONSCRYPT);
+    } catch (SecurityException t) {
+      // Pre-Java 7u121/Java 8u111 fails with SecurityException:
+      //   JCE cannot authenticate the provider Conscrypt
+      //
+      // This is because Conscrypt uses a newer (more secure) signing CA than the earlier Java
+      // supported. https://www.oracle.com/technetwork/java/javase/8u111-relnotes-3124969.html
+      // https://www.oracle.com/technetwork/java/javase/documentation/javase7supportreleasenotes-1601161.html#R170_121
+      //
+      // Use WARNING instead of INFO in this case because it is unlikely to be a supported
+      // environment. In the other cases we might be on Java 9+; it seems unlikely in this case.
+      // Note that on Java 7, we're likely to crash later because GCM is unsupported.
+      logger.log(
+          Level.WARNING,
+          "Could not load Conscrypt. Will try slower JDK implementation. This may be because the "
+          + "JDK is older than Java 7 update 121 or Java 8 update 111. If so, please update",
+          t);
+      return null;
+    } catch (Throwable t) {
+      logger.log(Level.INFO, "Could not load Conscrypt. Will use slower JDK implementation", t);
+      return null;
+    }
+    return provider;
   }
 }

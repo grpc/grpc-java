@@ -474,7 +474,7 @@ public abstract class NameResolver {
      */
     @Nullable
     @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
-    public Executor getBlockingExecutor() {
+    public Executor getOffloadExecutor() {
       return executor;
     }
 
@@ -500,7 +500,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
-      builder.setBlockingExecutor(executor);
+      builder.setOffloadExecutor(executor);
       return builder;
     }
 
@@ -569,12 +569,12 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@link Args#getBlockingExecutor}. This is an optional field.
+       * See {@link Args#getOffloadExecutor}. This is an optional field.
        *
        * @since 1.25.0
        */
       @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6279")
-      public Builder setBlockingExecutor(Executor executor) {
+      public Builder setOffloadExecutor(Executor executor) {
         this.executor = executor;
         return this;
       }

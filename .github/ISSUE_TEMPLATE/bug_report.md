@@ -4,11 +4,12 @@ about: Create a bug report to help us improve
 labels: bug
 ---
 
-Please answer these questions before submitting a bug report.
+<!-- Please answer these questions before submitting a bug report. -->
 
-### What version of gRPC are you using?
+### What version of gRPC-Java are you using?
 
-### What operating system (Linux, Windows,...) and version?
+### What is your environment?
+<!-- operating system (Linux, Windows,...) and version, jdk version, etc. -->
 
 ### What did you expect to see?
 
@@ -16,4 +17,4 @@ Please answer these questions before submitting a bug report.
 
 ### Steps to reproduce the bug
 
-Make sure you include information that can help us debug (full error message, exception listing, stack trace, logs).
+<!-- Make sure you include information that can help us debug (full error message, exception listing, stack trace, logs). -->
