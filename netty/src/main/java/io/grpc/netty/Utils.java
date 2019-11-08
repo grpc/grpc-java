@@ -109,7 +109,7 @@ class Utils {
 
         @Override
         public void close(ByteBufAllocator allocator) {
-          // TODO(zhangkun83): do anything?
+          // PooledByteBufAllocator doesn't provide a shutdown method.  Leaving it to GC.
         }
       };
 
