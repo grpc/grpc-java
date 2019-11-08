@@ -160,7 +160,7 @@ final class XdsClientImpl extends XdsClient {
     if (adsStream == null) {
       startRpcStream();
     }
-    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
+    adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
   }
 
   /**
@@ -331,7 +331,7 @@ final class XdsClientImpl extends XdsClient {
                 .build();
         configWatcher.onConfigChanged(configUpdate);
       } else {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, rdsRouteConfigName);
+        adsStream.sendXdsRequest(ADS_TYPE_URL_RDS, ImmutableList.of(rdsRouteConfigName));
       }
     } else {
       // The requested Listener does not exist.
@@ -440,7 +440,7 @@ final class XdsClientImpl extends XdsClient {
     public void run() {
       startRpcStream();
       if (configWatcher != null) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
+        adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
       }
       // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
     }
@@ -543,7 +543,7 @@ final class XdsClientImpl extends XdsClient {
       if (delayNanos == 0) {
         startRpcStream();
         if (configWatcher != null) {
-          adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ldsResourceName);
+          adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
         }
         // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
       } else {
@@ -573,7 +573,7 @@ final class XdsClientImpl extends XdsClient {
      * requested resource name (except for LDS as we always request for the singleton Listener)
      * as we need it to find resources in responses.
      */
-    private void sendXdsRequest(String typeUrl, String resourceName) {
+    private void sendXdsRequest(String typeUrl, List<String> resourceNames) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String version = "";
       String nonce = "";
@@ -581,9 +581,11 @@ final class XdsClientImpl extends XdsClient {
         version = ldsVersion;
         nonce = ldsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+        checkArgument(resourceNames.size() == 1,
+            "RDS request requesting for more than one resource");
         version = rdsVersion;
         nonce = rdsRespNonce;
-        rdsResourceName = resourceName;
+        rdsResourceName = resourceNames.get(0);
       }
       // TODO(chengyuanzhang): cases for CDS/EDS.
       DiscoveryRequest request =
@@ -591,7 +593,7 @@ final class XdsClientImpl extends XdsClient {
               .newBuilder()
               .setVersionInfo(version)
               .setNode(node)
-              .addResourceNames(resourceName)
+              .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
               .build();
