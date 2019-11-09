@@ -349,8 +349,8 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleRdsResponse(DiscoveryResponse rdsResponse) {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
-    checkState(ldsResourceName != null && configWatcher != null,
-        "No LDS request was ever sent. Management server is doing something wrong");
+    checkState(adsStream.rdsResourceName != null,
+        "Never requested for RDS resources, management server is doing something wrong");
     adsStream.rdsRespNonce = rdsResponse.getNonce();
 
     // Unpack RouteConfiguration messages.
@@ -468,9 +468,10 @@ final class XdsClientImpl extends XdsClient {
     private String ldsRespNonce = "";
     private String rdsRespNonce = "";
 
-    // Most recently requested resource name for each resource type. Note the resource_name in
+    // Most recently requested resource name(s) for each resource type. Note the resource_name in
     // LDS requests will always be "xds:" URI (including port suffix if present).
-    private String rdsResourceName = "";
+    @Nullable
+    private String rdsResourceName;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
