@@ -186,6 +186,57 @@ final class XdsClientImpl extends XdsClient {
     adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
   }
 
+  @Override
+  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+    boolean needRequeset = false;
+    if (!endpointWatchers.containsKey(clusterName)) {
+      needRequeset = true;
+      endpointWatchers.put(clusterName, new HashSet<EndpointWatcher>());
+    }
+    Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
+    if (watchers.contains(watcher)) {
+      logger.log(Level.WARNING, "Watcher {0} already registered", watcher);
+    }
+    watchers.add(watcher);
+    // If local cache contains endpoint information for the cluster to be watched, notify
+    // the watcher immediately.
+    if (clusterNamesToEndpointUpates.containsKey(clusterName)) {
+      watcher.onEndpointChanged(clusterNamesToEndpointUpates.get(clusterName));
+    }
+    if (rpcRetryTimer != null) {
+      // Currently in retry backoff.
+      return;
+    }
+    if (needRequeset) {
+      if (adsStream == null) {
+        startRpcStream();
+      }
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+    }
+  }
+
+  @Override
+  void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+    Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
+    if (watchers == null) {
+      logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
+      return;
+    }
+    watchers.remove(watcher);
+    if (watchers.isEmpty()) {
+      endpointWatchers.remove(clusterName);
+      // No longer interested in this cluster, send an updated EDS request to unsubscribe
+      // this resource.
+      if (rpcRetryTimer != null) {
+        // Currently in retry backoff.
+        return;
+      }
+      checkState(adsStream != null,
+          "Severe bug: ADS stream was not created while an endpoint watcher was registered");
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+    }
+  }
+
   /**
    * Builds a channel to the given server URI with the first supported channel creds config.
    */
@@ -560,7 +611,10 @@ final class XdsClientImpl extends XdsClient {
       if (configWatcher != null) {
         adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
       }
-      // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
+      if (!endpointWatchers.isEmpty()) {
+        adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+      }
+      // TODO(chengyuanzhang): send CDS requests if CDS watcher presents.
     }
   }
 
