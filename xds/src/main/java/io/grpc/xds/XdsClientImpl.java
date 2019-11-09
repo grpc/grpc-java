@@ -44,6 +44,7 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -574,7 +575,7 @@ final class XdsClientImpl extends XdsClient {
      * requested resource name (except for LDS as we always request for the singleton Listener)
      * as we need it to find resources in responses.
      */
-    private void sendXdsRequest(String typeUrl, List<String> resourceNames) {
+    private void sendXdsRequest(String typeUrl, Collection<String> resourceNames) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String version = "";
       String nonce = "";
@@ -586,7 +587,7 @@ final class XdsClientImpl extends XdsClient {
             "RDS request requesting for more than one resource");
         version = rdsVersion;
         nonce = rdsRespNonce;
-        rdsResourceName = resourceNames.get(0);
+        rdsResourceName = resourceNames.iterator().next();
       }
       // TODO(chengyuanzhang): cases for CDS/EDS.
       DiscoveryRequest request =
@@ -605,8 +606,8 @@ final class XdsClientImpl extends XdsClient {
      * Sends a DiscoveryRequest with the given information as an ACK. Updates the latest accepted
      * version for the corresponding resource type.
      */
-    private void sendAckRequest(String typeUrl, List<String> resourceNames, String versionInfo,
-        String nonce) {
+    private void sendAckRequest(String typeUrl, Collection<String> resourceNames,
+        String versionInfo, String nonce) {
       checkState(requestWriter != null, "ADS stream has not been started");
       if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
         ldsVersion = versionInfo;
@@ -632,7 +633,7 @@ final class XdsClientImpl extends XdsClient {
      * Sends a DiscoveryRequest with the given information as an NACK. NACK takes the previous
      * accepted version.
      */
-    private void sendNackRequest(String typeUrl, List<String> resourceNames, String nonce,
+    private void sendNackRequest(String typeUrl, Collection<String> resourceNames, String nonce,
         String message) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String versionInfo = "";
