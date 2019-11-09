@@ -25,6 +25,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
@@ -44,6 +45,9 @@ import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -66,6 +70,8 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
+  private static final String ADS_TYPE_URL_EDS =
+      "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
@@ -83,6 +89,16 @@ final class XdsClientImpl extends XdsClient {
   // Optimization: only cache clusterName field in the RouteConfiguration messages of RDS
   // responses.
   private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
+
+  // Cached data for EDS responses, keyed cluster names.
+  // CDS responses indicate absence of clusters and RDS responses indicate presence of clusters.
+  // Optimization: cache EndpointUpdate, which contains only information needed by gRPC, instead
+  // of whole ClusterLoadAssignment messages to reduce memory usage.
+  private final Map<String, EndpointUpdate> clusterNamesToEndpointUpates = new HashMap<>();
+
+  // Endpoint watchers waiting for endpoint updates for each cluster. Multiple endpoint
+  // watchers can watch endpoints in the same cluster.
+  private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
 
   @Nullable
   private AdsStream adsStream;
@@ -203,6 +219,22 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
+<<<<<<< HEAD
+=======
+   * Terminates the RPC connection.
+   */
+  @VisibleForTesting
+  void shutdownRpcStream() {
+    if (adsStream != null) {
+      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    if (rpcRetryTimer != null) {
+      rpcRetryTimer.cancel();
+    }
+  }
+
+  /**
+>>>>>>> Implemented EDS response handler.
    * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
    * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
    * listener, if exists, to find the VirtualHost configuration for the "xds:" URI
@@ -426,6 +458,100 @@ final class XdsClientImpl extends XdsClient {
     return null;
   }
 
+  private void handleEdsResponse(DiscoveryResponse edsResponse) {
+    logger.log(Level.FINE, "Received an EDS response: {0}", edsResponse);
+    checkState(adsStream.edsResourceNames != null,
+        "Never requested for EDS resources, management server is doing something wrong");
+    adsStream.edsRespNonce = edsResponse.getNonce();
+
+    // Unpack ClusterLoadAssignment messages.
+    List<ClusterLoadAssignment> clusterLoadAssignments =
+        new ArrayList<>(edsResponse.getResourcesCount());
+    try {
+      for (com.google.protobuf.Any res : edsResponse.getResourcesList()) {
+        clusterLoadAssignments.add(res.unpack(ClusterLoadAssignment.class));
+      }
+    } catch (InvalidProtocolBufferException e) {
+      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+          edsResponse.getNonce(), "Broken EDS response");
+      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken EDS response"));
+      return;
+    }
+
+    boolean invalidData = false;
+    // Full endpoint information update received in this EDS response to be cached.
+    Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
+    // EndpointUpdate data to be pushed to each watcher.
+    Map<String, EndpointUpdate> desiredEndpointUpdates = new HashMap<>();
+    // Walk through each ClusterLoadAssignment message. If any of them contain invalid information
+    // for gRPC's load balancing usage, the whole response is rejected.
+    validateData:
+    for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
+      String clusterName = assignment.getClusterName();
+      EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
+      updateBuilder.setClusterName(clusterName);
+      if (assignment.getEndpointsCount() == 0) {
+        invalidData = true;
+        break;
+      }
+      // The policy.disable_overprovisioning field must be set to true.
+      if (!assignment.getPolicy().getDisableOverprovisioning()) {
+        invalidData = true;
+        break;
+      }
+      for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
+          : assignment.getEndpointsList()) {
+        // The lb_endpoints field for LbEndpoint must contain at least one entry.
+        if (localityLbEndpoints.getLbEndpointsCount() == 0) {
+          invalidData = true;
+          break validateData;
+        }
+        // The endpoint field of each lb_endpoints must be set.
+        // Inside of it: the address field must be set.
+        for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
+            : localityLbEndpoints.getLbEndpointsList()) {
+          if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()) {
+            invalidData = true;
+            break validateData;
+          }
+        }
+        // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
+        // handed over to watching parties. It is watching parties' responsibility to
+        // filter out unhealthy endpoints. See EnvoyProtoData.LbEndpoint#isHealthy().
+        updateBuilder.addLocalityLbEndpoints(
+            Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
+            LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
+      }
+      for (io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload dropOverload
+          : assignment.getPolicy().getDropOverloadsList()) {
+        updateBuilder.addDropPolicy(DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+      }
+      EndpointUpdate update = updateBuilder.build();
+      endpointUpdates.put(clusterName, update);
+      if (endpointWatchers.containsKey(clusterName)) {
+        desiredEndpointUpdates.put(clusterName, update);
+      }
+    }
+    if (invalidData) {
+      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+          edsResponse.getNonce(),
+          "ClusterLoadAssignment message contains invalid information for gRPC's usage");
+      return;
+    }
+    adsStream.sendAckRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+        edsResponse.getVersionInfo(), edsResponse.getNonce());
+
+    // Update local EDS cache by inserting updated endpoint information.
+    clusterNamesToEndpointUpates.putAll(endpointUpdates);
+
+    // Notify watchers waiting for updates of endpoint information received in this EDS response.
+    for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
+      for (EndpointWatcher watcher : endpointWatchers.get(entry.getKey())) {
+        watcher.onEndpointChanged(entry.getValue());
+      }
+    }
+  }
+
   @VisibleForTesting
   final class RpcRetryTask implements Runnable {
     @Override
@@ -450,6 +576,7 @@ final class XdsClientImpl extends XdsClient {
     // resources.
     private String ldsVersion = "";
     private String rdsVersion = "";
+    private String edsVersion = "";
 
     // Response nonce for the most recently received discovery responses of each resource type.
     // Client initiated requests start response nonce with empty string.
@@ -459,11 +586,14 @@ final class XdsClientImpl extends XdsClient {
     // DiscoveryResponse.
     private String ldsRespNonce = "";
     private String rdsRespNonce = "";
+    private String edsRespNonce = "";
 
     // Most recently requested resource name(s) for each resource type. Note the resource_name in
     // LDS requests will always be "xds:" URI (including port suffix if present).
     @Nullable
     private String rdsResourceName;
+    @Nullable
+    private List<String> edsResourceNames;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
