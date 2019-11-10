@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
@@ -39,17 +40,22 @@ import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc.Secre
 import io.grpc.Internal;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.internal.SharedResourceHolder;
+import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.unix.DomainSocketAddress;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
+import io.netty.util.concurrent.DefaultThreadFactory;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -63,84 +69,104 @@ final class SdsClient {
   private static final Logger logger = Logger.getLogger(SdsClient.class.getName());
   private static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.api.v2.auth.Secret";
 
-  private final HashMap<String, HashSet<SecretWatcher>> watcherMap = new HashMap<>();
+  private final Set<SecretWatcher> watchers = new HashSet<>();
 
-  private static SdsClient instance;
-  private final ConfigSource configSource;
+  private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
   @VisibleForTesting String targetUri;
-  ManagedChannel channel;
+  private ManagedChannel channel;
   private SecretDiscoveryServiceStub secretDiscoveryServiceStub;
   private ResponseObserver responseObserver;
   private StreamObserver<DiscoveryRequest> requestObserver;
   private DiscoveryResponse lastResponse;
+  private EventLoopGroup eventLoopGroup;
+  private static final EventLoopGroupResource eventLoopGroupResource =
+      new EventLoopGroupResource("SdsClient");
+
+
+  private static final class EventLoopGroupResource implements Resource<EventLoopGroup> {
+    private final String name;
+
+    EventLoopGroupResource(
+        String name) {
+      this.name = name;
+    }
+
+    @Override
+    public EventLoopGroup create() {
+      // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
+      ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
+      return new EpollEventLoopGroup(0, threadFactory);
+    }
+
+    @SuppressWarnings("FutureReturnValueIgnored")
+    @Override
+    public void close(EventLoopGroup instance) {
+      instance.shutdownGracefully(0, 0, TimeUnit.SECONDS);
+    }
+  }
 
   /**
    * Starts resource discovery with SDS protocol. This method should be the first one to be called
    * and should be called only once.
    */
-  void start() {
-    if (channel == null) {
-      if (targetUri.startsWith("unix:")) {
-        EventLoopGroup elg = new EpollEventLoopGroup();
-        channel =
-            NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
-                .eventLoopGroup(elg)
-                .channelType(EpollDomainSocketChannel.class)
-                .build();
-      } else {
-        channel = NettyChannelBuilder.forTarget(targetUri).build();
+  synchronized void start(Executor executor) {
+    if (requestObserver == null) {
+      if (channel == null) {
+        NettyChannelBuilder builder;
+        if (targetUri.startsWith("unix:")) {
+          checkState(Epoll.isAvailable(), "Epoll is not available");
+          eventLoopGroup = SharedResourceHolder.get(eventLoopGroupResource);
+          builder =
+              NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
+                  .eventLoopGroup(eventLoopGroup)
+                  .channelType(EpollDomainSocketChannel.class);
+        } else {
+          builder = NettyChannelBuilder.forTarget(targetUri);
+        }
+        builder = builder.usePlaintext();
+        if (executor != null) {
+          builder = builder.executor(executor);
+        }
+        channel = builder.build();
       }
+      secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
+      responseObserver = new ResponseObserver();
+      requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
     }
-    secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
-    responseObserver = new ResponseObserver();
-    requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
   }
 
   /** Stops resource discovery. No method in this class should be called after this point. */
-  void shutdown() {
-    requestObserver.onCompleted();
-    channel.shutdownNow();
+  synchronized void shutdown() {
+    if (requestObserver != null) {
+      requestObserver.onCompleted();
+      requestObserver = null;
+      channel.shutdownNow();
+      if (eventLoopGroup != null) {
+        eventLoopGroup = SharedResourceHolder.release(eventLoopGroupResource, eventLoopGroup);
+      }
+    }
   }
 
-  /**
-   * Gets the singleton instance after constructing it as needed.
-   *
-   * @param configSource the {@link ConfigSource} pointing to the SDS server.
-   * @param node Node id of this client.
-   */
-  static synchronized SdsClient getInstance(ConfigSource configSource, Node node) {
-    checkNotNull(configSource, "configSource");
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node) {
+    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
     checkNotNull(node, "node");
-    if (instance == null) {
-      instance = new SdsClient(configSource, node);
-      return instance;
-    }
-    // check if apiConfigSource match
-    if (instance.configSource.equals(configSource) && instance.clientNode.equals(node)) {
-      return instance;
-    }
-    throw new UnsupportedOperationException(
-        "Multiple SdsClient's with different ApiConfigSource and Node's not supported");
-  }
-
-  private SdsClient(ConfigSource configSource, Node node) {
-    checkNotNull(configSource, "configSource");
-    checkNotNull(node, "node");
-    this.configSource = configSource;
+    this.sdsSecretConfig = sdsSecretConfig;
     this.clientNode = node;
-    this.targetUri = extractUdsTarget(configSource);
+    this.targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
   }
 
   /** Create the client with given configSource, node and channel. */
   @VisibleForTesting
-  SdsClient(ConfigSource configSource, Node node, ManagedChannel channel) {
-    this(configSource, node);
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, ManagedChannel channel) {
+    this(sdsSecretConfig, node);
+    checkNotNull(channel, "channel");
     this.channel = channel;
   }
 
   @VisibleForTesting
   static String extractUdsTarget(ConfigSource configSource) {
+    checkNotNull(configSource, "configSource");
     checkArgument(
         configSource.hasApiConfigSource(), "only configSource with ApiConfigSource supported");
     ApiConfigSource apiConfigSource = configSource.getApiConfigSource();
@@ -173,44 +199,17 @@ final class SdsClient {
 
     @Override
     public void onNext(DiscoveryResponse discoveryResponse) {
-      try {
-        processDiscoveryResponse(discoveryResponse);
-      } catch (Exception e) {
-        logger.log(Level.SEVERE, "processDiscoveryResponse", e);
-      }
-    }
 
-    private void processDiscoveryResponse(DiscoveryResponse response)
-        throws InvalidProtocolBufferException {
-      List<Any> resources = response.getResourcesList();
-      ArrayList<String> resourceNames = new ArrayList<>();
-      for (Any any : resources) {
-        final String typeUrl = any.getTypeUrl();
-        checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
-        Secret secret = Secret.parseFrom(any.getValue());
-        resourceNames.add(secret.getName());
-        processSecret(secret);
-      }
-      lastResponse = response;
-      // send discovery request as ACK
-      sendDiscoveryRequestOnStream(resourceNames);
-    }
+      processDiscoveryResponse(discoveryResponse);
 
-    private void processSecret(Secret secret) {
-      synchronized (watcherMap) {
-        final HashSet<SecretWatcher> secretWatchers = watcherMap.get(secret.getName());
-        if (secretWatchers != null) {
-          for (SecretWatcher secretWatcher : secretWatchers) {
-            secretWatcher.onSecretChanged(secret);
-          }
-        }
-      }
     }
 
     @Override
     public void onError(Throwable t) {
-      logger.log(Level.SEVERE, "ResponseObserver.onError", t);
+      sendErrorToWatchers(t);
     }
+
+
 
     @Override
     public void onCompleted() {
@@ -218,13 +217,22 @@ final class SdsClient {
     }
   }
 
-  private void sendDiscoveryRequestOnStream(String... names) {
-    sendDiscoveryRequestOnStream(Arrays.asList(names));
+  private void processDiscoveryResponse(DiscoveryResponse response) {
+    try {
+      processSecretsFromDiscoveryResponse(response);
+    } catch (Exception e) {
+      sendErrorToWatchers(e);
+      // send Nack
+      sendNack(Code.INTERNAL_VALUE, e.getMessage());
+      return;
+    }
+    lastResponse = response;
+    // send discovery request as ACK
+    sendDiscoveryRequestOnStream();
   }
 
   @SuppressWarnings("SynchronizeOnNonFinalField")
-  private void sendDiscoveryRequestOnStream(List<String> names) {
-    checkNotNull(names, "names");
+  private void sendNack(int errorCode, String errorMessage) {
     String nonce = "";
     String versionInfo = "";
 
@@ -237,72 +245,106 @@ final class SdsClient {
             .setTypeUrl(SECRET_TYPE_URL)
             .setResponseNonce(nonce)
             .setVersionInfo(versionInfo)
+            .addResourceNames(sdsSecretConfig.getName())
+            .setErrorDetail(
+                com.google.rpc.Status.newBuilder()
+                    .setCode(errorCode).setMessage(errorMessage).build())
             .setNode(clientNode);
 
-    for (String name : names) {
-      builder.addResourceNames(name);
-    }
     DiscoveryRequest req = builder.build();
     synchronized (requestObserver) {
       requestObserver.onNext(req);
     }
   }
 
-  /**
-   * Registers a secret watcher for the given SdsSecretConfig.
-   *
-   * @return A {@link SecretWatcherHandle} to pass to {@link
-   *     #cancelSecretWatch(SecretWatcherHandle)}.
-   */
-  SecretWatcherHandle watchSecret(SdsSecretConfig sdsSecretConfig, SecretWatcher secretWatcher) {
-    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
-    checkNotNull(secretWatcher, "secretWatcher");
-    checkArgument(
-        sdsSecretConfig.getSdsConfig().equals(this.configSource),
-        "expected configSource" + this.configSource);
-    String name = sdsSecretConfig.getName();
-    checkState(!Strings.isNullOrEmpty(name), "name required");
-    synchronized (watcherMap) {
-      HashSet<SecretWatcher> set = watcherMap.get(name);
-      if (set == null) {
-        set = new HashSet<>();
-        watcherMap.put(name, set);
+  private void sendErrorToWatchers(Throwable t) {
+    logger.log(Level.SEVERE, "error while processing DiscoveryResponse", t);
+    synchronized (watchers) {
+      for (SecretWatcher secretWatcher : watchers) {
+        try {
+          secretWatcher.onError(Status.fromThrowable(t));
+        } catch (Throwable throwable) {
+          logger.log(Level.SEVERE, "onError", throwable);
+        }
       }
-      set.add(secretWatcher);
     }
-    sendDiscoveryRequestOnStream(name);
-    return new SecretWatcherHandle(name, secretWatcher);
+  }
+
+  private void processSecretsFromDiscoveryResponse(DiscoveryResponse response)
+      throws InvalidProtocolBufferException {
+    List<Any> resources = response.getResourcesList();
+    checkState(resources.size() == 1, "exactly one resource expected");
+    for (Any any : resources) {
+      final String typeUrl = any.getTypeUrl();
+      checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
+      Secret secret = Secret.parseFrom(any.getValue());
+      processSecret(secret);
+    }
+  }
+
+  private void processSecret(Secret secret) {
+    checkState(sdsSecretConfig.getName().equals(secret.getName()),
+            "expected secret name %s", sdsSecretConfig.getName());
+    synchronized (watchers) {
+      for (SecretWatcher secretWatcher : watchers) {
+        try {
+          secretWatcher.onSecretChanged(secret);
+        } catch (Throwable t) {
+          logger.log(Level.SEVERE, "onSecretChanged", t);
+        }
+      }
+    }
+  }
+
+  @SuppressWarnings("SynchronizeOnNonFinalField")
+  private void sendDiscoveryRequestOnStream() {
+    String nonce = "";
+    String versionInfo = "";
+
+    if (lastResponse != null) {
+      nonce = lastResponse.getNonce();
+      versionInfo = lastResponse.getVersionInfo();
+    }
+    DiscoveryRequest.Builder builder =
+        DiscoveryRequest.newBuilder()
+            .setTypeUrl(SECRET_TYPE_URL)
+            .setResponseNonce(nonce)
+            .setVersionInfo(versionInfo)
+            .addResourceNames(sdsSecretConfig.getName())
+            .setNode(clientNode);
+
+    DiscoveryRequest req = builder.build();
+    synchronized (requestObserver) {
+      requestObserver.onNext(req);
+    }
+  }
+
+  /** Registers a secret watcher for this client's SdsSecretConfig. */
+  void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
+    checkNotNull(secretWatcher, "secretWatcher");
+    synchronized (watchers) {
+      checkState(watchers.add(secretWatcher),
+              "duplicate secretWatcher addition");
+    }
+    if (lastResponse == null) {
+      sendDiscoveryRequestOnStream();
+    } else {
+      processSecretsFromDiscoveryResponse(lastResponse);
+    }
   }
 
   /** Unregisters the given endpoints watcher. */
-  void cancelSecretWatch(SecretWatcherHandle secretWatcherHandle) {
-    checkNotNull(secretWatcherHandle, "secretWatcherHandle");
-    synchronized (watcherMap) {
-      HashSet<SecretWatcher> set = watcherMap.get(secretWatcherHandle.name);
-      checkState(set != null, "watcher not found");
-      checkState(set.remove(secretWatcherHandle.secretWatcher), "watcher not found");
+  void cancelSecretWatch(SecretWatcher secretWatcher) {
+    checkNotNull(secretWatcher, "secretWatcher");
+    synchronized (watchers) {
+      checkState(watchers.remove(secretWatcher), "watcher not found");
     }
   }
 
   /** Secret watcher interface. */
   interface SecretWatcher {
-
     void onSecretChanged(Secret secretUpdate);
 
     void onError(Status error);
-  }
-
-  /**
-   * Class representing opaque handle to refer to registered {@link SecretWatcher}'s to use in
-   * {@link #cancelSecretWatch(SecretWatcherHandle)}.
-   */
-  static final class SecretWatcherHandle {
-    private final String name;
-    private final SecretWatcher secretWatcher;
-
-    private SecretWatcherHandle(String name, SecretWatcher secretWatcher) {
-      this.name = name;
-      this.secretWatcher = secretWatcher;
-    }
   }
 }

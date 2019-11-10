@@ -17,7 +17,6 @@
 package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
-import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -25,6 +24,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
@@ -36,8 +36,6 @@ import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService;
 import io.envoyproxy.envoy.api.v2.core.Node;
-import io.grpc.ManagedChannel;
-import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.internal.testing.TestUtils;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -54,13 +52,14 @@ import org.mockito.ArgumentMatchers;
 
 /** Unit tests for {@link SdsClient}. */
 @RunWith(JUnit4.class)
-public class SdsClientTest {
+public class SdsClientUdsTest {
 
   private static final String SERVER_0_PEM_FILE = "server0.pem";
   private static final String SERVER_0_KEY_FILE = "server0.key";
   private static final String SERVER_1_PEM_FILE = "server1.pem";
   private static final String SERVER_1_KEY_FILE = "server1.key";
   private static final String CA_PEM_FILE = "ca.pem";
+  private static final String SDSCLIENT_TEST_SOCKET = "/tmp/sdsclient-test.socket";
 
   private TestSdsServer.SecretGetter secretGetter;
   private TestSdsServer server;
@@ -91,27 +90,19 @@ public class SdsClientTest {
   public void setUp() throws IOException {
     secretGetter = mock(TestSdsServer.SecretGetter.class);
     server = new TestSdsServer(secretGetter);
-    server.startServer("inproc", false);
-    ConfigSource configSource = buildConfigSource("inproc");
+    server.startServer(SDSCLIENT_TEST_SOCKET, true);
+    ConfigSource configSource = buildConfigSource("unix:" + SDSCLIENT_TEST_SOCKET);
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
-    node = Node.newBuilder().setId("sds-client-temp-test1").build();
-    ManagedChannel channel = InProcessChannelBuilder.forName("inproc").directExecutor().build();
-    sdsClient = new SdsClient(sdsSecretConfig, node, channel);
-    sdsClient.start(null);
+    node = Node.newBuilder().setId("sds-client-temp-test2").build();
+    sdsClient = new SdsClient(sdsSecretConfig, node);
+    sdsClient.start(MoreExecutors.directExecutor());
   }
 
   @After
   public void teardown() {
     sdsClient.shutdown();
     server.shutdown();
-  }
-
-  @Test
-  public void configSourceUdsTarget() {
-    ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path");
-    String targetUri = SdsClient.extractUdsTarget(configSource);
-    assertThat(targetUri).isEqualTo("unix:/tmp/uds_path");
   }
 
   @Test
@@ -140,77 +131,6 @@ public class SdsClientTest {
     sdsClient.cancelSecretWatch(mockWatcher);
     server.generateAsyncResponse("name1");
     verify(mockWatcher, never()).onSecretChanged(ArgumentMatchers.any(Secret.class));
-  }
-
-  @Test
-  public void testSecretWatcher_certificateValidationContext() throws IOException {
-    SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
-
-    when(secretGetter.getFor("name1"))
-        .thenReturn(getOneCertificateValidationContextSecret("name1", CA_PEM_FILE));
-
-    sdsClient.watchSecret(mockWatcher);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
-    discoveryRequestVerification(
-        server.lastRequestOnlyForAck,
-        "[name1]",
-        server.lastResponse.getVersionInfo(),
-        server.lastResponse.getNonce());
-    secretWatcherVerification(mockWatcher, "name1", CA_PEM_FILE);
-
-    reset(mockWatcher);
-    when(secretGetter.getFor("name1"))
-        .thenReturn(getOneCertificateValidationContextSecret("name1", SERVER_1_PEM_FILE));
-    server.generateAsyncResponse("name1");
-    secretWatcherVerification(mockWatcher, "name1", SERVER_1_PEM_FILE);
-    
-    reset(mockWatcher);
-    sdsClient.cancelSecretWatch(mockWatcher);
-    server.generateAsyncResponse("name1");
-    verify(mockWatcher, never()).onSecretChanged(ArgumentMatchers.any(Secret.class));
-  }
-
-  @Test
-  public void testSecretWatcher_tlsCertificate_multipleWatchers() throws IOException {
-    SdsClient.SecretWatcher mockWatcher1 = mock(SdsClient.SecretWatcher.class);
-    SdsClient.SecretWatcher mockWatcher2 = mock(SdsClient.SecretWatcher.class);
-
-    when(secretGetter.getFor("name1"))
-        .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
-
-    sdsClient.watchSecret(mockWatcher1);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
-    discoveryRequestVerification(
-        server.lastRequestOnlyForAck,
-        "[name1]",
-        server.lastResponse.getVersionInfo(),
-        server.lastResponse.getNonce());
-    secretWatcherVerification(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
-
-    final DiscoveryRequest lastGoodRequest = server.lastGoodRequest;
-    final DiscoveryRequest lastRequestOnlyForAck = server.lastRequestOnlyForAck;
-
-    sdsClient.watchSecret(mockWatcher2);
-    // should not have generated a request
-    assertThat(server.lastGoodRequest).isSameInstanceAs(lastGoodRequest);
-    assertThat(server.lastRequestOnlyForAck).isSameInstanceAs(lastRequestOnlyForAck);
-    verify(secretGetter, times(1)).getFor(any(String.class));
-
-    // mockWatcher2 called
-    secretWatcherVerification(mockWatcher2, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
-
-    // cancel mockWatcher2 ...
-    reset(mockWatcher1);
-    reset(mockWatcher2);
-    sdsClient.cancelSecretWatch(mockWatcher2);
-    server.generateAsyncResponse("name1");
-    verify(mockWatcher2, never()).onSecretChanged(any(Secret.class));
-
-    // but watch on name1 still works
-    secretWatcherVerification(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
-
-    // clean up
-    sdsClient.cancelSecretWatch(mockWatcher1);
   }
 
   private void discoveryRequestVerification(

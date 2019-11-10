@@ -29,7 +29,12 @@ import io.envoyproxy.envoy.api.v2.auth.Secret;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc;
 import io.grpc.Server;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerDomainSocketChannel;
+import io.netty.channel.unix.DomainSocketAddress;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -67,15 +72,31 @@ final class TestSdsServer {
     this.secretGetter = secretGetter;
   }
 
-  void startServer(String name) throws IOException {
+  void startServer(String name, boolean uds) throws IOException {
     checkNotNull(name, "name");
     discoveryService = new SecretDiscoveryServiceImpl();
-    server =
-        InProcessServerBuilder.forName(name)
-            .addService(discoveryService)
-            .directExecutor()
-            .build()
-            .start();
+    if (uds) {
+      // You are responsible for shutting down 'elg' and 'boss'. You
+      // may want to provide a ThreadFactory to use daemon threads.
+      EventLoopGroup elg = new EpollEventLoopGroup();
+      EventLoopGroup boss = new EpollEventLoopGroup(1);
+      server = NettyServerBuilder
+          .forAddress(new DomainSocketAddress(name))
+          .bossEventLoopGroup(boss)
+          .workerEventLoopGroup(elg)
+          .channelType(EpollServerDomainSocketChannel.class)
+          .addService(discoveryService)
+          .directExecutor()
+          .build()
+          .start();
+    } else {
+      server =
+          InProcessServerBuilder.forName(name)
+              .addService(discoveryService)
+              .directExecutor()
+              .build()
+              .start();
+    }
   }
 
   void shutdown() {
