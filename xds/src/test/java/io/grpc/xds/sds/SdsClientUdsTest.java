@@ -17,6 +17,8 @@
 package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -51,6 +53,8 @@ import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /** Unit tests for {@link SdsClient}. */
 @RunWith(JUnit4.class)
@@ -112,30 +116,48 @@ public class SdsClientUdsTest {
   }
 
   @Test
-  public void testSecretWatcher_tlsCertificate() throws IOException {
-    SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
+  public void testSecretWatcher_tlsCertificate() throws IOException, InterruptedException {
+    final SdsClient.SecretWatcher mockWatcher = mock(SdsClient.SecretWatcher.class);
 
     when(serverMock.getSecretFor("name1"))
         .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
+    doAnswer(new Answer<Object>() {
+      @Override
+      public Void answer(InvocationOnMock invocation) throws Throwable {
+        synchronized (mockWatcher) {
+          mockWatcher.notifyAll();
+        }
+        return null;
+      }
+    }).when(mockWatcher).onSecretChanged(any(Secret.class));
     sdsClient.watchSecret(mockWatcher);
+    synchronized (mockWatcher) {
+      mockWatcher.wait(100L);
+    }
+    //Thread.sleep(100L);
     discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
+    secretWatcherVerification(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
+    Thread.sleep(100L);
     discoveryRequestVerification(
         server.lastRequestOnlyForAck,
         "[name1]",
         server.lastResponse.getVersionInfo(),
         server.lastResponse.getNonce());
-    secretWatcherVerification(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
         .thenReturn(getOneTlsCertSecret("name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
+    synchronized (mockWatcher) {
+      mockWatcher.wait(100L);
+    }
     secretWatcherVerification(mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
 
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);
     server.generateAsyncResponse("name1");
+    Thread.sleep(100L);
     verify(mockWatcher, never()).onSecretChanged(ArgumentMatchers.any(Secret.class));
   }
 
