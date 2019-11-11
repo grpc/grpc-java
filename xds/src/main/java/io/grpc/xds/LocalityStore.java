@@ -211,9 +211,9 @@ interface LocalityStore {
       for (final Locality locality : newLocalities) {
         if (localityMap.containsKey(locality)) {
           final LocalityLbInfo localityLbInfo = localityMap.get(locality);
-          final LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+          final LocalityLbEndpoints localityLbEndpoints = localityInfoMap.get(locality);
           final List<EquivalentAddressGroup> eags = new ArrayList<>();
-          for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
+          for (LbEndpoint endpoint: localityLbEndpoints.getEndpoints()) {
             if (endpoint.isHealthy()) {
               eags.add(endpoint.getAddress());
             }
@@ -224,16 +224,7 @@ interface LocalityStore {
           helper.getSynchronizationContext().execute(new Runnable() {
             @Override
             public void run() {
-              if (eags.isEmpty()
-                  && !localityLbInfo.childBalancer.canHandleEmptyAddressListFromNameResolution()) {
-                localityLbInfo.childBalancer.handleNameResolutionError(
-                    Status.UNAVAILABLE.withDescription(
-                        "No healthy address available from EDS update '" + localityInfo
-                            + "' for locality '" + locality + "'"));
-              } else {
-                localityLbInfo.childBalancer.handleResolvedAddresses(
-                    ResolvedAddresses.newBuilder().setAddresses(eags).build());
-              }
+              handleEagsOnChildBalancer(eags, localityLbInfo, localityLbEndpoints, locality);
             }
           });
         }
@@ -606,22 +597,37 @@ interface LocalityStore {
                 childHelper);
         localityMap.put(locality, localityLbInfo);
 
-        LocalityLbEndpoints localityInfo = localityInfoMap.get(locality);
+        final LocalityLbEndpoints localityLbEndpoints = localityInfoMap.get(locality);
         final List<EquivalentAddressGroup> eags = new ArrayList<>();
-        for (LbEndpoint endpoint: localityInfo.getEndpoints()) {
-          eags.add(endpoint.getAddress());
+        for (LbEndpoint endpoint: localityLbEndpoints.getEndpoints()) {
+          if (endpoint.isHealthy()) {
+            eags.add(endpoint.getAddress());
+          }
         }
         // In extreme case handleResolvedAddresses() may trigger updateBalancingState() immediately,
         // so execute handleResolvedAddresses() after all the setup in the caller is complete.
         helper.getSynchronizationContext().execute(new Runnable() {
           @Override
           public void run() {
-            // TODO: put endPointWeights into attributes for WRR.
-            localityLbInfo.childBalancer
-                .handleResolvedAddresses(ResolvedAddresses.newBuilder()
-                    .setAddresses(eags).build());
+            handleEagsOnChildBalancer(eags, localityLbInfo, localityLbEndpoints, locality);
           }
         });
+      }
+    }
+
+    private static void handleEagsOnChildBalancer(
+        List<EquivalentAddressGroup> eags, LocalityLbInfo localityLbInfo,
+        LocalityLbEndpoints localityLbEndpoints, Locality locality) {
+      if (eags.isEmpty()
+          && !localityLbInfo.childBalancer.canHandleEmptyAddressListFromNameResolution()) {
+        localityLbInfo.childBalancer.handleNameResolutionError(
+            Status.UNAVAILABLE.withDescription(
+                "No healthy address available from EDS update '" + localityLbEndpoints
+                    + "' for locality '" + locality + "'"));
+      } else {
+        localityLbInfo.childBalancer
+            .handleResolvedAddresses(ResolvedAddresses.newBuilder()
+                .setAddresses(eags).build());
       }
     }
   }
