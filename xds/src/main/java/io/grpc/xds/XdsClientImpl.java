@@ -535,7 +535,6 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
           edsResponse.getNonce(), "Broken EDS response");
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken EDS response"));
       return;
     }
 
