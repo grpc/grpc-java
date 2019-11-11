@@ -190,7 +190,7 @@ public class ServiceConfigErrorHandlingTest {
             .userAgent(USER_AGENT)
             .idleTimeout(
                 AbstractManagedChannelImplBuilder.IDLE_MODE_MAX_TIMEOUT_DAYS, TimeUnit.DAYS)
-            .blockingExecutor(blockingExecutor);
+            .offloadExecutor(blockingExecutor);
     channelBuilder.executorPool = executorPool;
     channelBuilder.binlog = null;
     channelBuilder.channelz = channelz;
