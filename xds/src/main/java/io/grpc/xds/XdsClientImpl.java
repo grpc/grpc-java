@@ -70,7 +70,8 @@ final class XdsClientImpl extends XdsClient {
   @VisibleForTesting
   static final String ADS_TYPE_URL_RDS =
       "type.googleapis.com/envoy.api.v2.RouteConfiguration";
-  private static final String ADS_TYPE_URL_EDS =
+  @VisibleForTesting
+  static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
   private final ManagedChannel channel;
@@ -188,9 +189,9 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
-    boolean needRequeset = false;
+    boolean needRequest = false;
     if (!endpointWatchers.containsKey(clusterName)) {
-      needRequeset = true;
+      needRequest = true;
       endpointWatchers.put(clusterName, new HashSet<EndpointWatcher>());
     }
     Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
@@ -207,11 +208,11 @@ final class XdsClientImpl extends XdsClient {
       // Currently in retry backoff.
       return;
     }
-    if (needRequeset) {
+    if (needRequest) {
       if (adsStream == null) {
         startRpcStream();
       }
-      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
     }
   }
 
@@ -233,7 +234,7 @@ final class XdsClientImpl extends XdsClient {
       }
       checkState(adsStream != null,
           "Severe bug: ADS stream was not created while an endpoint watcher was registered");
-      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
     }
   }
 
@@ -596,7 +597,7 @@ final class XdsClientImpl extends XdsClient {
     clusterNamesToEndpointUpates.putAll(endpointUpdates);
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
-    for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
+    for (Map.Entry<String, EndpointUpdate> entry : desiredEndpointUpdates.entrySet()) {
       for (EndpointWatcher watcher : endpointWatchers.get(entry.getKey())) {
         watcher.onEndpointChanged(entry.getValue());
       }
@@ -612,7 +613,7 @@ final class XdsClientImpl extends XdsClient {
         adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
       }
       if (!endpointWatchers.isEmpty()) {
-        adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, clusterNamesToEndpointUpates.keySet());
+        adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
       }
       // TODO(chengyuanzhang): send CDS requests if CDS watcher presents.
     }
@@ -647,7 +648,7 @@ final class XdsClientImpl extends XdsClient {
     @Nullable
     private String rdsResourceName;
     @Nullable
-    private List<String> edsResourceNames;
+    private Collection<String> edsResourceNames;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
@@ -668,8 +669,10 @@ final class XdsClientImpl extends XdsClient {
             handleLdsResponse(response);
           } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
             handleRdsResponse(response);
+          } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+            handleEdsResponse(response);
           }
-          // TODO(zdapeng): add CDS/EDS response handles.
+          // TODO(zdapeng): add CDS response handles.
         }
       });
     }
@@ -755,6 +758,10 @@ final class XdsClientImpl extends XdsClient {
         version = rdsVersion;
         nonce = rdsRespNonce;
         rdsResourceName = resourceNames.iterator().next();
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+        version = edsVersion;
+        nonce = edsRespNonce;
+        edsResourceNames = resourceNames;
       }
       // TODO(chengyuanzhang): cases for CDS/EDS.
       DiscoveryRequest request =
@@ -782,8 +789,11 @@ final class XdsClientImpl extends XdsClient {
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
         rdsVersion = versionInfo;
         rdsRespNonce = nonce;
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+        edsVersion = versionInfo;
+        edsRespNonce = nonce;
       }
-      // TODO(chengyuanzhang): cases for CDS/EDS.
+      // TODO(chengyuanzhang): cases for CDS.
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
@@ -808,8 +818,10 @@ final class XdsClientImpl extends XdsClient {
         versionInfo = ldsVersion;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
         versionInfo = rdsVersion;
+      } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+        versionInfo = edsVersion;
       }
-      // TODO(chengyuanzhang): cases for CDS/EDS.
+      // TODO(chengyuanzhang): cases for EDS.
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()

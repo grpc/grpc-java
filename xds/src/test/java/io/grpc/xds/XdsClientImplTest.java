@@ -31,6 +31,21 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
+
+import com.google.common.collect.ImmutableList;
+import com.google.protobuf.Any;
+import com.google.protobuf.UInt32Value;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
@@ -39,6 +54,9 @@ import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.core.HealthStatus;
+import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.core.SocketAddress;
 import io.envoyproxy.envoy.api.v2.listener.FilterChain;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
@@ -50,6 +68,8 @@ import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -67,6 +87,20 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.LbEndpoint;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.XdsClient.ConfigUpdate;
+import io.grpc.xds.XdsClient.ConfigWatcher;
+import io.grpc.xds.XdsClient.EndpointUpdate;
+import io.grpc.xds.XdsClient.EndpointWatcher;
+import java.io.IOException;
+import java.util.ArrayDeque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Queue;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -77,6 +111,8 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -121,6 +157,8 @@ public class XdsClientImplTest {
   private BackoffPolicy backoffPolicy2;
   @Mock
   private ConfigWatcher configWatcher;
+  @Mock
+  private EndpointWatcher endpointWatcher;
 
   private ManagedChannel channel;
   private XdsClientImpl xdsClient;
@@ -1081,6 +1119,493 @@ public class XdsClientImplTest {
   }
 
   /**
+   * Client receives an EDS response that does not contain a ClusterLoadAssignment for the
+   * requested resource while each received ClusterLoadAssignment is valid.
+   * The EDS response is ACKed.
+   * The config watcher is NOT notified with an error (EDS protocol is incremental, responses
+   * not containing requested resources does not indicate absence).
+   */
+  @Test
+  public void edsResponseWithoutMatchingResource() {
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request for the only cluster being watched to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Management server sends back an EDS response without ClusterLoadAssignment for the requested
+    // cluster.
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())),
+        Any.pack(buildClusterLoadAssignment("cluster-baz.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                    6, 1)),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    verifyZeroInteractions(endpointWatcher);
+  }
+
+  /**
+   * Normal workflow of receiving an EDS response containing ClusterLoadAssignment message for
+   * a requested cluster.
+   */
+  @Test
+  public void edsResponseWithMatchingResource() {
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", endpointWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request for the only cluster being watched to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Management server sends back an EDS response with ClusterLoadAssignment for the requested
+    // cluster.
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    1, 0),
+                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.142.5", 80, HealthStatus.UNKNOWN, 5)),
+                    2, 1)),
+            ImmutableList.of(
+                buildDropOverload("lb", 200),
+                buildDropOverload("throttle", 1000)))),
+        Any.pack(buildClusterLoadAssignment("cluster-baz.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                    6, 1)),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(endpointWatcher).onEndpointChanged(endpointUpdateCaptor.capture());
+    EndpointUpdate endpointUpdate = endpointUpdateCaptor.getValue();
+    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate.getDropPolicies())
+        .containsExactly(
+            new DropOverload("lb", 200),
+            new DropOverload("throttle", 1000));
+    assertThat(endpointUpdate.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080,
+                        2, true)), 1, 0),
+            new Locality("region3", "zone3", "subzone3"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.142.5", 80,
+                        5, true)), 2, 1));
+  }
+
+  @Test
+  public void multipleEndpointWatchers() {
+    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
+    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
+    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
+    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
+
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request containing all clusters being watched to management server.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Management server sends back an EDS response contains ClusterLoadAssignment for only one of
+    // requested cluster.
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
+                    1, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("0",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    // Two watchers get notification of endpoint update for the cluster they are interested in.
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
+    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
+    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080,
+                        2, true)), 1, 0));
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onEndpointChanged(endpointUpdateCaptor2.capture());
+    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
+    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080,
+                        2, true)), 1, 0));
+
+    verifyZeroInteractions(watcher3);
+
+    // Management server sends back another EDS response contains ClusterLoadAssignment for the
+    // other requested cluster.
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
+                    6, 1)),
+            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+
+    response = buildDiscoveryResponse("1", clusterLoadAssignments,
+        XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("1",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    // The corresponding watcher gets notified.
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onEndpointChanged(endpointUpdateCaptor3.capture());
+    EndpointUpdate endpointUpdate3 = endpointUpdateCaptor3.getValue();
+    assertThat(endpointUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(endpointUpdate3.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region2", "zone2", "subzone2"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.234.52", 8888,
+                        5, true)), 6, 1));
+  }
+
+  /**
+   * (EDS response caching behavior) Adding endpoint watchers interested in some cluster that
+   * some other endpoint watcher had already been watching on will result in endpoint update
+   * notified to the newly added watcher immediately, without sending new EDS requests.
+   */
+  @Test
+  public void receivedEndpointUpdateNotifiedToWatcherImmediately() {
+    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+
+    // Streaming RPC starts after a first watcher is added.
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Management server sends back an EDS response with ClusterLoadAssignment for the requested
+    // cluster.
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
+                        buildLbEndpoint("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
+                    1, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
+    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
+    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080, 2, true),
+                    new LbEndpoint("192.132.53.5", 80,5, false)),
+                1, 0));
+
+    // Another endpoint watcher interested in the same cluster is added.
+    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
+
+    // Since the client has received endpoint update for this cluster before, cached result is
+    // notified to the newly added watcher immediately.
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
+    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor1.getValue();
+    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080, 2, true),
+                    new LbEndpoint("192.132.53.5", 80,5, false)),
+                1, 0));
+
+    verifyNoMoreInteractions(requestObserver);
+  }
+
+  @Test
+  public void addRemoveEndpointWatchersFreely() {
+    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
+
+    // Streaming RPC starts after a first watcher is added.
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Client sends an EDS request to management server.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
+
+    // Management server sends back an EDS response with ClusterLoadAssignment for the requested
+    // cluster.
+    List<Any> clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
+                        buildLbEndpoint("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
+                    1, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusterLoadAssignments,
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
+    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
+    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
+    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
+    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region1", "zone1", "subzone1"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.0.1", 8080, 2, true),
+                    new LbEndpoint("192.132.53.5", 80,5, false)),
+                1, 0));
+
+    // Add another endpoint watcher for a different cluster.
+    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher2);
+
+    // Client sent a new EDS request for all interested resources.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("0",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
+
+    // Management server sends back an EDS response with ClusterLoadAssignment for one of requested
+    // cluster.
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.312.6", 443, HealthStatus.HEALTHY, 1)),
+                    6, 1)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    response = buildDiscoveryResponse("1", clusterLoadAssignments,
+        XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request for all interested resources.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("1",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
+    verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
+    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
+    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region2", "zone2", "subzone2"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.312.6", 443, 1, true)),
+                6, 1));
+
+    // Cancel one of the watcher.
+    xdsClient.cancelEndpointDataWatch("cluster-foo.googleapis.com", watcher1);
+
+    // Since the cancelled watcher was the last watcher interested in that cluster, client
+    // sent an new EDS request to unsubscribe from that cluster.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("1", "cluster-bar.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    // Management server should not respond as it had previously sent the requested resource.
+
+    // Cancel the other watcher.
+    xdsClient.cancelEndpointDataWatch("cluster-bar.googleapis.com", watcher2);
+
+    // Since the cancelled watcher was the last watcher interested in that cluster, client
+    // sent an new EDS request to unsubscribe from that cluster.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("1",
+                    ImmutableList.<String>of(),  // empty resources
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
+
+    // All endpoint watchers have been cancelled.
+
+    // Management server sends back an EDS response for updating previously sent resources.
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.432.6", 80, HealthStatus.HEALTHY, 2)),
+                    3, 0)),
+            ImmutableList.<Policy.DropOverload>of())),
+        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
+                    3, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    response = buildDiscoveryResponse("2", clusterLoadAssignments,
+        XdsClientImpl.ADS_TYPE_URL_EDS, "0002");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK EDS request.
+    verify(requestObserver)
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("2",
+                    ImmutableList.<String>of(),  // empty resources
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+
+    // Cancelled watchers do not receive notification.
+    verifyNoMoreInteractions(watcher1, watcher2);
+
+    // A new endpoint watcher is added to watch an old cluster.
+    EndpointWatcher watcher3 = mock(EndpointWatcher.class);
+    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
+
+    // Notified with cached data immediately.
+    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
+    verify(watcher3).onEndpointChanged(endpointUpdateCaptor3.capture());
+    EndpointUpdate endpointUpdate3 = endpointUpdateCaptor3.getValue();
+    assertThat(endpointUpdate3.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(endpointUpdate3.getLocalityLbEndpointsMap())
+        .containsExactly(
+            new Locality("region4", "zone4", "subzone4"),
+            new LocalityLbEndpoints(
+                ImmutableList.of(
+                    new LbEndpoint("192.168.75.6", 8888, 2, true)),
+                3, 0));
+
+    // An EDS request is sent to re-subscribe the cluster again.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("2", "cluster-bar.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+  }
+
+  // TODO(chengyuanzhang): tests for caching EDS responses proactively sent by management server.
+
+  // TODO(chengyuanzhang): tests for LDS/RDS/CDS/EDS sharing the same RPC stream.
+
+  // TODO(chengyuanzhang): incorporate interactions with cluster watchers and end endpoint watchers
+  //  during retry.
+  
+  /**
    * RPC stream closed and retry during the period of first tiem resolving service config
    * (LDS/RDS only).
    */
@@ -1295,12 +1820,17 @@ public class XdsClientImplTest {
 
   private static DiscoveryRequest buildDiscoveryRequest(String versionInfo,
       String resourceName, String typeUrl, String nonce) {
+    return buildDiscoveryRequest(versionInfo, ImmutableList.of(resourceName), typeUrl, nonce);
+  }
+
+  private static DiscoveryRequest buildDiscoveryRequest(String versionInfo,
+      List<String> resourceNames, String typeUrl, String nonce) {
     return
         DiscoveryRequest.newBuilder()
             .setVersionInfo(versionInfo)
             .setNode(NODE)
             .setTypeUrl(typeUrl)
-            .addResourceNames(resourceName)
+            .addAllResourceNames(resourceNames)
             .setResponseNonce(nonce)
             .build();
   }
@@ -1338,18 +1868,69 @@ public class XdsClientImplTest {
             .build();
   }
 
+  private static ClusterLoadAssignment buildClusterLoadAssignment(String clusterName,
+      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localityLbEndpoints,
+      List<Policy.DropOverload> dropOverloads) {
+    return
+        ClusterLoadAssignment.newBuilder()
+            .setClusterName(clusterName)
+            .addAllEndpoints(localityLbEndpoints)
+            .setPolicy(
+                Policy.newBuilder()
+                    .setDisableOverprovisioning(true)
+                    .addAllDropOverloads(dropOverloads))
+            .build();
+  }
+
+  private static Policy.DropOverload buildDropOverload(String category, int dropPerMillion) {
+    return
+        Policy.DropOverload.newBuilder()
+            .setCategory(category)
+            .setDropPercentage(
+                FractionalPercent.newBuilder()
+                    .setNumerator(dropPerMillion)
+                    .setDenominator(DenominatorType.MILLION))
+            .build();
+  }
+
+  private static io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints buildLocalityLbEndpoints(
+      String region, String zone, String subzone,
+      List<io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint> lbEndpoints,
+      int loadBalancingWeight, int priority) {
+    return
+        io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints.newBuilder()
+            .setLocality(
+                io.envoyproxy.envoy.api.v2.core.Locality.newBuilder()
+                    .setRegion(region)
+                    .setZone(zone)
+                    .setSubZone(subzone))
+            .addAllLbEndpoints(lbEndpoints)
+            .setLoadBalancingWeight(UInt32Value.newBuilder().setValue(loadBalancingWeight))
+            .setPriority(priority)
+            .build();
+  }
+
+  private static io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint buildLbEndpoint(String address,
+      int port, HealthStatus healthStatus, int loadbalancingWeight) {
+    return
+        io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint.newBuilder()
+            .setEndpoint(
+                io.envoyproxy.envoy.api.v2.endpoint.Endpoint.newBuilder().setAddress(
+                    Address.newBuilder().setSocketAddress(
+                        SocketAddress.newBuilder().setAddress(address).setPortValue(port))))
+            .setHealthStatus(healthStatus).setLoadBalancingWeight(
+                UInt32Value.newBuilder().setValue(loadbalancingWeight))
+            .build();
+  }
+
   /**
-   * Matcher for DiscoveryRequest without the comparison of error_details field, which is used for
-   * management server debugging purposes.
-   *
-   * <p>In general, if you are sure error_details field should not be set in a DiscoveryRequest,
-   * compare with message equality. Otherwise, this matcher is handy for comparing other fields
-   * only.
+   * Matcher for DiscoveryRequest used to verify NACK requests. Eliminates the comparison of
+   * error_details for DiscoveryRequests if they are expected to be an NACK request.
    */
   private static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
     private final String versionInfo;
     private final String typeUrl;
-    private final List<String> resourceNames;
+    private final Set<String> resourceNames;
     private final String responseNonce;
 
     private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
@@ -1360,7 +1941,7 @@ public class XdsClientImplTest {
     private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
         String responseNonce) {
       this.versionInfo = versionInfo;
-      this.resourceNames = resourceNames;
+      this.resourceNames = new HashSet<>(resourceNames);
       this.typeUrl = typeUrl;
       this.responseNonce = responseNonce;
     }
@@ -1376,7 +1957,7 @@ public class XdsClientImplTest {
       if (!responseNonce.equals(argument.getResponseNonce())) {
         return false;
       }
-      if (!resourceNames.equals(argument.getResourceNamesList())) {
+      if (!resourceNames.equals(new HashSet<>(argument.getResourceNamesList()))) {
         return false;
       }
       return NODE.equals(argument.getNode());

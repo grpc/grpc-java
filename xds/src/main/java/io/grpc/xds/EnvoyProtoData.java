@@ -24,6 +24,7 @@ import io.envoyproxy.envoy.type.FractionalPercent;
 import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.EquivalentAddressGroup;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -194,6 +195,14 @@ final class EnvoyProtoData {
     private final EquivalentAddressGroup eag;
     private final int loadBalancingWeight;
     private final boolean isHealthy;
+
+    @VisibleForTesting
+    LbEndpoint(String address, int port, int loadBalancingWeight, boolean isHealthy) {
+      this(
+          new EquivalentAddressGroup(
+              ImmutableList.<SocketAddress>of(new InetSocketAddress(address, port))),
+          loadBalancingWeight, isHealthy);
+    }
 
     @VisibleForTesting
     LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight, boolean isHealthy) {
