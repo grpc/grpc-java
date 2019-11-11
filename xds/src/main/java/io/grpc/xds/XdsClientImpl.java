@@ -510,6 +510,15 @@ final class XdsClientImpl extends XdsClient {
     return null;
   }
 
+  /**
+   * Handles EDS response, which contains a list of ClusterLoadAssignment messages. Each
+   * ClusterLoadAssignment message contains information for endpoints in a cluster, grouped
+   * by localities. The response is NACKed if contains invalid information for gRPC's usage.
+   * Otherwise, an ACK request is sent to management server. Information in ClusterLoadAssignment
+   * messages are saved in local cache, in case of corresponding endpoint watchers are registered
+   * later. Endpoint watchers interested in endpoint information contained in this response are
+   * notified.
+   */
   private void handleEdsResponse(DiscoveryResponse edsResponse) {
     logger.log(Level.FINE, "Received an EDS response: {0}", edsResponse);
     checkState(adsStream.edsResourceNames != null,
