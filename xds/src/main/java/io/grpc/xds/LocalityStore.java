@@ -597,7 +597,7 @@ interface LocalityStore {
         }
       }
       // In extreme case handleResolvedAddresses() may trigger updateBalancingState()
-      // immediately, so execute handleResolvedAddresses() after all the setup in this method is
+      // immediately, so execute handleResolvedAddresses() after all the setup in the caller is
       // complete.
       childHelper.getSynchronizationContext().execute(new Runnable() {
         @Override
