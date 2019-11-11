@@ -105,7 +105,7 @@ public class SdsClientUdsTest {
 
     sdsClient.watchSecret(mockWatcher);
     // wait until our server received the requests
-    assertThat(server.requestsCounter.tryAcquire(2, 100, TimeUnit.MILLISECONDS)).isTrue();
+    assertThat(server.requestsCounter.tryAcquire(2, 1000, TimeUnit.MILLISECONDS)).isTrue();
     SdsClientTest.discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "", node);
     SdsClientTest.secretWatcherVerification(
         mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
@@ -122,7 +122,7 @@ public class SdsClientUdsTest {
             SdsClientTest.getOneTlsCertSecret("name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
     // wait until our server received the request
-    assertThat(server.requestsCounter.tryAcquire(1, 100, TimeUnit.MILLISECONDS)).isTrue();
+    assertThat(server.requestsCounter.tryAcquire(1, 1000, TimeUnit.MILLISECONDS)).isTrue();
     SdsClientTest.secretWatcherVerification(
         mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
 
@@ -130,7 +130,7 @@ public class SdsClientUdsTest {
     sdsClient.cancelSecretWatch(mockWatcher);
     server.generateAsyncResponse("name1");
     // wait until our server received the request
-    assertThat(server.requestsCounter.tryAcquire(1, 100, TimeUnit.MILLISECONDS)).isTrue();
+    assertThat(server.requestsCounter.tryAcquire(1, 1000, TimeUnit.MILLISECONDS)).isTrue();
     verify(mockWatcher, never()).onSecretChanged(ArgumentMatchers.any(Secret.class));
   }
 }
