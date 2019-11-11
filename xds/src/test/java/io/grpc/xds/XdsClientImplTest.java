@@ -187,8 +187,9 @@ public class XdsClientImplTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     xdsClient =
-        new XdsClientImpl(channel, NODE, syncContext, fakeClock.getScheduledExecutorService(),
-            backoffPolicyProvider, fakeClock.getStopwatchSupplier().get());
+        new XdsClientImpl(serverName, channel, NODE, syncContext,
+            fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
+            fakeClock.getStopwatchSupplier().get());
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
