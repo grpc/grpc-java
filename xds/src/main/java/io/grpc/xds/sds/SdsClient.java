@@ -194,22 +194,18 @@ final class SdsClient {
 
   /** Response observer for SdsClient. */
   private final class ResponseObserver implements StreamObserver<DiscoveryResponse> {
-
     ResponseObserver() {}
 
     @Override
     public void onNext(DiscoveryResponse discoveryResponse) {
-
       processDiscoveryResponse(discoveryResponse);
-
     }
 
     @Override
     public void onError(Throwable t) {
+      //logger.log(Level.SEVERE, "Received error on ResponseObserver", t);
       sendErrorToWatchers(t);
     }
-
-
 
     @Override
     public void onCompleted() {
@@ -221,7 +217,6 @@ final class SdsClient {
     try {
       processSecretsFromDiscoveryResponse(response);
     } catch (Exception e) {
-      sendErrorToWatchers(e);
       // send Nack
       sendNack(Code.INTERNAL_VALUE, e.getMessage());
       return;
@@ -258,7 +253,6 @@ final class SdsClient {
   }
 
   private void sendErrorToWatchers(Throwable t) {
-    logger.log(Level.SEVERE, "error while processing DiscoveryResponse", t);
     synchronized (watchers) {
       for (SecretWatcher secretWatcher : watchers) {
         try {
@@ -287,11 +281,7 @@ final class SdsClient {
             "expected secret name %s", sdsSecretConfig.getName());
     synchronized (watchers) {
       for (SecretWatcher secretWatcher : watchers) {
-        try {
-          secretWatcher.onSecretChanged(secret);
-        } catch (Throwable t) {
-          logger.log(Level.SEVERE, "onSecretChanged", t);
-        }
+        secretWatcher.onSecretChanged(secret);
       }
     }
   }

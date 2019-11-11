@@ -54,9 +54,9 @@ final class TestSdsServer {
   private String currentVersion;
   private String lastRespondedNonce;
   private List<String> lastResourceNames;
-  private SecretDiscoveryServiceImpl discoveryService;
+  @VisibleForTesting SecretDiscoveryServiceImpl discoveryService;
   private Server server;
-  private final SecretGetter secretGetter;
+  private final ServerMock serverMock;
 
   /** last "good" discovery request we processed and sent a response to. */
   @VisibleForTesting DiscoveryRequest lastGoodRequest;
@@ -64,12 +64,16 @@ final class TestSdsServer {
   /** last discovery request that was only used as Ack since it contained no new resources. */
   @VisibleForTesting DiscoveryRequest lastRequestOnlyForAck;
 
+  /** last Nack. */
+  @VisibleForTesting DiscoveryRequest lastNack;
+
+
   /** last response we sent. */
   @VisibleForTesting DiscoveryResponse lastResponse;
 
-  TestSdsServer(SecretGetter secretGetter) {
-    checkNotNull(secretGetter, "secretGetter");
-    this.secretGetter = secretGetter;
+  TestSdsServer(ServerMock serverMock) {
+    checkNotNull(serverMock, "serverMock");
+    this.serverMock = serverMock;
   }
 
   void startServer(String name, boolean uds) throws IOException {
@@ -103,9 +107,11 @@ final class TestSdsServer {
     server.shutdown();
   }
 
-  /** Interface that allows the server to return any {@link Secret} for any name. */
-  interface SecretGetter {
-    Secret getFor(String name);
+  /** Interface that allows mocking server behavior. */
+  interface ServerMock {
+    Secret getSecretFor(String name);
+
+    boolean onNext(DiscoveryRequest discoveryRequest);
   }
 
   /** Callers can call this to return an "async" response for given resource names. */
@@ -114,7 +120,7 @@ final class TestSdsServer {
   }
 
   /** Main streaming service implementation. */
-  private final class SecretDiscoveryServiceImpl
+  final class SecretDiscoveryServiceImpl
       extends SecretDiscoveryServiceGrpc.SecretDiscoveryServiceImplBase {
 
     // we use startTime for generating version string.
@@ -150,6 +156,11 @@ final class TestSdsServer {
         boolean forcedAsync,
         DiscoveryRequest discoveryRequest) {
       checkNotNull(resourceNames, "resourceNames");
+
+      if (discoveryRequest != null && discoveryRequest.hasErrorDetail()) {
+        lastNack = discoveryRequest;
+        return null;
+      }
       // for stale version or nonce don't send a response
       if (!Strings.isNullOrEmpty(requestVersion) && !requestVersion.equals(currentVersion)) {
         return null;
@@ -188,14 +199,14 @@ final class TestSdsServer {
 
     private void buildAndAddResource(
         DiscoveryResponse.Builder responseBuilder, String resourceName) {
-      Secret secret = secretGetter.getFor(resourceName);
+      Secret secret = serverMock.getSecretFor(resourceName);
       ByteString data = secret.toByteString();
       Any anyValue = Any.newBuilder().setTypeUrl(SECRET_TYPE_URL).setValue(data).build();
       responseBuilder.addResources(anyValue);
     }
 
     /** Inbound {@link StreamObserver} to process incoming requests. */
-    private final class SdsInboundStreamObserver implements StreamObserver<DiscoveryRequest> {
+    final class SdsInboundStreamObserver implements StreamObserver<DiscoveryRequest> {
       final StreamObserver<DiscoveryResponse> responseObserver;
       ScheduledExecutorService periodicScheduler;
       ScheduledFuture<?> future;
@@ -219,10 +230,12 @@ final class TestSdsServer {
 
       @Override
       public void onNext(DiscoveryRequest discoveryRequest) {
-        DiscoveryResponse discoveryResponse = buildResponse(discoveryRequest);
-        if (discoveryResponse != null) {
-          lastGoodRequest = discoveryRequest;
-          responseObserver.onNext(discoveryResponse);
+        if (!serverMock.onNext(discoveryRequest)) {
+          DiscoveryResponse discoveryResponse = buildResponse(discoveryRequest);
+          if (discoveryResponse != null) {
+            lastGoodRequest = discoveryRequest;
+            responseObserver.onNext(discoveryResponse);
+          }
         }
       }
 
