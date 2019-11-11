@@ -1122,7 +1122,7 @@ public class XdsClientImplTest {
    * Client receives an EDS response that does not contain a ClusterLoadAssignment for the
    * requested resource while each received ClusterLoadAssignment is valid.
    * The EDS response is ACKed.
-   * The config watcher is NOT notified with an error (EDS protocol is incremental, responses
+   * Endpoint watchers are NOT notified with an error (EDS protocol is incremental, responses
    * not containing requested resources does not indicate absence).
    */
   @Test
