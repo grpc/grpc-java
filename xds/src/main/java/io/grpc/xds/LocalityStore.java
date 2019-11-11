@@ -224,14 +224,16 @@ interface LocalityStore {
           helper.getSynchronizationContext().execute(new Runnable() {
             @Override
             public void run() {
-              if (eags.isEmpty()) {
+              if (eags.isEmpty()
+                  && !localityLbInfo.childBalancer.canHandleEmptyAddressListFromNameResolution()) {
                 localityLbInfo.childBalancer.handleNameResolutionError(
                     Status.UNAVAILABLE.withDescription(
                         "No healthy address available from EDS update '" + localityInfo
                             + "' for locality '" + locality + "'"));
+              } else {
+                localityLbInfo.childBalancer.handleResolvedAddresses(
+                    ResolvedAddresses.newBuilder().setAddresses(eags).build());
               }
-              localityLbInfo.childBalancer.handleResolvedAddresses(
-                  ResolvedAddresses.newBuilder().setAddresses(eags).build());
             }
           });
         }
