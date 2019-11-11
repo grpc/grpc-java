@@ -645,8 +645,6 @@ final class XdsClientImpl extends XdsClient {
     // watchers are interested in.
     @Nullable
     private String rdsResourceName;
-    @Nullable
-    private List<String> edsResourceNames;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
