@@ -79,5 +79,9 @@ public final class XdsAttributes {
   static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_REF =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientRef");
 
+  @NameResolver.ResolutionResultAttr
+  static final Attributes.Key<LoadStatsStore> LOAD_STATS_STORE_REF =
+      Attributes.Key.create("io.grpc.xds.XdsAttributes.loadStatsStoreRef");
+
   private XdsAttributes() {}
 }
