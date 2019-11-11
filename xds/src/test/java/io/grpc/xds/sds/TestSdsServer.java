@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
@@ -55,6 +56,9 @@ final class TestSdsServer {
   private String lastRespondedNonce;
   private List<String> lastResourceNames;
   @VisibleForTesting SecretDiscoveryServiceImpl discoveryService;
+
+  /** Used for signalling test clients that request received and processed. */
+  @VisibleForTesting final Semaphore requestsCounter = new Semaphore(0);
   private Server server;
   private final ServerMock serverMock;
 
@@ -76,12 +80,16 @@ final class TestSdsServer {
     this.serverMock = serverMock;
   }
 
-  void startServer(String name, boolean uds) throws IOException {
+  /**
+   * Starts the server with given transport params.
+   *
+   * @param name UDS pathname or server name for {@link InProcessServerBuilder}
+   * @param useUds creates a UDS based server if true.
+   */
+  void startServer(String name, boolean useUds) throws IOException {
     checkNotNull(name, "name");
     discoveryService = new SecretDiscoveryServiceImpl();
-    if (uds) {
-      // You are responsible for shutting down 'elg' and 'boss'. You
-      // may want to provide a ThreadFactory to use daemon threads.
+    if (useUds) {
       EventLoopGroup elg = new EpollEventLoopGroup();
       EventLoopGroup boss = new EpollEventLoopGroup(1);
       server = NettyServerBuilder
@@ -156,7 +164,6 @@ final class TestSdsServer {
         boolean forcedAsync,
         DiscoveryRequest discoveryRequest) {
       checkNotNull(resourceNames, "resourceNames");
-
       if (discoveryRequest != null && discoveryRequest.hasErrorDetail()) {
         lastNack = discoveryRequest;
         return null;
@@ -237,6 +244,7 @@ final class TestSdsServer {
             responseObserver.onNext(discoveryResponse);
           }
         }
+        requestsCounter.release();
       }
 
       @Override

@@ -127,12 +127,13 @@ public class SdsClientTest {
         .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
+    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "", node);
     discoveryRequestVerification(
         server.lastRequestOnlyForAck,
         "[name1]",
         server.lastResponse.getVersionInfo(),
-        server.lastResponse.getNonce());
+        server.lastResponse.getNonce(),
+        node);
     secretWatcherVerification(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     reset(mockWatcher);
@@ -155,12 +156,13 @@ public class SdsClientTest {
         .thenReturn(getOneCertificateValidationContextSecret("name1", CA_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
+    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "", node);
     discoveryRequestVerification(
         server.lastRequestOnlyForAck,
         "[name1]",
         server.lastResponse.getVersionInfo(),
-        server.lastResponse.getNonce());
+        server.lastResponse.getNonce(),
+        node);
     secretWatcherVerification(mockWatcher, "name1", CA_PEM_FILE);
 
     reset(mockWatcher);
@@ -168,7 +170,7 @@ public class SdsClientTest {
         .thenReturn(getOneCertificateValidationContextSecret("name1", SERVER_1_PEM_FILE));
     server.generateAsyncResponse("name1");
     secretWatcherVerification(mockWatcher, "name1", SERVER_1_PEM_FILE);
-    
+
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);
     server.generateAsyncResponse("name1");
@@ -184,38 +186,36 @@ public class SdsClientTest {
         .thenReturn(getOneTlsCertSecret("name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE));
 
     sdsClient.watchSecret(mockWatcher1);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
+    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "", node);
     discoveryRequestVerification(
         server.lastRequestOnlyForAck,
         "[name1]",
         server.lastResponse.getVersionInfo(),
-        server.lastResponse.getNonce());
+        server.lastResponse.getNonce(),
+        node);
     secretWatcherVerification(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     final DiscoveryRequest lastGoodRequest = server.lastGoodRequest;
     final DiscoveryRequest lastRequestOnlyForAck = server.lastRequestOnlyForAck;
 
+    // add mockWatcher2
     sdsClient.watchSecret(mockWatcher2);
-    // should not have generated a request
+    // should not have generated a request because client has the info.
     assertThat(server.lastGoodRequest).isSameInstanceAs(lastGoodRequest);
     assertThat(server.lastRequestOnlyForAck).isSameInstanceAs(lastRequestOnlyForAck);
     verify(serverMock, times(1)).getSecretFor(any(String.class));
 
-    // mockWatcher2 called
+    // ... mockWatcher2 gets updated
     secretWatcherVerification(mockWatcher2, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
-    // cancel mockWatcher2 ...
     reset(mockWatcher1);
     reset(mockWatcher2);
     sdsClient.cancelSecretWatch(mockWatcher2);
     server.generateAsyncResponse("name1");
     verify(mockWatcher2, never()).onSecretChanged(any(Secret.class));
 
-    // but watch on name1 still works
+    // ... watch on name1 still works
     secretWatcherVerification(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
-
-    // clean up
-    sdsClient.cancelSecretWatch(mockWatcher1);
   }
 
   @Test
@@ -232,7 +232,7 @@ public class SdsClientTest {
                 DiscoveryRequest req = (DiscoveryRequest) args[0];
                 requestArrayList.add(req);
                 server.discoveryService.inboundStreamObserver.responseObserver.onError(
-                      Status.NOT_FOUND.asException());
+                    Status.NOT_FOUND.asException());
                 return true;
               }
             });
@@ -255,7 +255,7 @@ public class SdsClientTest {
         .onSecretChanged(any(Secret.class));
 
     sdsClient.watchSecret(mockWatcher);
-    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "");
+    discoveryRequestVerification(server.lastGoodRequest, "[name1]", "", "", node);
     assertThat(server.lastRequestOnlyForAck).isNull();
     assertThat(server.lastNack).isNotNull();
     assertThat(server.lastNack.getVersionInfo()).isEmpty();
@@ -265,8 +265,12 @@ public class SdsClientTest {
     assertThat(errorDetail.getMessage()).isEqualTo("test exception-abc");
   }
 
-  private void discoveryRequestVerification(
-      DiscoveryRequest request, String resourceNames, String versionInfo, String responseNonce) {
+  static void discoveryRequestVerification(
+      DiscoveryRequest request,
+      String resourceNames,
+      String versionInfo,
+      String responseNonce,
+      Node node) {
     assertThat(request).isNotNull();
     assertThat(request.getNode()).isEqualTo(node);
     assertThat(Arrays.toString(request.getResourceNamesList().toArray())).isEqualTo(resourceNames);
@@ -279,7 +283,7 @@ public class SdsClientTest {
     }
   }
 
-  private void secretWatcherVerification(
+  static void secretWatcherVerification(
       SdsClient.SecretWatcher mockWatcher,
       String secretName,
       String keyFileName,
@@ -310,7 +314,7 @@ public class SdsClientTest {
         .isEqualTo(getResourcesFileContent(caFileName));
   }
 
-  private Secret getOneTlsCertSecret(String name, String keyFileName, String certFileName)
+  static Secret getOneTlsCertSecret(String name, String keyFileName, String certFileName)
       throws IOException {
     TlsCertificate tlsCertificate =
         TlsCertificate.newBuilder()

@@ -70,10 +70,9 @@ final class SdsClient {
   private static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.api.v2.auth.Secret";
 
   private final Set<SecretWatcher> watchers = new HashSet<>();
-
   private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
-  @VisibleForTesting String targetUri;
+  private String targetUri;
   private ManagedChannel channel;
   private SecretDiscoveryServiceStub secretDiscoveryServiceStub;
   private ResponseObserver responseObserver;
@@ -83,12 +82,10 @@ final class SdsClient {
   private static final EventLoopGroupResource eventLoopGroupResource =
       new EventLoopGroupResource("SdsClient");
 
-
   private static final class EventLoopGroupResource implements Resource<EventLoopGroup> {
     private final String name;
 
-    EventLoopGroupResource(
-        String name) {
+    EventLoopGroupResource(String name) {
       this.name = name;
     }
 
@@ -104,6 +101,22 @@ final class SdsClient {
     public void close(EventLoopGroup instance) {
       instance.shutdownGracefully(0, 0, TimeUnit.SECONDS);
     }
+  }
+
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node) {
+    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
+    checkNotNull(node, "node");
+    this.sdsSecretConfig = sdsSecretConfig;
+    this.clientNode = node;
+    this.targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
+  }
+
+  /** Create the client with given configSource, node and channel. */
+  @VisibleForTesting
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, ManagedChannel channel) {
+    this(sdsSecretConfig, node);
+    checkNotNull(channel, "channel");
+    this.channel = channel;
   }
 
   /**
@@ -148,22 +161,6 @@ final class SdsClient {
     }
   }
 
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node) {
-    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
-    checkNotNull(node, "node");
-    this.sdsSecretConfig = sdsSecretConfig;
-    this.clientNode = node;
-    this.targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
-  }
-
-  /** Create the client with given configSource, node and channel. */
-  @VisibleForTesting
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, ManagedChannel channel) {
-    this(sdsSecretConfig, node);
-    checkNotNull(channel, "channel");
-    this.channel = channel;
-  }
-
   @VisibleForTesting
   static String extractUdsTarget(ConfigSource configSource) {
     checkNotNull(configSource, "configSource");
@@ -203,7 +200,6 @@ final class SdsClient {
 
     @Override
     public void onError(Throwable t) {
-      //logger.log(Level.SEVERE, "Received error on ResponseObserver", t);
       sendErrorToWatchers(t);
     }
 
@@ -243,7 +239,9 @@ final class SdsClient {
             .addResourceNames(sdsSecretConfig.getName())
             .setErrorDetail(
                 com.google.rpc.Status.newBuilder()
-                    .setCode(errorCode).setMessage(errorMessage).build())
+                    .setCode(errorCode)
+                    .setMessage(errorMessage)
+                    .build())
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
@@ -277,13 +275,43 @@ final class SdsClient {
   }
 
   private void processSecret(Secret secret) {
-    checkState(sdsSecretConfig.getName().equals(secret.getName()),
-            "expected secret name %s", sdsSecretConfig.getName());
+    checkState(
+        sdsSecretConfig.getName().equals(secret.getName()),
+        "expected secret name %s",
+        sdsSecretConfig.getName());
     synchronized (watchers) {
       for (SecretWatcher secretWatcher : watchers) {
         secretWatcher.onSecretChanged(secret);
       }
     }
+  }
+
+  /** Registers a secret watcher for this client's SdsSecretConfig. */
+  void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
+    checkNotNull(secretWatcher, "secretWatcher");
+    synchronized (watchers) {
+      checkState(watchers.add(secretWatcher), "duplicate secretWatcher addition");
+    }
+    if (lastResponse == null) {
+      sendDiscoveryRequestOnStream();
+    } else {
+      processSecretsFromDiscoveryResponse(lastResponse);
+    }
+  }
+
+  /** Unregisters the given endpoints watcher. */
+  void cancelSecretWatch(SecretWatcher secretWatcher) {
+    checkNotNull(secretWatcher, "secretWatcher");
+    synchronized (watchers) {
+      checkState(watchers.remove(secretWatcher), "watcher not found");
+    }
+  }
+
+  /** Secret watcher interface. */
+  interface SecretWatcher {
+    void onSecretChanged(Secret secretUpdate);
+
+    void onError(Status error);
   }
 
   @SuppressWarnings("SynchronizeOnNonFinalField")
@@ -307,34 +335,5 @@ final class SdsClient {
     synchronized (requestObserver) {
       requestObserver.onNext(req);
     }
-  }
-
-  /** Registers a secret watcher for this client's SdsSecretConfig. */
-  void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
-    checkNotNull(secretWatcher, "secretWatcher");
-    synchronized (watchers) {
-      checkState(watchers.add(secretWatcher),
-              "duplicate secretWatcher addition");
-    }
-    if (lastResponse == null) {
-      sendDiscoveryRequestOnStream();
-    } else {
-      processSecretsFromDiscoveryResponse(lastResponse);
-    }
-  }
-
-  /** Unregisters the given endpoints watcher. */
-  void cancelSecretWatch(SecretWatcher secretWatcher) {
-    checkNotNull(secretWatcher, "secretWatcher");
-    synchronized (watchers) {
-      checkState(watchers.remove(secretWatcher), "watcher not found");
-    }
-  }
-
-  /** Secret watcher interface. */
-  interface SecretWatcher {
-    void onSecretChanged(Secret secretUpdate);
-
-    void onError(Status error);
   }
 }
