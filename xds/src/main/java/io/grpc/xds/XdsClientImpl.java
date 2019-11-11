@@ -91,11 +91,11 @@ final class XdsClientImpl extends XdsClient {
   // responses.
   private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
 
-  // Cached data for EDS responses, keyed cluster names.
+  // Cached data for EDS responses, keyed by cluster names.
   // CDS responses indicate absence of clusters and RDS responses indicate presence of clusters.
   // Optimization: cache EndpointUpdate, which contains only information needed by gRPC, instead
   // of whole ClusterLoadAssignment messages to reduce memory usage.
-  private final Map<String, EndpointUpdate> clusterNamesToEndpointUpates = new HashMap<>();
+  private final Map<String, EndpointUpdate> clusterNamesToEndpointUpdates = new HashMap<>();
 
   // Endpoint watchers waiting for endpoint updates for each cluster. Multiple endpoint
   // watchers can watch endpoints in the same cluster.
@@ -201,8 +201,8 @@ final class XdsClientImpl extends XdsClient {
     watchers.add(watcher);
     // If local cache contains endpoint information for the cluster to be watched, notify
     // the watcher immediately.
-    if (clusterNamesToEndpointUpates.containsKey(clusterName)) {
-      watcher.onEndpointChanged(clusterNamesToEndpointUpates.get(clusterName));
+    if (clusterNamesToEndpointUpdates.containsKey(clusterName)) {
+      watcher.onEndpointChanged(clusterNamesToEndpointUpdates.get(clusterName));
     }
     if (rpcRetryTimer != null) {
       // Currently in retry backoff.
@@ -602,7 +602,7 @@ final class XdsClientImpl extends XdsClient {
         edsResponse.getVersionInfo(), edsResponse.getNonce());
 
     // Update local EDS cache by inserting updated endpoint information.
-    clusterNamesToEndpointUpates.putAll(endpointUpdates);
+    clusterNamesToEndpointUpdates.putAll(endpointUpdates);
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
     for (Map.Entry<String, EndpointUpdate> entry : desiredEndpointUpdates.entrySet()) {
