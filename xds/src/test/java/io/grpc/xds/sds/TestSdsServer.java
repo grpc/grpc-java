@@ -113,6 +113,7 @@ final class TestSdsServer {
     }
   }
 
+  @SuppressWarnings("FutureReturnValueIgnored")
   void shutdown() throws InterruptedException {
     server.shutdown();
     if (boss != null) {

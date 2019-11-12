@@ -358,6 +358,7 @@ final class SdsClient {
       return new EpollEventLoopGroup(1, threadFactory);
     }
 
+    @SuppressWarnings("FutureReturnValueIgnored")
     @Override
     public void close(EventLoopGroup instance) {
       try {
