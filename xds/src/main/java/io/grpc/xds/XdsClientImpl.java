@@ -957,7 +957,10 @@ final class XdsClientImpl extends XdsClient {
       } else if (typeUrl.equals(ADS_TYPE_URL_CDS)) {
         version = cdsVersion;
         nonce = cdsRespNonce;
-        cdsResourceNames = resourceNames;
+        // For CDS protocol resource unsubscribe workaround, keep the last unsubscribed cluster
+        // as the requested resource name for ACK requests when all all resources have
+        // been unsubscribed.
+        cdsResourceNames = ImmutableList.copyOf(resourceNames);
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         version = edsVersion;
         nonce = edsRespNonce;
