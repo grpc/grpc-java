@@ -619,10 +619,20 @@ final class XdsClientImpl extends XdsClient {
     clusterNamesToClusterUpdates.clear();
     clusterNamesToClusterUpdates.putAll(clusterUpdates);
 
-    // Notify watchers waiting for updates of endpoint information received in this EDS response.
-    for (Map.Entry<String, ClusterUpdate> entry : desiredClusterUpdates.entrySet()) {
-      for (ClusterWatcher watcher : clusterWatchers.get(entry.getKey())) {
-        watcher.onClusterChanged(entry.getValue());
+    // Notify watchers waiting for updates of cluster information received in this CDS response.
+    // Notify watchers waiting for updates of cluster information not received in this CDS
+    // response.
+    for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
+      if (desiredClusterUpdates.containsKey(entry.getKey())) {
+        for (ClusterWatcher watcher : entry.getValue()) {
+          watcher.onClusterChanged(desiredClusterUpdates.get(entry.getKey()));
+        }
+      } else {
+        for (ClusterWatcher watcher : entry.getValue()) {
+          watcher.onError(
+              Status.NOT_FOUND.withDescription(
+                  "Requested cluster [" + entry.getKey() + "] does not exist"));
+        }
       }
     }
   }
