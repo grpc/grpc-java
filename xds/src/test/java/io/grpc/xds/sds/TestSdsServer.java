@@ -35,8 +35,6 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
-import io.netty.util.concurrent.Future;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -61,6 +59,7 @@ final class TestSdsServer {
 
   /** Used for signalling test clients that request received and processed. */
   @VisibleForTesting final Semaphore requestsCounter = new Semaphore(0);
+
   private EventLoopGroup elg;
   private EventLoopGroup boss;
   private Server server;
@@ -74,7 +73,6 @@ final class TestSdsServer {
 
   /** last Nack. */
   @VisibleForTesting DiscoveryRequest lastNack;
-
 
   /** last response we sent. */
   @VisibleForTesting DiscoveryResponse lastResponse;
@@ -96,15 +94,15 @@ final class TestSdsServer {
     if (useUds) {
       elg = new EpollEventLoopGroup();
       boss = new EpollEventLoopGroup(1);
-      server = NettyServerBuilder
-          .forAddress(new DomainSocketAddress(name))
-          .bossEventLoopGroup(boss)
-          .workerEventLoopGroup(elg)
-          .channelType(EpollServerDomainSocketChannel.class)
-          .addService(discoveryService)
-          .directExecutor()
-          .build()
-          .start();
+      server =
+          NettyServerBuilder.forAddress(new DomainSocketAddress(name))
+              .bossEventLoopGroup(boss)
+              .workerEventLoopGroup(elg)
+              .channelType(EpollServerDomainSocketChannel.class)
+              .addService(discoveryService)
+              .directExecutor()
+              .build()
+              .start();
     } else {
       server =
           InProcessServerBuilder.forName(name)

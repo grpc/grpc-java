@@ -51,8 +51,6 @@ import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import io.netty.util.concurrent.Future;
-
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -72,7 +70,7 @@ final class SdsClient {
   private static final Logger logger = Logger.getLogger(SdsClient.class.getName());
   private static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.api.v2.auth.Secret";
   private static final EventLoopGroupResource eventLoopGroupResource =
-          Epoll.isAvailable() ? new EventLoopGroupResource("SdsClient") : null;
+      Epoll.isAvailable() ? new EventLoopGroupResource("SdsClient") : null;
 
   private final Set<SecretWatcher> watchers = new HashSet<>();
   private final SdsSecretConfig sdsSecretConfig;
@@ -85,15 +83,22 @@ final class SdsClient {
   private StreamObserver<DiscoveryRequest> requestObserver;
   private DiscoveryResponse lastResponse;
 
+  /** Factory for creating SdsClient based on input params and for unit tests. */
   static class Factory {
 
-    static SdsClient getForInProcChannel(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, String name) {
+    /** Creates an SdsClient with {@link InProcessChannelBuilder}. */
+    static SdsClient createWithInProcChannel(
+        SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, String name) {
       ManagedChannel channel = InProcessChannelBuilder.forName(name).directExecutor().build();
       return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, null);
     }
 
-    static SdsClient getForNettyChannel(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor,
-                                        Executor channelExecutor) {
+    /** Creates an SdsClient with {@link NettyChannelBuilder} for UDS or IP-based sockets. */
+    static SdsClient createWithNettyChannel(
+        SdsSecretConfig sdsSecretConfig,
+        Node node,
+        Executor watcherExecutor,
+        Executor channelExecutor) {
       String targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
       NettyChannelBuilder builder;
       EventLoopGroup eventLoopGroup = null;
@@ -101,9 +106,9 @@ final class SdsClient {
         checkState(Epoll.isAvailable(), "Epoll is not available");
         eventLoopGroup = SharedResourceHolder.get(eventLoopGroupResource);
         builder =
-                NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
-                        .eventLoopGroup(eventLoopGroup)
-                        .channelType(EpollDomainSocketChannel.class);
+            NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
+                .eventLoopGroup(eventLoopGroup)
+                .channelType(EpollDomainSocketChannel.class);
       } else {
         builder = NettyChannelBuilder.forTarget(targetUri);
       }
@@ -144,20 +149,12 @@ final class SdsClient {
     }
   }
 
-
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, EventLoopGroup eventLoopGroup) {
-    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
-    checkNotNull(node, "node");
-    this.sdsSecretConfig = sdsSecretConfig;
-    this.clientNode = node;
-    this.watcherExecutor = watcherExecutor;
-    this.eventLoopGroup = eventLoopGroup;
-  }
-
-  /** Create the client with given configSource, node and channel. */
-  @VisibleForTesting
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, ManagedChannel channel,
-            EventLoopGroup eventLoopGroup) {
+  private SdsClient(
+      SdsSecretConfig sdsSecretConfig,
+      Node node,
+      Executor watcherExecutor,
+      ManagedChannel channel,
+      EventLoopGroup eventLoopGroup) {
     checkNotNull(sdsSecretConfig, "sdsSecretConfig");
     checkNotNull(node, "node");
     this.sdsSecretConfig = sdsSecretConfig;
@@ -214,18 +211,18 @@ final class SdsClient {
 
   private void processDiscoveryResponse(final DiscoveryResponse response) {
     watcherExecutor.execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                if (!processSecretsFromDiscoveryResponse(response)) {
-                  sendNack(Code.INTERNAL_VALUE, "Secret not updated");
-                  return;
-                }
-                lastResponse = response;
-                // send discovery request as ACK
-                sendDiscoveryRequestOnStream();
-              }
-            });
+        new Runnable() {
+          @Override
+          public void run() {
+            if (!processSecretsFromDiscoveryResponse(response)) {
+              sendNack(Code.INTERNAL_VALUE, "Secret not updated");
+              return;
+            }
+            lastResponse = response;
+            // send discovery request as ACK
+            sendDiscoveryRequestOnStream();
+          }
+        });
   }
 
   @SuppressWarnings("SynchronizeOnNonFinalField")
@@ -258,20 +255,20 @@ final class SdsClient {
 
   private void sendErrorToWatchers(final Throwable t) {
     watcherExecutor.execute(
-            new Runnable() {
-              @Override
-              public void run() {
-                synchronized (watchers) {
-                  for (SecretWatcher secretWatcher : watchers) {
-                    try {
-                      secretWatcher.onError(Status.fromThrowable(t));
-                    } catch (Throwable throwable) {
-                      logger.log(Level.SEVERE, "exception from onError", throwable);
-                    }
-                  }
+        new Runnable() {
+          @Override
+          public void run() {
+            synchronized (watchers) {
+              for (SecretWatcher secretWatcher : watchers) {
+                try {
+                  secretWatcher.onError(Status.fromThrowable(t));
+                } catch (Throwable throwable) {
+                  logger.log(Level.SEVERE, "exception from onError", throwable);
                 }
               }
-            });
+            }
+          }
+        });
   }
 
   private boolean processSecretsFromDiscoveryResponse(DiscoveryResponse response) {
@@ -323,12 +320,12 @@ final class SdsClient {
       sendDiscoveryRequestOnStream();
     } else {
       watcherExecutor.execute(
-              new Runnable() {
-                @Override
-                public void run() {
-                  processSecretsFromDiscoveryResponse(lastResponse);
-                }
-              });
+          new Runnable() {
+            @Override
+            public void run() {
+              processSecretsFromDiscoveryResponse(lastResponse);
+            }
+          });
     }
   }
 

@@ -81,8 +81,9 @@ public class SdsClientUdsTest {
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
     node = Node.newBuilder().setId("sds-client-temp-test2").build();
-    sdsClient = SdsClient.Factory.getForNettyChannel(sdsSecretConfig, node,
-            MoreExecutors.directExecutor(), MoreExecutors.directExecutor());
+    sdsClient =
+        SdsClient.Factory.createWithNettyChannel(
+            sdsSecretConfig, node, MoreExecutors.directExecutor(), MoreExecutors.directExecutor());
     sdsClient.start();
   }
 
@@ -107,13 +108,14 @@ public class SdsClientUdsTest {
     sdsClient.watchSecret(mockWatcher);
     // wait until our server received the requests
     assertThat(server.requestsCounter.tryAcquire(2, 1000, TimeUnit.MILLISECONDS)).isTrue();
-    SdsClientTest.verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "[name1]");
-    SdsClientTest.verifySecretWatcher(
-        mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
+    SdsClientTest.verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
+    SdsClientTest.verifySecretWatcher(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
     SdsClientTest.verifyDiscoveryRequest(
         server.lastRequestOnlyForAck,
-            server.lastResponse.getVersionInfo(), server.lastResponse.getNonce(), node, "[name1]"
-    );
+        server.lastResponse.getVersionInfo(),
+        server.lastResponse.getNonce(),
+        node,
+        "name1");
 
     reset(mockWatcher);
     when(serverMock.getSecretFor("name1"))
@@ -122,8 +124,7 @@ public class SdsClientUdsTest {
     server.generateAsyncResponse("name1");
     // wait until our server received the request
     assertThat(server.requestsCounter.tryAcquire(1, 1000, TimeUnit.MILLISECONDS)).isTrue();
-    SdsClientTest.verifySecretWatcher(
-        mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
+    SdsClientTest.verifySecretWatcher(mockWatcher, "name1", SERVER_1_KEY_FILE, SERVER_1_PEM_FILE);
 
     reset(mockWatcher);
     sdsClient.cancelSecretWatch(mockWatcher);

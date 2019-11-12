@@ -100,7 +100,9 @@ public class SdsClientTest {
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
     node = Node.newBuilder().setId("sds-client-temp-test1").build();
-    sdsClient = SdsClient.Factory.getForInProcChannel(sdsSecretConfig, node, MoreExecutors.directExecutor(), "inproc");
+    sdsClient =
+        SdsClient.Factory.createWithInProcChannel(
+            sdsSecretConfig, node, MoreExecutors.directExecutor(), "inproc");
     sdsClient.start();
   }
 
@@ -128,8 +130,10 @@ public class SdsClientTest {
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
     verifyDiscoveryRequest(
         server.lastRequestOnlyForAck,
-            server.lastResponse.getVersionInfo(), server.lastResponse.getNonce(), node, "name1"
-    );
+        server.lastResponse.getVersionInfo(),
+        server.lastResponse.getNonce(),
+        node,
+        "name1");
     verifySecretWatcher(mockWatcher, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     reset(mockWatcher);
@@ -155,8 +159,10 @@ public class SdsClientTest {
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
     verifyDiscoveryRequest(
         server.lastRequestOnlyForAck,
-            server.lastResponse.getVersionInfo(), server.lastResponse.getNonce(), node, "name1"
-    );
+        server.lastResponse.getVersionInfo(),
+        server.lastResponse.getNonce(),
+        node,
+        "name1");
     verifySecretWatcher(mockWatcher, "name1", CA_PEM_FILE);
 
     reset(mockWatcher);
@@ -183,8 +189,10 @@ public class SdsClientTest {
     verifyDiscoveryRequest(server.lastGoodRequest, "", "", node, "name1");
     verifyDiscoveryRequest(
         server.lastRequestOnlyForAck,
-            server.lastResponse.getVersionInfo(), server.lastResponse.getNonce(), node, "name1"
-    );
+        server.lastResponse.getVersionInfo(),
+        server.lastResponse.getNonce(),
+        node,
+        "name1");
     verifySecretWatcher(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
     final DiscoveryRequest lastGoodRequest = server.lastGoodRequest;
@@ -258,8 +266,11 @@ public class SdsClientTest {
   }
 
   static void verifyDiscoveryRequest(
-          DiscoveryRequest request,
-          String versionInfo, String responseNonce, Node node, String ... resourceNames) {
+      DiscoveryRequest request,
+      String versionInfo,
+      String responseNonce,
+      Node node,
+      String... resourceNames) {
     assertThat(request).isNotNull();
     assertThat(request.getNode()).isEqualTo(node);
     assertThat(request.getResourceNamesList()).isEqualTo(Arrays.asList(resourceNames));
