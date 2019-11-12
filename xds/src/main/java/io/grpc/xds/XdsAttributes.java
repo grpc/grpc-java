@@ -26,7 +26,6 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
-
 import java.util.concurrent.atomic.AtomicReference;
 
 /**

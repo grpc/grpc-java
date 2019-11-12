@@ -136,9 +136,7 @@ final class EdsLoadBalancer extends LoadBalancer {
     }
 
     if (xdsClient != null) {
-      Preconditions.checkState(
-          xdsClient == xdsClientRef.get(),
-          "The XdsClient is changed");
+      Preconditions.checkState(xdsClient == xdsClientRef.get(), "The XdsClient is changed");
     } else {
       xdsClient = xdsClientRef.get();
     }
