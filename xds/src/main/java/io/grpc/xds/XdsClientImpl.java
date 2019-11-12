@@ -257,7 +257,7 @@ final class XdsClientImpl extends XdsClient {
       }
       checkState(adsStream != null,
           "Severe bug: ADS stream was not created while an endpoint watcher was registered");
-      adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+      adsStream.sendXdsRequest(ADS_TYPE_URL_CDS, clusterWatchers.keySet());
     }
   }
 
@@ -603,7 +603,7 @@ final class XdsClientImpl extends XdsClient {
       }
       ClusterUpdate update = updateBuilder.build();
       clusterUpdates.put(clusterName, update);
-      if (endpointWatchers.containsKey(clusterName)) {
+      if (clusterWatchers.containsKey(clusterName)) {
         desiredClusterUpdates.put(clusterName, update);
       }
     }
