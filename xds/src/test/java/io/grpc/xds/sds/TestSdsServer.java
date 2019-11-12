@@ -35,6 +35,8 @@ import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
+import io.netty.util.concurrent.Future;
+
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -59,6 +61,8 @@ final class TestSdsServer {
 
   /** Used for signalling test clients that request received and processed. */
   @VisibleForTesting final Semaphore requestsCounter = new Semaphore(0);
+  private EventLoopGroup elg;
+  private EventLoopGroup boss;
   private Server server;
   private final ServerMock serverMock;
 
@@ -90,8 +94,8 @@ final class TestSdsServer {
     checkNotNull(name, "name");
     discoveryService = new SecretDiscoveryServiceImpl();
     if (useUds) {
-      EventLoopGroup elg = new EpollEventLoopGroup();
-      EventLoopGroup boss = new EpollEventLoopGroup(1);
+      elg = new EpollEventLoopGroup();
+      boss = new EpollEventLoopGroup(1);
       server = NettyServerBuilder
           .forAddress(new DomainSocketAddress(name))
           .bossEventLoopGroup(boss)
@@ -111,8 +115,14 @@ final class TestSdsServer {
     }
   }
 
-  void shutdown() {
+  void shutdown() throws InterruptedException {
     server.shutdown();
+    if (boss != null) {
+      boss.shutdownGracefully().sync();
+    }
+    if (elg != null) {
+      elg.shutdownGracefully().sync();
+    }
   }
 
   /** Interface that allows mocking server behavior. */

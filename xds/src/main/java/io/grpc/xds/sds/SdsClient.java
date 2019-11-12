@@ -40,6 +40,7 @@ import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc.Secre
 import io.grpc.Internal;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
+import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.internal.SharedResourceHolder;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.NettyChannelBuilder;
@@ -50,6 +51,8 @@ import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.util.concurrent.DefaultThreadFactory;
+import io.netty.util.concurrent.Future;
+
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -68,53 +71,99 @@ import java.util.logging.Logger;
 final class SdsClient {
   private static final Logger logger = Logger.getLogger(SdsClient.class.getName());
   private static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.api.v2.auth.Secret";
+  private static final EventLoopGroupResource eventLoopGroupResource =
+          Epoll.isAvailable() ? new EventLoopGroupResource("SdsClient") : null;
 
   private final Set<SecretWatcher> watchers = new HashSet<>();
   private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
-  private String targetUri;
+  private final Executor watcherExecutor;
+  private EventLoopGroup eventLoopGroup;
   private ManagedChannel channel;
   private SecretDiscoveryServiceStub secretDiscoveryServiceStub;
   private ResponseObserver responseObserver;
   private StreamObserver<DiscoveryRequest> requestObserver;
   private DiscoveryResponse lastResponse;
-  private EventLoopGroup eventLoopGroup;
-  private static final EventLoopGroupResource eventLoopGroupResource =
-      new EventLoopGroupResource("SdsClient");
 
-  private static final class EventLoopGroupResource implements Resource<EventLoopGroup> {
-    private final String name;
+  static class Factory {
 
-    EventLoopGroupResource(String name) {
-      this.name = name;
+    static SdsClient getForInProcChannel(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, String name) {
+      ManagedChannel channel = InProcessChannelBuilder.forName(name).directExecutor().build();
+      return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, null);
     }
 
-    @Override
-    public EventLoopGroup create() {
-      // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
-      ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
-      return new EpollEventLoopGroup(0, threadFactory);
+    static SdsClient getForNettyChannel(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor,
+                                        Executor channelExecutor) {
+      String targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
+      NettyChannelBuilder builder;
+      EventLoopGroup eventLoopGroup = null;
+      if (targetUri.startsWith("unix:")) {
+        checkState(Epoll.isAvailable(), "Epoll is not available");
+        eventLoopGroup = SharedResourceHolder.get(eventLoopGroupResource);
+        builder =
+                NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
+                        .eventLoopGroup(eventLoopGroup)
+                        .channelType(EpollDomainSocketChannel.class);
+      } else {
+        builder = NettyChannelBuilder.forTarget(targetUri);
+      }
+      builder = builder.usePlaintext();
+      if (channelExecutor != null) {
+        builder = builder.executor(channelExecutor);
+      }
+      ManagedChannel channel = builder.build();
+      return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, eventLoopGroup);
     }
 
-    @SuppressWarnings("FutureReturnValueIgnored")
-    @Override
-    public void close(EventLoopGroup instance) {
-      instance.shutdownGracefully(0, 0, TimeUnit.SECONDS);
+    @VisibleForTesting
+    static String extractUdsTarget(ConfigSource configSource) {
+      checkNotNull(configSource, "configSource");
+      checkArgument(
+          configSource.hasApiConfigSource(), "only configSource with ApiConfigSource supported");
+      ApiConfigSource apiConfigSource = configSource.getApiConfigSource();
+      checkArgument(
+          ApiType.GRPC.equals(apiConfigSource.getApiType()),
+          "only GRPC ApiConfigSource type supported");
+      checkArgument(
+          apiConfigSource.getGrpcServicesCount() == 1,
+          "expecting exactly 1 GrpcService in ApiConfigSource");
+      GrpcService grpcService = apiConfigSource.getGrpcServices(0);
+      checkArgument(
+          grpcService.hasGoogleGrpc() && !grpcService.hasEnvoyGrpc(),
+          "only GoogleGrpc expected in GrpcService");
+      GoogleGrpc googleGrpc = grpcService.getGoogleGrpc();
+      // for now don't support any credentials
+      checkArgument(
+          !googleGrpc.hasChannelCredentials()
+              && googleGrpc.getCallCredentialsCount() == 0
+              && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
+          "No credentials supported in GoogleGrpc");
+      String targetUri = googleGrpc.getTargetUri();
+      checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
+      return targetUri;
     }
   }
 
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node) {
+
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, EventLoopGroup eventLoopGroup) {
     checkNotNull(sdsSecretConfig, "sdsSecretConfig");
     checkNotNull(node, "node");
     this.sdsSecretConfig = sdsSecretConfig;
     this.clientNode = node;
-    this.targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
+    this.watcherExecutor = watcherExecutor;
+    this.eventLoopGroup = eventLoopGroup;
   }
 
   /** Create the client with given configSource, node and channel. */
   @VisibleForTesting
-  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, ManagedChannel channel) {
-    this(sdsSecretConfig, node);
+  SdsClient(SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, ManagedChannel channel,
+            EventLoopGroup eventLoopGroup) {
+    checkNotNull(sdsSecretConfig, "sdsSecretConfig");
+    checkNotNull(node, "node");
+    this.sdsSecretConfig = sdsSecretConfig;
+    this.clientNode = node;
+    this.watcherExecutor = watcherExecutor;
+    this.eventLoopGroup = eventLoopGroup;
     checkNotNull(channel, "channel");
     this.channel = channel;
   }
@@ -123,26 +172,8 @@ final class SdsClient {
    * Starts resource discovery with SDS protocol. This method should be the first one to be called
    * and should be called only once.
    */
-  synchronized void start(Executor executor) {
+  synchronized void start() {
     if (requestObserver == null) {
-      if (channel == null) {
-        NettyChannelBuilder builder;
-        if (targetUri.startsWith("unix:")) {
-          checkState(Epoll.isAvailable(), "Epoll is not available");
-          eventLoopGroup = SharedResourceHolder.get(eventLoopGroupResource);
-          builder =
-              NettyChannelBuilder.forAddress(new DomainSocketAddress(targetUri.substring(5)))
-                  .eventLoopGroup(eventLoopGroup)
-                  .channelType(EpollDomainSocketChannel.class);
-        } else {
-          builder = NettyChannelBuilder.forTarget(targetUri);
-        }
-        builder = builder.usePlaintext();
-        if (executor != null) {
-          builder = builder.executor(executor);
-        }
-        channel = builder.build();
-      }
       secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
       responseObserver = new ResponseObserver();
       requestObserver = secretDiscoveryServiceStub.streamSecrets(responseObserver);
@@ -159,34 +190,6 @@ final class SdsClient {
         eventLoopGroup = SharedResourceHolder.release(eventLoopGroupResource, eventLoopGroup);
       }
     }
-  }
-
-  @VisibleForTesting
-  static String extractUdsTarget(ConfigSource configSource) {
-    checkNotNull(configSource, "configSource");
-    checkArgument(
-        configSource.hasApiConfigSource(), "only configSource with ApiConfigSource supported");
-    ApiConfigSource apiConfigSource = configSource.getApiConfigSource();
-    checkArgument(
-        ApiType.GRPC.equals(apiConfigSource.getApiType()),
-        "only GRPC ApiConfigSource type supported");
-    checkArgument(
-        apiConfigSource.getGrpcServicesCount() == 1,
-        "expecting exactly 1 GrpcService in ApiConfigSource");
-    GrpcService grpcService = apiConfigSource.getGrpcServices(0);
-    checkArgument(
-        grpcService.hasGoogleGrpc() && !grpcService.hasEnvoyGrpc(),
-        "only GoogleGrpc expected in GrpcService");
-    GoogleGrpc googleGrpc = grpcService.getGoogleGrpc();
-    // for now don't support any credentials
-    checkArgument(
-        !googleGrpc.hasChannelCredentials()
-            && googleGrpc.getCallCredentialsCount() == 0
-            && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
-        "No credentials supported in GoogleGrpc");
-    String targetUri = googleGrpc.getTargetUri();
-    checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
-    return targetUri;
   }
 
   /** Response observer for SdsClient. */
@@ -209,17 +212,20 @@ final class SdsClient {
     }
   }
 
-  private void processDiscoveryResponse(DiscoveryResponse response) {
-    try {
-      processSecretsFromDiscoveryResponse(response);
-    } catch (Exception e) {
-      // send Nack
-      sendNack(Code.INTERNAL_VALUE, e.getMessage());
-      return;
-    }
-    lastResponse = response;
-    // send discovery request as ACK
-    sendDiscoveryRequestOnStream();
+  private void processDiscoveryResponse(final DiscoveryResponse response) {
+    watcherExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                if (!processSecretsFromDiscoveryResponse(response)) {
+                  sendNack(Code.INTERNAL_VALUE, "Secret not updated");
+                  return;
+                }
+                lastResponse = response;
+                // send discovery request as ACK
+                sendDiscoveryRequestOnStream();
+              }
+            });
   }
 
   @SuppressWarnings("SynchronizeOnNonFinalField")
@@ -250,40 +256,61 @@ final class SdsClient {
     }
   }
 
-  private void sendErrorToWatchers(Throwable t) {
-    synchronized (watchers) {
-      for (SecretWatcher secretWatcher : watchers) {
-        try {
-          secretWatcher.onError(Status.fromThrowable(t));
-        } catch (Throwable throwable) {
-          logger.log(Level.SEVERE, "onError", throwable);
-        }
-      }
-    }
+  private void sendErrorToWatchers(final Throwable t) {
+    watcherExecutor.execute(
+            new Runnable() {
+              @Override
+              public void run() {
+                synchronized (watchers) {
+                  for (SecretWatcher secretWatcher : watchers) {
+                    try {
+                      secretWatcher.onError(Status.fromThrowable(t));
+                    } catch (Throwable throwable) {
+                      logger.log(Level.SEVERE, "exception from onError", throwable);
+                    }
+                  }
+                }
+              }
+            });
   }
 
-  private void processSecretsFromDiscoveryResponse(DiscoveryResponse response)
-      throws InvalidProtocolBufferException {
+  private boolean processSecretsFromDiscoveryResponse(DiscoveryResponse response) {
     List<Any> resources = response.getResourcesList();
     checkState(resources.size() == 1, "exactly one resource expected");
+    boolean noException = true;
     for (Any any : resources) {
       final String typeUrl = any.getTypeUrl();
       checkState(SECRET_TYPE_URL.equals(typeUrl), "wrong value for typeUrl %s", typeUrl);
-      Secret secret = Secret.parseFrom(any.getValue());
-      processSecret(secret);
+      Secret secret = null;
+      try {
+        secret = Secret.parseFrom(any.getValue());
+        if (!processSecret(secret)) {
+          noException = false;
+        }
+      } catch (InvalidProtocolBufferException e) {
+        logger.log(Level.SEVERE, "exception from parseFrom", e);
+      }
     }
+    return noException;
   }
 
-  private void processSecret(Secret secret) {
+  private boolean processSecret(Secret secret) {
     checkState(
         sdsSecretConfig.getName().equals(secret.getName()),
         "expected secret name %s",
         sdsSecretConfig.getName());
+    boolean noException = true;
     synchronized (watchers) {
       for (SecretWatcher secretWatcher : watchers) {
-        secretWatcher.onSecretChanged(secret);
+        try {
+          secretWatcher.onSecretChanged(secret);
+        } catch (Throwable throwable) {
+          noException = false;
+          logger.log(Level.SEVERE, "exception from onSecretChanged", throwable);
+        }
       }
     }
+    return noException;
   }
 
   /** Registers a secret watcher for this client's SdsSecretConfig. */
@@ -295,7 +322,13 @@ final class SdsClient {
     if (lastResponse == null) {
       sendDiscoveryRequestOnStream();
     } else {
-      processSecretsFromDiscoveryResponse(lastResponse);
+      watcherExecutor.execute(
+              new Runnable() {
+                @Override
+                public void run() {
+                  processSecretsFromDiscoveryResponse(lastResponse);
+                }
+              });
     }
   }
 
@@ -312,6 +345,30 @@ final class SdsClient {
     void onSecretChanged(Secret secretUpdate);
 
     void onError(Status error);
+  }
+
+  private static final class EventLoopGroupResource implements Resource<EventLoopGroup> {
+    private final String name;
+
+    EventLoopGroupResource(String name) {
+      this.name = name;
+    }
+
+    @Override
+    public EventLoopGroup create() {
+      // Use Netty's DefaultThreadFactory in order to get the benefit of FastThreadLocal.
+      ThreadFactory threadFactory = new DefaultThreadFactory(name, /* daemon= */ true);
+      return new EpollEventLoopGroup(1, threadFactory);
+    }
+
+    @Override
+    public void close(EventLoopGroup instance) {
+      try {
+        instance.shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
+      } catch (InterruptedException e) {
+        logger.log(Level.SEVERE, "from EventLoopGroup.shutdownGracefully", e);
+      }
+    }
   }
 
   @SuppressWarnings("SynchronizeOnNonFinalField")
