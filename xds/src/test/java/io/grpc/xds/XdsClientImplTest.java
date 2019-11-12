@@ -1408,7 +1408,7 @@ public class XdsClientImplTest {
     // notified to the newly added watcher immediately.
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
-    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor1.getValue();
+    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
     assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
         .containsExactly(
