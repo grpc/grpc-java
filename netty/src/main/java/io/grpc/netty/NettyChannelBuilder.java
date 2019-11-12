@@ -65,7 +65,8 @@ import javax.net.ssl.SSLException;
 public final class NettyChannelBuilder
     extends AbstractManagedChannelImplBuilder<NettyChannelBuilder> {
 
-  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1048576; // 1MiB
+  // 1MiB.
+  public static final int DEFAULT_FLOW_CONTROL_WINDOW = 1024 * 1024;
 
   private static final long AS_LARGE_AS_INFINITE = TimeUnit.DAYS.toNanos(1000L);
 
