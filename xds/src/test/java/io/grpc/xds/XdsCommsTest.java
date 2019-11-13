@@ -278,7 +278,7 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponse);
 
     verify(endpointWatcher).onEndpointChanged(
-        endPointUpdatefromClusterAssignment(clusterLoadAssignment));
+        endpointUpdatefromClusterAssignment(clusterLoadAssignment));
 
     ClusterLoadAssignment clusterLoadAssignment2 = ClusterLoadAssignment.newBuilder()
         .addEndpoints(LocalityLbEndpoints.newBuilder()
@@ -299,7 +299,7 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponse);
 
     verify(endpointWatcher).onEndpointChanged(
-        endPointUpdatefromClusterAssignment(clusterLoadAssignment2));
+        endpointUpdatefromClusterAssignment(clusterLoadAssignment2));
     verifyNoMoreInteractions(endpointWatcher);
 
     xdsComms.shutdown();
@@ -502,7 +502,7 @@ public class XdsCommsTest {
     xdsComms.shutdown();
   }
 
-  private static XdsClient.EndpointUpdate endPointUpdatefromClusterAssignment(
+  private static XdsClient.EndpointUpdate endpointUpdatefromClusterAssignment(
       ClusterLoadAssignment clusterLoadAssignment) {
     EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
     endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
