@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -108,6 +109,8 @@ public class XdsClientImplTest {
   private final Queue<StreamObserver<DiscoveryRequest>> requestObservers = new ArrayDeque<>();
 
   @Mock
+  private AggregatedDiscoveryServiceImplBase mockedDiscoveryService;
+  @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
   @Mock
   private BackoffPolicy backoffPolicy1;
@@ -147,11 +150,13 @@ public class XdsClientImplTest {
         return requestObserver;
       }
     };
+    mockedDiscoveryService =
+        mock(AggregatedDiscoveryServiceImplBase.class, delegatesTo(serviceImpl));
 
     cleanupRule.register(
         InProcessServerBuilder
             .forName(serverName)
-            .addService(serviceImpl)
+            .addService(mockedDiscoveryService)
             .directExecutor()
             .build()
             .start());
@@ -1065,12 +1070,24 @@ public class XdsClientImplTest {
         .isEqualTo("Listener for requested resource [foo.googleapis.com:8080] does not exist");
   }
 
+  /**
+   * RPC stream closed and retry during the period of first tiem resolving service config
+   * (LDS/RDS only).
+   */
   @Test
-  public void streamClosedAndRetry() {
+  public void streamClosedAndRetryWhenResolvingConfig() {
+    InOrder inOrder =
+        Mockito.inOrder(mockedDiscoveryService, backoffPolicyProvider, backoffPolicy1,
+            backoffPolicy2);
     xdsClient.watchConfigData(HOSTNAME, PORT, configWatcher);
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+
+    ArgumentCaptor<StreamObserver<DiscoveryResponse>> responseObserverCaptor =
+        ArgumentCaptor.forClass(null);
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    StreamObserver<DiscoveryResponse> responseObserver =
+        responseObserverCaptor.getValue();  // same as responseObservers.poll()
     StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-    InOrder inOrder = Mockito.inOrder(backoffPolicyProvider, backoffPolicy1, backoffPolicy2);
 
     // Client sends an LDS request for the host name (with port) to management server.
     verify(requestObserver)
@@ -1085,10 +1102,11 @@ public class XdsClientImplTest {
 
     // Retry after backoff.
     fakeClock.forwardNanos(9L);
-    assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
     fakeClock.forwardNanos(1L);
-    responseObserver = responseObservers.poll();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
 
     // Client retried by sending an LDS request.
@@ -1104,10 +1122,11 @@ public class XdsClientImplTest {
 
     // Retry after backoff.
     fakeClock.forwardNanos(99L);
-    assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
     fakeClock.forwardNanos(1L);
-    responseObserver = responseObservers.poll();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
 
     // Client retried again by sending an LDS.
@@ -1146,7 +1165,9 @@ public class XdsClientImplTest {
 
     // Reset backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
-    responseObserver = responseObservers.poll();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
@@ -1159,10 +1180,11 @@ public class XdsClientImplTest {
 
     // Retry after backoff.
     fakeClock.forwardNanos(19L);
-    assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
     fakeClock.forwardNanos(1L);
-    responseObserver = responseObservers.poll();
+    inOrder.verify(mockedDiscoveryService)
+        .streamAggregatedResources(responseObserverCaptor.capture());
+    responseObserver = responseObserverCaptor.getValue();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
