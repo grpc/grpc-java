@@ -1037,20 +1037,18 @@ public class ServerImplTest {
       throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
-    testStreamClose_setup(callReference,
-        context, contextCancelled, 0L);
+    testStreamClose_setup(callReference, context, contextCancelled, 0L);
 
-    // This assert that stream.setListener() is called before stream.cancel(), which avoid every
-    // short deadlines causing NPEs.
+    // This assert that stream.setListener(jumpListener) is called before stream.cancel(), which
+    // prevents extremely short deadlines causing NPEs.
     InOrder inOrder = inOrder(stream);
     inOrder.verify(stream).setListener(any(ServerStreamListener.class));
     inOrder.verify(stream).cancel(statusCaptor.capture());
 
-    assertThat(
-        statusCaptor.getValue().asException()).hasMessageThat().contains("context timed out");
+    assertThat(statusCaptor.getValue().asException())
+        .hasMessageThat().contains("context timed out");
     assertTrue(callReference.get().isCancelled());
   }
 
@@ -1058,8 +1056,7 @@ public class ServerImplTest {
   public void testStreamClose_clientCancelTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     ServerStreamListener streamListener = testStreamClose_setup(callReference,
         context, contextCancelled, null);
@@ -1081,8 +1078,7 @@ public class ServerImplTest {
   public void testStreamClose_clientOkTriggersDelayedCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     ServerStreamListener streamListener = testStreamClose_setup(callReference,
         context, contextCancelled, null);
@@ -1105,8 +1101,7 @@ public class ServerImplTest {
   public void testStreamClose_deadlineExceededTriggersImmediateCancellation() throws Exception {
     AtomicBoolean contextCancelled = new AtomicBoolean(false);
     AtomicReference<Context> context = new AtomicReference<>();
-    AtomicReference<ServerCall<String, Integer>> callReference
-        = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference = new AtomicReference<>();
 
     testStreamClose_setup(callReference, context, contextCancelled, 50L);
 
