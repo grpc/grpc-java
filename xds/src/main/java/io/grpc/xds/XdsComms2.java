@@ -255,7 +255,9 @@ final class XdsComms2 extends XdsClient {
 
   @Override
   void shutdown() {
-    adsStream.cancelRpc("shutdown", null);
+    if (adsStream != null) {
+      adsStream.cancelRpc("shutdown", null);
+    }
     cancelRetryTimer();
     channel.shutdown();
   }
