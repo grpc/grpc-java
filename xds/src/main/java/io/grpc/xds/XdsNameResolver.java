@@ -34,7 +34,6 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
 /**
  * A {@link NameResolver} for resolving gRPC target names with "xds-experimental" scheme.
@@ -60,9 +59,6 @@ final class XdsNameResolver extends NameResolver {
   private final String authority;
   private final Bootstrapper bootstrapper;
 
-  @Nullable
-  private BootstrapInfo bootstrapInfo;
-
   XdsNameResolver(String name) {
     this(name, Bootstrapper.getInstance());
   }
@@ -85,13 +81,12 @@ final class XdsNameResolver extends NameResolver {
   @SuppressWarnings("unchecked")
   @Override
   public void start(final Listener2 listener) {
-    if (bootstrapInfo == null) {
-      try {
-        bootstrapInfo = bootstrapper.readBootstrap();
-      } catch (Exception e) {
-        listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
-        return;
-      }
+    BootstrapInfo bootstrapInfo = null;
+    try {
+      bootstrapInfo = bootstrapper.readBootstrap();
+    } catch (Exception e) {
+      listener.onError(Status.UNAVAILABLE.withDescription("Failed to bootstrap").withCause(e));
+      return;
     }
 
     String serviceConfig = "{"
