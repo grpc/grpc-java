@@ -102,6 +102,74 @@ public class XdsNameResolverTest {
     }
   }
 
+  /**
+   * Each resolver explicitly triggers reading bootstrap configurations.
+   */
+  @Test
+  public void eachResolverReadsBootstrapSeparately() {
+    final ChannelCreds loasCreds = new ChannelCreds("loas2", null);
+    final ChannelCreds googleDefaultCreds = new ChannelCreds("google_default", null);
+    Bootstrapper bootstrapper1 = new Bootstrapper() {
+      @Override
+      BootstrapInfo readBootstrap() throws Exception {
+        return new BootstrapInfo("trafficdirector-foo.googleapis.com",
+            ImmutableList.of(googleDefaultCreds), FAKE_BOOTSTRAP_NODE);
+      }
+    };
+    Bootstrapper bootstrapper2 = new Bootstrapper() {
+      @Override
+      BootstrapInfo readBootstrap() throws Exception {
+        return new BootstrapInfo("trafficdirector-bar.googleapis.com",
+            ImmutableList.of(loasCreds), FAKE_BOOTSTRAP_NODE);
+      }
+    };
+
+    XdsNameResolver resolver1 = new XdsNameResolver("service-foo.googleapis.com", bootstrapper1);
+    XdsNameResolver resolver2 = new XdsNameResolver("service-bar.googleapis.com", bootstrapper2);
+    NameResolver.Listener2 listener1 = mock(NameResolver.Listener2.class);
+    NameResolver.Listener2 listener2 = mock(NameResolver.Listener2.class);
+    ArgumentCaptor<ResolutionResult> resultCaptor = ArgumentCaptor.forClass(null);
+
+    resolver1.start(listener1);
+    verify(listener1).onResult(resultCaptor.capture());
+    ResolutionResult result1 = resultCaptor.getValue();
+    assertThat(result1.getAddresses()).isEmpty();
+    Map<String, ?> serviceConfig1 =
+        result1.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    Map<String, ?> xdsLbConfig1 = extractXdsLoadBalancingConfigFromServiceConfig(serviceConfig1);
+    assertThat(xdsLbConfig1)
+        .containsExactly(
+            "balancerName",
+            "trafficdirector-foo.googleapis.com",
+            "childPolicy",
+            Collections.singletonList(
+                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
+    assertThat(result1.getAttributes().get(XdsNameResolver.XDS_NODE))
+        .isEqualTo(FAKE_BOOTSTRAP_NODE);
+    assertThat(result1.getAttributes().get(XdsNameResolver.XDS_CHANNEL_CREDS_LIST))
+        .containsExactly(googleDefaultCreds);
+
+    resolver2.start(listener2);
+    verify(listener2).onResult(resultCaptor.capture());
+    ResolutionResult result2 = resultCaptor.getValue();
+    assertThat(result2.getAddresses()).isEmpty();
+    Map<String, ?> serviceConfig2 =
+        result2.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+    Map<String, ?> xdsLbConfig2 = extractXdsLoadBalancingConfigFromServiceConfig(serviceConfig2);
+    assertThat(xdsLbConfig2)
+        .containsExactly(
+            "balancerName",
+            "trafficdirector-bar.googleapis.com",
+            "childPolicy",
+            Collections.singletonList(
+                Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));
+    assertThat(result2.getAttributes().get(XdsNameResolver.XDS_NODE))
+        .isEqualTo(FAKE_BOOTSTRAP_NODE);
+    assertThat(result2.getAttributes().get(XdsNameResolver.XDS_CHANNEL_CREDS_LIST))
+        .containsExactly(loasCreds);
+
+  }
+
   @Test
   public void resolve_bootstrapResult() {
     final ChannelCreds loasCreds = new ChannelCreds("loas2", null);
@@ -122,13 +190,7 @@ public class XdsNameResolverTest {
 
     Map<String, ?> serviceConfig =
         result.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
-    @SuppressWarnings("unchecked")
-    List<Map<String, ?>> rawLbConfigs =
-        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
-    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
-    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
+    Map<String, ?> rawConfigValues = extractXdsLoadBalancingConfigFromServiceConfig(serviceConfig);
     assertThat(rawConfigValues)
         .containsExactly(
             "balancerName",
@@ -158,5 +220,16 @@ public class XdsNameResolverTest {
     assertThat(error.getCode()).isEqualTo(Code.UNAVAILABLE);
     assertThat(error.getDescription()).isEqualTo("Failed to bootstrap");
     assertThat(error.getCause()).hasMessageThat().isEqualTo("Fail to read bootstrap file");
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, ?> extractXdsLoadBalancingConfigFromServiceConfig(
+      Map<String, ?> serviceConfig) {
+    List<Map<String, ?>> rawLbConfigs =
+        (List<Map<String, ?>>) serviceConfig.get("loadBalancingConfig");
+    Map<String, ?> xdsLbConfig = Iterables.getOnlyElement(rawLbConfigs);
+    assertThat(xdsLbConfig.keySet()).containsExactly("xds_experimental");
+
+    return (Map<String, ?>) xdsLbConfig.get("xds_experimental");
   }
 }
