@@ -72,6 +72,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   // cancelling the stream, which changes the final status of the stream from the server's
   // perspective.
   // Mitigate this by introduce a delay for client to send the cancel request.(b/118879795)
+  // This only impacts server statistics.
   @VisibleForTesting
   static final long DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS = TimeUnit.SECONDS.toNanos(1);
 
