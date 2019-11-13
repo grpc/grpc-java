@@ -95,7 +95,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
     String newBalancerName = xdsConfig.balancerName;
 
-    // Legacy path.
+    // The is to handle the legacy usecase that requires balancerName from xds config.
     if (!newBalancerName.equals(balancerName)) {
       balancerName = newBalancerName; // cache the name and check next time for optimization
       Node node = resolvedAddresses.getAttributes().get(XDS_NODE);
@@ -116,7 +116,6 @@ final class LookasideLb extends ForwardingLoadBalancer {
           newBalancerName, node, channelCredsList));
     }
 
-    // New path.
     if (newBalancerName == null) {
       // TODO(zdapeng): load XdsClient from Attributes. If null create XdsClient from bootstrap
       // lookasideChannelLb = new LookasideChannelLb(
