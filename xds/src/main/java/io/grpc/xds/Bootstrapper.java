@@ -55,7 +55,7 @@ abstract class Bootstrapper {
     }
   };
 
-  static Bootstrapper newInstance() {
+  static Bootstrapper getInstance() {
     return DEFAULT_INSTANCE;
   }
 
