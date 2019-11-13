@@ -105,11 +105,6 @@ subprojects {
             }
 
             tasks.withType(JavaCompile) {
-                // Protobuf-generated code produces some warnings.
-                // https://github.com/google/protobuf/issues/2718
-                it.options.compilerArgs += [
-                    "-Xlint:-cast",
-                ]
                 it.options.errorprone.excludedPaths = ".*/src/generated/[^/]+/java/.*" +
                         "|.*/build/generated/source/proto/[^/]+/java/.*"
             }

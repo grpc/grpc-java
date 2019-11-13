@@ -22,16 +22,12 @@ dependencies {
     }
 
     testCompile project(':grpc-core')
-    testProtobuf libraries.protobuf
 
     signature "org.codehaus.mojo.signature:java17:1.0@signature"
     signature "net.sf.androidscents.signature:android-api-level-14:4.0_r4@signature"
 }
 
 compileTestJava {
-    options.compilerArgs += [
-        "-Xlint:-cast"
-    ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
