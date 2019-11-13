@@ -16,8 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
@@ -133,6 +131,7 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
    */
   static final class XdsConfig {
     // TODO(chengyuanzhang): delete after shifting to use bootstrap.
+    @Nullable
     final String balancerName;
     // TODO(carl-mastrangelo): make these Object's containing the fully parsed child configs.
     @Nullable
@@ -150,9 +149,10 @@ public final class XdsLoadBalancerProvider extends LoadBalancerProvider {
     final String lrsServerName;
 
     XdsConfig(
-        String balancerName, @Nullable LbConfig childPolicy, @Nullable LbConfig fallbackPolicy,
-        @Nullable String edsServiceName, @Nullable String lrsServerName) {
-      this.balancerName = checkNotNull(balancerName, "balancerName");
+        @Nullable String balancerName, @Nullable LbConfig childPolicy,
+        @Nullable LbConfig fallbackPolicy, @Nullable String edsServiceName,
+        @Nullable String lrsServerName) {
+      this.balancerName = balancerName;
       this.childPolicy = childPolicy;
       this.fallbackPolicy = fallbackPolicy;
       this.edsServiceName = edsServiceName;

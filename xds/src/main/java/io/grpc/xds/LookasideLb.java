@@ -33,6 +33,8 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.alts.GoogleDefaultChannelBuilder;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
@@ -92,6 +94,8 @@ final class LookasideLb extends ForwardingLoadBalancer {
     XdsConfig xdsConfig = (XdsConfig) cfg.getConfig();
 
     String newBalancerName = xdsConfig.balancerName;
+
+    // Legacy path.
     if (!newBalancerName.equals(balancerName)) {
       balancerName = newBalancerName; // cache the name and check next time for optimization
       Node node = resolvedAddresses.getAttributes().get(XDS_NODE);
@@ -111,6 +115,14 @@ final class LookasideLb extends ForwardingLoadBalancer {
       lookasideChannelLb.switchTo(newLookasideChannelLbProvider(
           newBalancerName, node, channelCredsList));
     }
+
+    // New path.
+    if (newBalancerName == null) {
+      // TODO(zdapeng): load XdsClient from Attributes. If null create XdsClient from bootstrap
+      // lookasideChannelLb = new LookasideChannelLb(
+      //     edsServiceName, lookasideChannelCallback, xdsClient, localityStore);
+    }
+
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
   }
 
@@ -157,10 +169,18 @@ final class LookasideLb extends ForwardingLoadBalancer {
     public LoadBalancer newLoadBalancer(
         Helper helper, LookasideChannelCallback lookasideChannelCallback, String balancerName,
         Node node, List<ChannelCreds> channelCredsList) {
+      ManagedChannel channel = initLbChannel(helper, balancerName, channelCredsList);
+      XdsClient xdsClient  = new XdsComms2(
+          channel, helper, new ExponentialBackoffPolicy.Provider(),
+          GrpcUtil.STOPWATCH_SUPPLIER, node);
+      LocalityStore localityStore =
+          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry());
+      // TODO(zdapeng): Use XdsClient to do Lrs directly.
+      LoadReportClient lrsClient = new LoadReportClientImpl(
+          channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, new ExponentialBackoffPolicy.Provider(),
+          localityStore.getLoadStatsStore());
       return new LookasideChannelLb(
-          helper, lookasideChannelCallback, initLbChannel(helper, balancerName, channelCredsList),
-          new LocalityStoreImpl(helper, LoadBalancerRegistry.getDefaultRegistry()),
-          node);
+          node.getCluster(), lookasideChannelCallback, xdsClient, lrsClient, localityStore);
     }
 
     private static ManagedChannel initLbChannel(
