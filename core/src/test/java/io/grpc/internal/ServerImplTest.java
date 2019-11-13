@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -109,6 +110,7 @@ import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -1028,6 +1030,28 @@ public class ServerImplTest {
     streamListener.onReady();
     assertEquals(1, executor.runDueTasks());
     return streamListener;
+  }
+
+  @Test
+  public void testContextExpiredBeforeStreamCreate_StreamCancelNotCalledBeforeSetListener()
+      throws Exception {
+    AtomicBoolean contextCancelled = new AtomicBoolean(false);
+    AtomicReference<Context> context = new AtomicReference<>();
+    AtomicReference<ServerCall<String, Integer>> callReference
+        = new AtomicReference<>();
+
+    testStreamClose_setup(callReference,
+        context, contextCancelled, 0L);
+
+    // This assert that stream.setListener() is called before stream.cancel(), which avoid every
+    // short deadlines causing NPEs.
+    InOrder inOrder = inOrder(stream);
+    inOrder.verify(stream).setListener(any(ServerStreamListener.class));
+    inOrder.verify(stream).cancel(statusCaptor.capture());
+
+    assertThat(
+        statusCaptor.getValue().asException()).hasMessageThat().contains("context timed out");
+    assertTrue(callReference.get().isCancelled());
   }
 
   @Test
