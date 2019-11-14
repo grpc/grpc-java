@@ -167,7 +167,6 @@ public class XdsNameResolverTest {
         .isEqualTo(FAKE_BOOTSTRAP_NODE);
     assertThat(result2.getAttributes().get(XdsNameResolver.XDS_CHANNEL_CREDS_LIST))
         .containsExactly(loasCreds);
-
   }
 
   @Test
