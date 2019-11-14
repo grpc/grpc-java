@@ -116,12 +116,6 @@ final class LookasideLb extends ForwardingLoadBalancer {
           newBalancerName, node, channelCredsList));
     }
 
-    if (newBalancerName == null) {
-      // TODO(zdapeng): load XdsClient from Attributes. If null create XdsClient from bootstrap
-      // lookasideChannelLb = new LookasideChannelLb(
-      //     edsServiceName, lookasideChannelCallback, xdsClient, localityStore);
-    }
-
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
   }
 
