@@ -105,11 +105,6 @@ subprojects {
             }
 
             tasks.withType(JavaCompile) {
-                // Protobuf-generated code produces some warnings.
-                // https://github.com/google/protobuf/issues/2718
-                it.options.compilerArgs += [
-                    "-Xlint:-cast",
-                ]
                 it.options.errorprone.excludedPaths = ".*/src/generated/[^/]+/java/.*" +
                         "|.*/build/generated/source/proto/[^/]+/java/.*"
             }
@@ -137,8 +132,7 @@ subprojects {
             perfmark: 'io.perfmark:perfmark-api:0.19.0',
             pgv: 'io.envoyproxy.protoc-gen-validate:pgv-java-stub:0.2.0',
             protobuf: "com.google.protobuf:protobuf-java:${protobufVersion}",
-            protobuf_lite: "com.google.protobuf:protobuf-lite:3.0.1",
-            protoc_lite: "com.google.protobuf:protoc-gen-javalite:3.0.0",
+            protobuf_lite: "com.google.protobuf:protobuf-javalite:${protobufVersion}",
             protobuf_util: "com.google.protobuf:protobuf-java-util:${protobufVersion}",
             lang: "org.apache.commons:commons-lang3:3.5",
 

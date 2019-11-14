@@ -51,14 +51,15 @@ android {
 protobuf {
     protoc { artifact = 'com.google.protobuf:protoc:3.10.0' }
     plugins {
-        javalite { artifact = "com.google.protobuf:protoc-gen-javalite:3.0.0" }
         grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
     }
     generateProtoTasks {
         all().each { task ->
+            task.builtins {
+                java { option 'lite' }
+            }
             task.plugins {
-                javalite {}
                 grpc { // Options added to --grpc_out
                     option 'lite' }
             }
