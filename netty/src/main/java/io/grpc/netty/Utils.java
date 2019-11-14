@@ -34,6 +34,8 @@ import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.SharedResourceHolder.Resource;
 import io.grpc.netty.GrpcHttp2HeadersUtils.GrpcHttp2InboundHeaders;
 import io.grpc.netty.NettySocketSupport.NativeSocketOptions;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFactory;
@@ -82,6 +84,42 @@ class Utils {
       = new DefaultEventLoopGroupResource(0, "grpc-nio-worker-ELG", EventLoopGroupType.NIO);
   public static final Resource<EventLoopGroup> DEFAULT_BOSS_EVENT_LOOP_GROUP;
   public static final Resource<EventLoopGroup> DEFAULT_WORKER_EVENT_LOOP_GROUP;
+
+  public static final Resource<ByteBufAllocator> BYTE_BUF_ALLOCATOR =
+      new Resource<ByteBufAllocator>() {
+        @Override
+        public ByteBufAllocator create() {
+          if (Boolean.parseBoolean(
+                  System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
+            int maxOrder;
+            if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+              // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+              // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+              // 2MiB, thus reducing the maxOrder to 8.
+              maxOrder = 8;
+            } else {
+              maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+            }
+            return new PooledByteBufAllocator(
+                PooledByteBufAllocator.defaultPreferDirect(),
+                PooledByteBufAllocator.defaultNumHeapArena(),
+                PooledByteBufAllocator.defaultNumDirectArena(),
+                PooledByteBufAllocator.defaultPageSize(),
+                maxOrder,
+                PooledByteBufAllocator.defaultTinyCacheSize(),
+                PooledByteBufAllocator.defaultSmallCacheSize(),
+                PooledByteBufAllocator.defaultNormalCacheSize(),
+                PooledByteBufAllocator.defaultUseCacheForAllThreads());
+          } else {
+            return ByteBufAllocator.DEFAULT;
+          }
+        }
+
+        @Override
+        public void close(ByteBufAllocator allocator) {
+          // PooledByteBufAllocator doesn't provide a shutdown method.  Leaving it to GC.
+        }
+      };
 
   public static final ChannelFactory<? extends ServerChannel> DEFAULT_SERVER_CHANNEL_FACTORY;
   public static final Class<? extends Channel> DEFAULT_CLIENT_CHANNEL_TYPE;

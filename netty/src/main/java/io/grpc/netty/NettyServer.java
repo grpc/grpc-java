@@ -18,6 +18,7 @@ package io.grpc.netty;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.netty.NettyServerBuilder.MAX_CONNECTION_AGE_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_BACKLOG;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
@@ -37,6 +38,7 @@ import io.grpc.internal.ServerListener;
 import io.grpc.internal.ServerTransportListener;
 import io.grpc.internal.TransportTracer;
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
@@ -73,8 +75,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final int maxStreamsPerConnection;
   private final ObjectPool<? extends EventLoopGroup> bossGroupPool;
   private final ObjectPool<? extends EventLoopGroup> workerGroupPool;
+  private final ObjectPool<? extends ByteBufAllocator> allocatorPool;
   private EventLoopGroup bossGroup;
   private EventLoopGroup workerGroup;
+  private ByteBufAllocator allocator;
   private ServerListener listener;
   private Channel channel;
   private final int flowControlWindow;
@@ -87,7 +91,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
   private final long maxConnectionAgeGraceInNanos;
   private final boolean permitKeepAliveWithoutCalls;
   private final long permitKeepAliveTimeInNanos;
-  private final ReferenceCounted eventLoopReferenceCounter = new EventLoopReferenceCounter();
+  private final ReferenceCounted sharedResourceReferenceCounter =
+      new SharedResourceReferenceCounter();
   private final List<? extends ServerStreamTracer.Factory> streamTracerFactories;
   private final TransportTracer.Factory transportTracerFactory;
   private final InternalChannelz channelz;
@@ -100,6 +105,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
       Map<ChannelOption<?>, ?> channelOptions,
       ObjectPool<? extends EventLoopGroup> bossGroupPool,
       ObjectPool<? extends EventLoopGroup> workerGroupPool,
+      ObjectPool<? extends ByteBufAllocator> allocatorPool,
       ProtocolNegotiator protocolNegotiator,
       List<? extends ServerStreamTracer.Factory> streamTracerFactories,
       TransportTracer.Factory transportTracerFactory,
@@ -115,8 +121,10 @@ class NettyServer implements InternalServer, InternalWithLogId {
     this.channelOptions = new HashMap<ChannelOption<?>, Object>(channelOptions);
     this.bossGroupPool = checkNotNull(bossGroupPool, "bossGroupPool");
     this.workerGroupPool = checkNotNull(workerGroupPool, "workerGroupPool");
+    this.allocatorPool = checkNotNull(allocatorPool, "allocatorPool");
     this.bossGroup = bossGroupPool.getObject();
     this.workerGroup = workerGroupPool.getObject();
+    this.allocator = allocatorPool.getObject();
     this.protocolNegotiator = checkNotNull(protocolNegotiator, "protocolNegotiator");
     this.streamTracerFactories = checkNotNull(streamTracerFactories, "streamTracerFactories");
     this.transportTracerFactory = transportTracerFactory;
@@ -155,6 +163,8 @@ class NettyServer implements InternalServer, InternalWithLogId {
     listener = checkNotNull(serverListener, "serverListener");
 
     ServerBootstrap b = new ServerBootstrap();
+    b.option(ALLOCATOR, allocator);
+    b.childOption(ALLOCATOR, allocator);
     b.group(bossGroup, workerGroup);
     b.channelFactory(channelFactory);
     // For non-socket based channel, the option will be ignored.
@@ -210,7 +220,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
           // `channel` shutdown can race with `ch` initialization, so this is only safe to increment
           // inside the lock.
-          eventLoopReferenceCounter.retain();
+          sharedResourceReferenceCounter.retain();
           transportListener = listener.transportCreated(transport);
         }
 
@@ -224,7 +234,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
           public void operationComplete(ChannelFuture future) throws Exception {
             if (!done) {
               done = true;
-              eventLoopReferenceCounter.release();
+              sharedResourceReferenceCounter.release();
             }
           }
         }
@@ -281,7 +291,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         synchronized (NettyServer.this) {
           listener.serverShutdown();
         }
-        eventLoopReferenceCounter.release();
+        sharedResourceReferenceCounter.release();
       }
     });
     try {
@@ -305,7 +315,7 @@ class NettyServer implements InternalServer, InternalWithLogId {
         .toString();
   }
 
-  class EventLoopReferenceCounter extends AbstractReferenceCounted {
+  class SharedResourceReferenceCounter extends AbstractReferenceCounted {
     @Override
     protected void deallocate() {
       try {
@@ -320,6 +330,13 @@ class NettyServer implements InternalServer, InternalWithLogId {
           }
         } finally {
           workerGroup = null;
+          try  {
+            if (allocator != null) {
+              allocatorPool.returnObject(allocator);
+            }
+          } finally {
+            allocator = null;
+          }
         }
       }
     }

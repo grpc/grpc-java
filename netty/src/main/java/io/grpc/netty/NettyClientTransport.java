@@ -17,6 +17,7 @@
 package io.grpc.netty;
 
 import static io.grpc.internal.GrpcUtil.KEEPALIVE_TIME_NANOS_DISABLED;
+import static io.netty.channel.ChannelOption.ALLOCATOR;
 import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -43,6 +44,7 @@ import io.grpc.internal.StatsTraceContext;
 import io.grpc.internal.TransportTracer;
 import io.grpc.netty.NettyChannelBuilder.LocalSocketPicker;
 import io.netty.bootstrap.Bootstrap;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFactory;
 import io.netty.channel.ChannelFuture;
@@ -74,6 +76,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   private final SocketAddress remoteAddress;
   private final ChannelFactory<? extends Channel> channelFactory;
   private final EventLoopGroup group;
+  private final ByteBufAllocator allocator;
   private final ProtocolNegotiator negotiator;
   private final String authorityString;
   private final AsciiString authority;
@@ -105,6 +108,7 @@ class NettyClientTransport implements ConnectionClientTransport {
   NettyClientTransport(
       SocketAddress address, ChannelFactory<? extends Channel> channelFactory,
       Map<ChannelOption<?>, ?> channelOptions, EventLoopGroup group,
+      ByteBufAllocator allocator,
       ProtocolNegotiator negotiator, int flowControlWindow, int maxMessageSize,
       int maxHeaderListSize, long keepAliveTimeNanos, long keepAliveTimeoutNanos,
       boolean keepAliveWithoutCalls, String authority, @Nullable String userAgent,
@@ -115,6 +119,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     this.negotiationScheme = this.negotiator.scheme();
     this.remoteAddress = Preconditions.checkNotNull(address, "address");
     this.group = Preconditions.checkNotNull(group, "group");
+    this.allocator = Preconditions.checkNotNull(allocator, "allocator");
     this.channelFactory = channelFactory;
     this.channelOptions = Preconditions.checkNotNull(channelOptions, "channelOptions");
     this.flowControlWindow = flowControlWindow;
@@ -225,6 +230,7 @@ class NettyClientTransport implements ConnectionClientTransport {
     ChannelHandler negotiationHandler = negotiator.newHandler(handler);
 
     Bootstrap b = new Bootstrap();
+    b.option(ALLOCATOR, allocator);
     b.attr(LOGGER_KEY, channelLogger);
     b.group(eventLoop);
     b.channelFactory(channelFactory);
