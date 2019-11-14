@@ -18,6 +18,7 @@ package io.grpc.xds.sds.trust;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.protobuf.ByteString;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.grpc.internal.testing.TestUtils;
@@ -54,6 +55,26 @@ public class SdsTrustManagerFactoryTest {
   public void constructor_fromFile() throws CertificateException, IOException, CertStoreException {
     SdsTrustManagerFactory factory =
         new SdsTrustManagerFactory(getCertContextFromPath(CA_PEM_FILE));
+    assertThat(factory).isNotNull();
+    TrustManager[] tms = factory.getTrustManagers();
+    assertThat(tms).isNotNull();
+    assertThat(tms).hasLength(1);
+    TrustManager myTm = tms[0];
+    assertThat(myTm).isInstanceOf(SdsX509TrustManager.class);
+    SdsX509TrustManager sdsX509TrustManager = (SdsX509TrustManager) myTm;
+    X509Certificate[] acceptedIssuers = sdsX509TrustManager.getAcceptedIssuers();
+    assertThat(acceptedIssuers).isNotNull();
+    assertThat(acceptedIssuers).hasLength(1);
+    X509Certificate caCert = acceptedIssuers[0];
+    assertThat(caCert)
+        .isEqualTo(CertificateUtils.toX509Certificates(TestUtils.loadCert(CA_PEM_FILE))[0]);
+  }
+
+  @Test
+  public void constructor_fromInlineBytes()
+      throws CertificateException, IOException, CertStoreException {
+    SdsTrustManagerFactory factory =
+        new SdsTrustManagerFactory(getCertContextFromPathAsInlineBytes(CA_PEM_FILE));
     assertThat(factory).isNotNull();
     TrustManager[] tms = factory.getTrustManagers();
     assertThat(tms).isNotNull();
@@ -133,6 +154,16 @@ public class SdsTrustManagerFactoryTest {
     return CertificateValidationContext.newBuilder()
         .setTrustedCa(
             DataSource.newBuilder().setFilename(TestUtils.loadCert(pemFilePath).getAbsolutePath()))
+        .build();
+  }
+
+  /** constructs CertificateValidationContext from pemFilePath and sets contents as inline-bytes. */
+  private static final CertificateValidationContext getCertContextFromPathAsInlineBytes(
+      String pemFilePath) throws IOException, CertificateException {
+    X509Certificate x509Cert = TestUtils.loadX509Cert(pemFilePath);
+    return CertificateValidationContext.newBuilder()
+        .setTrustedCa(
+            DataSource.newBuilder().setInlineBytes(ByteString.copyFrom(x509Cert.getEncoded())))
         .build();
   }
 }
