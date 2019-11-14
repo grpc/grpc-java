@@ -865,12 +865,13 @@ public class ClientCallImplTest {
 
     fakeClock.forwardTime(1000, TimeUnit.MILLISECONDS);
     verify(stream, never()).cancel(statusCaptor.capture());
-
-    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS - 1);
-    verify(stream, never()).cancel(statusCaptor.capture());
+    // verify app is notified.
+    verify(callListener).onClose(statusCaptor.capture(), metadataArgumentCaptor.capture());
+    assertThat(statusCaptor.getValue().getDescription()).contains("context timed out");
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.DEADLINE_EXCEEDED);
 
     // verify cancel send to server is delayed with DEADLINE_EXPIRATION_CANCEL_DELAY
-    fakeClock.forwardNanos(1);
+    fakeClock.forwardNanos(DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS);
     verify(stream).cancel(statusCaptor.capture());
     assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
     assertThat(statusCaptor.getValue().getDescription()).isEqualTo("context timed out");

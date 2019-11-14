@@ -126,21 +126,21 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private final class ContextCancellationListener implements CancellationListener {
+    private Listener<RespT> observer;
+
+    private void setObserver(Listener<RespT> observer) {
+      this.observer = observer;
+    }
+
     @Override
     public void cancelled(final Context context) {
       if (context.getDeadline() == null || !context.getDeadline().isExpired()) {
         stream.cancel(statusFromCancelled(context));
       } else {
-        if (deadlineCancellationSendToServerFuture == null) {
-          deadlineCancellationSendToServerFuture = deadlineCancellationExecutor.schedule(
-              new Runnable() {
-                @Override
-                public void run() {
-                  stream.cancel(statusFromCancelled(context));
-                }
-              },
-              DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
-              TimeUnit.NANOSECONDS);
+        if (observer != null) {
+          Status status = statusFromCancelled(context);
+          deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
+          executeCloseObserverInContext(observer, status);
         }
       }
     }
@@ -216,6 +216,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     }
   }
 
+  @SuppressWarnings("unchecked")
   private void startInternal(final Listener<RespT> observer, Metadata headers) {
     checkState(stream == null, "Already started");
     checkState(!cancelCalled, "call was cancelled");
@@ -326,6 +327,10 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         && !(stream instanceof FailingClientStream)) {
       deadlineCancellationNotifyApplicationFuture =
           startDeadlineNotifyApplicationTimer(effectiveDeadline, observer);
+    } else {
+      if (cancellationListener instanceof ClientCallImpl.ContextCancellationListener) {
+        ((ContextCancellationListener) cancellationListener).setObserver(observer);
+      }
     }
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
@@ -377,38 +382,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     class DeadlineExceededNotifyApplicationTimer implements Runnable {
       @Override
       public void run() {
-        final InsightBuilder insight = new InsightBuilder();
-        stream.appendTimeoutInsight(insight);
-
-        long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
-        long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
-
-        StringBuilder buf = new StringBuilder();
-        buf.append("deadline exceeded after ");
-        if (remainingNanos < 0) {
-          buf.append('-');
-        }
-        buf.append(seconds);
-        buf.append(String.format(".%09d", nanos));
-        buf.append("s. ");
-        buf.append(insight);
-
-        final Status status = DEADLINE_EXCEEDED.augmentDescription(buf.toString());
-        deadlineCancellationSendToServerFuture =
-            startDeadlineSendCancelToServerTimer(status);
-
-        class CloseInContext extends ContextRunnable {
-          CloseInContext() {
-            super(context);
-          }
-
-          @Override
-          public void runInContext() {
-            closeObserver(observer, status, new Metadata());
-          }
-        }
-
-        callExecutor.execute(new CloseInContext());
+        Status status = buildDeadlineExceededStatusWithRemainingNanos(remainingNanos);
+        deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
+        executeCloseObserverInContext(observer, status);
       }
     }
 
@@ -416,6 +392,41 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
         new LogExceptionRunnable(new DeadlineExceededNotifyApplicationTimer()),
         remainingNanos,
         TimeUnit.NANOSECONDS);
+  }
+
+  private Status buildDeadlineExceededStatusWithRemainingNanos(long remainingNanos) {
+    final InsightBuilder insight = new InsightBuilder();
+    stream.appendTimeoutInsight(insight);
+
+    long seconds = Math.abs(remainingNanos) / TimeUnit.SECONDS.toNanos(1);
+    long nanos = Math.abs(remainingNanos) % TimeUnit.SECONDS.toNanos(1);
+
+    StringBuilder buf = new StringBuilder();
+    buf.append("deadline exceeded after ");
+    if (remainingNanos < 0) {
+      buf.append('-');
+    }
+    buf.append(seconds);
+    buf.append(String.format(".%09d", nanos));
+    buf.append("s. ");
+    buf.append(insight);
+
+    return DEADLINE_EXCEEDED.augmentDescription(buf.toString());
+  }
+
+  private void executeCloseObserverInContext(final Listener<RespT> observer, final Status status) {
+    class CloseInContext extends ContextRunnable {
+      CloseInContext() {
+        super(context);
+      }
+
+      @Override
+      public void runInContext() {
+        closeObserver(observer, status, new Metadata());
+      }
+    }
+
+    callExecutor.execute(new CloseInContext());
   }
 
   private void closeObserver(Listener<RespT> observer, Status status, Metadata trailers) {
