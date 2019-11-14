@@ -28,6 +28,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -229,6 +230,25 @@ abstract class XdsClient {
      */
     List<DropOverload> getDropPolicies() {
       return Collections.unmodifiableList(dropPolicies);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      EndpointUpdate that = (EndpointUpdate) o;
+      return clusterName.equals(that.clusterName)
+          && localityLbEndpointsMap.equals(that.localityLbEndpointsMap)
+          && dropPolicies.equals(that.dropPolicies);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(clusterName, localityLbEndpointsMap, dropPolicies);
     }
 
     static final class Builder {

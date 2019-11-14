@@ -19,13 +19,16 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer.Helper;
@@ -42,7 +45,7 @@ import javax.annotation.CheckForNull;
  */
 // TODO(zdapeng): This is a temporary and easy refactor of XdsComms, will be replaced by XdsClient.
 // Tests are deferred in XdsClientTest, otherwise it's just a refactor of XdsCommsTest.
-final class XdsComms2 {
+final class XdsComms2 extends XdsClient {
   private final ManagedChannel channel;
   private final Helper helper;
   private final BackoffPolicy.Provider backoffPolicyProvider;
@@ -62,7 +65,7 @@ final class XdsComms2 {
     static final String EDS_TYPE_URL =
         "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-    final AdsStreamCallback adsStreamCallback;
+    final XdsClient.EndpointWatcher endpointWatcher;
     final StreamObserver<DiscoveryRequest> xdsRequestWriter;
     final Stopwatch retryStopwatch = stopwatchSupplier.get().start();
 
@@ -89,7 +92,7 @@ final class XdsComms2 {
                         value.getResources(0).unpack(ClusterLoadAssignment.class);
                   } catch (InvalidProtocolBufferException | RuntimeException e) {
                     cancelRpc("Received invalid EDS response", e);
-                    adsStreamCallback.onError();
+                    endpointWatcher.onError(Status.fromThrowable(e));
                     scheduleRetry();
                     return;
                   }
@@ -98,7 +101,25 @@ final class XdsComms2 {
                       ChannelLogLevel.DEBUG,
                       "Received an EDS response: {0}", clusterLoadAssignment);
                   firstEdsResponseReceived = true;
-                  adsStreamCallback.onEdsResponse(clusterLoadAssignment);
+
+                  // Converts clusterLoadAssignment data to EndpointUpdate
+                  EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
+                  endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
+                  for (DropOverload dropOverload :
+                      clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
+                    endpointUpdateBuilder.addDropPolicy(
+                        EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+                  }
+                  for (LocalityLbEndpoints localityLbEndpoints :
+                      clusterLoadAssignment.getEndpointsList()) {
+                    endpointUpdateBuilder.addLocalityLbEndpoints(
+                        EnvoyProtoData.Locality.fromEnvoyProtoLocality(
+                            localityLbEndpoints.getLocality()),
+                        EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+                            localityLbEndpoints));
+
+                  }
+                  endpointWatcher.onEndpointChanged(endpointUpdateBuilder.build());
                 }
               }
             }
@@ -107,7 +128,7 @@ final class XdsComms2 {
           }
 
           @Override
-          public void onError(Throwable t) {
+          public void onError(final Throwable t) {
             helper.getSynchronizationContext().execute(
                 new Runnable() {
                   @Override
@@ -116,7 +137,7 @@ final class XdsComms2 {
                     if (cancelled) {
                       return;
                     }
-                    adsStreamCallback.onError();
+                    endpointWatcher.onError(Status.fromThrowable(t));
                     scheduleRetry();
                   }
                 });
@@ -124,7 +145,7 @@ final class XdsComms2 {
 
           @Override
           public void onCompleted() {
-            onError(Status.INTERNAL.withDescription("Server closed the ADS streaming RPC")
+            onError(Status.UNAVAILABLE.withDescription("Server closed the ADS streaming RPC")
                 .asException());
           }
 
@@ -168,8 +189,8 @@ final class XdsComms2 {
     boolean cancelled;
     boolean closed;
 
-    AdsStream(AdsStreamCallback adsStreamCallback) {
-      this.adsStreamCallback = adsStreamCallback;
+    AdsStream(XdsClient.EndpointWatcher endpointWatcher) {
+      this.endpointWatcher = endpointWatcher;
       this.xdsRequestWriter = AggregatedDiscoveryServiceGrpc.newStub(channel).withWaitForReady()
           .streamAggregatedResources(xdsResponseReader);
 
@@ -186,7 +207,7 @@ final class XdsComms2 {
     }
 
     AdsStream(AdsStream adsStream) {
-      this(adsStream.adsStreamCallback);
+      this(adsStream.endpointWatcher);
     }
 
     // run in SynchronizationContext
@@ -204,15 +225,13 @@ final class XdsComms2 {
    * Starts a new ADS streaming RPC.
    */
   XdsComms2(
-      ManagedChannel channel, Helper helper, AdsStreamCallback adsStreamCallback,
+      ManagedChannel channel, Helper helper,
       BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier,
       Node node) {
     this.channel = checkNotNull(channel, "channel");
     this.helper = checkNotNull(helper, "helper");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.node = node;
-    this.adsStream = new AdsStream(
-        checkNotNull(adsStreamCallback, "adsStreamCallback"));
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.adsRpcRetryPolicy = backoffPolicyProvider.get();
   }
@@ -227,12 +246,20 @@ final class XdsComms2 {
     }
   }
 
-  // run in SynchronizationContext
-  // TODO: Change method name to shutdown or shutdownXdsComms if that gives better semantics (
-  //  cancel LB RPC and clean up retry timer).
-  void shutdownLbRpc() {
-    adsStream.cancelRpc("shutdown", null);
+  @Override
+  void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+    if (adsStream == null) {
+      adsStream = new AdsStream(watcher);
+    }
+  }
+
+  @Override
+  void shutdown() {
+    if (adsStream != null) {
+      adsStream.cancelRpc("shutdown", null);
+    }
     cancelRetryTimer();
+    channel.shutdown();
   }
 
   // run in SynchronizationContext
@@ -244,12 +271,28 @@ final class XdsComms2 {
   }
 
   /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
+   * Converts ClusterLoadAssignment data to {@link EndpointUpdate}. All the needed data, that is
+   * clusterName, localityLbEndpointsMap and dropPolicies, is extracted from ClusterLoadAssignment,
+   * and all other data is ignored.
    */
-  interface AdsStreamCallback {
-    void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment);
+  @VisibleForTesting
+  static EndpointUpdate getEndpointUpdatefromClusterAssignment(
+      ClusterLoadAssignment clusterLoadAssignment) {
+    EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
+    endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
+    for (DropOverload dropOverload :
+        clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
+      endpointUpdateBuilder.addDropPolicy(
+          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+    }
+    for (LocalityLbEndpoints localityLbEndpoints : clusterLoadAssignment.getEndpointsList()) {
+      endpointUpdateBuilder.addLocalityLbEndpoints(
+          EnvoyProtoData.Locality.fromEnvoyProtoLocality(
+              localityLbEndpoints.getLocality()),
+          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+              localityLbEndpoints));
 
-    void onError();
+    }
+    return endpointUpdateBuilder.build();
   }
 }

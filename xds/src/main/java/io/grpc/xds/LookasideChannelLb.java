@@ -16,22 +16,18 @@
 
 package io.grpc.xds;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
-import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.LoadBalancer;
-import io.grpc.ManagedChannel;
 import io.grpc.Status;
-import io.grpc.internal.ExponentialBackoffPolicy;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import io.grpc.xds.XdsComms2.AdsStreamCallback;
+import io.grpc.xds.XdsClient.EndpointUpdate;
+import io.grpc.xds.XdsClient.EndpointWatcher;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A load balancer that has a lookaside channel. This layer of load balancer creates a channel to
@@ -40,33 +36,16 @@ import java.util.List;
  */
 final class LookasideChannelLb extends LoadBalancer {
 
-  private final ManagedChannel lbChannel;
   private final LoadReportClient lrsClient;
-  private final XdsComms2 xdsComms2;
+  private final XdsClient xdsClient;
 
   LookasideChannelLb(
-      Helper helper, LookasideChannelCallback lookasideChannelCallback, ManagedChannel lbChannel,
-      LocalityStore localityStore, Node node) {
-    this(
-        helper,
-        lookasideChannelCallback,
-        lbChannel,
-        new LoadReportClientImpl(
-            lbChannel, helper, GrpcUtil.STOPWATCH_SUPPLIER, new ExponentialBackoffPolicy.Provider(),
-            localityStore.getLoadStatsStore()),
-        localityStore,
-        node);
-  }
-
-  @VisibleForTesting
-  LookasideChannelLb(
-      Helper helper,
+      String edsServiceName,
       LookasideChannelCallback lookasideChannelCallback,
-      ManagedChannel lbChannel,
+      XdsClient xdsClient,
       LoadReportClient lrsClient,
-      final LocalityStore localityStore,
-      Node node) {
-    this.lbChannel = lbChannel;
+      final LocalityStore localityStore) {
+    this.xdsClient = xdsClient;
     LoadReportCallback lrsCallback =
         new LoadReportCallback() {
           @Override
@@ -76,11 +55,9 @@ final class LookasideChannelLb extends LoadBalancer {
         };
     this.lrsClient = lrsClient;
 
-    AdsStreamCallback adsCallback = new AdsStreamCallbackImpl(
+    EndpointWatcher endpointWatcher = new EndpointWatcherImpl(
         lookasideChannelCallback, lrsClient, lrsCallback, localityStore) ;
-    xdsComms2 = new XdsComms2(
-        lbChannel, helper, adsCallback, new ExponentialBackoffPolicy.Provider(),
-        GrpcUtil.STOPWATCH_SUPPLIER, node);
+    xdsClient.watchEndpointData(edsServiceName, endpointWatcher);
   }
 
   @Override
@@ -91,11 +68,10 @@ final class LookasideChannelLb extends LoadBalancer {
   @Override
   public void shutdown() {
     lrsClient.stopLoadReporting();
-    xdsComms2.shutdownLbRpc();
-    lbChannel.shutdown();
+    xdsClient.shutdown();
   }
 
-  private static final class AdsStreamCallbackImpl implements AdsStreamCallback {
+  private static final class EndpointWatcherImpl implements EndpointWatcher {
 
     final LookasideChannelCallback lookasideChannelCallback;
     final LoadReportClient lrsClient;
@@ -103,7 +79,7 @@ final class LookasideChannelLb extends LoadBalancer {
     final LocalityStore localityStore;
     boolean firstEdsResponseReceived;
 
-    AdsStreamCallbackImpl(
+    EndpointWatcherImpl(
         LookasideChannelCallback lookasideChannelCallback, LoadReportClient lrsClient,
         LoadReportCallback lrsCallback, LocalityStore localityStore) {
       this.lookasideChannelCallback = lookasideChannelCallback;
@@ -113,39 +89,32 @@ final class LookasideChannelLb extends LoadBalancer {
     }
 
     @Override
-    public void onEdsResponse(ClusterLoadAssignment clusterLoadAssignment) {
+    public void onEndpointChanged(EndpointUpdate endpointUpdate) {
       if (!firstEdsResponseReceived) {
         firstEdsResponseReceived = true;
         lookasideChannelCallback.onWorking();
         lrsClient.startLoadReporting(lrsCallback);
       }
 
-      List<ClusterLoadAssignment.Policy.DropOverload> dropOverloadsProto =
-          clusterLoadAssignment.getPolicy().getDropOverloadsList();
+      List<DropOverload> dropOverloads = endpointUpdate.getDropPolicies();
       ImmutableList.Builder<DropOverload> dropOverloadsBuilder = ImmutableList.builder();
-      for (ClusterLoadAssignment.Policy.DropOverload drop : dropOverloadsProto) {
-        DropOverload dropOverload = DropOverload.fromEnvoyProtoDropOverload(drop);
+      for (DropOverload dropOverload : dropOverloads) {
         dropOverloadsBuilder.add(dropOverload);
         if (dropOverload.getDropsPerMillion() == 1_000_000) {
           lookasideChannelCallback.onAllDrop();
           break;
         }
       }
-      ImmutableList<DropOverload> dropOverloads = dropOverloadsBuilder.build();
-      localityStore.updateDropPercentage(dropOverloads);
+      localityStore.updateDropPercentage(dropOverloadsBuilder.build());
 
-      List<io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints> localities =
-          clusterLoadAssignment.getEndpointsList();
       ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
           new ImmutableMap.Builder<>();
-      for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
-          : localities) {
-        Locality locality = Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality());
-        int localityWeight = localityLbEndpoints.getLoadBalancingWeight().getValue();
+      for (Map.Entry<Locality, LocalityLbEndpoints> entry
+          : endpointUpdate.getLocalityLbEndpointsMap().entrySet()) {
+        int localityWeight = entry.getValue().getLocalityWeight();
 
         if (localityWeight != 0) {
-          localityEndpointsMapping.put(
-              locality, LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
+          localityEndpointsMapping.put(entry.getKey(), entry.getValue());
         }
       }
 
@@ -153,7 +122,7 @@ final class LookasideChannelLb extends LoadBalancer {
     }
 
     @Override
-    public void onError() {
+    public void onError(Status error) {
       lookasideChannelCallback.onError();
     }
   }

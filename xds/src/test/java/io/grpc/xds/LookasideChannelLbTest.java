@@ -51,6 +51,8 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.internal.ExponentialBackoffPolicy;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.testing.StreamRecorder;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
@@ -168,9 +170,11 @@ public class LookasideChannelLbTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
 
+    XdsClient xdsClient = new XdsComms2(
+        channel, helper, new ExponentialBackoffPolicy.Provider(),
+        GrpcUtil.STOPWATCH_SUPPLIER, Node.getDefaultInstance());
     lookasideChannelLb = new LookasideChannelLb(
-        helper, lookasideChannelCallback, channel, loadReportClient, localityStore,
-        Node.getDefaultInstance());
+        "cluster1", lookasideChannelCallback, xdsClient, loadReportClient, localityStore);
   }
 
   @Test
