@@ -48,7 +48,8 @@ abstract class Bootstrapper {
     BootstrapInfo readBootstrap() throws IOException {
       String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
       if (filePath == null) {
-        throw new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not found.");
+        throw
+            new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
       }
       return parseConfig(
           new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
