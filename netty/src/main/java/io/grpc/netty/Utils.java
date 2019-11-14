@@ -89,25 +89,30 @@ class Utils {
       new Resource<ByteBufAllocator>() {
         @Override
         public ByteBufAllocator create() {
-          int maxOrder;
-          if (System.getProperty("io.netty.allocator.maxOrder") == null) {
-            // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
-            // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
-            // 1MiB, thus reducing the maxOrder to 7.
-            maxOrder = 7;
+          if (Boolean.parseBoolean(
+                  System.getProperty("io.grpc.netty.useCustomAllocator", "false"))) {
+            int maxOrder;
+            if (System.getProperty("io.netty.allocator.maxOrder") == null) {
+              // See the implementation of PooledByteBufAllocator.  DEFAULT_MAX_ORDER in there is
+              // 11, which makes chunk size to be 8192 << 11 = 16 MiB.  We want the chunk size to be
+              // 2MiB, thus reducing the maxOrder to 8.
+              maxOrder = 8;
+            } else {
+              maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+            }
+            return new PooledByteBufAllocator(
+                PooledByteBufAllocator.defaultPreferDirect(),
+                PooledByteBufAllocator.defaultNumHeapArena(),
+                PooledByteBufAllocator.defaultNumDirectArena(),
+                PooledByteBufAllocator.defaultPageSize(),
+                maxOrder,
+                PooledByteBufAllocator.defaultTinyCacheSize(),
+                PooledByteBufAllocator.defaultSmallCacheSize(),
+                PooledByteBufAllocator.defaultNormalCacheSize(),
+                PooledByteBufAllocator.defaultUseCacheForAllThreads());
           } else {
-            maxOrder = PooledByteBufAllocator.defaultMaxOrder();
+            return ByteBufAllocator.DEFAULT;
           }
-          return new PooledByteBufAllocator(
-              PooledByteBufAllocator.defaultPreferDirect(),
-              PooledByteBufAllocator.defaultNumHeapArena(),
-              PooledByteBufAllocator.defaultNumDirectArena(),
-              PooledByteBufAllocator.defaultPageSize(),
-              maxOrder,
-              PooledByteBufAllocator.defaultTinyCacheSize(),
-              PooledByteBufAllocator.defaultSmallCacheSize(),
-              PooledByteBufAllocator.defaultNormalCacheSize(),
-              PooledByteBufAllocator.defaultUseCacheForAllThreads());
         }
 
         @Override
