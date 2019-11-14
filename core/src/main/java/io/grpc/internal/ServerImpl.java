@@ -498,7 +498,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
       final StatsTraceContext statsTraceCtx = Preconditions.checkNotNull(
           stream.statsTraceContext(), "statsTraceCtx not present from stream");
 
-      final Context.CancellableContext context = createContext(stream, headers, statsTraceCtx);
+      final Context.CancellableContext context = createContext(headers, statsTraceCtx);
       final Executor wrappedExecutor;
       // This is a performance optimization that avoids the synchronization and queuing overhead
       // that comes with SerializingExecutor.
@@ -553,8 +553,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
               context.cancel(null);
               return;
             }
-            listener =
-                startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
+            listener = startCall(stream, methodName, method, headers, context, statsTraceCtx, tag);
           } catch (RuntimeException e) {
             stream.close(Status.fromThrowable(e), new Metadata());
             context.cancel(null);
@@ -566,6 +565,23 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           } finally {
             jumpListener.setListener(listener);
           }
+
+          // An extremely short deadline may expire before stream.setListener(jumpListener).
+          // This causes NPE as in issue: https://github.com/grpc/grpc-java/issues/6300
+          // Delay of setting cancellationListener to context will fix the issue.
+          final class ServerStreamCancellationListener implements Context.CancellationListener {
+            @Override
+            public void cancelled(Context context) {
+              Status status = statusFromCancelled(context);
+              if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
+                // This should rarely get run, since the client will likely cancel the stream
+                // before the timeout is reached.
+                stream.cancel(status);
+              }
+            }
+          }
+
+          context.addListener(new ServerStreamCancellationListener(), directExecutor());
         }
       }
 
@@ -573,7 +589,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
     }
 
     private Context.CancellableContext createContext(
-        final ServerStream stream, Metadata headers, StatsTraceContext statsTraceCtx) {
+        Metadata headers, StatsTraceContext statsTraceCtx) {
       Long timeoutNanos = headers.get(TIMEOUT_KEY);
 
       Context baseContext = statsTraceCtx.serverFilterContext(rootContext);
@@ -586,19 +602,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
           baseContext.withDeadline(
               Deadline.after(timeoutNanos, NANOSECONDS, ticker),
               transport.getScheduledExecutorService());
-      final class ServerStreamCancellationListener implements Context.CancellationListener {
-        @Override
-        public void cancelled(Context context) {
-          Status status = statusFromCancelled(context);
-          if (DEADLINE_EXCEEDED.getCode().equals(status.getCode())) {
-            // This should rarely get run, since the client will likely cancel the stream before
-            // the timeout is reached.
-            stream.cancel(status);
-          }
-        }
-      }
-
-      context.addListener(new ServerStreamCancellationListener(), directExecutor());
 
       return context;
     }
