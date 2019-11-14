@@ -55,7 +55,7 @@ final class LookasideChannelLb extends LoadBalancer {
         };
     this.lrsClient = lrsClient;
 
-    XdsClient.EndpointWatcher endpointWatcher = new EndpointWatcherImpl(
+    EndpointWatcher endpointWatcher = new EndpointWatcherImpl(
         lookasideChannelCallback, lrsClient, lrsCallback, localityStore) ;
     xdsClient.watchEndpointData(edsServiceName, endpointWatcher);
   }
