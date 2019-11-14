@@ -585,7 +585,6 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
         }
       }
 
-
       wrappedExecutor.execute(new StreamCreated());
     }
 
