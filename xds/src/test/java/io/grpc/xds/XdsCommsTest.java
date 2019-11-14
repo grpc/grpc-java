@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.xds.XdsComms2.getEndpointUpdatefromClusterAssignment;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
+import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -44,6 +46,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.Endpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint;
 import io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.envoyproxy.envoy.type.FractionalPercent;
+import io.envoyproxy.envoy.type.FractionalPercent.DenominatorType;
 import io.grpc.ChannelLogger;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
@@ -61,7 +65,9 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -192,6 +198,11 @@ public class XdsCommsTest {
     xdsComms.watchEndpointData("", endpointWatcher);
   }
 
+  @After
+  public void tearDown() {
+    xdsComms.shutdown();
+  }
+
   @Test
   public void shutdownLbRpc_verifyChannelShutdown() throws Exception {
     xdsComms.shutdown();
@@ -278,7 +289,7 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponse);
 
     verify(endpointWatcher).onEndpointChanged(
-        endpointUpdatefromClusterAssignment(clusterLoadAssignment));
+        getEndpointUpdatefromClusterAssignment(clusterLoadAssignment));
 
     ClusterLoadAssignment clusterLoadAssignment2 = ClusterLoadAssignment.newBuilder()
         .addEndpoints(LocalityLbEndpoints.newBuilder()
@@ -299,10 +310,8 @@ public class XdsCommsTest {
     responseWriter.onNext(edsResponse);
 
     verify(endpointWatcher).onEndpointChanged(
-        endpointUpdatefromClusterAssignment(clusterLoadAssignment2));
+        getEndpointUpdatefromClusterAssignment(clusterLoadAssignment2));
     verifyNoMoreInteractions(endpointWatcher);
-
-    xdsComms.shutdown();
   }
 
   @Test
@@ -498,31 +507,88 @@ public class XdsCommsTest {
 
     xdsComms.refreshAdsStream();
     assertEquals(0, fakeClock.numPendingTasks(LB_RPC_RETRY_TASK_FILTER));
-
-    xdsComms.shutdown();
   }
 
-  private static XdsClient.EndpointUpdate endpointUpdatefromClusterAssignment(
-      ClusterLoadAssignment clusterLoadAssignment) {
-    EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
-    endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
-    for (DropOverload dropOverload :
-        clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
-      endpointUpdateBuilder.addDropPolicy(
-          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
-    }
-    for (LocalityLbEndpoints localityLbEndpoints :
-        clusterLoadAssignment.getEndpointsList()) {
-      if (localityLbEndpoints.getLoadBalancingWeight().getValue() == 0) {
-        continue;
-      }
-      endpointUpdateBuilder.addLocalityLbEndpoints(
-          EnvoyProtoData.Locality.fromEnvoyProtoLocality(
-              localityLbEndpoints.getLocality()),
-          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
-              localityLbEndpoints));
+  @Test
+  public void convertClusterLoadAssignmentToEndpointUpdate() {
+    Locality localityProto1 = Locality.newBuilder()
+        .setRegion("region1").setZone("zone1").setSubZone("subzone1").build();
+    LbEndpoint endpoint11 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr11").setPortValue(11))))
+        .setLoadBalancingWeight(UInt32Value.of(11))
+        .build();
+    LbEndpoint endpoint12 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr12").setPortValue(12))))
+        .setLoadBalancingWeight(UInt32Value.of(12))
+        .build();
+    Locality localityProto2 = Locality.newBuilder()
+        .setRegion("region2").setZone("zone2").setSubZone("subzone2").build();
+    LbEndpoint endpoint21 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr21").setPortValue(21))))
+        .setLoadBalancingWeight(UInt32Value.of(21))
+        .build();
+    LbEndpoint endpoint22 = LbEndpoint.newBuilder()
+        .setEndpoint(Endpoint.newBuilder()
+            .setAddress(Address.newBuilder()
+                .setSocketAddress(SocketAddress.newBuilder()
+                    .setAddress("addr22").setPortValue(22))))
+        .setLoadBalancingWeight(UInt32Value.of(22))
+        .build();
+    LocalityLbEndpoints localityLbEndpointsProto1 = LocalityLbEndpoints.newBuilder()
+        .setLocality(localityProto1)
+        .setPriority(1)
+        .addLbEndpoints(endpoint11)
+        .addLbEndpoints(endpoint12)
+        .setLoadBalancingWeight(UInt32Value.of(1))
+        .build();
+    LocalityLbEndpoints localityLbEndpointsProto2 = LocalityLbEndpoints.newBuilder()
+        .setLocality(localityProto2)
+        .addLbEndpoints(endpoint21)
+        .addLbEndpoints(endpoint22)
+        .setLoadBalancingWeight(UInt32Value.of(2))
+        .build();
+    DropOverload dropOverloadProto1 = DropOverload.newBuilder()
+        .setCategory("cat1")
+        .setDropPercentage(FractionalPercent.newBuilder()
+            .setDenominator(DenominatorType.TEN_THOUSAND).setNumerator(123))
+        .build();
+    DropOverload dropOverloadProto2 = DropOverload.newBuilder()
+        .setCategory("cat2")
+        .setDropPercentage(FractionalPercent.newBuilder()
+            .setDenominator(DenominatorType.TEN_THOUSAND).setNumerator(456))
+        .build();
+    ClusterLoadAssignment clusterLoadAssignment = ClusterLoadAssignment.newBuilder()
+        .setClusterName("cluster1")
+        .addEndpoints(localityLbEndpointsProto1)
+        .addEndpoints(localityLbEndpointsProto2)
+        .setPolicy(Policy.newBuilder()
+            .addDropOverloads(dropOverloadProto1)
+            .addDropOverloads(dropOverloadProto2))
+        .build();
 
-    }
-    return endpointUpdateBuilder.build();
+    EndpointUpdate endpointUpdate = getEndpointUpdatefromClusterAssignment(clusterLoadAssignment);
+
+    assertThat(endpointUpdate.getClusterName()).isEqualTo("cluster1");
+    Map<EnvoyProtoData.Locality, EnvoyProtoData.LocalityLbEndpoints> localityLbEndpointsMap =
+        endpointUpdate.getLocalityLbEndpointsMap();
+    assertThat(localityLbEndpointsMap).containsExactly(
+        EnvoyProtoData.Locality.fromEnvoyProtoLocality(localityProto1),
+        EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+            localityLbEndpointsProto1),
+        EnvoyProtoData.Locality.fromEnvoyProtoLocality(localityProto2),
+        EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+            localityLbEndpointsProto2));
+    assertThat(endpointUpdate.getDropPolicies()).containsExactly(
+        EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverloadProto1),
+        EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverloadProto2));
   }
 }

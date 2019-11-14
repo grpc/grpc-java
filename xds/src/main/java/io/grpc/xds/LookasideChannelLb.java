@@ -17,13 +17,17 @@
 package io.grpc.xds;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
+import io.grpc.xds.EnvoyProtoData.Locality;
+import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import java.util.List;
+import java.util.Map;
 
 /**
  * A load balancer that has a lookaside channel. This layer of load balancer creates a channel to
@@ -102,7 +106,19 @@ final class LookasideChannelLb extends LoadBalancer {
         }
       }
       localityStore.updateDropPercentage(dropOverloadsBuilder.build());
-      localityStore.updateLocalityStore(endpointUpdate.getLocalityLbEndpointsMap());
+
+      ImmutableMap.Builder<Locality, LocalityLbEndpoints> localityEndpointsMapping =
+          new ImmutableMap.Builder<>();
+      for (Map.Entry<Locality, LocalityLbEndpoints> entry
+          : endpointUpdate.getLocalityLbEndpointsMap().entrySet()) {
+        int localityWeight = entry.getValue().getLocalityWeight();
+
+        if (localityWeight != 0) {
+          localityEndpointsMapping.put(entry.getKey(), entry.getValue());
+        }
+      }
+
+      localityStore.updateLocalityStore(localityEndpointsMapping.build());
     }
 
     @Override

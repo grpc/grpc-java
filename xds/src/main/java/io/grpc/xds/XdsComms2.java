@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
 import com.google.protobuf.InvalidProtocolBufferException;
@@ -100,6 +101,8 @@ final class XdsComms2 extends XdsClient {
                       ChannelLogLevel.DEBUG,
                       "Received an EDS response: {0}", clusterLoadAssignment);
                   firstEdsResponseReceived = true;
+
+                  // Converts clusterLoadAssignment data to EndpointUpdate
                   EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
                   endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
                   for (DropOverload dropOverload :
@@ -109,9 +112,6 @@ final class XdsComms2 extends XdsClient {
                   }
                   for (LocalityLbEndpoints localityLbEndpoints :
                       clusterLoadAssignment.getEndpointsList()) {
-                    if (localityLbEndpoints.getLoadBalancingWeight().getValue() == 0) {
-                      continue;
-                    }
                     endpointUpdateBuilder.addLocalityLbEndpoints(
                         EnvoyProtoData.Locality.fromEnvoyProtoLocality(
                             localityLbEndpoints.getLocality()),
@@ -268,5 +268,31 @@ final class XdsComms2 extends XdsClient {
       adsRpcRetryTimer.cancel();
       adsRpcRetryTimer = null;
     }
+  }
+
+  /**
+   * Converts ClusterLoadAssignment data to {@link EndpointUpdate}. All the needed data, that is
+   * clusterName, localityLbEndpointsMap and dropPolicies, is extracted from ClusterLoadAssignment,
+   * and all other data is ignored.
+   */
+  @VisibleForTesting
+  static EndpointUpdate getEndpointUpdatefromClusterAssignment(
+      ClusterLoadAssignment clusterLoadAssignment) {
+    EndpointUpdate.Builder endpointUpdateBuilder = EndpointUpdate.newBuilder();
+    endpointUpdateBuilder.setClusterName(clusterLoadAssignment.getClusterName());
+    for (DropOverload dropOverload :
+        clusterLoadAssignment.getPolicy().getDropOverloadsList()) {
+      endpointUpdateBuilder.addDropPolicy(
+          EnvoyProtoData.DropOverload.fromEnvoyProtoDropOverload(dropOverload));
+    }
+    for (LocalityLbEndpoints localityLbEndpoints : clusterLoadAssignment.getEndpointsList()) {
+      endpointUpdateBuilder.addLocalityLbEndpoints(
+          EnvoyProtoData.Locality.fromEnvoyProtoLocality(
+              localityLbEndpoints.getLocality()),
+          EnvoyProtoData.LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(
+              localityLbEndpoints));
+
+    }
+    return endpointUpdateBuilder.build();
   }
 }
