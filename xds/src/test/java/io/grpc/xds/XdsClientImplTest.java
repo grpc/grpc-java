@@ -1725,8 +1725,6 @@ public class XdsClientImplTest {
             XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
   }
 
-  // TODO(chengyuanzhang): tests for LDS/RDS/CDS/EDS sharing the same RPC stream.
-
   // TODO(chengyuanzhang): incorporate interactions with cluster watchers and end endpoint watchers
   //  during retry.
   
