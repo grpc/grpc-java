@@ -144,6 +144,9 @@ compileTestJava {
 
 compileTestLiteJava {
     options.compilerArgs = compileTestJava.options.compilerArgs
+    options.compilerArgs += [
+        "-Xlint:-cast"
+    ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 

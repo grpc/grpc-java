@@ -28,6 +28,9 @@ dependencies {
 }
 
 compileTestJava {
+    options.compilerArgs += [
+        "-Xlint:-cast"
+    ]
     options.errorprone.excludedPaths = ".*/build/generated/source/proto/.*"
 }
 
