@@ -397,12 +397,10 @@ final class XdsClientImpl extends XdsClient {
   /**
    * Processes RouteConfiguration message (from an resource information in an LDS or RDS
    * response), which may contain a VirtualHost with domains matching the "xds:"
-   * URI hostname directly in-line. Returns the clusterName found in the VirtualHost
-   * message with domains matching the "xds:" URI hostname. Returns {@code null} if such a
-   * clusterName cannot be resolved.
+   * URI hostname directly in-line. Returns the clusterName found in that VirtualHost
+   * message. Returns {@code null} if such a clusterName cannot be resolved.
    *
-   * <p>Note we only validate VirtualHosts with domains matching the "xds:" URI hostname as we
-   * never care about others.
+   * <p>Note we only validate VirtualHosts with domains matching the "xds:" URI hostname.
    */
   @Nullable
   private String processRouteConfig(RouteConfiguration config) {
