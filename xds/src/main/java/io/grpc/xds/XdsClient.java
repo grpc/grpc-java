@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Status;
+import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import javax.annotation.CheckReturnValue;
 import javax.annotation.Nullable;
 
 /**
@@ -385,5 +387,61 @@ abstract class XdsClient {
    * Stops reporting client load stats to the remote server for the given cluster.
    */
   void cancelClientStatsReport(String clusterName) {
+  }
+
+  /**
+   * An {@link ObjectPool} holding reference and ref-count of an {@link XdsClient} instance.
+   * Once the ref-count gets back to zero, the xds client will be shutdown and later calls of {@lint
+   * #getObject()} will return null.
+   */
+  static final class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+    private final Object lock = new Object();
+
+    @Nullable
+    private XdsClient xdsClient;
+    private int refCount;
+
+    RefCountedXdsClientObjectPool(XdsClient xdsClient) {
+      this.xdsClient = Preconditions.checkNotNull(xdsClient, "xdsClient");
+    }
+
+    @CheckReturnValue
+    @Nullable
+    @Override
+    public XdsClient getObject() {
+      synchronized (lock) {
+        if (xdsClient != null) {
+          refCount++;
+        }
+        return xdsClient;
+      }
+    }
+
+    @Override
+    public XdsClient returnObject(Object object) {
+      XdsClient xdsClientToShutdown = null;
+
+      synchronized (lock) {
+        Preconditions.checkState(
+            object == xdsClient,
+            "Bug: the returned object '%s' does not match current XdsClient '%s'",
+            object,
+            xdsClient);
+        if (object != null) {
+          refCount--;
+        }
+        Preconditions.checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
+        if (refCount == 0) {
+          xdsClientToShutdown = xdsClient;
+          xdsClient = null;
+        }
+      }
+
+      if (xdsClientToShutdown != null) {
+        xdsClientToShutdown.shutdown();
+      }
+
+      return null;
+    }
   }
 }

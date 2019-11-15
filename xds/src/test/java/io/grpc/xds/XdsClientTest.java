@@ -17,9 +17,15 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import io.grpc.xds.XdsClient.ClusterUpdate;
+import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -28,6 +34,8 @@ import org.junit.runners.JUnit4;
  */
 @RunWith(JUnit4.class)
 public class XdsClientTest {
+  @Rule
+  public final ExpectedException thrown = ExpectedException.none();
 
   @Test
   public void buildClusterUpdate_defaultToClusterNameWhenEdsServiceNameNotSet() {
@@ -45,5 +53,33 @@ public class XdsClientTest {
             .setLbPolicy("round_robin")
             .build();
     assertThat(clusterUpdate2.getEdsServiceName()).isEqualTo("foo.googleapis.com");
+  }
+
+  @Test
+  public void refCountedXdsClientObjectPool_getObjectShouldMatchReturnObject() {
+    XdsClient xdsClient = mock(XdsClient.class);
+    RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(xdsClient);
+    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
+    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
+    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
+
+    verify(xdsClient, never()).shutdown();
+    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
+    verify(xdsClient).shutdown();
+
+    thrown.expect(IllegalStateException.class);
+    xdsClientRef.returnObject(xdsClient);
+  }
+
+  @Test
+  public void refCountedXdsClientObjectPool_getObjectReturnsNullIfAlreadyShutdown() {
+    XdsClient xdsClient = mock(XdsClient.class);
+    RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(xdsClient);
+    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
+    verify(xdsClient, never()).shutdown();
+    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
+    verify(xdsClient).shutdown();
+
+    assertThat(xdsClientRef.getObject()).isNull();
   }
 }
