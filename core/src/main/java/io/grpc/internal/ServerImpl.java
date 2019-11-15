@@ -131,7 +131,7 @@ public final class ServerImpl extends io.grpc.Server implements InternalInstrume
    * Construct a server.
    *
    * @param builder builder with configuration for server
-   * @param transportServer transport server that will create new incoming transports
+   * @param transportServers transport servers that will create new incoming transports
    * @param rootContext context that callbacks for new RPCs should be derived from
    */
   ServerImpl(
