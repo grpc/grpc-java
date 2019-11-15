@@ -233,7 +233,6 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getNonce(), "Broken LDS response");
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
       return;
     }
 
@@ -252,7 +251,6 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getNonce(), "Broken LDS response");
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken LDS response"));
       return;
     }
 
@@ -283,7 +281,7 @@ final class XdsClientImpl extends XdsClient {
     String clusterName = null;
     // RouteConfiguration name to be used as the resource name for RDS request.
     String rdsRouteConfigName = null;
-    if (requestedHttpConnManager != null) {
+    if (!dataInvalid && requestedHttpConnManager != null) {
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
         clusterName = processRouteConfig(rc);
@@ -363,7 +361,6 @@ final class XdsClientImpl extends XdsClient {
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
           rdsResponse.getNonce(), "Broken RDS response");
-      configWatcher.onError(Status.fromThrowable(e).augmentDescription("Broken RDS response"));
       return;
     }
 
