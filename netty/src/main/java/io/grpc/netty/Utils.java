@@ -49,6 +49,7 @@ import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
 import io.netty.util.AsciiString;
+import io.netty.util.NettyRuntime;
 import io.netty.util.concurrent.DefaultThreadFactory;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -372,7 +373,16 @@ class Utils {
     DefaultEventLoopGroupResource(
         int numEventLoops, String name, EventLoopGroupType eventLoopGroupType) {
       this.name = name;
-      this.numEventLoops = numEventLoops;
+      // See the implementation of MultithreadEventLoopGroup.  DEFAULT_EVENT_LOOP_THREADS there
+      // defaults to NettyRuntime.availableProcessors() * 2.  We don't think we need that many
+      // threads.  The overhead of a thread includes file descriptors and at least one chunk
+      // allocation from PooledByteBufAllocator.  Here we reduce the default number of threads by
+      // half.
+      if (numEventLoops == 0 && System.getProperty("io.netty.eventLoopThreads") == null) {
+        this.numEventLoops = NettyRuntime.availableProcessors();
+      } else {
+        this.numEventLoops = numEventLoops;
+      }
       this.eventLoopGroupType = eventLoopGroupType;
     }
 
