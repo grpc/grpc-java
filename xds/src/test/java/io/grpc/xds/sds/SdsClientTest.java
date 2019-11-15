@@ -17,6 +17,7 @@
 package io.grpc.xds.sds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -178,7 +179,7 @@ public class SdsClientTest {
   }
 
   @Test
-  public void testSecretWatcher_tlsCertificate_multipleWatchers() throws IOException {
+  public void testSecretWatcher_multipleWatchers_expectException() throws IOException {
     SdsClient.SecretWatcher mockWatcher1 = mock(SdsClient.SecretWatcher.class);
     SdsClient.SecretWatcher mockWatcher2 = mock(SdsClient.SecretWatcher.class);
 
@@ -195,27 +196,13 @@ public class SdsClientTest {
         "name1");
     verifySecretWatcher(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
 
-    final DiscoveryRequest lastGoodRequest = server.lastGoodRequest;
-    final DiscoveryRequest lastRequestOnlyForAck = server.lastRequestOnlyForAck;
-
     // add mockWatcher2
-    sdsClient.watchSecret(mockWatcher2);
-    // should not have generated a request because client has the info.
-    assertThat(server.lastGoodRequest).isSameInstanceAs(lastGoodRequest);
-    assertThat(server.lastRequestOnlyForAck).isSameInstanceAs(lastRequestOnlyForAck);
-    verify(serverMock, times(1)).getSecretFor(any(String.class));
-
-    // ... mockWatcher2 gets updated
-    verifySecretWatcher(mockWatcher2, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
-
-    reset(mockWatcher1);
-    reset(mockWatcher2);
-    sdsClient.cancelSecretWatch(mockWatcher2);
-    server.generateAsyncResponse("name1");
-    verify(mockWatcher2, never()).onSecretChanged(any(Secret.class));
-
-    // ... watch on name1 still works
-    verifySecretWatcher(mockWatcher1, "name1", SERVER_0_KEY_FILE, SERVER_0_PEM_FILE);
+    try {
+      sdsClient.watchSecret(mockWatcher2);
+      fail("exception expected");
+    } catch (IllegalStateException expected) {
+      assertThat(expected).hasMessageThat().isEqualTo("watcher already set");
+    }
   }
 
   @Test

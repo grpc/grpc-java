@@ -51,9 +51,8 @@ import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.unix.DomainSocketAddress;
 import io.netty.util.concurrent.DefaultThreadFactory;
-import java.util.HashSet;
+
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -72,7 +71,7 @@ final class SdsClient {
   private static final EventLoopGroupResource eventLoopGroupResource =
       Epoll.isAvailable() ? new EventLoopGroupResource("SdsClient") : null;
 
-  private final Set<SecretWatcher> watchers = new HashSet<>();
+  private SecretWatcher watcher;
   private final SdsSecretConfig sdsSecretConfig;
   private final Node clientNode;
   private final Executor watcherExecutor;
@@ -87,6 +86,7 @@ final class SdsClient {
   static class Factory {
 
     /** Creates an SdsClient with {@link InProcessChannelBuilder}. */
+    @VisibleForTesting
     static SdsClient createWithInProcChannel(
         SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, String name) {
       ManagedChannel channel = InProcessChannelBuilder.forName(name).directExecutor().build();
@@ -178,7 +178,7 @@ final class SdsClient {
   }
 
   /** Stops resource discovery. No method in this class should be called after this point. */
-  synchronized void shutdown() {
+  void shutdown() {
     if (requestObserver != null) {
       requestObserver.onCompleted();
       requestObserver = null;
@@ -200,7 +200,7 @@ final class SdsClient {
 
     @Override
     public void onError(Throwable t) {
-      sendErrorToWatchers(t);
+      sendErrorToWatcher(t);
     }
 
     @Override
@@ -253,22 +253,21 @@ final class SdsClient {
     }
   }
 
-  private void sendErrorToWatchers(final Throwable t) {
-    watcherExecutor.execute(
-        new Runnable() {
-          @Override
-          public void run() {
-            synchronized (watchers) {
-              for (SecretWatcher secretWatcher : watchers) {
-                try {
-                  secretWatcher.onError(Status.fromThrowable(t));
-                } catch (Throwable throwable) {
-                  logger.log(Level.SEVERE, "exception from onError", throwable);
-                }
+  private void sendErrorToWatcher(final Throwable t) {
+    final SecretWatcher localCopy = watcher;
+    if (localCopy != null) {
+      watcherExecutor.execute(
+          new Runnable() {
+            @Override
+            public void run() {
+              try {
+                localCopy.onError(Status.fromThrowable(t));
+              } catch (Throwable throwable) {
+                logger.log(Level.SEVERE, "exception from onError", throwable);
               }
             }
-          }
-        });
+          });
+    }
   }
 
   private boolean processSecretsFromDiscoveryResponse(DiscoveryResponse response) {
@@ -297,14 +296,13 @@ final class SdsClient {
         "expected secret name %s",
         sdsSecretConfig.getName());
     boolean noException = true;
-    synchronized (watchers) {
-      for (SecretWatcher secretWatcher : watchers) {
-        try {
-          secretWatcher.onSecretChanged(secret);
-        } catch (Throwable throwable) {
-          noException = false;
-          logger.log(Level.SEVERE, "exception from onSecretChanged", throwable);
-        }
+    final SecretWatcher localCopy = watcher;
+    if (localCopy != null) {
+      try {
+        localCopy.onSecretChanged(secret);
+      } catch (Throwable throwable) {
+        noException = false;
+        logger.log(Level.SEVERE, "exception from onSecretChanged", throwable);
       }
     }
     return noException;
@@ -312,9 +310,10 @@ final class SdsClient {
 
   /** Registers a secret watcher for this client's SdsSecretConfig. */
   void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
-    checkNotNull(secretWatcher, "secretWatcher");
-    synchronized (watchers) {
-      checkState(watchers.add(secretWatcher), "duplicate secretWatcher addition");
+    synchronized (this) {
+      checkNotNull(secretWatcher, "secretWatcher");
+      checkState(watcher == null, "watcher already set");
+      watcher = secretWatcher;
     }
     if (lastResponse == null) {
       sendDiscoveryRequestOnStream();
@@ -330,11 +329,10 @@ final class SdsClient {
   }
 
   /** Unregisters the given endpoints watcher. */
-  void cancelSecretWatch(SecretWatcher secretWatcher) {
+  synchronized void cancelSecretWatch(SecretWatcher secretWatcher) {
     checkNotNull(secretWatcher, "secretWatcher");
-    synchronized (watchers) {
-      checkState(watchers.remove(secretWatcher), "watcher not found");
-    }
+    checkArgument(secretWatcher == watcher, "Incorrect secretWatcher to cancel");
+    watcher = null;
   }
 
   /** Secret watcher interface. */
@@ -365,6 +363,7 @@ final class SdsClient {
         instance.shutdownGracefully(0, 0, TimeUnit.SECONDS).sync();
       } catch (InterruptedException e) {
         logger.log(Level.SEVERE, "from EventLoopGroup.shutdownGracefully", e);
+        Thread.currentThread().interrupt(); // to not "swallow" the exception...
       }
     }
   }
