@@ -18,7 +18,6 @@ package io.grpc;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
@@ -332,31 +331,14 @@ public abstract class NameResolver {
     public abstract void onResult(ResolutionResult resolutionResult);
 
     /**
-     * Handles an error from the resolver. The listener is responsible for eventually invoking
-     * {@link NameResolver#refresh()} to re-attempt resolution.
+     * Handles a name resolving error from the resolver. The listener is responsible for eventually
+     * invoking {@link NameResolver#refresh()} to re-attempt resolution.
      *
      * @param error a non-OK status
      * @since 1.21.0
      */
     @Override
     public abstract void onError(Status error);
-
-    /**
-     * Handles an error from the resolver. If the error is not recoverable, it calls {@link
-     * #onError(Status)}.
-     *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
-     * @since 1.26.0
-     */
-    public void handleError(ResolutionResult resolutionResult) {
-      checkNotNull(
-          resolutionResult.getServiceConfig(),
-          "Resolution result should have a ServiceConfig with error");
-      Status error = resolutionResult.getServiceConfig().getError();
-      checkState(error != null && !error.isOk(), "ServiceConfig has no error");
-
-      onError(error);
-    }
   }
 
   /**

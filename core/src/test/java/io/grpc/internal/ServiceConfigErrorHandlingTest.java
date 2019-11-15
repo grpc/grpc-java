@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -518,11 +519,16 @@ public class ServiceConfigErrorHandlingTest {
           listener.onError(error);
           return;
         }
-        listener.onResult(
+        Attributes attr = nextResolvedAttributes.get();
+        Map<String, ?> config = attr.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
+        ResolutionResult.Builder builder =
             ResolutionResult.newBuilder()
                 .setAddresses(servers)
-                .setAttributes(nextResolvedAttributes.get())
-                .build());
+                .setAttributes(attr);
+        if (config != null) {
+          builder.setServiceConfig(ConfigOrError.fromConfig(config));
+        }
+        listener.onResult(builder.build());
       }
 
       @Override public void shutdown() {

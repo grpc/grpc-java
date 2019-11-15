@@ -130,7 +130,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   static final Status SUBCHANNEL_SHUTDOWN_STATUS =
       Status.UNAVAILABLE.withDescription("Subchannel shutdown invoked");
 
-  private static final Map<String, Object> EMPTY_SERVICE_CONFIG = Collections.emptyMap();
+  private static final Map<String, ?> EMPTY_SERVICE_CONFIG = Collections.emptyMap();
 
   private final InternalLogId logId;
   private final String target;
@@ -1303,7 +1303,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
     public void onResult(final ResolutionResult resolutionResult) {
       final class NamesResolved implements Runnable {
 
-        @SuppressWarnings("ReferenceEquality")
+        @SuppressWarnings({"ReferenceEquality", "unchecked"})
         @Override
         public void run() {
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
@@ -1311,16 +1311,26 @@ final class ManagedChannelImpl extends ManagedChannel implements
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 
+          boolean nrReplied = haveBackends == null;
+
           if (haveBackends == null || !haveBackends) {
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
             haveBackends = true;
           }
 
           nameResolverBackoffPolicy = null;
+          ConfigOrError configOrError = resolutionResult.getServiceConfig();
+          Map<String, ?> serviceConfig = null;
+          if (configOrError != null) {
+            if (configOrError.getConfig() != null) {
+              serviceConfig = (Map<String, ?>) configOrError.getConfig();
+            } else if (nrReplied || defaultServiceConfig == null) {
+              // First DNS lookup has invalid service config, and cannot fall back to default(=null)
+              onError(configOrError.getError());
+              return;
+            }
+          }
 
-          // Assuming no error in config resolution for now.
-          final Map<String, ?> serviceConfig =
-              attrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG);
           Map<String, ?> effectiveServiceConfig;
           if (!lookUpServiceConfig) {
             if (serviceConfig != null) {
@@ -1334,19 +1344,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
             // Otherwise, try to use the default config if available
             if (serviceConfig != null) {
               effectiveServiceConfig = serviceConfig;
+            } else if (defaultServiceConfig != null) {
+              effectiveServiceConfig = defaultServiceConfig;
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Received no service config, using default service config");
             } else {
-              effectiveServiceConfig = defaultServiceConfig != null
-                  ? defaultServiceConfig : EMPTY_SERVICE_CONFIG;
-              if (defaultServiceConfig != null) {
-                channelLogger.log(
-                    ChannelLogLevel.INFO,
-                    "Received no service config, using default service config");
-              } else {
-                channelLogger.log(
-                    ChannelLogLevel.INFO,
-                    "Received no service config and default service config is not provided. "
-                        + "Falling back to empty service config");
-              }
+              effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Received no service config and default service config is not provided. "
+                      + "Falling back to empty service config");
             }
 
             // FIXME(notcarl): reference equality is not right (although not harmful) right now.
@@ -1387,16 +1395,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       }
 
       syncContext.execute(new NamesResolved());
-    }
-
-    @Override
-    public void handleError(ResolutionResult resolutionResult) {
-      boolean nrReplied = haveBackends == null;
-      if (!nrReplied) {
-        onResult(
-            ResolutionResult.newBuilder().setAddresses(resolutionResult.getAddresses()).build());
-      }
-      super.handleError(resolutionResult);
     }
 
     @Override

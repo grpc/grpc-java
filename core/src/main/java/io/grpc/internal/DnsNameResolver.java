@@ -308,23 +308,22 @@ final class DnsNameResolver extends NameResolver {
         ConfigOrError serviceConfig =
             parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
         if (serviceConfig != null) {
-          if (serviceConfig.getError() != null) {
-            savedListener.handleError(resultBuilder.setServiceConfig(serviceConfig).build());
-            return;
-          } else {
+          resultBuilder.setServiceConfig(serviceConfig);
+          if (serviceConfig.getError() == null) {
             @SuppressWarnings("unchecked")
             Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
             resultBuilder
                 .setAttributes(
                     Attributes.newBuilder()
                         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
-                        .build())
-                .setServiceConfig(serviceConfig);
+                        .build());
           }
+
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
+
       savedListener.onResult(resultBuilder.build());
     }
   }
