@@ -57,13 +57,15 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * SDS client used by {@link SslContextProvider}s to get SDS updates from the SDS server. This is
+ * SDS client used by an {@link SslContextProvider} to get SDS updates from the SDS server. This is
  * most likely a temporary implementation until merged with the XdsClient.
  */
 // TODO(sanjaypujare): once XdsClientImpl is ready, merge with it and add retry logic
 @Internal
+@NotThreadSafe
 final class SdsClient {
   private static final Logger logger = Logger.getLogger(SdsClient.class.getName());
   private static final String SECRET_TYPE_URL = "type.googleapis.com/envoy.api.v2.auth.Secret";
@@ -168,7 +170,7 @@ final class SdsClient {
    * Starts resource discovery with SDS protocol. This method should be the first one to be called
    * and should be called only once.
    */
-  synchronized void start() {
+  void start() {
     if (requestObserver == null) {
       secretDiscoveryServiceStub = SecretDiscoveryServiceGrpc.newStub(channel);
       responseObserver = new ResponseObserver();
@@ -224,7 +226,6 @@ final class SdsClient {
         });
   }
 
-  @SuppressWarnings("SynchronizeOnNonFinalField")
   private void sendNack(int errorCode, String errorMessage) {
     String nonce = "";
     String versionInfo = "";
@@ -247,9 +248,7 @@ final class SdsClient {
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
-    synchronized (requestObserver) {
-      requestObserver.onNext(req);
-    }
+    requestObserver.onNext(req);
   }
 
   private void sendErrorToWatcher(final Throwable t) {
@@ -309,11 +308,9 @@ final class SdsClient {
 
   /** Registers a secret watcher for this client's SdsSecretConfig. */
   void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
-    synchronized (this) {
-      checkNotNull(secretWatcher, "secretWatcher");
-      checkState(watcher == null, "watcher already set");
-      watcher = secretWatcher;
-    }
+    checkNotNull(secretWatcher, "secretWatcher");
+    checkState(watcher == null, "watcher already set");
+    watcher = secretWatcher;
     if (lastResponse == null) {
       sendDiscoveryRequestOnStream();
     } else {
@@ -328,7 +325,7 @@ final class SdsClient {
   }
 
   /** Unregisters the given endpoints watcher. */
-  synchronized void cancelSecretWatch(SecretWatcher secretWatcher) {
+  void cancelSecretWatch(SecretWatcher secretWatcher) {
     checkNotNull(secretWatcher, "secretWatcher");
     checkArgument(secretWatcher == watcher, "Incorrect secretWatcher to cancel");
     watcher = null;
@@ -367,7 +364,6 @@ final class SdsClient {
     }
   }
 
-  @SuppressWarnings("SynchronizeOnNonFinalField")
   private void sendDiscoveryRequestOnStream() {
     String nonce = "";
     String versionInfo = "";
@@ -385,8 +381,6 @@ final class SdsClient {
             .setNode(clientNode);
 
     DiscoveryRequest req = builder.build();
-    synchronized (requestObserver) {
-      requestObserver.onNext(req);
-    }
+    requestObserver.onNext(req);
   }
 }
