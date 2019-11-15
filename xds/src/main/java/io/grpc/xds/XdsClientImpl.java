@@ -79,7 +79,7 @@ final class XdsClientImpl extends XdsClient {
   // Cached data for RDS responses, keyed by RouteConfiguration names.
   // LDS responses indicate absence of RouteConfigurations and RDS responses indicate presence
   // of RouteConfigurations.
-  // Optimization: only cache clusterName filed in the RouteConfiguration messages of RDS
+  // Optimization: only cache clusterName field in the RouteConfiguration messages of RDS
   // responses.
   private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
 
@@ -218,7 +218,7 @@ final class XdsClientImpl extends XdsClient {
    * ACK request is sent to management server.
    */
   private void handleLdsResponse(DiscoveryResponse ldsResponse) {
-    logger.log(Level.FINE, "Received a LDS response: {0}", ldsResponse);
+    logger.log(Level.FINE, "Received an LDS response: {0}", ldsResponse);
     checkState(ldsResourceName != null && configWatcher != null,
         "No LDS request was ever sent. Management server is doing something wrong");
     adsStream.ldsRespNonce = ldsResponse.getNonce();
@@ -255,7 +255,7 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    boolean invalidData = false;
+    boolean dataInvalid = false;
     // All RouteConfigurations referenced by this LDS response, either in in-lined
     // RouteConfiguration message or in RDS config.
     Set<String> routeConfigs = new HashSet<>();
@@ -268,12 +268,12 @@ final class XdsClientImpl extends XdsClient {
         Rds rds = hm.getRds();
         // For using RDS, it must be set to use ADS.
         if (!rds.getConfigSource().hasAds()) {
-          invalidData = true;
+          dataInvalid = true;
           break;
         }
         routeConfigs.add(rds.getRouteConfigName());
       } else {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
     }
@@ -287,7 +287,7 @@ final class XdsClientImpl extends XdsClient {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
         clusterName = processRouteConfig(rc);
         if (clusterName == null) {
-          invalidData = true;
+          dataInvalid = true;
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -296,7 +296,7 @@ final class XdsClientImpl extends XdsClient {
       // Else impossible as we have already validated all HttpConnectionManager messages.
     }
 
-    if (invalidData) {
+    if (dataInvalid) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
           ldsResponse.getNonce(),
           "HttpConnectionManager contains invalid information for gRPC's usage");
