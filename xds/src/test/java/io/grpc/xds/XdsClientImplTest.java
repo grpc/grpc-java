@@ -1254,7 +1254,7 @@ public class XdsClientImplTest {
   }
 
   @Test
-  public void matchHostName_postfixMatch() {
+  public void matchHostName_postfixWildCard() {
     String pattern = "foo.*";
     assertThat(XdsClientImpl.matchHostName("bar.googleapis.com", pattern)).isFalse();
     assertThat(XdsClientImpl.matchHostName("bar.foo.googleapis.com", pattern)).isFalse();
