@@ -26,7 +26,7 @@ import io.grpc.Attributes;
 import io.grpc.Grpc;
 import io.grpc.Internal;
 import io.grpc.NameResolver;
-import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.internal.ObjectPool;
 
 /**
  * Special attributes that are only useful to gRPC in the XDS context.
@@ -76,7 +76,7 @@ public final class XdsAttributes {
       Attributes.Key.create("io.grpc.xds.XdsAttributes.downstreamTlsContext");
 
   @NameResolver.ResolutionResultAttr
-  static final Attributes.Key<RefCountedXdsClientObjectPool> XDS_CLIENT_REF =
+  static final Attributes.Key<ObjectPool<XdsClient>> XDS_CLIENT_REF =
       Attributes.Key.create("io.grpc.xds.XdsAttributes.xdsClientRef");
 
   private XdsAttributes() {}
