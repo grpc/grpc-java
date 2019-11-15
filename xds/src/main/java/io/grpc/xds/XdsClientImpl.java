@@ -224,11 +224,10 @@ final class XdsClientImpl extends XdsClient {
     adsStream.ldsRespNonce = ldsResponse.getNonce();
 
     // Unpack Listener messages.
-    Map<String, Listener> listeners = new HashMap<>(ldsResponse.getResourcesCount());
+    List<Listener> listeners = new ArrayList<>(ldsResponse.getResourcesCount());
     try {
       for (com.google.protobuf.Any res : ldsResponse.getResourcesList()) {
-        Listener l = res.unpack(Listener.class);
-        listeners.put(l.getName(), l);
+        listeners.add(res.unpack(Listener.class));
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
@@ -241,11 +240,11 @@ final class XdsClientImpl extends XdsClient {
     HttpConnectionManager requestedHttpConnManager = null;
     List<HttpConnectionManager> httpConnectionManagers = new ArrayList<>();
     try {
-      for (Map.Entry<String, Listener> entry : listeners.entrySet()) {
+      for (Listener listener : listeners) {
         HttpConnectionManager hm =
-            entry.getValue().getApiListener().getApiListener().unpack(HttpConnectionManager.class);
+            listener.getApiListener().getApiListener().unpack(HttpConnectionManager.class);
         httpConnectionManagers.add(hm);
-        if (entry.getKey().equals(ldsResourceName)) {
+        if (listener.getName().equals(ldsResourceName)) {
           requestedHttpConnManager = hm;
         }
       }

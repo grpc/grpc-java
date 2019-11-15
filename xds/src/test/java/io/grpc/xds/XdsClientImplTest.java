@@ -954,7 +954,7 @@ public class XdsClientImplTest {
     assertThat(configUpdateCaptor.getValue().getClusterName()).isEqualTo("cluster2.googleapis.com");
 
     // At this time, no RDS request is sent as the result can be found in local cache (even if
-    // a request is sent for it, management server will not reply).
+    // a request is sent for it, management server does not necessarily reply).
     verify(requestObserver, times(0))
         .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
