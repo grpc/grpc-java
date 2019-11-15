@@ -23,6 +23,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
 import java.io.IOException;
@@ -94,48 +95,41 @@ abstract class Bootstrapper {
       }
     }
 
-    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
-    if (rawNode == null) {
-      throw new IOException("Invalid bootstrap: 'node' does not exist.");
-    }
-    // Fields in "node" are not checked.
     Node.Builder nodeBuilder = Node.newBuilder();
-    String id = JsonUtil.getString(rawNode, "id");
-    if (id != null) {
-      nodeBuilder.setId(id);
-    }
-    String cluster = JsonUtil.getString(rawNode, "cluster");
-    if (cluster != null) {
-      nodeBuilder.setCluster(cluster);
-    }
-    Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
-    if (metadata != null) {
-      Struct.Builder structBuilder = Struct.newBuilder();
-      for (Map.Entry<String, ?> entry : metadata.entrySet()) {
-        structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+    Map<String, ?> rawNode = JsonUtil.getObject(rawBootstrap, "node");
+    if (rawNode != null) {
+      String id = JsonUtil.getString(rawNode, "id");
+      if (id != null) {
+        nodeBuilder.setId(id);
       }
-      nodeBuilder.setMetadata(structBuilder);
-    }
-    Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
-    if (rawLocality != null) {
-      Locality.Builder localityBuilder = Locality.newBuilder();
-      String region = JsonUtil.getString(rawLocality, "region");
-      if (region == null) {
-        throw new IOException("Invalid bootstrap: malformed 'node : locality'.");
+      String cluster = JsonUtil.getString(rawNode, "cluster");
+      if (cluster != null) {
+        nodeBuilder.setCluster(cluster);
       }
-      localityBuilder.setRegion(region);
-      if (rawLocality.containsKey("zone")) {
-        localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
+      Map<String, ?> metadata = JsonUtil.getObject(rawNode, "metadata");
+      if (metadata != null) {
+        Struct.Builder structBuilder = Struct.newBuilder();
+        for (Map.Entry<String, ?> entry : metadata.entrySet()) {
+          structBuilder.putFields(entry.getKey(), convertToValue(entry.getValue()));
+        }
+        nodeBuilder.setMetadata(structBuilder);
       }
-      if (rawLocality.containsKey("sub_zone")) {
-        localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
+      Map<String, ?> rawLocality = JsonUtil.getObject(rawNode, "locality");
+      if (rawLocality != null) {
+        Locality.Builder localityBuilder = Locality.newBuilder();
+        if (rawLocality.containsKey("region")) {
+          localityBuilder.setRegion(JsonUtil.getString(rawLocality, "region"));
+        }
+        if (rawLocality.containsKey("zone")) {
+          localityBuilder.setZone(JsonUtil.getString(rawLocality, "zone"));
+        }
+        if (rawLocality.containsKey("sub_zone")) {
+          localityBuilder.setSubZone(JsonUtil.getString(rawLocality, "sub_zone"));
+        }
+        nodeBuilder.setLocality(localityBuilder);
       }
-      nodeBuilder.setLocality(localityBuilder);
     }
-    String buildVersion = JsonUtil.getString(rawNode, "build_version");
-    if (buildVersion != null) {
-      nodeBuilder.setBuildVersion(buildVersion);
-    }
+    nodeBuilder.setBuildVersion(GrpcUtil.getGrpcBuildVersion());
 
     return new BootstrapInfo(serverUri, channelCredsOptions, nodeBuilder.build());
   }
