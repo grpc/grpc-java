@@ -538,7 +538,7 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    boolean invalidData = false;
+    boolean dataInvalid = false;
     // Full endpoint information update received in this EDS response to be cached.
     Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
     // EndpointUpdate data to be pushed to each watcher.
@@ -551,19 +551,19 @@ final class XdsClientImpl extends XdsClient {
       EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
       if (assignment.getEndpointsCount() == 0) {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
       // The policy.disable_overprovisioning field must be set to true.
       if (!assignment.getPolicy().getDisableOverprovisioning()) {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
         // The lb_endpoints field for LbEndpoint must contain at least one entry.
         if (localityLbEndpoints.getLbEndpointsCount() == 0) {
-          invalidData = true;
+          dataInvalid = true;
           break validateData;
         }
         // The endpoint field of each lb_endpoints must be set.
@@ -571,7 +571,7 @@ final class XdsClientImpl extends XdsClient {
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()) {
-            invalidData = true;
+            dataInvalid = true;
             break validateData;
           }
         }
@@ -592,7 +592,7 @@ final class XdsClientImpl extends XdsClient {
         desiredEndpointUpdates.put(clusterName, update);
       }
     }
-    if (invalidData) {
+    if (dataInvalid) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
           edsResponse.getNonce(),
           "ClusterLoadAssignment message contains invalid information for gRPC's usage");
