@@ -47,7 +47,6 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
-import io.grpc.xds.LocalityStore.LocalityStoreImpl;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
@@ -73,12 +72,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
         lookasideLbHelper,
         lookasideChannelCallback,
         LoadBalancerRegistry.getDefaultRegistry(),
-        new LocalityStoreFactory() {
-          @Override
-          public LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
-            return new LocalityStoreImpl(helper, lbRegistry);
-          }
-        },
+        LocalityStoreFactory.getInstance(),
         LoadReportClientFactory.getInstance());
   }
 

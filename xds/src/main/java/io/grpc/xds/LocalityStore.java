@@ -83,8 +83,20 @@ interface LocalityStore {
   LoadStatsStore getLoadStatsStore();
 
   @VisibleForTesting
-  interface LocalityStoreFactory {
-    LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
+  abstract class LocalityStoreFactory {
+    private static final LocalityStoreFactory DEFAULT_INSTANCE =
+        new LocalityStoreFactory() {
+          @Override
+          LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
+            return new LocalityStoreImpl(helper, lbRegistry);
+          }
+        };
+
+    static LocalityStoreFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
   }
 
   final class LocalityStoreImpl implements LocalityStore {
