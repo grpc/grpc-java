@@ -34,6 +34,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
 import io.envoyproxy.envoy.api.v2.ClusterLoadAssignment;
@@ -118,16 +119,14 @@ public class LookasideLbTest {
           .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
           .build();
   private final List<Helper> helpers = new ArrayList<>();
+  private final List<LocalityStore> localityStores = new ArrayList<>();
+  private final List<LoadReportClient> loadReportClients = new ArrayList<>();
   private final FakeClock fakeClock = new FakeClock();
 
   @Mock
   private Helper helper;
   @Mock
-  private LocalityStore localityStore;
-  @Mock
   private LookasideChannelCallback lookasideChannelCallback;
-  @Mock
-  private LoadReportClient loadReportClient;
   @Captor
   private ArgumentCaptor<ImmutableMap<Locality, LocalityLbEndpoints>>
       localityEndpointsMappingCaptor;
@@ -186,12 +185,15 @@ public class LookasideLbTest {
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
     doReturn(channel).when(helper).createResolvingOobChannel(anyString());
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
-    doReturn(mock(LoadStatsStore.class)).when(localityStore).getLoadStatsStore();
 
     localityStoreFactory = new LocalityStoreFactory() {
       @Override
       public LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
         helpers.add(helper);
+        LocalityStore localityStore = mock(LocalityStore.class);
+        LoadStatsStore loadStatsStore = mock(LoadStatsStore.class);
+        doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
+        localityStores.add(localityStore);
         return localityStore;
       }
     };
@@ -200,6 +202,8 @@ public class LookasideLbTest {
       @Override
       LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
           Provider backoffPolicyProvider, LoadStatsStore loadStatsStore) {
+        LoadReportClient loadReportClient = mock(LoadReportClient.class);
+        loadReportClients.add(loadReportClient);
         return loadReportClient;
       }
     };
@@ -221,6 +225,8 @@ public class LookasideLbTest {
   public void handleChildPolicyChangeThenBalancerNameChangeThenChildPolicyChange()
       throws Exception {
     assertThat(helpers).isEmpty();
+    assertThat(localityStores).isEmpty();
+    assertThat(loadReportClients).isEmpty();
 
     List<EquivalentAddressGroup> eags = ImmutableList.of();
     String lbConfigRaw11 = "{\"balancerName\" : \"dns:///balancer1.example.com:8080\"}";
@@ -233,6 +239,8 @@ public class LookasideLbTest {
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(1);
+    assertThat(localityStores).hasSize(1);
+    assertThat(loadReportClients).hasSize(1);
     Helper helper1 = helpers.get(0);
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
@@ -251,7 +259,13 @@ public class LookasideLbTest {
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
+    LocalityStore localityStore1 = Iterables.getOnlyElement(localityStores);
+    LoadReportClient loadReportClient1 = Iterables.getOnlyElement(loadReportClients);
+    verify(localityStore1, never()).reset();
+    verify(loadReportClient1, never()).stopLoadReporting();
     assertThat(helpers).hasSize(1);
+    assertThat(localityStores).hasSize(1);
+    assertThat(loadReportClients).hasSize(1);
 
     // change balancer name policy to balancer2.example.com
     String lbConfigRaw21 = "{\"balancerName\" : \"dns:///balancer2.example.com:8080\"}";
@@ -263,8 +277,14 @@ public class LookasideLbTest {
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
+    verify(localityStore1).reset();
+    verify(loadReportClient1).stopLoadReporting();
     assertThat(helpers).hasSize(2);
+    assertThat(localityStores).hasSize(2);
+    assertThat(loadReportClients).hasSize(2);
     Helper helper2 = helpers.get(1);
+    LocalityStore localityStore2 = localityStores.get(1);
+    LoadReportClient loadReportClient2 = loadReportClients.get(1);
 
     picker1 = mock(SubchannelPicker.class);
     helper1.updateBalancingState(CONNECTING, picker1);
@@ -287,7 +307,7 @@ public class LookasideLbTest {
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(2);
-    assertThat(helpers.get(1)).isSameInstanceAs(helper2);
+    assertThat(localityStores).hasSize(2);
 
     SubchannelPicker picker3 = mock(SubchannelPicker.class);
     helper2.updateBalancingState(READY, picker3);
@@ -312,12 +332,20 @@ public class LookasideLbTest {
     helper3.updateBalancingState(CONNECTING, picker4);
     // balancer2 was READY, so balancer3 will gracefully switch and not update non-READY picker
     verify(helper, never()).updateBalancingState(any(ConnectivityState.class), eq(picker4));
+    verify(localityStore2, never()).reset();
+    verify(loadReportClient2, never()).stopLoadReporting();
 
     SubchannelPicker picker5 = mock(SubchannelPicker.class);
     helper3.updateBalancingState(READY, picker5);
     verify(helper).updateBalancingState(READY, picker5);
+    verify(localityStore2).reset();
+    verify(loadReportClient2).stopLoadReporting();
 
+    verify(localityStores.get(2), never()).reset();
+    verify(loadReportClients.get(2), never()).stopLoadReporting();
     lookasideLb.shutdown();
+    verify(localityStores.get(2)).reset();
+    verify(loadReportClients.get(2)).stopLoadReporting();
   }
 
   @Test
@@ -346,6 +374,7 @@ public class LookasideLbTest {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
     verify(lookasideChannelCallback, never()).onWorking();
+    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // first EDS response
@@ -361,6 +390,7 @@ public class LookasideLbTest {
     verify(lookasideChannelCallback, times(1)).onWorking();
     verify(loadReportClient, times(1)).startLoadReporting(any(LoadReportCallback.class));
 
+    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
     verify(localityStore, never()).updateOobMetricsReportInterval(anyLong());
     loadReportCallback.onReportResponse(1234);
     verify(localityStore).updateOobMetricsReportInterval(1234);
@@ -374,6 +404,7 @@ public class LookasideLbTest {
   public void handleDropUpdates() {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
+    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
     verify(localityStore, never()).updateDropPercentage(
         ArgumentMatchers.<ImmutableList<DropOverload>>any());
 
@@ -549,6 +580,7 @@ public class LookasideLbTest {
         2, 0);
     Locality locality2 = Locality.fromEnvoyProtoLocality(localityProto2);
 
+    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
     InOrder inOrder = inOrder(localityStore);
     inOrder.verify(localityStore).updateDropPercentage(ImmutableList.<DropOverload>of());
     inOrder.verify(localityStore).updateLocalityStore(localityEndpointsMappingCaptor.capture());
@@ -573,6 +605,8 @@ public class LookasideLbTest {
   public void shutdown() {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
+    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
+    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
     verify(localityStore, never()).reset();
     verify(loadReportClient, never()).stopLoadReporting();
     assertThat(channel.isShutdown()).isFalse();
@@ -595,6 +629,7 @@ public class LookasideLbTest {
 
     // Simulates a syntactically incorrect EDS response.
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
+    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
     verify(lookasideChannelCallback, never()).onWorking();
     verify(lookasideChannelCallback, never()).onError();
@@ -612,6 +647,7 @@ public class LookasideLbTest {
     ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
     verify(loadReportClient).startLoadReporting(lrsCallbackCaptor.capture());
     lrsCallbackCaptor.getValue().onReportResponse(19543);
+    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
     verify(localityStore).updateOobMetricsReportInterval(19543);
 
     // Simulate another EDS response from the same remote balancer.
