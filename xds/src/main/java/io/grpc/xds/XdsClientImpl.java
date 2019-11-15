@@ -707,13 +707,6 @@ final class XdsClientImpl extends XdsClient {
       return false;
     }
 
-    // Optimization: check whether hostName is too short to match the pattern. hostName must be at
-    // least as long as the pattern because asterisk has to match one or more characters.
-    if (hostName.length() < pattern.length()) {
-      // hostName too short to match the pattern.
-      return false;
-    }
-
     if (index == 0 && hostName.endsWith(pattern.substring(1))) {
       // Prefix matching fails.
       return true;
