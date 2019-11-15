@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
+import io.grpc.xds.LookasideLb.LookasideChannelCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;

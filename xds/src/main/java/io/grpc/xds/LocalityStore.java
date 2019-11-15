@@ -82,6 +82,11 @@ interface LocalityStore {
 
   LoadStatsStore getLoadStatsStore();
 
+  @VisibleForTesting
+  interface LocalityStoreFactory {
+    LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
+  }
+
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
     private static final long DELAYED_DELETION_TIMEOUT_MINUTES = 15L;

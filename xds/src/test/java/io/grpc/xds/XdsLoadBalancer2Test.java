@@ -40,7 +40,7 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
-import io.grpc.xds.LookasideChannelLb.LookasideChannelCallback;
+import io.grpc.xds.LookasideLb.LookasideChannelCallback;
 import io.grpc.xds.XdsLoadBalancer2.LookasideLbFactory;
 import java.util.ArrayList;
 import java.util.List;
