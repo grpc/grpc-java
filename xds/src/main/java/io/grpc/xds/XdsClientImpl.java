@@ -405,29 +405,32 @@ final class XdsClientImpl extends XdsClient {
   @Nullable
   private String processRouteConfig(RouteConfiguration config) {
     List<VirtualHost> virtualHosts = config.getVirtualHostsList();
-    String clusterName = null;
-    // Proceed with the virtual host that has longest wildcard matched domain name with the
-    // hostname in original "xds:" URI.
     int matchingLen = -1;  // longest length of wildcard pattern that matches host name
+    VirtualHost targetVirtualHost = null;  // target VirtualHost with longest matched domain
     for (VirtualHost vHost : virtualHosts) {
       for (String domain : vHost.getDomainsList()) {
-        // We only validate data for VirtualHosts that matches hostname.
         if (matchHostName(hostName, domain) && domain.length() > matchingLen) {
           matchingLen = domain.length();
-          // The client will look only at the last route in the list (the default route),
-          // whose match field must be empty and whose route field must be set.
-          List<Route> routes = vHost.getRoutesList();
-          if (!routes.isEmpty()) {
-            Route route = routes.get(routes.size() - 1);
-            // TODO(chengyuanzhang): check the match field must be empty.
-            if (route.hasRoute()) {
-              clusterName = route.getRoute().getCluster();
-            }
-          }
+          targetVirtualHost = vHost;
         }
       }
     }
-    return clusterName;
+
+    // Proceed with the virtual host that has longest wildcard matched domain name with the
+    // hostname in original "xds:" URI.
+    if (targetVirtualHost != null) {
+      // The client will look only at the last route in the list (the default route),
+      // whose match field must be empty and whose route field must be set.
+      List<Route> routes = targetVirtualHost.getRoutesList();
+      if (!routes.isEmpty()) {
+        Route route = routes.get(routes.size() - 1);
+        // TODO(chengyuanzhang): check the match field must be empty.
+        if (route.hasRoute()) {
+          return route.getRoute().getCluster();
+        }
+      }
+    }
+    return null;
   }
 
   @VisibleForTesting
