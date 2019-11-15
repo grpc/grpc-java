@@ -318,12 +318,10 @@ final class DnsNameResolver extends NameResolver {
                         .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
                         .build());
           }
-
         }
       } else {
         logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
       }
-
       savedListener.onResult(resultBuilder.build());
     }
   }
