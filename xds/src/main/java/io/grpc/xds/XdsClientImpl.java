@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
@@ -650,7 +651,10 @@ final class XdsClientImpl extends XdsClient {
               .addAllResourceNames(resourceNames)
               .setTypeUrl(typeUrl)
               .setResponseNonce(nonce)
-              .setErrorDetail(com.google.rpc.Status.newBuilder().setMessage(message))
+              .setErrorDetail(
+                  com.google.rpc.Status.newBuilder()
+                      .setCode(Code.INVALID_ARGUMENT_VALUE)
+                      .setMessage(message))
               .build();
       requestWriter.onNext(request);
     }
