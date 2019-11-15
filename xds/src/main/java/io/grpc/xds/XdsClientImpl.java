@@ -556,7 +556,7 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    boolean invalidData = false;
+    boolean dataInvalid = false;
     // Full cluster information update received in this CDS response to be cached.
     Map<String, ClusterUpdate> clusterUpdates = new HashMap<>();
     // ClusterUpdate data to be pushed to each watcher.
@@ -567,14 +567,14 @@ final class XdsClientImpl extends XdsClient {
       updateBuilder.setClusterName(clusterName);
       // The type field must be set to EDS.
       if (!cluster.getType().equals(DiscoveryType.EDS)) {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
       // In the eds_cluster_config field, the eds_config field must be set to indicate to
       // use EDS (must be set to use ADS).
       EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
       if (!edsClusterConfig.hasEdsConfig() || !edsClusterConfig.getEdsConfig().hasAds()) {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
       // If the service_name field is set, that value will be used for the EDS request
@@ -584,7 +584,7 @@ final class XdsClientImpl extends XdsClient {
       }
       // The lb_policy field must be set to ROUND_ROBIN.
       if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
-        invalidData = true;
+        dataInvalid = true;
         break;
       }
       updateBuilder.setLbPolicy("round_robin");
@@ -593,7 +593,7 @@ final class XdsClientImpl extends XdsClient {
       // LRS load reporting will be disabled.
       if (cluster.hasLrsServer()) {
         if (!cluster.getLrsServer().hasSelf()) {
-          invalidData = true;
+          dataInvalid = true;
           break;
         }
         updateBuilder.setEnableLrs(true);
@@ -607,7 +607,7 @@ final class XdsClientImpl extends XdsClient {
         desiredClusterUpdates.put(clusterName, update);
       }
     }
-    if (invalidData) {
+    if (dataInvalid) {
       adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
           "Cluster message contains invalid information for gRPC's usage");
       return;
