@@ -35,57 +35,35 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
-import javax.annotation.concurrent.ThreadSafe;
 
 /**
  * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
-@ThreadSafe
 abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
-  static Bootstrapper newInsatnce() {
-    return new FileBasedBootstrapper();
+  private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
+    @Override
+    BootstrapInfo readBootstrap() throws IOException {
+      String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
+      if (filePath == null) {
+        throw
+            new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR + " not defined.");
+      }
+      return parseConfig(
+          new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8));
+    }
+  };
+
+  static Bootstrapper getInstance() {
+    return DEFAULT_INSTANCE;
   }
 
   /**
    * Returns configurations from bootstrap.
    */
   abstract BootstrapInfo readBootstrap() throws Exception;
-
-  private static final class FileBasedBootstrapper extends Bootstrapper {
-
-    private static volatile Exception failToBootstrapException;
-    private static volatile BootstrapInfo bootstrapInfo;
-
-    @Override
-    BootstrapInfo readBootstrap() throws Exception {
-      if (bootstrapInfo == null && failToBootstrapException == null) {
-        synchronized (FileBasedBootstrapper.class) {
-          if (bootstrapInfo == null && failToBootstrapException == null) {
-            try {
-              String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
-              if (filePath == null) {
-                throw
-                    new IOException("Environment variable " + BOOTSTRAP_PATH_SYS_ENV_VAR
-                        + " not found.");
-              }
-              bootstrapInfo =
-                  parseConfig(new String(Files.readAllBytes(Paths.get(filePath)),
-                      StandardCharsets.UTF_8));
-            } catch (Exception e) {
-              failToBootstrapException = e;
-            }
-          }
-        }
-      }
-      if (failToBootstrapException != null) {
-        throw new IOException(failToBootstrapException);
-      }
-      return bootstrapInfo;
-    }
-  }
 
   @VisibleForTesting
   static BootstrapInfo parseConfig(String rawData) throws IOException {

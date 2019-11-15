@@ -60,7 +60,7 @@ final class XdsNameResolver extends NameResolver {
   private final Bootstrapper bootstrapper;
 
   XdsNameResolver(String name) {
-    this(name, Bootstrapper.newInsatnce());
+    this(name, Bootstrapper.getInstance());
   }
 
   @VisibleForTesting
