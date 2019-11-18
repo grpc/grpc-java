@@ -23,6 +23,7 @@ import static org.mockito.Mockito.verify;
 
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
+import io.grpc.xds.XdsClient.XdsClientFactory;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -57,29 +58,50 @@ public class XdsClientTest {
 
   @Test
   public void refCountedXdsClientObjectPool_getObjectShouldMatchReturnObject() {
-    XdsClient xdsClient = mock(XdsClient.class);
-    RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(xdsClient);
-    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
-    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
-    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return mock(XdsClient.class);
+      }
+    };
+    RefCountedXdsClientObjectPool xdsClientRef =
+        new RefCountedXdsClientObjectPool(xdsClientFactory);
 
+    // getObject once
+    XdsClient xdsClient = xdsClientRef.getObject();
+    assertThat(xdsClient).isNotNull();
+    // getObject twice
+    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
+    // returnObject once
+    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
     verify(xdsClient, never()).shutdown();
+    // returnObject twice
     assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
     verify(xdsClient).shutdown();
+    assertThat(xdsClientRef.xdsClient).isNull();
 
     thrown.expect(IllegalStateException.class);
+    // returnOject for the 3rd time
     xdsClientRef.returnObject(xdsClient);
   }
 
   @Test
-  public void refCountedXdsClientObjectPool_getObjectReturnsNullIfAlreadyShutdown() {
-    XdsClient xdsClient = mock(XdsClient.class);
-    RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(xdsClient);
-    assertThat(xdsClientRef.getObject()).isSameInstanceAs(xdsClient);
-    verify(xdsClient, never()).shutdown();
-    assertThat(xdsClientRef.returnObject(xdsClient)).isNull();
-    verify(xdsClient).shutdown();
+  public void refCountedXdsClientObjectPool_getObjectCreatesNewInstanceIfAlreadyShutdown() {
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return mock(XdsClient.class);
+      }
+    };
+    RefCountedXdsClientObjectPool xdsClientRef =
+        new RefCountedXdsClientObjectPool(xdsClientFactory);
 
-    assertThat(xdsClientRef.getObject()).isNull();
+    XdsClient xdsClient1 = xdsClientRef.getObject();
+    verify(xdsClient1, never()).shutdown();
+    assertThat(xdsClientRef.returnObject(xdsClient1)).isNull();
+    verify(xdsClient1).shutdown();
+
+    XdsClient xdsClient2 = xdsClientRef.getObject();
+    assertThat(xdsClient2).isNotSameInstanceAs(xdsClient1);
   }
 }
