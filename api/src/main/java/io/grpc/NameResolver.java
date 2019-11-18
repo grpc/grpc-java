@@ -474,6 +474,7 @@ public abstract class NameResolver {
      *
      * @since 1.26.0
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
     public ChannelLogger getChannelLogger() {
       if (channelLogger == null) {
         throw new IllegalStateException("ChannelLogger is not set in Builder");
@@ -591,6 +592,7 @@ public abstract class NameResolver {
        *
        * @since 1.26.0
        */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
       public Builder setChannelLogger(ChannelLogger channelLogger) {
         this.channelLogger = checkNotNull(channelLogger);
         return this;
