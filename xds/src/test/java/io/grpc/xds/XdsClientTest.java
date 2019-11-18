@@ -86,6 +86,23 @@ public class XdsClientTest {
   }
 
   @Test
+  public void refCountedXdsClientObjectPool_returnWrongObjectShouldThrow() {
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return mock(XdsClient.class);
+      }
+    };
+    RefCountedXdsClientObjectPool xdsClientRef =
+        new RefCountedXdsClientObjectPool(xdsClientFactory);
+
+    xdsClientRef.getObject();
+
+    thrown.expect(IllegalStateException.class);
+    xdsClientRef.returnObject(mock(XdsClient.class));
+  }
+
+  @Test
   public void refCountedXdsClientObjectPool_getObjectCreatesNewInstanceIfAlreadyShutdown() {
     XdsClientFactory xdsClientFactory = new XdsClientFactory() {
       @Override
