@@ -414,7 +414,7 @@ public abstract class NameResolver {
     private final ServiceConfigParser serviceConfigParser;
     @Nullable private final Executor executor;
 
-    Args(
+    private Args(
         Integer defaultPort,
         ProxyDetector proxyDetector,
         SynchronizationContext syncContext,
