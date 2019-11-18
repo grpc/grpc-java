@@ -541,17 +541,9 @@ final class XdsClientImpl extends XdsClient {
                 retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
-      if (delayNanos == 0) {
-        startRpcStream();
-        if (configWatcher != null) {
-          adsStream.sendXdsRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName));
-        }
-        // TODO(chengyuanzhang): send CDS/EDS requests if CDS/EDS watcher presents.
-      } else {
-        rpcRetryTimer =
-            syncContext.schedule(
-                new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
-      }
+      rpcRetryTimer =
+          syncContext.schedule(
+              new RpcRetryTask(), delayNanos, TimeUnit.NANOSECONDS, timeService);
     }
 
     private void close(Exception error) {

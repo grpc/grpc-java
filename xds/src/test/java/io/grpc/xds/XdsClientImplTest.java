@@ -1165,6 +1165,7 @@ public class XdsClientImplTest {
 
     // Reset backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
@@ -1217,6 +1218,7 @@ public class XdsClientImplTest {
 
     // Reset backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     requestObserver = requestObservers.poll();
     verify(requestObserver)
         .onNext(eq(buildDiscoveryRequest("", "foo.googleapis.com:8080",
