@@ -408,21 +408,11 @@ public abstract class NameResolver {
    */
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
   public static final class Args {
-    private static final ChannelLogger NOOP_CHANNEL_LOGGER = new ChannelLogger() {
-      @Override
-      public void log(ChannelLogLevel level, String message) {
-      }
-
-      @Override
-      public void log(ChannelLogLevel level, String messageFormat, Object... args) {
-      }
-    };
-
     private final int defaultPort;
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
-    private final ChannelLogger channelLogger;
+    @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
 
     Args(
@@ -436,11 +426,7 @@ public abstract class NameResolver {
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
-      if (channelLogger == null) {
-        this.channelLogger = NOOP_CHANNEL_LOGGER;
-      } else {
-        this.channelLogger = channelLogger;
-      }
+      this.channelLogger = channelLogger;
       this.executor = executor;
     }
 
@@ -489,6 +475,9 @@ public abstract class NameResolver {
      * @since 1.26.0
      */
     public ChannelLogger getChannelLogger() {
+      if (channelLogger == null) {
+        throw new IllegalStateException("ChannelLogger is not set in Builder");
+      }
       return channelLogger;
     }
 
@@ -598,7 +587,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@link Args#getChannelLogger}. This is an optional field.
+       * See {@link Args#getChannelLogger}. This is a required field.
        *
        * @since 1.26.0
        */

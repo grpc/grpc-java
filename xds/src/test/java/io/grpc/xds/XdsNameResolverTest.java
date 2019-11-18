@@ -24,6 +24,7 @@ import static org.mockito.Mockito.verify;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ResolutionResult;
 import io.grpc.NameResolver.ServiceConfigParser;
@@ -69,6 +70,7 @@ public class XdsNameResolverTest {
           .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
           .setSynchronizationContext(syncContext)
           .setServiceConfigParser(mock(ServiceConfigParser.class))
+          .setChannelLogger(mock(ChannelLogger.class))
           .build();
 
   private final XdsNameResolverProvider provider = new XdsNameResolverProvider();
