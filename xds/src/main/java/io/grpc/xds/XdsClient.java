@@ -16,10 +16,12 @@
 
 package io.grpc.xds;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.Status;
+import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -385,5 +387,67 @@ abstract class XdsClient {
    * Stops reporting client load stats to the remote server for the given cluster.
    */
   void cancelClientStatsReport(String clusterName) {
+  }
+
+  abstract static class XdsClientFactory {
+    abstract XdsClient createXdsClient();
+  }
+
+  /**
+   * An {@link ObjectPool} holding reference and ref-count of an {@link XdsClient} instance.
+   * Initially the instance is null and the ref-count is zero. {@link #getObject()} will create a
+   * new XdsClient instance if the ref-count is zero when calling the method. {@code #getObject()}
+   * increments the ref-count and {@link #returnObject(Object)} decrements it. Anytime when the
+   * ref-count gets back to zero, the XdsClient instance will be shutdown and de-referenced.
+   */
+  static final class RefCountedXdsClientObjectPool implements ObjectPool<XdsClient> {
+
+    private final XdsClientFactory xdsClientFactory;
+
+    @VisibleForTesting
+    @Nullable
+    XdsClient xdsClient;
+
+    private int refCount;
+
+    RefCountedXdsClientObjectPool(XdsClientFactory xdsClientFactory) {
+      this.xdsClientFactory = Preconditions.checkNotNull(xdsClientFactory, "xdsClientFactory");
+    }
+
+    /**
+     * See {@link RefCountedXdsClientObjectPool}.
+     */
+    @Override
+    public synchronized XdsClient getObject() {
+      if (xdsClient == null) {
+        Preconditions.checkState(
+            refCount == 0,
+            "Bug: refCount should be zero while xdsClient is null");
+        xdsClient = xdsClientFactory.createXdsClient();
+      }
+      refCount++;
+      return xdsClient;
+    }
+
+    /**
+     * See {@link RefCountedXdsClientObjectPool}.
+     */
+    @Override
+    public synchronized XdsClient returnObject(Object object) {
+      Preconditions.checkState(
+          object == xdsClient,
+          "Bug: the returned object '%s' does not match current XdsClient '%s'",
+          object,
+          xdsClient);
+
+      refCount--;
+      Preconditions.checkState(refCount >= 0, "Bug: refCount of XdsClient less than 0");
+      if (refCount == 0) {
+        xdsClient.shutdown();
+        xdsClient = null;
+      }
+
+      return null;
+    }
   }
 }
