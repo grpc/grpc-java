@@ -588,7 +588,7 @@ public abstract class NameResolver {
       }
 
       /**
-       * See {@link Args#getChannelLogger}. This is a required field.
+       * See {@link Args#getChannelLogger}.
        *
        * @since 1.26.0
        */
