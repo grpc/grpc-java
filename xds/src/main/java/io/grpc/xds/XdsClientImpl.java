@@ -232,7 +232,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(), "Broken LDS response");
+          ldsResponse.getNonce(), "Broken LDS response.");
       return;
     }
 
@@ -250,11 +250,11 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(), "Broken LDS response");
+          ldsResponse.getNonce(), "Broken LDS response.");
       return;
     }
 
-    boolean dataInvalid = false;
+    String errorMessage = null;
     // All RouteConfigurations referenced by this LDS response, either in in-lined
     // RouteConfiguration message or in RDS config.
     Set<String> routeConfigs = new HashSet<>();
@@ -265,14 +265,14 @@ final class XdsClientImpl extends XdsClient {
         routeConfigs.add(hm.getRouteConfig().getName());
       } else if (hm.hasRds()) {
         Rds rds = hm.getRds();
-        // For using RDS, it must be set to use ADS.
         if (!rds.getConfigSource().hasAds()) {
-          dataInvalid = true;
+          errorMessage = "For using RDS, it must be set to use ADS.";
           break;
         }
         routeConfigs.add(rds.getRouteConfigName());
       } else {
-        dataInvalid = true;
+        errorMessage = "HttpConnectionManager message must either provide the "
+            + "RouteConfiguration directly in-line or tell the client to use RDS to obtain it.";
         break;
       }
     }
@@ -281,12 +281,13 @@ final class XdsClientImpl extends XdsClient {
     String clusterName = null;
     // RouteConfiguration name to be used as the resource name for RDS request.
     String rdsRouteConfigName = null;
-    if (!dataInvalid && requestedHttpConnManager != null) {
+    if (errorMessage == null && requestedHttpConnManager != null) {
       if (requestedHttpConnManager.hasRouteConfig()) {
         RouteConfiguration rc = requestedHttpConnManager.getRouteConfig();
         clusterName = processRouteConfig(rc);
         if (clusterName == null) {
-          dataInvalid = true;
+          errorMessage = "Cannot find a valid cluster name in VirtualHost inside "
+              + "RouteConfiguration with domains matching: " + hostName + ".";
         }
       } else if (requestedHttpConnManager.hasRds()) {
         Rds rds = requestedHttpConnManager.getRds();
@@ -295,10 +296,9 @@ final class XdsClientImpl extends XdsClient {
       // Else impossible as we have already validated all HttpConnectionManager messages.
     }
 
-    if (dataInvalid) {
+    if (errorMessage != null) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(),
-          "HttpConnectionManager contains invalid information for gRPC's usage");
+          ldsResponse.getNonce(), errorMessage);
       return;
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
@@ -360,7 +360,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
-          rdsResponse.getNonce(), "Broken RDS response");
+          rdsResponse.getNonce(), "Broken RDS response.");
       return;
     }
 
@@ -371,7 +371,8 @@ final class XdsClientImpl extends XdsClient {
       if (clusterName == null) {
         adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
             rdsResponse.getNonce(),
-            "Received RouteConfigurations without cluster information for requested hostname");
+            "Cannot find a valid cluster name in VirtualHost inside "
+                + "RouteConfiguration with domains matching: " + hostName + ".");
         return;
       }
       clusterNames.put(routeConfig.getName(), clusterName);
