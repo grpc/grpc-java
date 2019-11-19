@@ -114,104 +114,102 @@ final class LookasideLb extends ForwardingLoadBalancer {
     // The is to handle the legacy usecase that requires balancerName from xds config.
     if (!newBalancerName.equals(balancerName)) {
       balancerName = newBalancerName; // cache the name and check next time for optimization
-      Node node = resolvedAddresses.getAttributes().get(XDS_NODE);
-      if (node == null) {
+      Node nodeFromResolvedAddresses = resolvedAddresses.getAttributes().get(XDS_NODE);
+      final Node node;
+      if (nodeFromResolvedAddresses == null) {
         node = Node.newBuilder()
             .setMetadata(Struct.newBuilder()
                 .putFields(
                     "endpoints_required",
                     Value.newBuilder().setBoolValue(true).build()))
             .build();
+      } else {
+        node = nodeFromResolvedAddresses;
       }
-      List<ChannelCreds> channelCredsList =
+      List<ChannelCreds> channelCredsListFromResolvedAddresses =
           resolvedAddresses.getAttributes().get(XDS_CHANNEL_CREDS_LIST);
-      if (channelCredsList == null) {
+      final List<ChannelCreds> channelCredsList;
+      if (channelCredsListFromResolvedAddresses == null) {
         channelCredsList = Collections.emptyList();
+      } else {
+        channelCredsList = channelCredsListFromResolvedAddresses;
       }
-      lookasideChannelLb.switchTo(newLookasideChannelLbProvider(
-          newBalancerName, node, channelCredsList));
+
+      LoadBalancerProvider childBalancerProvider = new LoadBalancerProvider() {
+        @Override
+        public boolean isAvailable() {
+          return true;
+        }
+
+        @Override
+        public int getPriority() {
+          return 5;
+        }
+
+        /**
+         * A synthetic policy name identified by balancerName. The implementation detail doesn't
+         * matter.
+         */
+        @Override
+        public String getPolicyName() {
+          return "xds_child_policy_balancer_name_" + balancerName;
+        }
+
+        @Override
+        public LoadBalancer newLoadBalancer(final Helper helper) {
+          return new LoadBalancer() {
+            @Nullable
+            XdsClient xdsClient;
+            @Nullable
+            LocalityStore localityStore;
+            @Nullable
+            LoadReportClient lrsClient;
+
+            @Override
+            public void handleNameResolutionError(Status error) {}
+
+            @Override
+            public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+              if (xdsClient == null) {
+                ManagedChannel channel = initLbChannel(helper, balancerName, channelCredsList);
+                xdsClient  = new XdsComms2(
+                    channel, helper, new ExponentialBackoffPolicy.Provider(),
+                    GrpcUtil.STOPWATCH_SUPPLIER, node);
+                localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
+                // TODO(zdapeng): Use XdsClient to do Lrs directly.
+                lrsClient = loadReportClientFactory.createLoadReportClient(
+                    channel, helper, new ExponentialBackoffPolicy.Provider(),
+                    localityStore.getLoadStatsStore());
+                final LoadReportCallback lrsCallback =
+                    new LoadReportCallback() {
+                      @Override
+                      public void onReportResponse(long reportIntervalNano) {
+                        localityStore.updateOobMetricsReportInterval(reportIntervalNano);
+                      }
+                    };
+
+                EndpointWatcher endpointWatcher =
+                    new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
+                xdsClient.watchEndpointData(node.getCluster(), endpointWatcher);
+              }
+            }
+
+            @Override
+            public void shutdown() {
+              if (xdsClient != null) {
+                lrsClient.stopLoadReporting();
+                localityStore.reset();
+                xdsClient.shutdown();
+              }
+            }
+          };
+        }
+      };
+
+      lookasideChannelLb.switchTo(childBalancerProvider);
     }
 
     lookasideChannelLb.handleResolvedAddresses(resolvedAddresses);
-  }
-
-  /**
-   * Creates a balancer that is associated to a balancer name. The is to handle the legacy usecase
-   * that requires balancerName from xds config.
-   */
-  private LoadBalancerProvider newLookasideChannelLbProvider(
-      final String balancerName, final Node node, final List<ChannelCreds> channelCredsList) {
-
-    return new LoadBalancerProvider() {
-      @Override
-      public boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      public int getPriority() {
-        return 5;
-      }
-
-      /**
-       * A synthetic policy name for LookasideChannelLb identified by balancerName. The
-       * implementation detail doesn't matter.
-       */
-      @Override
-      public String getPolicyName() {
-        return "xds_child_policy_balancer_name_" + balancerName;
-      }
-
-      @Override
-      public LoadBalancer newLoadBalancer(final Helper helper) {
-        return new LoadBalancer() {
-          @Nullable
-          XdsClient xdsClient;
-          @Nullable
-          LocalityStore localityStore;
-          @Nullable
-          LoadReportClient lrsClient;
-
-          @Override
-          public void handleNameResolutionError(Status error) {}
-
-          @Override
-          public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-            if (xdsClient == null) {
-              ManagedChannel channel = initLbChannel(helper, balancerName, channelCredsList);
-              xdsClient  = new XdsComms2(
-                  channel, helper, new ExponentialBackoffPolicy.Provider(),
-                  GrpcUtil.STOPWATCH_SUPPLIER, node);
-              localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
-              // TODO(zdapeng): Use XdsClient to do Lrs directly.
-              lrsClient = loadReportClientFactory.createLoadReportClient(
-                  channel, helper, new ExponentialBackoffPolicy.Provider(),
-                  localityStore.getLoadStatsStore());
-              final LoadReportCallback lrsCallback =
-                  new LoadReportCallback() {
-                    @Override
-                    public void onReportResponse(long reportIntervalNano) {
-                      localityStore.updateOobMetricsReportInterval(reportIntervalNano);
-                    }
-                  };
-
-              EndpointWatcher endpointWatcher =
-                  new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
-              xdsClient.watchEndpointData(node.getCluster(), endpointWatcher);
-            }
-          }
-
-          @Override
-          public void shutdown() {
-            if (xdsClient != null) {
-              lrsClient.stopLoadReporting();
-              localityStore.reset();
-              xdsClient.shutdown();
-            }
-          }
-        };
-      }
-    };
   }
 
   private static ManagedChannel initLbChannel(
