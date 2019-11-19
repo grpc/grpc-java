@@ -5,8 +5,10 @@
 # the correct environment for releases.
 # To run locally:
 #  ./buildscripts/kokoro/unix.sh
-# For 32 bit:
-#  ARCH=32 ./buildscripts/kokoro/unix.sh
+# For x86 32 arch:
+#  ARCH=x86_32 ./buildscripts/kokoro/unix.sh
+# For aarch64 arch:
+#  ARCH=aarch_64 ./buildscripts/kokoro/unix.sh
 
 # This script assumes `set -e`. Removing it may lead to undefined behavior.
 set -exu -o pipefail
@@ -23,14 +25,14 @@ cd $(dirname $0)/../..
 
 # TODO(zpencer): always make sure we are using Oracle jdk8
 
-# ARCH is 64 bit unless otherwise specified.
-ARCH="${ARCH:-64}"
+# ARCH is x86_64 unless otherwise specified.
+ARCH="${ARCH:-x86_64}"
 
 ARCH="$ARCH" buildscripts/make_dependencies.sh
 
 # Set properties via flags, do not pollute gradle.properties
 GRADLE_FLAGS="${GRADLE_FLAGS:-}"
-GRADLE_FLAGS+=" -PtargetArch=x86_$ARCH"
+GRADLE_FLAGS+=" -PtargetArch=$ARCH"
 GRADLE_FLAGS+=" -Pcheckstyle.ignoreFailures=false"
 GRADLE_FLAGS+=" -PfailOnWarnings=true"
 GRADLE_FLAGS+=" -PerrorProne=true"

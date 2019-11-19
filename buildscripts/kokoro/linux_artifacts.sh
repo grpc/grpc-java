@@ -33,3 +33,14 @@ popd
 readonly MVN_ARTIFACT_DIR="${MVN_ARTIFACT_DIR:-$GRPC_JAVA_DIR/mvn-artifacts}"
 mkdir -p "$MVN_ARTIFACT_DIR"
 cp -r "$LOCAL_MVN_TEMP"/* "$MVN_ARTIFACT_DIR"/
+
+# for aarch64 platform
+apt-get install -y wget autoconf automake libtool g++-aarch64-linux-gnu g++ make
+
+apt-get install software-properties-common -y
+add-apt-repository ppa:openjdk-r/ppa -y
+apt-get update
+apt install openjdk-8-jdk -y
+export JAVA_HOME=`dirname $(dirname $(update-alternatives --list javac |grep java-8))`
+update-ca-certificates -f
+SKIP_TESTS=true ARCH=aarch_64 ./buildscripts/kokoro/unix.sh
