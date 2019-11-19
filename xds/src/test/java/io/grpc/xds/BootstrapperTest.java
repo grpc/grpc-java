@@ -22,6 +22,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import java.io.IOException;
 import org.junit.Rule;
@@ -80,6 +81,7 @@ public class BootstrapperTest {
                     .putFields("TRAFFICDIRECTOR_NETWORK_NAME",
                         Value.newBuilder().setStringValue("VPC_NETWORK_NAME").build())
                     .build())
+            .setBuildVersion(GrpcUtil.getGrpcBuildVersion())
             .build());
   }
 
@@ -94,7 +96,6 @@ public class BootstrapperTest {
   @Test
   public void parseBootstrap_minimumRequiredFields() throws IOException {
     String rawData = "{"
-        + "\"node\": {},"
         + "\"xds_server\": {"
         + "\"server_uri\": \"trafficdirector.googleapis.com:443\""
         + "}"
@@ -102,22 +103,12 @@ public class BootstrapperTest {
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
     assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.getNode()).isEqualTo(Node.getDefaultInstance());
-  }
-
-  @Test
-  public void parseBootstrap_noNode() throws IOException {
-    String rawData = "{"
-        + "\"xds_server\": {"
-        + "\"server_uri\": \"trafficdirector.googleapis.com:443\","
-        + "\"channel_creds\": "
-        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"} ]"
-        + "} "
-        + "}";
-
-    thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'node' does not exist.");
-    Bootstrapper.parseConfig(rawData);
+    assertThat(info.getNode())
+        .isEqualTo(
+            Node.newBuilder()
+                .setBuildVersion(
+                    GrpcUtil.getGrpcBuildVersion())
+                .build());
   }
 
   @Test

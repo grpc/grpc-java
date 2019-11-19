@@ -444,6 +444,13 @@ public final class GrpcUtil {
   }
 
   /**
+   * Returns the build version of gRPC.
+   */
+  public static String getGrpcBuildVersion() {
+    return "gRPC Java " + IMPLEMENTATION_VERSION;
+  }
+
+  /**
    * Parse an authority into a URI for retrieving the host and port.
    */
   public static URI authorityToUri(String authority) {
