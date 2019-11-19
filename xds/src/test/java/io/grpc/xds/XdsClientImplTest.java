@@ -2234,6 +2234,7 @@ public class XdsClientImplTest {
 
     // Resets backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
@@ -2310,6 +2311,7 @@ public class XdsClientImplTest {
 
     // Resets backoff and retry immediately
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
@@ -2376,6 +2378,7 @@ public class XdsClientImplTest {
 
     // Resets backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
@@ -2450,6 +2453,7 @@ public class XdsClientImplTest {
 
     // Resets backoff and retry immediately.
     inOrder.verify(backoffPolicyProvider).get();
+    fakeClock.runDueTasks();
     inOrder.verify(mockedDiscoveryService)
         .streamAggregatedResources(responseObserverCaptor.capture());
     responseObserver = responseObserverCaptor.getValue();
