@@ -141,7 +141,6 @@ final class LookasideLb extends ForwardingLoadBalancer {
    */
   private LoadBalancerProvider newLookasideChannelLbProvider(
       final String balancerName, final Node node, final List<ChannelCreds> channelCredsList) {
-    checkNotNull(balancerName, "balancerName is required");
 
     return new LoadBalancerProvider() {
       @Override
