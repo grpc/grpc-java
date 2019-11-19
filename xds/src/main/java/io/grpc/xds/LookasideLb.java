@@ -59,7 +59,7 @@ import javax.annotation.Nullable;
 /** Lookaside load balancer that handles balancer name changes. */
 final class LookasideLb extends ForwardingLoadBalancer {
 
-  private final LookasideChannelCallback lookasideChannelCallback;
+  private final EdsUpdateCallback edsUpdateCallback;
   private final GracefulSwitchLoadBalancer lookasideChannelLb;
   private final LoadBalancerRegistry lbRegistry;
   private final LocalityStoreFactory localityStoreFactory;
@@ -67,10 +67,10 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
   private String balancerName;
 
-  LookasideLb(Helper lookasideLbHelper, LookasideChannelCallback lookasideChannelCallback) {
+  LookasideLb(Helper lookasideLbHelper, EdsUpdateCallback edsUpdateCallback) {
     this(
         lookasideLbHelper,
-        lookasideChannelCallback,
+        edsUpdateCallback,
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
         LoadReportClientFactory.getInstance());
@@ -79,11 +79,11 @@ final class LookasideLb extends ForwardingLoadBalancer {
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
-      LookasideChannelCallback lookasideChannelCallback,
+      EdsUpdateCallback edsUpdateCallback,
       LoadBalancerRegistry lbRegistry,
       LocalityStoreFactory localityStoreFactory,
       LoadReportClientFactory loadReportClientFactory) {
-    this.lookasideChannelCallback = lookasideChannelCallback;
+    this.edsUpdateCallback = edsUpdateCallback;
     this.lbRegistry = lbRegistry;
     this.lookasideChannelLb = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.localityStoreFactory = localityStoreFactory;
@@ -249,24 +249,14 @@ final class LookasideLb extends ForwardingLoadBalancer {
   }
 
   /**
-   * Callback on ADS stream events. The callback methods should be called in a proper {@link
-   * io.grpc.SynchronizationContext}.
+   * Callbacks for the EDS-only-with-fallback usecase. Being deprecated.
    */
-  interface LookasideChannelCallback {
+  interface EdsUpdateCallback {
 
-    /**
-     * Once the response observer receives the first response.
-     */
     void onWorking();
 
-    /**
-     * Once an error occurs in ADS stream.
-     */
     void onError();
 
-    /**
-     * Once receives a response indicating that 100% of calls should be dropped.
-     */
     void onAllDrop();
   }
 
@@ -275,7 +265,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
     final LoadReportClient lrsClient;
     final LoadReportCallback lrsCallback;
     final LocalityStore localityStore;
-    boolean firstEdsResponseReceived;
+    boolean firstEdsUpdateReceived;
 
     EndpointWatcherImpl(
         LoadReportClient lrsClient, LoadReportCallback lrsCallback, LocalityStore localityStore) {
@@ -286,9 +276,9 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
     @Override
     public void onEndpointChanged(EndpointUpdate endpointUpdate) {
-      if (!firstEdsResponseReceived) {
-        firstEdsResponseReceived = true;
-        lookasideChannelCallback.onWorking();
+      if (!firstEdsUpdateReceived) {
+        firstEdsUpdateReceived = true;
+        edsUpdateCallback.onWorking();
         lrsClient.startLoadReporting(lrsCallback);
       }
 
@@ -297,7 +287,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
       for (DropOverload dropOverload : dropOverloads) {
         dropOverloadsBuilder.add(dropOverload);
         if (dropOverload.getDropsPerMillion() == 1_000_000) {
-          lookasideChannelCallback.onAllDrop();
+          edsUpdateCallback.onAllDrop();
           break;
         }
       }
@@ -319,8 +309,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
 
     @Override
     public void onError(Status error) {
-      lookasideChannelCallback.onError();
+      edsUpdateCallback.onError();
     }
   }
-
 }

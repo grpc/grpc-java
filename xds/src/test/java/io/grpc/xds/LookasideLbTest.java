@@ -74,7 +74,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
-import io.grpc.xds.LookasideLb.LookasideChannelCallback;
+import io.grpc.xds.LookasideLb.EdsUpdateCallback;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -126,7 +126,7 @@ public class LookasideLbTest {
   @Mock
   private Helper helper;
   @Mock
-  private LookasideChannelCallback lookasideChannelCallback;
+  private EdsUpdateCallback edsUpdateCallback;
   @Captor
   private ArgumentCaptor<ImmutableMap<Locality, LocalityLbEndpoints>>
       localityEndpointsMappingCaptor;
@@ -209,7 +209,7 @@ public class LookasideLbTest {
     };
 
     lookasideLb = new LookasideLb(
-        helper, lookasideChannelCallback, new LoadBalancerRegistry(), localityStoreFactory,
+        helper, edsUpdateCallback, new LoadBalancerRegistry(), localityStoreFactory,
         loadReportClientFactory);
 
     String lbConfigRaw11 = "{\"balancerName\" : \"dns:///balancer1.example.com:8080\"}";
@@ -352,7 +352,7 @@ public class LookasideLbTest {
   public void handleResolvedAddress_createLbChannel()
       throws Exception {
     // Test balancer created with the default real LookasideChannelLbFactory
-    lookasideLb = new LookasideLb(helper, mock(LookasideChannelCallback.class));
+    lookasideLb = new LookasideLb(helper, mock(EdsUpdateCallback.class));
     String lbConfigRaw11 = "{'balancerName' : 'dns:///balancer1.example.com:8080'}"
         .replace("'", "\"");
     @SuppressWarnings("unchecked")
@@ -373,13 +373,13 @@ public class LookasideLbTest {
   public void firstAndSecondEdsResponseReceived() {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
-    verify(lookasideChannelCallback, never()).onWorking();
+    verify(edsUpdateCallback, never()).onWorking();
     LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
 
     // first EDS response
     serverResponseWriter.onNext(edsResponse);
-    verify(lookasideChannelCallback).onWorking();
+    verify(edsUpdateCallback).onWorking();
     ArgumentCaptor<LoadReportCallback> loadReportCallbackCaptor =
         ArgumentCaptor.forClass(LoadReportCallback.class);
     verify(loadReportClient).startLoadReporting(loadReportCallbackCaptor.capture());
@@ -387,7 +387,7 @@ public class LookasideLbTest {
 
     // second EDS response
     serverResponseWriter.onNext(edsResponse);
-    verify(lookasideChannelCallback, times(1)).onWorking();
+    verify(edsUpdateCallback, times(1)).onWorking();
     verify(loadReportClient, times(1)).startLoadReporting(any(LoadReportCallback.class));
 
     LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
@@ -395,7 +395,7 @@ public class LookasideLbTest {
     loadReportCallback.onReportResponse(1234);
     verify(localityStore).updateOobMetricsReportInterval(1234);
 
-    verify(lookasideChannelCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError();
 
     lookasideLb.shutdown();
   }
@@ -440,7 +440,7 @@ public class LookasideLbTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build());
 
-    verify(lookasideChannelCallback, never()).onAllDrop();
+    verify(edsUpdateCallback, never()).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
         new DropOverload("cat_2", 45_00),
@@ -475,12 +475,12 @@ public class LookasideLbTest {
             .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
             .build());
 
-    verify(lookasideChannelCallback).onAllDrop();
+    verify(edsUpdateCallback).onAllDrop();
     verify(localityStore).updateDropPercentage(ImmutableList.of(
         new DropOverload("cat_1", 300_00),
         new DropOverload("cat_2", 100_00_00)));
 
-    verify(lookasideChannelCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError();
 
     lookasideLb.shutdown();
   }
@@ -587,7 +587,7 @@ public class LookasideLbTest {
     assertThat(localityEndpointsMappingCaptor.getValue()).containsExactly(
         locality1, localityInfo1, locality2, localityInfo2).inOrder();
 
-    verify(lookasideChannelCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError();
 
     lookasideLb.shutdown();
   }
@@ -596,9 +596,9 @@ public class LookasideLbTest {
   public void verifyRpcErrorPropagation() {
     lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
 
-    verify(lookasideChannelCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onError();
     serverResponseWriter.onError(new RuntimeException());
-    verify(lookasideChannelCallback).onError();
+    verify(edsUpdateCallback).onError();
   }
 
   @Test
@@ -631,8 +631,8 @@ public class LookasideLbTest {
     serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
     LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
     verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
-    verify(lookasideChannelCallback, never()).onWorking();
-    verify(lookasideChannelCallback, never()).onError();
+    verify(edsUpdateCallback, never()).onWorking();
+    verify(edsUpdateCallback, never()).onError();
 
     // Simulate a syntactically correct EDS response.
     DiscoveryResponse edsResponse =
@@ -642,7 +642,7 @@ public class LookasideLbTest {
             .build();
     serverResponseWriter.onNext(edsResponse);
 
-    verify(lookasideChannelCallback).onWorking();
+    verify(edsUpdateCallback).onWorking();
 
     ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
     verify(loadReportClient).startLoadReporting(lrsCallbackCaptor.capture());
@@ -652,13 +652,13 @@ public class LookasideLbTest {
 
     // Simulate another EDS response from the same remote balancer.
     serverResponseWriter.onNext(edsResponse);
-    verifyNoMoreInteractions(lookasideChannelCallback, loadReportClient);
+    verifyNoMoreInteractions(edsUpdateCallback, loadReportClient);
 
     // Simulate an EDS error response.
     serverResponseWriter.onError(Status.ABORTED.asException());
-    verify(lookasideChannelCallback).onError();
+    verify(edsUpdateCallback).onError();
 
-    verifyNoMoreInteractions(lookasideChannelCallback, loadReportClient);
+    verifyNoMoreInteractions(edsUpdateCallback, loadReportClient);
     verify(localityStore, times(1)).updateOobMetricsReportInterval(anyLong()); // only once
 
     lookasideLb.shutdown();
