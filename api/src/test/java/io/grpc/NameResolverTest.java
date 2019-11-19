@@ -45,6 +45,7 @@ public class NameResolverTest {
   private final SynchronizationContext syncContext =
       new SynchronizationContext(mock(UncaughtExceptionHandler.class));
   private final ServiceConfigParser parser = mock(ServiceConfigParser.class);
+  private final ChannelLogger channelLogger = mock(ChannelLogger.class);
   private final Executor executor = Executors.newSingleThreadExecutor();
   private URI uri;
   private final NameResolver nameResolver = mock(NameResolver.class);
@@ -61,6 +62,7 @@ public class NameResolverTest {
     assertThat(args.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args.getOffloadExecutor()).isSameInstanceAs(executor);
 
     NameResolver.Args args2 = args.toBuilder().build();
@@ -68,6 +70,7 @@ public class NameResolverTest {
     assertThat(args2.getProxyDetector()).isSameInstanceAs(proxyDetector);
     assertThat(args2.getSynchronizationContext()).isSameInstanceAs(syncContext);
     assertThat(args2.getServiceConfigParser()).isSameInstanceAs(parser);
+    assertThat(args2.getChannelLogger()).isSameInstanceAs(channelLogger);
     assertThat(args2.getOffloadExecutor()).isSameInstanceAs(executor);
 
     assertThat(args2).isNotSameInstanceAs(args);
@@ -251,6 +254,7 @@ public class NameResolverTest {
         .setProxyDetector(proxyDetector)
         .setSynchronizationContext(syncContext)
         .setServiceConfigParser(parser)
+        .setChannelLogger(channelLogger)
         .setOffloadExecutor(executor)
         .build();
   }

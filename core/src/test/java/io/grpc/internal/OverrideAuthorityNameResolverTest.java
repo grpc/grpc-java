@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.grpc.ChannelLogger;
 import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.ProxyDetector;
@@ -41,6 +42,7 @@ public class OverrideAuthorityNameResolverTest {
       .setProxyDetector(mock(ProxyDetector.class))
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
   @Test

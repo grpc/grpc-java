@@ -561,6 +561,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
       final TimeProvider timeProvider) {
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
+    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    maxTraceEvents = builder.maxTraceEvents;
+    channelTracer = new ChannelTracer(
+        logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
+        "Channel for '" + target + "'");
+    channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     this.nameResolverFactory = builder.getNameResolverFactory();
     ProxyDetector proxyDetector =
         builder.proxyDetector != null ? builder.proxyDetector : GrpcUtil.DEFAULT_PROXY_DETECTOR;
@@ -581,6 +587,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
                     builder.maxRetryAttempts,
                     builder.maxHedgedAttempts,
                     loadBalancerFactory))
+            .setChannelLogger(channelLogger)
             .setOffloadExecutor(
                 // Avoid creating the offloadExecutor until it is first used
                 new Executor() {
@@ -591,12 +598,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 })
             .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
-    this.timeProvider = checkNotNull(timeProvider, "timeProvider");
-    maxTraceEvents = builder.maxTraceEvents;
-    channelTracer = new ChannelTracer(
-        logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
-        "Channel for '" + target + "'");
-    channelLogger = new ChannelLoggerImpl(channelTracer, timeProvider);
     this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);

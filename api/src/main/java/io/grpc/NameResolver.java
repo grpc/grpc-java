@@ -412,6 +412,7 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
+    @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
 
     private Args(
@@ -419,11 +420,13 @@ public abstract class NameResolver {
         ProxyDetector proxyDetector,
         SynchronizationContext syncContext,
         ServiceConfigParser serviceConfigParser,
+        @Nullable ChannelLogger channelLogger,
         @Nullable Executor executor) {
       this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
+      this.channelLogger = channelLogger;
       this.executor = executor;
     }
 
@@ -467,6 +470,19 @@ public abstract class NameResolver {
     }
 
     /**
+     * Returns the {@link ChannelLogger} for the Channel served by this NameResolver.
+     *
+     * @since 1.26.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
+    public ChannelLogger getChannelLogger() {
+      if (channelLogger == null) {
+        throw new IllegalStateException("ChannelLogger is not set in Builder");
+      }
+      return channelLogger;
+    }
+
+    /**
      * Returns the Executor on which this resolver should execute long-running or I/O bound work.
      * Null if no Executor was set.
      *
@@ -485,6 +501,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("channelLogger", channelLogger)
           .add("executor", executor)
           .toString();
     }
@@ -500,6 +517,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
+      builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
       return builder;
     }
@@ -523,6 +541,7 @@ public abstract class NameResolver {
       private ProxyDetector proxyDetector;
       private SynchronizationContext syncContext;
       private ServiceConfigParser serviceConfigParser;
+      private ChannelLogger channelLogger;
       private Executor executor;
 
       Builder() {
@@ -569,6 +588,17 @@ public abstract class NameResolver {
       }
 
       /**
+       * See {@link Args#getChannelLogger}.
+       *
+       * @since 1.26.0
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6438")
+      public Builder setChannelLogger(ChannelLogger channelLogger) {
+        this.channelLogger = checkNotNull(channelLogger);
+        return this;
+      }
+
+      /**
        * See {@link Args#getOffloadExecutor}. This is an optional field.
        *
        * @since 1.25.0
@@ -585,7 +615,10 @@ public abstract class NameResolver {
        * @since 1.21.0
        */
       public Args build() {
-        return new Args(defaultPort, proxyDetector, syncContext, serviceConfigParser, executor);
+        return
+            new Args(
+                defaultPort, proxyDetector, syncContext, serviceConfigParser,
+                channelLogger, executor);
       }
     }
   }
