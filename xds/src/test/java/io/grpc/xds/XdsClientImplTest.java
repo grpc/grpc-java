@@ -178,8 +178,9 @@ public class XdsClientImplTest {
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
-  // Always test from the entire workflow: start with LDS, then RDS (if necessary), then CDS,
-  // then EDS. Even if the test case covers only a specific resource type response handling.
+  // Always test the real workflow and integrity of XdsClient: RDS protocol should always followed
+  // after at least one LDS request-response, from which the RDS resource name comes. CDS and EDS
+  // can be tested separately as they are used in a standalone way.
 
   // Discovery responses should follow management server spec and xDS protocol. See
   // https://www.envoyproxy.io/docs/envoy/latest/api-docs/xds_protocol.
