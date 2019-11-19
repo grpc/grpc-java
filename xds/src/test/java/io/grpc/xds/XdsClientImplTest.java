@@ -175,6 +175,7 @@ public class XdsClientImplTest {
   public void tearDown() {
     xdsClient.shutdownRpcStream();
     channel.shutdown();
+    assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
   // Always test from the entire workflow: start with LDS, then RDS (if necessary), then CDS,
