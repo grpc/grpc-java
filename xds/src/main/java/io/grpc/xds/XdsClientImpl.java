@@ -142,7 +142,12 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void shutdown() {
     channel.shutdown();
-    shutdownRpcStream();
+    if (adsStream != null) {
+      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    if (rpcRetryTimer != null) {
+      rpcRetryTimer.cancel();
+    }
   }
 
   @Override
@@ -195,19 +200,6 @@ final class XdsClientImpl extends XdsClient {
     adsStream = new AdsStream(stub);
     adsStream.start();
     stopwatch.reset().start();
-  }
-
-  /**
-   * Terminates the RPC connection.
-   */
-  @VisibleForTesting
-  void shutdownRpcStream() {
-    if (adsStream != null) {
-      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
-    }
-    if (rpcRetryTimer != null) {
-      rpcRetryTimer.cancel();
-    }
   }
 
   /**

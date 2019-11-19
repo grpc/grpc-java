@@ -29,6 +29,7 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -47,6 +48,8 @@ import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Http
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.config.listener.v2.ApiListener;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.grpc.Context;
+import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.Status.Code;
@@ -63,6 +66,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -107,6 +111,7 @@ public class XdsClientImplTest {
 
   private final Queue<StreamObserver<DiscoveryResponse>> responseObservers = new ArrayDeque<>();
   private final Queue<StreamObserver<DiscoveryRequest>> requestObservers = new ArrayDeque<>();
+  private final AtomicBoolean callEnded = new AtomicBoolean(true);
 
   @Mock
   private AggregatedDiscoveryServiceImplBase mockedDiscoveryService;
@@ -134,6 +139,15 @@ public class XdsClientImplTest {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
+        assertThat(callEnded.get()).isTrue();  // ensure previous call was ended
+        callEnded.set(false);
+        Context.current().addListener(
+            new CancellationListener() {
+              @Override
+              public void cancelled(Context context) {
+                callEnded.set(true);
+              }
+            }, MoreExecutors.directExecutor());
         responseObservers.offer(responseObserver);
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
@@ -173,8 +187,9 @@ public class XdsClientImplTest {
 
   @After
   public void tearDown() {
-    xdsClient.shutdownRpcStream();
-    channel.shutdown();
+    xdsClient.shutdown();
+    assertThat(callEnded.get()).isTrue();
+    assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
 
