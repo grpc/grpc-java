@@ -24,6 +24,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import com.google.rpc.Code;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
@@ -86,21 +88,20 @@ final class SdsClient {
   /** Factory for creating SdsClient based on input params and for unit tests. */
   static class Factory {
 
-    /** Creates an SdsClient with {@link InProcessChannelBuilder}. */
-    @VisibleForTesting
-    static SdsClient createWithInProcChannel(
-        SdsSecretConfig sdsSecretConfig, Node node, Executor watcherExecutor, String name) {
-      ManagedChannel channel = InProcessChannelBuilder.forName(name).directExecutor().build();
-      return new SdsClient(sdsSecretConfig, node, watcherExecutor, channel, null);
-    }
-
-    /** Creates an SdsClient with {@link NettyChannelBuilder} for UDS or IP-based sockets. */
-    static SdsClient createWithNettyChannel(
+    /** Creates an SdsClient after figuring out channel to use. */
+    static SdsClient createSdsClient(
         SdsSecretConfig sdsSecretConfig,
         Node node,
         Executor watcherExecutor,
         Executor channelExecutor) {
-      String targetUri = extractUdsTarget(sdsSecretConfig.getSdsConfig());
+      String[] channelInfo = extractChannelInfo(sdsSecretConfig.getSdsConfig());
+      String targetUri = channelInfo[0];
+      if (channelInfo[1] != null && channelInfo[1].startsWith("inproc")) {
+        ManagedChannel channel =
+            InProcessChannelBuilder.forName(targetUri).executor(channelExecutor).build();
+        return new SdsClient(
+            sdsSecretConfig, node, watcherExecutor, channel, /* eventLoopGroup= */ null);
+      }
       NettyChannelBuilder builder;
       EventLoopGroup eventLoopGroup = null;
       if (targetUri.startsWith("unix:")) {
@@ -122,7 +123,7 @@ final class SdsClient {
     }
 
     @VisibleForTesting
-    static String extractUdsTarget(ConfigSource configSource) {
+    static String[] extractChannelInfo(ConfigSource configSource) {
       checkNotNull(configSource, "configSource");
       checkArgument(
           configSource.hasApiConfigSource(), "only configSource with ApiConfigSource supported");
@@ -144,9 +145,15 @@ final class SdsClient {
               && googleGrpc.getCallCredentialsCount() == 0
               && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
           "No credentials supported in GoogleGrpc");
-      String targetUri = googleGrpc.getTargetUri();
-      checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
-      return targetUri;
+      String[] retArray = new String[2];
+      retArray[0] = googleGrpc.getTargetUri();
+      if (googleGrpc.hasConfig()) {
+        Struct struct = googleGrpc.getConfig();
+        Value value = struct.getFieldsMap().get("channelType");
+        retArray[1] = value.getStringValue();
+      }
+      checkArgument(!Strings.isNullOrEmpty(retArray[0]), "targetUri in GoogleGrpc is empty!");
+      return retArray;
     }
   }
 
@@ -307,7 +314,7 @@ final class SdsClient {
   }
 
   /** Registers a secret watcher for this client's SdsSecretConfig. */
-  void watchSecret(SecretWatcher secretWatcher) throws InvalidProtocolBufferException {
+  void watchSecret(SecretWatcher secretWatcher) {
     checkNotNull(secretWatcher, "secretWatcher");
     checkState(watcher == null, "watcher already set");
     watcher = secretWatcher;

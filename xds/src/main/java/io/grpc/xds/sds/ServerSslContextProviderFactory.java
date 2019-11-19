@@ -20,7 +20,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.envoyproxy.envoy.api.v2.auth.DownstreamTlsContext;
+import io.grpc.xds.Bootstrapper;
 import io.grpc.xds.sds.ReferenceCountingSslContextProviderMap.SslContextProviderFactory;
+import java.util.concurrent.Executors;
 
 /** Factory to create server-side SslContextProvider from DownstreamTlsContext. */
 final class ServerSslContextProviderFactory
@@ -37,7 +39,15 @@ final class ServerSslContextProviderFactory
     if (CommonTlsContextUtil.hasAllSecretsUsingFilename(
         downstreamTlsContext.getCommonTlsContext())) {
       return SecretVolumeSslContextProvider.getProviderForServer(downstreamTlsContext);
+    } else if (CommonTlsContextUtil.hasAllSecretsUsingSds(
+        downstreamTlsContext.getCommonTlsContext())) {
+      return SdsSslContextProvider.getProviderForServer(
+          downstreamTlsContext,
+          Bootstrapper.getNode(),
+          Executors.newSingleThreadExecutor(),
+          /* channelExecutor= */ null);
     }
-    throw new UnsupportedOperationException("DownstreamTlsContext using SDS not supported");
+    throw new UnsupportedOperationException(
+        "DownstreamTlsContext to have all filenames or all SdsConfig");
   }
 }

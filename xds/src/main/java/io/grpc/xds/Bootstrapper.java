@@ -37,10 +37,8 @@ import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
-/**
- * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
- */
-abstract class Bootstrapper {
+/** Loads configuration information to bootstrap gRPC's integration of xDS protocol. */
+public abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
@@ -59,6 +57,15 @@ abstract class Bootstrapper {
 
   static Bootstrapper getInstance() {
     return DEFAULT_INSTANCE;
+  }
+
+  /** Gets the current Node from the bootstrap file. */
+  public static Node getNode() {
+    try {
+      return getInstance().readBootstrap().getNode();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**
