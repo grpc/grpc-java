@@ -291,7 +291,7 @@ public class XdsClientImplTest {
     // Client sends an NACK LDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "foo.googleapis.com:8080",
+            argThat(new NackRequestMatcher("", "foo.googleapis.com:8080",
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
@@ -545,7 +545,7 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+            argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
@@ -606,7 +606,7 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
+            argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verifyZeroInteractions(configWatcher);
@@ -1349,18 +1349,18 @@ public class XdsClientImplTest {
    * Matcher for DiscoveryRequest used to verify NACK requests. Eliminates the comparison of
    * error_details for DiscoveryRequests if they are expected to be an NACK request.
    */
-  private static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
+  private static class NackRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
     private final String versionInfo;
     private final String typeUrl;
     private final List<String> resourceNames;
     private final String responseNonce;
 
-    private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
+    private NackRequestMatcher(String versionInfo, String resourceName, String typeUrl,
         String responseNonce) {
       this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
     }
 
-    private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
+    private NackRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
         String responseNonce) {
       this.versionInfo = versionInfo;
       this.resourceNames = resourceNames;
