@@ -232,8 +232,6 @@ final class XdsClientImpl extends XdsClient {
         // Currently in retry backoff.
         return;
       }
-      checkState(adsStream != null,
-          "Severe bug: ADS stream was not created while an endpoint watcher was registered");
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
     }
   }
