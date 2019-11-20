@@ -507,19 +507,19 @@ final class XdsClientImpl extends XdsClient {
         @Override
         public void run() {
           handleStreamClosed(
-              Status.UNAVAILABLE.withDescription("ADS stream [" + this + "] was closed"));
+              Status.UNAVAILABLE.withDescription("ADS stream [" + this + "] was closed by server"));
         }
       });
     }
 
     private void handleStreamClosed(Status error) {
+      logger.log(Level.INFO, error.getDescription(), error.getCause());
       checkArgument(!error.isOk(), "unexpected OK status");
       if (closed) {
         return;
       }
       closed = true;
       cleanUp();
-      configWatcher.onError(error);
       if (responseReceived || retryBackoffPolicy == null) {
         // Reset the backoff sequence if had received a response, or backoff sequence
         // has never been initialized.
