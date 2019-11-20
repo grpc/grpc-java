@@ -323,6 +323,31 @@ public class ServiceConfigErrorHandlingTest {
   }
 
   @Test
+  public void invalidConfig_withDefaultConfig() throws Exception {
+    FakeNameResolverFactory nameResolverFactory =
+        new FakeNameResolverFactory.Builder(expectedUri)
+            .setServers(ImmutableList.of(addressGroup))
+            .build();
+    channelBuilder.nameResolverFactory(nameResolverFactory);
+    ImmutableMap<String, Object> defaultServiceConfig =
+        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    channelBuilder.defaultServiceConfig(defaultServiceConfig);
+
+    createChannel();
+
+    ArgumentCaptor<ResolvedAddresses> resultCaptor =
+        ArgumentCaptor.forClass(ResolvedAddresses.class);
+    verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
+    assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
+    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
+    assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
+        .isEqualTo(defaultServiceConfig);
+    verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+
+    assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+  }
+
+  @Test
   public void resolverReturnsNoConfig_noDefaultConfig() {
     FakeNameResolverFactory nameResolverFactory =
         new FakeNameResolverFactory.Builder(expectedUri)

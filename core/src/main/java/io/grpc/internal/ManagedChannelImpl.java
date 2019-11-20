@@ -247,17 +247,13 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final InternalChannelz channelz;
   // Must be mutated and read from syncContext
   @CheckForNull
-  private Boolean haveBackends; // a flag for doing channel tracing when flipped
+  private Boolean lastResolutionResultWasSuccess; // a flag for doing channel tracing when flipped
   // Must be mutated and read from constructor or syncContext
-  // TODO(notcarl): check this value when error in service config resolution
   @Nullable
   private Map<String, ?> lastServiceConfig; // used for channel tracing when value changed
   @Nullable
   private final Map<String, ?> defaultServiceConfig;
   // Must be mutated and read from constructor or syncContext
-  // See service config error handling spec for reference.
-  // TODO(notcarl): check this value when error in service config resolution
-  @SuppressWarnings("UnusedVariable")
   private boolean waitingForServiceConfig = true;
   private final boolean lookUpServiceConfig;
 
@@ -1311,11 +1307,9 @@ final class ManagedChannelImpl extends ManagedChannel implements
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
 
-          boolean nrReplied = haveBackends == null;
-
-          if (haveBackends == null || !haveBackends) {
+          if (lastResolutionResultWasSuccess == null || !lastResolutionResultWasSuccess) {
             channelLogger.log(ChannelLogLevel.INFO, "Address resolved: {0}", servers);
-            haveBackends = true;
+            lastResolutionResultWasSuccess = true;
           }
 
           nameResolverBackoffPolicy = null;
@@ -1324,10 +1318,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
           if (configOrError != null) {
             if (configOrError.getConfig() != null) {
               serviceConfig = (Map<String, ?>) configOrError.getConfig();
-            } else if (nrReplied || defaultServiceConfig == null) {
-              // First DNS lookup has invalid service config, and cannot fall back to default(=null)
-              onError(configOrError.getError());
-              return;
             }
           }
 
@@ -1349,6 +1339,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
               channelLogger.log(
                   ChannelLogLevel.INFO,
                   "Received no service config, using default service config");
+            } else if (waitingForServiceConfig
+                && configOrError != null
+                && configOrError.getError() != null) {
+              // First DNS lookup has invalid service config, and cannot fall back to default(=null)
+              onError(configOrError.getError());
+              return;
             } else {
               effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
               channelLogger.log(
@@ -1413,18 +1409,17 @@ final class ManagedChannelImpl extends ManagedChannel implements
     private void handleErrorInSyncContext(Status error) {
       logger.log(Level.WARNING, "[{0}] Failed to resolve name. status={1}",
           new Object[] {getLogId(), error});
-      if (haveBackends == null || haveBackends) {
+      if (lastResolutionResultWasSuccess == null || lastResolutionResultWasSuccess) {
         channelLogger.log(ChannelLogLevel.WARNING, "Failed to resolve name: {0}", error);
       }
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
       if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
       }
-      boolean nameResolverReplied = haveBackends == null;
-      if (nameResolverReplied) {
+      if (waitingForServiceConfig) {
         lastServiceConfig = defaultServiceConfig != null
             ? defaultServiceConfig : EMPTY_SERVICE_CONFIG;
-        haveBackends = false;
+        lastResolutionResultWasSuccess = false;
       }
 
       helper.lb.handleNameResolutionError(error);
