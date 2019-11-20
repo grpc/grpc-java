@@ -191,6 +191,7 @@ final class XdsClientImpl extends XdsClient {
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
     boolean needRequest = false;
     if (!endpointWatchers.containsKey(clusterName)) {
+      logger.log(Level.FINE, "Start watching endpoints in cluster {0}", clusterName);
       needRequest = true;
       endpointWatchers.put(clusterName, new HashSet<EndpointWatcher>());
     }
@@ -225,6 +226,7 @@ final class XdsClientImpl extends XdsClient {
     }
     watchers.remove(watcher);
     if (watchers.isEmpty()) {
+      logger.log(Level.FINE, "Stop watching endpoints in cluster {0}", clusterName);
       endpointWatchers.remove(clusterName);
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
