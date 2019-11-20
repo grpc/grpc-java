@@ -1403,18 +1403,12 @@ public class XdsClientImplTest {
   }
 
   /**
-   * Client receives EDS responses containing ClusterLoadAssignments for resources that were
-   * not requested (management server sends them proactively). Later client receives a CDS
-   * response with the requested Cluster referencing one of the previously received
-   * ClusterLoadAssignments. No EDS request needs to be sent for that
-   * ClusterLoadAssignment as it can be found in local cache (management server will not send
-   * EDS responses for that ClusterLoadAssignment again). A future EDS response update for
-   * that ClusterLoadAssignment should be notified to corresponding endpoint watchers.
-   *
-   * <p>Tests for caching EDS response data behavior.
+   * An endpoint watcher is registered for a cluster that already has some other endpoint watchers
+   * watching on. Endpoint information received previously is in local cache and notified to
+   * the new watcher immediately.
    */
   @Test
-  public void receiveEdsResponsesForClusterLoadAssignmentToBeUsedLater() {
+  public void watchEndpointsForClusterAlreadyBeingWatched() {
     EndpointWatcher watcher1 = mock(EndpointWatcher.class);
     xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
     StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
@@ -1434,14 +1428,7 @@ public class XdsClientImplTest {
                     ImmutableList.of(
                         buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2)),
                     1, 0)),
-            ImmutableList.<Policy.DropOverload>of())),
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
-            ImmutableList.of(
-                buildLocalityLbEndpoints("region2", "zone2", "subzone2",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.234.52", 8888, HealthStatus.UNKNOWN, 5)),
-                    6, 1)),
-            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
+            ImmutableList.<Policy.DropOverload>of())));
 
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusterLoadAssignments,
@@ -1466,67 +1453,26 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.0.1", 8080,
                         2, true)), 1, 0));
 
-    // Start watching endpoints in cluster that server had already sent to us.
+    // A second endpoint watcher is registered for endpoints in the same cluster.
     EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher2);
+    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
 
-    // Cached result is notified to watcher immediately.
+    // Cached endpoint information is notified to the new watcher immediately, without sending
+    // another EDS request.
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
     verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
     EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
+    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
     assertThat(endpointUpdate2.getDropPolicies()).isEmpty();
     assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
         .containsExactly(
-            new Locality("region2", "zone2", "subzone2"),
+            new Locality("region1", "zone1", "subzone1"),
             new LocalityLbEndpoints(
                 ImmutableList.of(
-                    new LbEndpoint("192.168.234.52", 8888,
-                        5, true)), 6, 1));
+                    new LbEndpoint("192.168.0.1", 8080,
+                        2, true)), 1, 0));
 
-    // Client sent an EDS request to subscribe to resources newly being watched.
-    verify(requestObserver)
-        .onNext(
-            argThat(
-                new DiscoveryRequestMatcher("0",
-                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
-
-    // Management server sends back an EDS response updating endpoints in a previously known
-    // cluster.
-    clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
-            ImmutableList.of(
-                buildLocalityLbEndpoints("region3", "zone3", "subzone3",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.41.54", 443, HealthStatus.UNKNOWN, 4)),
-                    2, 0)),
-            ImmutableList.<ClusterLoadAssignment.Policy.DropOverload>of())));
-
-    response = buildDiscoveryResponse("1", clusterLoadAssignments,
-        XdsClientImpl.ADS_TYPE_URL_EDS, "0001");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK EDS request.
-    verify(requestObserver)
-        .onNext(
-            argThat(
-                new DiscoveryRequestMatcher("1",
-                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_EDS, "0001")));
-
-    // Updated result is notified to the corresponding watcher.
-    verify(watcher2, times(2)).onEndpointChanged(endpointUpdateCaptor2.capture());
-    endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-bar.googleapis.com");
-    assertThat(endpointUpdate2.getDropPolicies()).isEmpty();
-    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
-        .containsExactly(
-            new Locality("region3", "zone3", "subzone3"),
-            new LocalityLbEndpoints(
-                ImmutableList.of(
-                    new LbEndpoint("192.168.41.54", 443,
-                        4, true)), 2, 0));
+    verifyNoMoreInteractions(requestObserver);
   }
 
   @Test
@@ -1682,11 +1628,34 @@ public class XdsClientImplTest {
     // Cancelled watchers do not receive notification.
     verifyNoMoreInteractions(watcher1, watcher2);
 
-    // A new endpoint watcher is added to watch an old cluster.
+    // A new endpoint watcher is added to watch an old but was no longer interested in cluster.
     EndpointWatcher watcher3 = mock(EndpointWatcher.class);
     xdsClient.watchEndpointData("cluster-bar.googleapis.com", watcher3);
 
-    // Notified with cached data immediately.
+    // Nothing should be notified to the new watcher as we are still waiting management server's
+    // latest response.
+    // Cached endpoint data should have been purged.
+    verify(watcher3, never()).onEndpointChanged(any(EndpointUpdate.class));
+
+    // An EDS request is sent to re-subscribe the cluster again.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("2", "cluster-bar.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+
+    // Management server sends back an EDS response for re-subscribed resource.
+    clusterLoadAssignments = ImmutableList.of(
+        Any.pack(buildClusterLoadAssignment("cluster-bar.googleapis.com",
+            ImmutableList.of(
+                buildLocalityLbEndpoints("region4", "zone4", "subzone4",
+                    ImmutableList.of(
+                        buildLbEndpoint("192.168.75.6", 8888, HealthStatus.HEALTHY, 2)),
+                    3, 0)),
+            ImmutableList.<Policy.DropOverload>of())));
+
+    response = buildDiscoveryResponse("3", clusterLoadAssignments,
+        XdsClientImpl.ADS_TYPE_URL_EDS, "0003");
+    responseObserver.onNext(response);
+
     ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor3 = ArgumentCaptor.forClass(null);
     verify(watcher3).onEndpointChanged(endpointUpdateCaptor3.capture());
     EndpointUpdate endpointUpdate3 = endpointUpdateCaptor3.getValue();
@@ -1699,10 +1668,13 @@ public class XdsClientImplTest {
                     new LbEndpoint("192.168.75.6", 8888, 2, true)),
                 3, 0));
 
-    // An EDS request is sent to re-subscribe the cluster again.
+    // Client sent an ACK EDS request.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("2", "cluster-bar.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0002")));
+        .onNext(
+            argThat(
+                new DiscoveryRequestMatcher("3",
+                    ImmutableList.of("cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_EDS, "0003")));
   }
 
   // TODO(chengyuanzhang): incorporate interactions with cluster watchers and end endpoint watchers

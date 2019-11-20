@@ -228,6 +228,8 @@ final class XdsClientImpl extends XdsClient {
     if (watchers.isEmpty()) {
       logger.log(Level.FINE, "Stop watching endpoints in cluster {0}", clusterName);
       endpointWatchers.remove(clusterName);
+      // Remove the corresponding EDS cache entry.
+      clusterNamesToEndpointUpdates.remove(clusterName);
       // No longer interested in this cluster, send an updated EDS request to unsubscribe
       // this resource.
       if (rpcRetryTimer != null) {
@@ -523,15 +525,20 @@ final class XdsClientImpl extends XdsClient {
     }
 
     String errorMessage = null;
-    // Full endpoint information update received in this EDS response to be cached.
+    // Endpoint information updates for requested clusters received in this EDS response.
     Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
-    // EndpointUpdate data to be pushed to each watcher.
-    Map<String, EndpointUpdate> desiredEndpointUpdates = new HashMap<>();
-    // Walk through each ClusterLoadAssignment message. If any of them contain invalid information
-    // for gRPC's load balancing usage, the whole response is rejected.
+    // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
+    // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
     validateData:
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
       String clusterName = assignment.getClusterName();
+      // Skip information for clusters not requested.
+      // Management server is required to always send newly requested resources, even if they
+      // may have been sent previously (proactively). Thus, client does not need to cache
+      // unrequested resources.
+      if (!endpointWatchers.containsKey(clusterName)) {
+        continue;
+      }
       EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
       if (assignment.getEndpointsCount() == 0) {
@@ -572,9 +579,6 @@ final class XdsClientImpl extends XdsClient {
       }
       EndpointUpdate update = updateBuilder.build();
       endpointUpdates.put(clusterName, update);
-      if (endpointWatchers.containsKey(clusterName)) {
-        desiredEndpointUpdates.put(clusterName, update);
-      }
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
@@ -590,7 +594,7 @@ final class XdsClientImpl extends XdsClient {
     clusterNamesToEndpointUpdates.putAll(endpointUpdates);
 
     // Notify watchers waiting for updates of endpoint information received in this EDS response.
-    for (Map.Entry<String, EndpointUpdate> entry : desiredEndpointUpdates.entrySet()) {
+    for (Map.Entry<String, EndpointUpdate> entry : endpointUpdates.entrySet()) {
       for (EndpointWatcher watcher : endpointWatchers.get(entry.getKey())) {
         watcher.onEndpointChanged(entry.getValue());
       }
