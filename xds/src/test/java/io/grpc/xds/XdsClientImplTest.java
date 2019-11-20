@@ -280,7 +280,7 @@ public class XdsClientImplTest {
     // Client sends an NACK LDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new NackRequestMatcher("", "foo.googleapis.com:8080",
+            argThat(new DiscoveryRequestMatcher("", "foo.googleapis.com:8080",
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
@@ -536,7 +536,7 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
@@ -598,7 +598,7 @@ public class XdsClientImplTest {
     // Client sent an NACK RDS request.
     verify(requestObserver)
         .onNext(
-            argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
+            argThat(new DiscoveryRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
     verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
@@ -1339,21 +1339,25 @@ public class XdsClientImplTest {
   }
 
   /**
-   * Matcher for DiscoveryRequest used to verify NACK requests. Eliminates the comparison of
-   * error_details for DiscoveryRequests if they are expected to be an NACK request.
+   * Matcher for DiscoveryRequest without the comparison of error_details field, which is used for
+   * management server debugging purposes.
+   *
+   * <p>In general, if you are sure error_details field should not be set in a DiscoveryRequest,
+   * compare with message equality. Otherwise, this matcher is handy for comparing other fields
+   * only.
    */
-  private static class NackRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
+  private static class DiscoveryRequestMatcher implements ArgumentMatcher<DiscoveryRequest> {
     private final String versionInfo;
     private final String typeUrl;
     private final List<String> resourceNames;
     private final String responseNonce;
 
-    private NackRequestMatcher(String versionInfo, String resourceName, String typeUrl,
+    private DiscoveryRequestMatcher(String versionInfo, String resourceName, String typeUrl,
         String responseNonce) {
       this(versionInfo, ImmutableList.of(resourceName), typeUrl, responseNonce);
     }
 
-    private NackRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
+    private DiscoveryRequestMatcher(String versionInfo, List<String> resourceNames, String typeUrl,
         String responseNonce) {
       this.versionInfo = versionInfo;
       this.resourceNames = resourceNames;
