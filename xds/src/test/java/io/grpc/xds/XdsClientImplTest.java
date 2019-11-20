@@ -18,13 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
@@ -282,7 +283,8 @@ public class XdsClientImplTest {
             argThat(new NackRequestMatcher("", "foo.googleapis.com:8080",
                 XdsClientImpl.ADS_TYPE_URL_LDS, "0000")));
 
-    verifyZeroInteractions(configWatcher);
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
     verifyNoMoreInteractions(requestObserver);
   }
 
@@ -417,7 +419,8 @@ public class XdsClientImplTest {
         .onNext(eq(buildDiscoveryRequest("0", "route-foo.googleapis.com",
             XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    verifyZeroInteractions(configWatcher);
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
   }
 
   /**
@@ -536,7 +539,8 @@ public class XdsClientImplTest {
             argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    verifyZeroInteractions(configWatcher);
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
   }
 
   /**
@@ -597,7 +601,8 @@ public class XdsClientImplTest {
             argThat(new NackRequestMatcher("", "route-foo.googleapis.com",
                 XdsClientImpl.ADS_TYPE_URL_RDS, "0000")));
 
-    verifyZeroInteractions(configWatcher);
+    verify(configWatcher, never()).onConfigChanged(any(ConfigUpdate.class));
+    verify(configWatcher, never()).onError(any(Status.class));
   }
 
   /**
