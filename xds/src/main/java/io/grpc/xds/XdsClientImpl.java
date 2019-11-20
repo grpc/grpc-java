@@ -520,7 +520,7 @@ final class XdsClientImpl extends XdsClient {
       return;
     }
 
-    boolean dataInvalid = false;
+    String errorMessage = null;
     // Full endpoint information update received in this EDS response to be cached.
     Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
     // EndpointUpdate data to be pushed to each watcher.
@@ -533,19 +533,19 @@ final class XdsClientImpl extends XdsClient {
       EndpointUpdate.Builder updateBuilder = EndpointUpdate.newBuilder();
       updateBuilder.setClusterName(clusterName);
       if (assignment.getEndpointsCount() == 0) {
-        dataInvalid = true;
+        errorMessage = "Cluster without any locality endpoint.";
         break;
       }
       // The policy.disable_overprovisioning field must be set to true.
       if (!assignment.getPolicy().getDisableOverprovisioning()) {
-        dataInvalid = true;
+        errorMessage = "Cluster requires overprovisioning.";
         break;
       }
       for (io.envoyproxy.envoy.api.v2.endpoint.LocalityLbEndpoints localityLbEndpoints
           : assignment.getEndpointsList()) {
         // The lb_endpoints field for LbEndpoint must contain at least one entry.
         if (localityLbEndpoints.getLbEndpointsCount() == 0) {
-          dataInvalid = true;
+          errorMessage = "Locality with no endpoint.";
           break validateData;
         }
         // The endpoint field of each lb_endpoints must be set.
@@ -553,7 +553,7 @@ final class XdsClientImpl extends XdsClient {
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()) {
-            dataInvalid = true;
+            errorMessage = "Invalid endpoint address information.";
             break validateData;
           }
         }
@@ -574,10 +574,11 @@ final class XdsClientImpl extends XdsClient {
         desiredEndpointUpdates.put(clusterName, update);
       }
     }
-    if (dataInvalid) {
+    if (errorMessage != null) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
           edsResponse.getNonce(),
-          "ClusterLoadAssignment message contains invalid information for gRPC's usage");
+          "ClusterLoadAssignment message contains invalid information for gRPC's usage: "
+              + errorMessage);
       return;
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
@@ -753,7 +754,7 @@ final class XdsClientImpl extends XdsClient {
         nonce = edsRespNonce;
         edsResourceNames = resourceNames;
       }
-      // TODO(chengyuanzhang): cases for CDS/EDS.
+      // TODO(chengyuanzhang): cases for CDS.
       DiscoveryRequest request =
           DiscoveryRequest
               .newBuilder()
