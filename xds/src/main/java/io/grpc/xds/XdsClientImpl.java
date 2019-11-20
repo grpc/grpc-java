@@ -271,22 +271,6 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-<<<<<<< HEAD
-=======
-   * Terminates the RPC connection.
-   */
-  @VisibleForTesting
-  void shutdownRpcStream() {
-    if (adsStream != null) {
-      adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
-    }
-    if (rpcRetryTimer != null) {
-      rpcRetryTimer.cancel();
-    }
-  }
-
-  /**
->>>>>>> Implemented EDS response handler.
    * Handles LDS response to find the HttpConnectionManager message for the requested resource name.
    * Proceed with the resolved RouteConfiguration in HttpConnectionManager message of the requested
    * listener, if exists, to find the VirtualHost configuration for the "xds:" URI
