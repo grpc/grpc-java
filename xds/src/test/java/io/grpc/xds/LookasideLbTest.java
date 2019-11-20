@@ -132,6 +132,7 @@ public class LookasideLbTest {
       localityEndpointsMappingCaptor;
 
   private ManagedChannel channel;
+  private ManagedChannel channel2;
   private StreamObserver<DiscoveryResponse> serverResponseWriter;
   private LocalityStoreFactory localityStoreFactory;
   private LoadBalancer lookasideLb;
@@ -179,11 +180,16 @@ public class LookasideLbTest {
             .forName(serverName)
             .directExecutor()
             .build());
+    channel2 = cleanupRule.register(
+        InProcessChannelBuilder
+            .forName(serverName)
+            .directExecutor()
+            .build());
 
     doReturn(SERVICE_AUTHORITY).when(helper).getAuthority();
     doReturn(syncContext).when(helper).getSynchronizationContext();
     doReturn(mock(ChannelLogger.class)).when(helper).getChannelLogger();
-    doReturn(channel).when(helper).createResolvingOobChannel(anyString());
+    doReturn(channel, channel2).when(helper).createResolvingOobChannel(anyString());
     doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
 
     localityStoreFactory = new LocalityStoreFactory() {

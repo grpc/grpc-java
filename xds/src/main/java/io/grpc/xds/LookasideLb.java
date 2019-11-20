@@ -109,7 +109,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
     }
     XdsConfig xdsConfig = (XdsConfig) cfg.getConfig();
 
-    String newBalancerName = xdsConfig.balancerName;
+    final String newBalancerName = xdsConfig.balancerName;
 
     // The is to handle the legacy usecase that requires balancerName from xds config.
     if (!newBalancerName.equals(balancerName)) {
@@ -152,7 +152,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
          */
         @Override
         public String getPolicyName() {
-          return "xds_child_policy_balancer_name_" + balancerName;
+          return "xds_child_policy_balancer_name_" + newBalancerName;
         }
 
         @Override
@@ -171,7 +171,7 @@ final class LookasideLb extends ForwardingLoadBalancer {
             @Override
             public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
               if (xdsClient == null) {
-                ManagedChannel channel = initLbChannel(helper, balancerName, channelCredsList);
+                ManagedChannel channel = initLbChannel(helper, newBalancerName, channelCredsList);
                 xdsClient  = new XdsComms2(
                     channel, helper, new ExponentialBackoffPolicy.Provider(),
                     GrpcUtil.STOPWATCH_SUPPLIER, node);
