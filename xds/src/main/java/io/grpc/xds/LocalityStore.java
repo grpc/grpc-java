@@ -28,14 +28,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import io.grpc.ConnectivityState;
-import io.grpc.ConnectivityStateInfo;
 import io.grpc.EquivalentAddressGroup;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancer.Helper;
 import io.grpc.LoadBalancer.PickResult;
 import io.grpc.LoadBalancer.PickSubchannelArgs;
 import io.grpc.LoadBalancer.ResolvedAddresses;
-import io.grpc.LoadBalancer.Subchannel;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
@@ -76,11 +74,26 @@ interface LocalityStore {
 
   void updateDropPercentage(List<DropOverload> dropOverloads);
 
-  void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState);
-
   void updateOobMetricsReportInterval(long reportIntervalNano);
 
   LoadStatsStore getLoadStatsStore();
+
+  @VisibleForTesting
+  abstract class LocalityStoreFactory {
+    private static final LocalityStoreFactory DEFAULT_INSTANCE =
+        new LocalityStoreFactory() {
+          @Override
+          LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
+            return new LocalityStoreImpl(helper, lbRegistry);
+          }
+        };
+
+    static LocalityStoreFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    abstract LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
+  }
 
   final class LocalityStoreImpl implements LocalityStore {
     private static final String ROUND_ROBIN = "round_robin";
@@ -175,16 +188,6 @@ interface LocalityStore {
             return new InterLocalityPicker(childPickers);
           }
         };
-
-    // This is triggered by xdsLoadbalancer.handleSubchannelState
-    @Override
-    public void handleSubchannelState(Subchannel subchannel, ConnectivityStateInfo newState) {
-      // delegate to the childBalancer who manages this subchannel
-      for (LocalityLbInfo localityLbInfo : localityMap.values()) {
-        // This will probably trigger childHelper.updateBalancingState
-        localityLbInfo.childBalancer.handleSubchannelState(subchannel, newState);
-      }
-    }
 
     @Override
     public void reset() {
@@ -591,7 +594,7 @@ interface LocalityStore {
         Helper childHelper, final LocalityLbInfo localityLbInfo,
         final LocalityLbEndpoints localityLbEndpoints, final Locality locality) {
       final List<EquivalentAddressGroup> eags = new ArrayList<>();
-      for (LbEndpoint endpoint: localityLbEndpoints.getEndpoints()) {
+      for (LbEndpoint endpoint : localityLbEndpoints.getEndpoints()) {
         if (endpoint.isHealthy()) {
           eags.add(endpoint.getAddress());
         }
