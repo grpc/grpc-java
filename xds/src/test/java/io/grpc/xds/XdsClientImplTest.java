@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -77,8 +76,6 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /**
  * Tests for {@link XdsClientImpl}.
@@ -152,15 +149,6 @@ public class XdsClientImplTest {
         @SuppressWarnings("unchecked")
         StreamObserver<DiscoveryRequest> requestObserver = mock(StreamObserver.class);
         requestObservers.offer(requestObserver);
-        Answer<Void> closeRpc = new Answer<Void>() {
-          @Override
-          public Void answer(InvocationOnMock invocation) {
-            responseObserver.onCompleted();
-            return null;
-          }
-        };
-        doAnswer(closeRpc).when(requestObserver).onCompleted();
-
         return requestObserver;
       }
     };
