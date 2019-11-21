@@ -92,7 +92,7 @@ final class XdsClientImpl extends XdsClient {
   private final Map<String, String> routeConfigNamesToClusterNames = new HashMap<>();
 
   // Cached data for EDS responses, keyed by cluster names.
-  // CDS responses indicate absence of clusters and RDS responses indicate presence of clusters.
+  // CDS responses indicate absence of clusters and EDS responses indicate presence of clusters.
   // Optimization: cache EndpointUpdate, which contains only information needed by gRPC, instead
   // of whole ClusterLoadAssignment messages to reduce memory usage.
   private final Map<String, EndpointUpdate> clusterNamesToEndpointUpdates = new HashMap<>();
