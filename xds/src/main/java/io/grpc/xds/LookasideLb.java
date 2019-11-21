@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -186,7 +185,10 @@ final class LookasideLb extends LoadBalancer {
                 return;
               }
 
-              localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
+              LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
+              localityStore = localityStoreFactory.newLocalityStore(
+                  helper, lbRegistry, loadStatsStore);
+              // TODO(zdapeng): Use XdsClient to do Lrs directly.
               final LoadReportCallback lrsCallback =
                   new LoadReportCallback() {
                     @Override
@@ -210,8 +212,7 @@ final class LookasideLb extends LoadBalancer {
                       .build();
                   // TODO(zdapeng): Use XdsClient to do Lrs directly.
                   lrsClient = loadReportClientFactory.createLoadReportClient(
-                      channel, helper, new ExponentialBackoffPolicy.Provider(),
-                      localityStore.getLoadStatsStore());
+                      channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
                   xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
                     @Override
                     XdsClient createXdsClient() {
@@ -240,8 +241,7 @@ final class LookasideLb extends LoadBalancer {
                     bootstrapInfo.getChannelCredentials());
                 // TODO(zdapeng): Use XdsClient to do Lrs directly.
                 lrsClient = loadReportClientFactory.createLoadReportClient(
-                    channel, helper, new ExponentialBackoffPolicy.Provider(),
-                    localityStore.getLoadStatsStore());
+                    channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
                 xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
                   @Override
                   XdsClient createXdsClient() {
