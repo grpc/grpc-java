@@ -527,7 +527,6 @@ final class XdsClientImpl extends XdsClient {
     Map<String, EndpointUpdate> endpointUpdates = new HashMap<>();
     // Walk through each ClusterLoadAssignment message. If any of them for requested clusters
     // contain invalid information for gRPC's load balancing usage, the whole response is rejected.
-    validateData:
     for (ClusterLoadAssignment assignment : clusterLoadAssignments) {
       String clusterName = assignment.getClusterName();
       // Skip information for clusters not requested.
@@ -553,7 +552,7 @@ final class XdsClientImpl extends XdsClient {
         // The lb_endpoints field for LbEndpoint must contain at least one entry.
         if (localityLbEndpoints.getLbEndpointsCount() == 0) {
           errorMessage = "Locality with no endpoint.";
-          break validateData;
+          break;
         }
         // The endpoint field of each lb_endpoints must be set.
         // Inside of it: the address field must be set.
@@ -561,8 +560,11 @@ final class XdsClientImpl extends XdsClient {
             : localityLbEndpoints.getLbEndpointsList()) {
           if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()) {
             errorMessage = "Invalid endpoint address information.";
-            break validateData;
+            break;
           }
+        }
+        if (errorMessage != null) {
+          break;
         }
         // Note endpoints with health status other than UNHEALTHY and UNKNOWN are still
         // handed over to watching parties. It is watching parties' responsibility to
@@ -570,6 +572,9 @@ final class XdsClientImpl extends XdsClient {
         updateBuilder.addLocalityLbEndpoints(
             Locality.fromEnvoyProtoLocality(localityLbEndpoints.getLocality()),
             LocalityLbEndpoints.fromEnvoyProtoLocalityLbEndpoints(localityLbEndpoints));
+      }
+      if (errorMessage != null) {
+        break;
       }
       for (io.envoyproxy.envoy.api.v2.ClusterLoadAssignment.Policy.DropOverload dropOverload
           : assignment.getPolicy().getDropOverloadsList()) {
