@@ -216,6 +216,7 @@ public class CdsLoadBalancerTest {
 
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor2 = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchClusterData(eq("bar.googleapis.com"), clusterWatcherCaptor2.capture());
+    verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
     Helper edsLbHelper2 = edsLbHelpers.poll();
