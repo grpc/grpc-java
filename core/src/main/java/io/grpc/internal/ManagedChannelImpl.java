@@ -562,6 +562,12 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.target = checkNotNull(builder.target, "target");
     this.logId = InternalLogId.allocate("Channel", target);
     this.timeProvider = checkNotNull(timeProvider, "timeProvider");
+    this.executorPool = checkNotNull(builder.executorPool, "executorPool");
+    this.executor = checkNotNull(executorPool.getObject(), "executor");
+    this.transportFactory =
+        new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
+    this.scheduledExecutor =
+        new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
     maxTraceEvents = builder.maxTraceEvents;
     channelTracer = new ChannelTracer(
         logId, builder.maxTraceEvents, timeProvider.currentTimeNanos(),
@@ -581,6 +587,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
             .setDefaultPort(builder.getDefaultPort())
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
+            .setScheduledExecutorService(scheduledExecutor)
             .setServiceConfigParser(
                 new ScParser(
                     retryEnabled,
@@ -598,18 +605,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
                 })
             .build();
     this.nameResolver = getNameResolver(target, nameResolverFactory, nameResolverArgs);
-    this.executorPool = checkNotNull(builder.executorPool, "executorPool");
     this.balancerRpcExecutorPool = checkNotNull(balancerRpcExecutorPool, "balancerRpcExecutorPool");
     this.balancerRpcExecutorHolder = new ExecutorHolder(balancerRpcExecutorPool);
-    this.executor = checkNotNull(executorPool.getObject(), "executor");
     this.delayedTransport = new DelayedClientTransport(this.executor, this.syncContext);
     this.delayedTransport.start(delayedTransportListener);
     this.backoffPolicyProvider = backoffPolicyProvider;
-    this.transportFactory =
-        new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.scheduledExecutor =
-        new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
-
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
     this.defaultServiceConfig = builder.defaultServiceConfig;

@@ -39,6 +39,7 @@ import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -70,6 +71,7 @@ public class XdsNameResolverTest {
           .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
           .setSynchronizationContext(syncContext)
           .setServiceConfigParser(mock(ServiceConfigParser.class))
+          .setScheduledExecutorService(mock(ScheduledExecutorService.class))
           .setChannelLogger(mock(ChannelLogger.class))
           .build();
 

@@ -30,6 +30,7 @@ import io.grpc.ProxyDetector;
 import io.grpc.SynchronizationContext;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -42,6 +43,7 @@ public class OverrideAuthorityNameResolverTest {
       .setProxyDetector(mock(ProxyDetector.class))
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setScheduledExecutorService(mock(ScheduledExecutorService.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 

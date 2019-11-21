@@ -70,6 +70,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
@@ -116,6 +117,7 @@ public class DnsNameResolverTest {
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
+      .setScheduledExecutorService(mock(ScheduledExecutorService.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
@@ -177,6 +179,7 @@ public class DnsNameResolverTest {
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
             .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .setScheduledExecutorService(mock(ScheduledExecutorService.class))
             .setChannelLogger(mock(ChannelLogger.class))
             .build();
     return newResolver(name, stopwatch, isAndroid, args);
