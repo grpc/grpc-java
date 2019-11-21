@@ -137,7 +137,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
   private final NameResolver.Args nameResolverArgs;
   private final AutoConfiguredLoadBalancerFactory loadBalancerFactory;
   private final ClientTransportFactory transportFactory;
-  private final ScheduledExecutorForBalancer scheduledExecutorForBalancer;
+  private final RestrictedScheduledExecutor scheduledExecutor;
   private final Executor executor;
   private final ObjectPool<? extends Executor> executorPool;
   private final ObjectPool<? extends Executor> balancerRpcExecutorPool;
@@ -607,8 +607,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
     this.backoffPolicyProvider = backoffPolicyProvider;
     this.transportFactory =
         new CallCredentialsApplyingTransportFactory(clientTransportFactory, this.executor);
-    this.scheduledExecutorForBalancer =
-        new ScheduledExecutorForBalancer(transportFactory.getScheduledExecutorService());
+    this.scheduledExecutor =
+        new RestrictedScheduledExecutor(transportFactory.getScheduledExecutorService());
 
     serviceConfigInterceptor = new ServiceConfigInterceptor(
         retryEnabled, builder.maxRetryAttempts, builder.maxHedgedAttempts);
@@ -1269,7 +1269,7 @@ final class ManagedChannelImpl extends ManagedChannel implements
 
     @Override
     public ScheduledExecutorService getScheduledExecutorService() {
-      return scheduledExecutorForBalancer;
+      return scheduledExecutor;
     }
 
     @Override
@@ -1736,10 +1736,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
     }
   }
 
-  private static final class ScheduledExecutorForBalancer implements ScheduledExecutorService {
+  private static final class RestrictedScheduledExecutor implements ScheduledExecutorService {
     final ScheduledExecutorService delegate;
 
-    private ScheduledExecutorForBalancer(ScheduledExecutorService delegate) {
+    private RestrictedScheduledExecutor(ScheduledExecutorService delegate) {
       this.delegate = checkNotNull(delegate, "delegate");
     }
 
