@@ -286,7 +286,6 @@ final class XdsClientImpl extends XdsClient {
     logger.log(Level.FINE, "Received an LDS response: {0}", ldsResponse);
     checkState(ldsResourceName != null && configWatcher != null,
         "No LDS request was ever sent. Management server is doing something wrong");
-    adsStream.ldsRespNonce = ldsResponse.getNonce();
 
     // Unpack Listener messages.
     List<Listener> listeners = new ArrayList<>(ldsResponse.getResourcesCount());
@@ -414,7 +413,6 @@ final class XdsClientImpl extends XdsClient {
     logger.log(Level.FINE, "Received an RDS response: {0}", rdsResponse);
     checkState(adsStream.rdsResourceName != null,
         "Never requested for RDS resources, management server is doing something wrong");
-    adsStream.rdsRespNonce = rdsResponse.getNonce();
 
     // Unpack RouteConfiguration messages.
     List<RouteConfiguration> routeConfigs = new ArrayList<>(rdsResponse.getResourcesCount());
@@ -508,7 +506,6 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleEdsResponse(DiscoveryResponse edsResponse) {
     logger.log(Level.FINE, "Received an EDS response: {0}", edsResponse);
-    adsStream.edsRespNonce = edsResponse.getNonce();
 
     // Unpack ClusterLoadAssignment messages.
     List<ClusterLoadAssignment> clusterLoadAssignments =
@@ -667,11 +664,18 @@ final class XdsClientImpl extends XdsClient {
         public void run() {
           responseReceived = true;
           String typeUrl = response.getTypeUrl();
+          // Nonce in each response is echoed back in the following ACK/NACK request. It is
+          // used for management server to identify which response the client is ACKing/NACking.
+          // To avoid confusion, client-initiated requests will always use the nonce in
+          // most recently received responses of each resource type.
           if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
+            ldsRespNonce = response.getNonce();
             handleLdsResponse(response);
           } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
+            rdsRespNonce = response.getNonce();
             handleRdsResponse(response);
           } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
+            edsRespNonce = response.getNonce();
             handleEdsResponse(response);
           }
           // TODO(zdapeng): add CDS response handles.
@@ -786,13 +790,10 @@ final class XdsClientImpl extends XdsClient {
       checkState(requestWriter != null, "ADS stream has not been started");
       if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
         ldsVersion = versionInfo;
-        ldsRespNonce = nonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
         rdsVersion = versionInfo;
-        rdsRespNonce = nonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         edsVersion = versionInfo;
-        edsRespNonce = nonce;
       }
       // TODO(chengyuanzhang): cases for CDS.
       DiscoveryRequest request =
