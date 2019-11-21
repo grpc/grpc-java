@@ -507,8 +507,6 @@ final class XdsClientImpl extends XdsClient {
    */
   private void handleEdsResponse(DiscoveryResponse edsResponse) {
     logger.log(Level.FINE, "Received an EDS response: {0}", edsResponse);
-    checkState(adsStream.edsResourceNames != null,
-        "Never requested for EDS resources, management server is doing something wrong");
     adsStream.edsRespNonce = edsResponse.getNonce();
 
     // Unpack ClusterLoadAssignment messages.
@@ -519,7 +517,7 @@ final class XdsClientImpl extends XdsClient {
         clusterLoadAssignments.add(res.unpack(ClusterLoadAssignment.class));
       }
     } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
           edsResponse.getNonce(), "Broken EDS response");
       return;
     }
@@ -581,13 +579,13 @@ final class XdsClientImpl extends XdsClient {
       endpointUpdates.put(clusterName, update);
     }
     if (errorMessage != null) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+      adsStream.sendNackRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
           edsResponse.getNonce(),
           "ClusterLoadAssignment message contains invalid information for gRPC's usage: "
               + errorMessage);
       return;
     }
-    adsStream.sendAckRequest(ADS_TYPE_URL_EDS, adsStream.edsResourceNames,
+    adsStream.sendAckRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
         edsResponse.getVersionInfo(), edsResponse.getNonce());
 
     // Update local EDS cache by inserting updated endpoint information.
@@ -640,12 +638,13 @@ final class XdsClientImpl extends XdsClient {
     private String rdsRespNonce = "";
     private String edsRespNonce = "";
 
-    // Most recently requested resource name(s) for each resource type. Note the resource_name in
-    // LDS requests will always be "xds:" URI (including port suffix if present).
+    // Most recently requested RDS resource name, which is an intermediate resource name for
+    // resolving service config.
+    // LDS request always use the same resource name, which is the "xds:" URI.
+    // Resource names for CDS/EDS requests are always represented by the cluster names that
+    // watchers are interested i.
     @Nullable
     private String rdsResourceName;
-    @Nullable
-    private Collection<String> edsResourceNames;
 
     private AdsStream(AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceStub stub) {
       this.stub = checkNotNull(stub, "stub");
@@ -758,7 +757,6 @@ final class XdsClientImpl extends XdsClient {
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         version = edsVersion;
         nonce = edsRespNonce;
-        edsResourceNames = resourceNames;
       }
       // TODO(chengyuanzhang): cases for CDS.
       DiscoveryRequest request =
