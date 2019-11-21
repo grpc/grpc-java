@@ -26,7 +26,6 @@ import io.grpc.internal.DnsNameResolverProvider;
 import java.lang.Thread.UncaughtExceptionHandler;
 import java.net.URI;
 import java.util.List;
-import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -40,7 +39,6 @@ public class NameResolverRegistryTest {
       .setProxyDetector(mock(ProxyDetector.class))
       .setSynchronizationContext(new SynchronizationContext(mock(UncaughtExceptionHandler.class)))
       .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setScheduledExecutorService(mock(ScheduledExecutorService.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 

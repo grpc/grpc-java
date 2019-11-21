@@ -28,7 +28,6 @@ import io.grpc.NameResolverProvider;
 import io.grpc.SynchronizationContext;
 import io.grpc.internal.GrpcUtil;
 import java.net.URI;
-import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -48,7 +47,6 @@ public class XdsNameResolverProviderTest {
       .setProxyDetector(GrpcUtil.NOOP_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setScheduledExecutorService(mock(ScheduledExecutorService.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 

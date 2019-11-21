@@ -29,7 +29,6 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolver.ServiceConfigParser;
 import io.grpc.SynchronizationContext;
 import java.net.URI;
-import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -49,7 +48,6 @@ public class DnsNameResolverProviderTest {
       .setProxyDetector(GrpcUtil.DEFAULT_PROXY_DETECTOR)
       .setSynchronizationContext(syncContext)
       .setServiceConfigParser(mock(ServiceConfigParser.class))
-      .setScheduledExecutorService(mock(ScheduledExecutorService.class))
       .setChannelLogger(mock(ChannelLogger.class))
       .build();
 
