@@ -175,11 +175,13 @@ final class LookasideLb extends ForwardingLoadBalancer {
                 xdsClient  = new XdsComms2(
                     channel, helper, new ExponentialBackoffPolicy.Provider(),
                     GrpcUtil.STOPWATCH_SUPPLIER, node);
-                localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
+                LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
+                localityStore = localityStoreFactory.newLocalityStore(
+                    helper, lbRegistry, loadStatsStore);
                 // TODO(zdapeng): Use XdsClient to do Lrs directly.
                 lrsClient = loadReportClientFactory.createLoadReportClient(
                     channel, helper, new ExponentialBackoffPolicy.Provider(),
-                    localityStore.getLoadStatsStore());
+                    loadStatsStore);
                 final LoadReportCallback lrsCallback =
                     new LoadReportCallback() {
                       @Override
