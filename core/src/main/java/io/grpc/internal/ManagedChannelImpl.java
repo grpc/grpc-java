@@ -1303,6 +1303,11 @@ final class ManagedChannelImpl extends ManagedChannel implements
         @Override
         public void run() {
           List<EquivalentAddressGroup> servers = resolutionResult.getAddresses();
+          if (servers.isEmpty() && lastResolutionResultWasSuccess == Boolean.TRUE) {
+            channelLogger.log(
+                ChannelLogLevel.DEBUG, "Service config for no address detected, ignoring it");
+            return;
+          }
           Attributes attrs = resolutionResult.getAttributes();
           channelLogger.log(
               ChannelLogLevel.DEBUG, "Resolved address: {0}, config={1}", servers, attrs);
@@ -1315,10 +1320,8 @@ final class ManagedChannelImpl extends ManagedChannel implements
           nameResolverBackoffPolicy = null;
           ConfigOrError configOrError = resolutionResult.getServiceConfig();
           Map<String, ?> serviceConfig = null;
-          if (configOrError != null) {
-            if (configOrError.getConfig() != null) {
-              serviceConfig = (Map<String, ?>) configOrError.getConfig();
-            }
+          if (configOrError != null && configOrError.getConfig() != null) {
+            serviceConfig = (Map<String, ?>) configOrError.getConfig();
           }
 
           Map<String, ?> effectiveServiceConfig;
@@ -1345,6 +1348,10 @@ final class ManagedChannelImpl extends ManagedChannel implements
               // First DNS lookup has invalid service config, and cannot fall back to default(=null)
               onError(configOrError.getError());
               return;
+            } else if (!waitingForServiceConfig
+                && configOrError != null
+                && configOrError.getError() != null) {
+              effectiveServiceConfig = lastServiceConfig;
             } else {
               effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
               channelLogger.log(
@@ -1415,11 +1422,6 @@ final class ManagedChannelImpl extends ManagedChannel implements
       // Call LB only if it's not shutdown.  If LB is shutdown, lbHelper won't match.
       if (NameResolverListener.this.helper != ManagedChannelImpl.this.lbHelper) {
         return;
-      }
-      if (waitingForServiceConfig) {
-        lastServiceConfig = defaultServiceConfig != null
-            ? defaultServiceConfig : EMPTY_SERVICE_CONFIG;
-        lastResolutionResultWasSuccess = false;
       }
 
       helper.lb.handleNameResolutionError(error);
