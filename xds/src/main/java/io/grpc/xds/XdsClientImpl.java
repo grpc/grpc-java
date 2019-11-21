@@ -189,6 +189,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
+    checkNotNull(watcher, "watcher");
     boolean needRequest = false;
     if (!endpointWatchers.containsKey(clusterName)) {
       logger.log(Level.FINE, "Start watching endpoints in cluster {0}", clusterName);
@@ -219,6 +220,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
+    checkNotNull(watcher, "watcher");
     Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
     if (watchers == null || !watchers.contains(watcher)) {
       logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
