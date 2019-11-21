@@ -71,6 +71,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
@@ -81,6 +83,7 @@ import org.mockito.MockitoAnnotations;
 /**
  * Tests for {@link XdsClientImpl}.
  */
+@RunWith(JUnit4.class)
 public class XdsClientImplTest {
 
   private static final String HOSTNAME = "foo.googleapis.com";
