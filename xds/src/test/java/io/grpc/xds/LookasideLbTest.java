@@ -194,11 +194,10 @@ public class LookasideLbTest {
 
     localityStoreFactory = new LocalityStoreFactory() {
       @Override
-      public LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
+      public LocalityStore newLocalityStore(
+          Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
         helpers.add(helper);
         LocalityStore localityStore = mock(LocalityStore.class);
-        LoadStatsStore loadStatsStore = mock(LoadStatsStore.class);
-        doReturn(loadStatsStore).when(localityStore).getLoadStatsStore();
         localityStores.add(localityStore);
         return localityStore;
       }
