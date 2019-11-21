@@ -19,11 +19,13 @@ package io.grpc.netty;
 import static io.netty.util.CharsetUtil.UTF_8;
 
 import com.google.common.io.ByteStreams;
+import io.grpc.internal.ObjectPool;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.InputStream;
+import java.util.concurrent.Executor;
 
 /**
  * Utility methods for supporting Netty tests.
@@ -52,5 +54,31 @@ public class NettyTestUtil {
     buf.writeInt(data.length);
     buf.writeBytes(data);
     return buf;
+  }
+
+  // A simple implementation of ObjectPool<Executor> that could track if the resource is returned.
+  public static class TrackingObjectPoolForTest implements ObjectPool<Executor> {
+    private boolean inUse;
+
+    public TrackingObjectPoolForTest() { }
+
+    @Override
+    public Executor getObject() {
+      inUse = true;
+      return new Executor() {
+        @Override
+        public void execute(Runnable var1) { }
+      };
+    }
+
+    @Override
+    public Executor returnObject(Object object) {
+      inUse = false;
+      return null;
+    }
+
+    public boolean isInUse() {
+      return this.inUse;
+    }
   }
 }

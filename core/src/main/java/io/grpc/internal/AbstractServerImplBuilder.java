@@ -297,4 +297,11 @@ public abstract class AbstractServerImplBuilder<T extends AbstractServerImplBuil
       return null;
     }
   }
+
+  /**
+   * Returns the internal ExecutorPool for offloading tasks.
+   */
+  protected ObjectPool<? extends Executor> getExecutorPool() {
+    return this.executorPool;
+  }
 }
