@@ -183,12 +183,8 @@ final class LookasideLb extends LoadBalancer {
             @Override
             public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
               if (xdsClientRef != null) {
-                checkState(
-                    xdsClient != null, "Bug: xdsClient = xdsClientRef.getObject() not called");
                 return;
               }
-              checkState(
-                  xdsClient == null, "Bug: xdsClient is not null while xdsClientRef is null.");
 
               localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry);
               final LoadReportCallback lrsCallback =
