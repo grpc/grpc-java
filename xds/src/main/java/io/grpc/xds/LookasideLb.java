@@ -27,6 +27,8 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
+import io.grpc.ChannelLogger;
+import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
@@ -39,7 +41,6 @@ import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ExponentialBackoffPolicy;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.ObjectPool;
-import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
@@ -62,8 +63,9 @@ import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
 /** Lookaside load balancer that handles balancer name changes. */
-final class LookasideLb extends ForwardingLoadBalancer {
+final class LookasideLb extends LoadBalancer {
 
+  private final ChannelLogger channelLogger;
   private final EdsUpdateCallback edsUpdateCallback;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
@@ -101,17 +103,13 @@ final class LookasideLb extends ForwardingLoadBalancer {
       LocalityStoreFactory localityStoreFactory,
       LoadReportClientFactory loadReportClientFactory,
       Bootstrapper bootstrapper) {
+    this.channelLogger = lookasideLbHelper.getChannelLogger();
     this.edsUpdateCallback = edsUpdateCallback;
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.localityStoreFactory = localityStoreFactory;
     this.loadReportClientFactory = loadReportClientFactory;
     this.bootstrapper = bootstrapper;
-  }
-
-  @Override
-  protected LoadBalancer delegate() {
-    return switchingLoadBalancer;
   }
 
   @Override
@@ -301,6 +299,23 @@ final class LookasideLb extends ForwardingLoadBalancer {
     }
 
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+  }
+
+  @Override
+  public void handleNameResolutionError(Status error) {
+    channelLogger.log(ChannelLogLevel.DEBUG, "Name resolution error: '%s'", error);
+    switchingLoadBalancer.handleNameResolutionError(error);
+  }
+
+  @Override
+  public boolean canHandleEmptyAddressListFromNameResolution() {
+    return true;
+  }
+
+  @Override
+  public void shutdown() {
+    channelLogger.log(ChannelLogLevel.DEBUG, "EDS load balancer is shutting down");
+    switchingLoadBalancer.shutdown();
   }
 
   private static ManagedChannel initLbChannel(

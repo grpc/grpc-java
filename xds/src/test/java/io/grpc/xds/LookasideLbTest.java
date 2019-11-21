@@ -260,6 +260,11 @@ public class LookasideLbTest {
         .build();
   }
 
+  @Test
+  public void canHandleEmptyAddressListFromNameResolution() {
+    assertThat(lookasideLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void handleChildPolicyChangeThenBalancerNameChangeThenChildPolicyChange_swtichGracefully()
