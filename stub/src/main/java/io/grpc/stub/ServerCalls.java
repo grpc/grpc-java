@@ -380,7 +380,9 @@ public final class ServerCalls {
 
     @Override
     public void setOnReadyHandler(Runnable r) {
-      checkState(!frozen, "Cannot alter onReadyHandler after initialization");
+      checkState(!frozen, "Cannot alter onReadyHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onReadyHandler = r;
     }
 
@@ -391,7 +393,9 @@ public final class ServerCalls {
 
     @Override
     public void setOnCancelHandler(Runnable onCancelHandler) {
-      checkState(!frozen, "Cannot alter onCancelHandler after initialization");
+      checkState(!frozen, "Cannot alter onCancelHandler after initialization. May only be called "
+          + "during the initial call to the application, before the service returns its "
+          + "StreamObserver");
       this.onCancelHandler = onCancelHandler;
     }
 
