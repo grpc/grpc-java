@@ -475,6 +475,7 @@ public abstract class NameResolver {
      *
      * @since 1.26.0
      */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
     public ScheduledExecutorService getScheduledExecutorService() {
       if (scheduledExecutorService == null) {
         throw new IllegalStateException("ScheduledExecutorService not set in Builder");
@@ -605,6 +606,7 @@ public abstract class NameResolver {
       /**
        * See {@link Args#getScheduledExecutorService}.
        */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
       public Builder setScheduledExecutorService(
           ScheduledExecutorService scheduledExecutorService) {
         this.scheduledExecutorService = checkNotNull(scheduledExecutorService);
