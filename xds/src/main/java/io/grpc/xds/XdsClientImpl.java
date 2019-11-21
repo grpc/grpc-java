@@ -220,7 +220,7 @@ final class XdsClientImpl extends XdsClient {
   @Override
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
     Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
-    if (watchers == null) {
+    if (watchers == null || !watchers.contains(watcher)) {
       logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
       return;
     }
