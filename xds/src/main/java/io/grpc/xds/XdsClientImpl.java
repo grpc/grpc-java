@@ -499,13 +499,12 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Handles EDS response, which contains a list of ClusterLoadAssignment messages. Each
-   * ClusterLoadAssignment message contains information for endpoints in a cluster, grouped
-   * by localities. The response is NACKed if contains invalid information for gRPC's usage.
-   * Otherwise, an ACK request is sent to management server. Information in ClusterLoadAssignment
-   * messages are saved in local cache, in case of corresponding endpoint watchers are registered
-   * later. Endpoint watchers interested in endpoint information contained in this response are
-   * notified.
+   * Handles EDS response, which contains a list of ClusterLoadAssignment messages with
+   * endpoint load balancing information for each cluster. The response is NACKed if messages
+   * for requested resources contain invalid information for gRPC's usage. Otherwise,
+   * an ACK request is sent to management server. Response data for requested clusters is
+   * cached locally, in case of new endpoint watchers interested in the same clusters
+   * are added later.
    */
   private void handleEdsResponse(DiscoveryResponse edsResponse) {
     logger.log(Level.FINE, "Received an EDS response: {0}", edsResponse);
@@ -649,7 +648,7 @@ final class XdsClientImpl extends XdsClient {
     // resolving service config.
     // LDS request always use the same resource name, which is the "xds:" URI.
     // Resource names for CDS/EDS requests are always represented by the cluster names that
-    // watchers are interested i.
+    // watchers are interested in.
     @Nullable
     private String rdsResourceName;
 
