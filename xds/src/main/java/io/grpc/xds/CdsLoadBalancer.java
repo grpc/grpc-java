@@ -73,7 +73,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
     Preconditions.checkArgument(
-        lbConfig != null && CdsConfig.class.isAssignableFrom(lbConfig.getClass()),
+        lbConfig instanceof CdsConfig,
         "Expecting a CDS LB config, but the actual LB config is '%s'",
         lbConfig);
 
