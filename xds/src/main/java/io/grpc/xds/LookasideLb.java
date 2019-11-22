@@ -61,7 +61,7 @@ import java.util.Map;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 
-/** Lookaside load balancer that handles balancer name changes. */
+/** Lookaside load balancer that handles EDS config. */
 final class LookasideLb extends LoadBalancer {
 
   private final ChannelLogger channelLogger;
