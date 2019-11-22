@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.google.common.collect.ImmutableList;
@@ -193,6 +194,8 @@ public class CdsLoadBalancerTest {
         "edsServiceFoo.googleapis.com",
         null);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
+    LoadStatsStore loadStatsStoreFoo = resolvedAddressesFoo.getAttributes()
+        .get(XdsAttributes.LOAD_STATS_STORE_REF);
     assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
     assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
         .isSameInstanceAs(xdsClientRef);
@@ -244,10 +247,9 @@ public class CdsLoadBalancerTest {
     assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
     assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
         .isSameInstanceAs(xdsClientRef);
-    LoadStatsStore loadStatsStore = resolvedAddressesBar.getAttributes()
+    LoadStatsStore loadStatsStoreBar = resolvedAddressesBar.getAttributes()
         .get(XdsAttributes.LOAD_STATS_STORE_REF);
-    verify(xdsClient).reportClientStats(
-        "bar.googleapis.com", "lrsBar.googleapis.com", loadStatsStore);
+    assertThat(loadStatsStoreBar).isNotSameInstanceAs(loadStatsStoreFoo);
 
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     edsLbHelper2.updateBalancingState(ConnectivityState.CONNECTING, picker2);
@@ -262,5 +264,26 @@ public class CdsLoadBalancerTest {
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();
     assertThat(xdsClientRef.xdsClient).isNull();
+
+    clusterWatcher2.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("bar.googleapis.com")
+            .setEdsServiceName("edsServiceBar2.googleapis.com")
+            .setLbPolicy("round_robin")
+            .setEnableLrs(false)
+            .build());
+    verify(edsLoadBalancer2, times(2)).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
+    expectedXdsConfig = new XdsConfig(
+        null,
+        new LbConfig("round_robin", ImmutableMap.<String, Object>of()),
+        null,
+        "edsServiceBar2.googleapis.com",
+        null);
+    ResolvedAddresses resolvedAddressesBar2 = resolvedAddressesCaptor2.getValue();
+    assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
+    LoadStatsStore loadStatsStoreBar2 = resolvedAddressesBar2.getAttributes()
+        .get(XdsAttributes.LOAD_STATS_STORE_REF);
+    // LoadStatsStore should be reused for the same cluster.
+    assertThat(loadStatsStoreBar2).isSameInstanceAs(loadStatsStoreBar);
   }
 }

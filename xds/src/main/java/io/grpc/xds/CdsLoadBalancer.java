@@ -46,10 +46,11 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
-  /** Most recent XdsConfig. */
+
+  // Most recent XdsConfig.
   @Nullable
   private CdsConfig cdsConfig;
-  /** Most recent ClusterWatcher. */
+  // Most recent ClusterWatcher.
   @Nullable
   private ClusterWatcher clusterWatcher;
   @Nullable
@@ -92,63 +93,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final CdsConfig newCdsConfig = (CdsConfig) lbConfig;
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
-      final CdsConfig oldCdsConfig = cdsConfig;
-      final ClusterWatcher oldClusterWatcher = clusterWatcher;
-      // Provides a load balancer with the fixed CdsConfig: newCdsConfig.
-      LoadBalancerProvider fixedCdsConfigBalancer = new LoadBalancerProvider() {
-        ClusterWatcherImpl clusterWatcher;
-
-        @Override
-        public boolean isAvailable() {
-          return true;
-        }
-
-        @Override
-        public int getPriority() {
-          return 5;
-        }
-
-        /**
-         * A synthetic policy name identified by CDS config. The implementation detail doesn't
-         * matter.
-         */
-        @Override
-        public String getPolicyName() {
-          return "cds_policy__cluster_name_" + newCdsConfig.name;
-        }
-
-        @Override
-        public LoadBalancer newLoadBalancer(final Helper helper) {
-          return new LoadBalancer() {
-            @Override
-            public void handleNameResolutionError(Status error) {}
-
-            @Override
-            public void shutdown() {
-              clusterWatcher.edsBalancer.shutdown();
-            }
-
-            @Override
-            public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-              if (clusterWatcher == null) {
-                clusterWatcher = new ClusterWatcherImpl(helper, resolvedAddresses);
-                xdsClient.watchClusterData(newCdsConfig.name, clusterWatcher);
-                if (oldCdsConfig != null) {
-                  xdsClient.cancelClusterDataWatch(oldCdsConfig.name, oldClusterWatcher);
-                }
-                CdsLoadBalancer.this.clusterWatcher = clusterWatcher;
-              }
-            }
-          };
-        }
-      };
-
-      switchingLoadBalancer.switchTo(fixedCdsConfigBalancer);
+      LoadBalancerProvider fixedCdsConfigBalancerProvider =
+          new FixedCdsConfigBalancerProvider(newCdsConfig);
+      switchingLoadBalancer.switchTo(fixedCdsConfigBalancerProvider);
     }
 
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
-    // clusterWatcher is also updated after switchingLoadBalancer.handleResolvedAddresses
+    // The clusterWatcher is also updated after switchingLoadBalancer.handleResolvedAddresses().
     cdsConfig = newCdsConfig;
   }
 
@@ -172,11 +124,86 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
+  /**
+   * A LoadBalancerProvider that provides a load balancer with a fixed CdsConfig.
+   */
+  private final class FixedCdsConfigBalancerProvider extends LoadBalancerProvider {
+
+    final CdsConfig cdsConfig;
+    final CdsConfig oldCdsConfig;
+    final ClusterWatcher oldClusterWatcher;
+
+    FixedCdsConfigBalancerProvider(CdsConfig cdsConfig) {
+      this.cdsConfig = cdsConfig;
+      oldCdsConfig = CdsLoadBalancer.this.cdsConfig;
+      oldClusterWatcher = CdsLoadBalancer.this.clusterWatcher;
+    }
+
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    // A synthetic policy name identified by CDS config.
+    @Override
+    public String getPolicyName() {
+      return "cds_policy__cluster_name_" + cdsConfig.name;
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(final Helper helper) {
+      return new LoadBalancer() {
+        // Becomes non-null once handleResolvedAddresses() successfully.
+        // Assigned at most once.
+        @Nullable
+        ClusterWatcherImpl clusterWatcher;
+
+        @Override
+        public void handleNameResolutionError(Status error) {}
+
+        @Override
+        public boolean canHandleEmptyAddressListFromNameResolution() {
+          return true;
+        }
+
+        @Override
+        public void shutdown() {
+          if (clusterWatcher != null) {
+            clusterWatcher.edsBalancer.shutdown();
+          }
+        }
+
+        @Override
+        public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+          if (clusterWatcher == null) {
+            clusterWatcher = new ClusterWatcherImpl(helper, resolvedAddresses);
+            xdsClient.watchClusterData(cdsConfig.name, clusterWatcher);
+            if (oldCdsConfig != null) {
+              xdsClient.cancelClusterDataWatch(oldCdsConfig.name, oldClusterWatcher);
+            }
+            CdsLoadBalancer.this.clusterWatcher = clusterWatcher;
+          }
+        }
+      };
+    }
+  }
+
   private final class ClusterWatcherImpl implements ClusterWatcher {
 
     final LoadBalancer edsBalancer;
     final Helper helper;
     final ResolvedAddresses resolvedAddresses;
+
+    // LoadStatsStore for the cluster.
+    // Becomes non-null once handleResolvedAddresses() successfully.
+    // Assigned at most once.
+    @Nullable
+    LoadStatsStore loadStatsStore;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
       this.helper = helper;
@@ -185,22 +212,20 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
 
     @Override
-    public void onClusterChanged(ClusterUpdate update) {
+    public void onClusterChanged(ClusterUpdate newUpdate) {
       Preconditions.checkArgument(
-          update.getLbPolicy().equals("round_robin"),
-          "The lbPolicy in ClusterUpdate '%s' is not 'round_robin'", update);
+          newUpdate.getLbPolicy().equals("round_robin"),
+          "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
 
       final XdsConfig edsConfig = new XdsConfig(
           /* balancerName = */ null,
-          new LbConfig(update.getLbPolicy(), ImmutableMap.<String, Object>of()),
+          new LbConfig(newUpdate.getLbPolicy(), ImmutableMap.<String, Object>of()),
           /* fallbackPolicy = */ null,
-          /* edsServiceName = */ update.getEdsServiceName(),
-          /* lrsServerName = */ update.getLrsServerName());
+          /* edsServiceName = */ newUpdate.getEdsServiceName(),
+          /* lrsServerName = */ newUpdate.getLrsServerName());
 
-      LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
-      if (update.isEnableLrs()) {
-        xdsClient.reportClientStats(
-            update.getClusterName(), update.getLrsServerName(), loadStatsStore);
+      if (loadStatsStore == null) {
+        loadStatsStore = new LoadStatsStoreImpl();
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder()
