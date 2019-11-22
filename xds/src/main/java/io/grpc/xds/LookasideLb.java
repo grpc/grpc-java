@@ -310,14 +310,15 @@ final class LookasideLb extends LoadBalancer {
               }
             });
           } else {
-            // The balancerName is unchanged, so the channel is unchanged.
+            // The balancerName is unchanged, no need to create new channel.
             // Use the cached lrsClient and xdsClientRef, which are using the existing channel.
             lrsClient = cachedLrsClient;
             xdsClientRef = cachedXdsClientRef;
           }
         } else if (cachedXdsClientRef == null) {
-          // This is to handle EDS-only with bootstrap usecase: the name resolver resolves
-          // a ResolvedAddresses with an XdsConfig without balancerName field.
+          // This is to handle EDS-only with bootstrap usecase: The name resolver resolves
+          // a ResolvedAddresses with an XdsConfig without balancerName field. Use the bootstrap
+          // information to create a channel.
           final BootstrapInfo bootstrapInfo;
           try {
             bootstrapInfo = bootstrapper.readBootstrap();
@@ -343,7 +344,7 @@ final class LookasideLb extends LoadBalancer {
             }
           });
         } else {
-          // This is the XdsResolver or non EDS-only usecase.
+          // This is the XdsNameResolver or non EDS-only usecase.
           // XDS_CLIENT_REF attribute is available from ResolvedAddresses, and already cached.
           // Use the cached xdsClientRef.
           xdsClientRef = cachedXdsClientRef;
@@ -359,7 +360,7 @@ final class LookasideLb extends LoadBalancer {
           };
         }
 
-        // Now the lrsClient and xdsClientRef are assigned in all usecase, cache them for later
+        // Now the lrsClient and xdsClientRef are assigned in all usecases, cache them for later
         // use.
         cachedLrsClient = lrsClient;
         cachedXdsClientRef = xdsClientRef;
