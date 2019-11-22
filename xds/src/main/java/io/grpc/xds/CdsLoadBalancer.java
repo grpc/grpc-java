@@ -16,10 +16,10 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -47,7 +47,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
-  // Most recent XdsConfig.
+  // Most recent CdsConfig.
   @Nullable
   private CdsConfig cdsConfig;
   // Most recent ClusterWatcher.
@@ -73,7 +73,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
     Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    Preconditions.checkArgument(
+    checkArgument(
         lbConfig instanceof CdsConfig,
         "Expecting a CDS LB config, but the actual LB config is '%s'",
         lbConfig);
@@ -188,6 +188,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
             }
             CdsLoadBalancer.this.clusterWatcher = clusterWatcher;
           }
+          // Else handleResolvedAddresses() already called, so no-op here because the config is
+          // fixed in this balancer.
         }
       };
     }
@@ -213,7 +215,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onClusterChanged(ClusterUpdate newUpdate) {
-      Preconditions.checkArgument(
+      checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"),
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
 
@@ -252,7 +254,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     final String name;
 
     CdsConfig(String name) {
-      Preconditions.checkArgument(name != null && !name.isEmpty(), "name is null or empty");
+      checkArgument(name != null && !name.isEmpty(), "name is null or empty");
       this.name = name;
     }
 
