@@ -262,6 +262,8 @@ final class LookasideLb extends LoadBalancer {
       @Override
       public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
         if (xdsClientRef != null) {
+          // handleResolvedAddresses() already called, so no-op here, because the config is fixed in
+          // this balancer.
           return;
         }
 
