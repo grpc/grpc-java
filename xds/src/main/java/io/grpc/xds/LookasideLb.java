@@ -145,7 +145,7 @@ final class LookasideLb extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    channelLogger.log(ChannelLogLevel.DEBUG, "Name resolution error: '%s'", error);
+    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
     switchingLoadBalancer.handleNameResolutionError(error);
   }
 
@@ -279,6 +279,7 @@ final class LookasideLb extends LoadBalancer {
 
         // There are three usecases:
         // 1. The EDS-only legacy usecase that requires balancerName from xds config.
+        //    TODO(zdapeng): Remove the legacy case.
         // 2. The EDS-only with bootstrap usecase:
         //    The name resolver resolves a ResolvedAddresses with an XdsConfig without balancerName
         //    field. Use the bootstrap information to create a channel.
@@ -360,6 +361,7 @@ final class LookasideLb extends LoadBalancer {
               xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
                 @Override
                 XdsClient createXdsClient() {
+                  // TODO(zdapeng): Replace XdsComms2 with XdsClientImpl.
                   return new XdsComms2(
                       channel, helper, new ExponentialBackoffPolicy.Provider(),
                       GrpcUtil.STOPWATCH_SUPPLIER, bootstrapInfo.getNode());
