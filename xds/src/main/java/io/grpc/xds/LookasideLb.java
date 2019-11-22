@@ -72,11 +72,13 @@ final class LookasideLb extends LoadBalancer {
   private final LoadReportClientFactory loadReportClientFactory;
   private final Bootstrapper bootstrapper;
 
-  /** Most recent XdsConfig. */
-  @Nullable // Becomes non-null once handleResolvedAddresses() successfully.
+  // Most recent XdsConfig.
+  // Becomes non-null once handleResolvedAddresses() successfully.
+  @Nullable
   private XdsConfig xdsConfig;
-  /** Most recent EndpointWatcher. */
-  @Nullable // Becomes non-null once handleResolvedAddresses() successfully.
+  // Most recent EndpointWatcher.
+  // Becomes non-null once handleResolvedAddresses() successfully.
+  @Nullable
   private EndpointWatcher endpointWatcher;
 
   @Nullable
@@ -114,7 +116,7 @@ final class LookasideLb extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     // In the future, xdsConfig can be gotten directly by
-    // resolvedAddresses.getLoadBalancingPolicyConfig()
+    // resolvedAddresses.getLoadBalancingPolicyConfig().
     Attributes attributes = resolvedAddresses.getAttributes();
     final ObjectPool<XdsClient> xdsClientRefFromResolver =
         resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
@@ -174,7 +176,7 @@ final class LookasideLb extends LoadBalancer {
     try {
       channel = helper.createResolvingOobChannel(balancerName);
     } catch (UnsupportedOperationException uoe) {
-      // Temporary solution until createResolvingOobChannel is implemented
+      // Temporary solution until createResolvingOobChannel is implemented.
       // FIXME (https://github.com/grpc/grpc-java/issues/5495)
       Logger logger = Logger.getLogger(LookasideLb.class.getName());
       if (logger.isLoggable(FINEST)) {
@@ -272,7 +274,7 @@ final class LookasideLb extends LoadBalancer {
               };
 
           if (xdsConfig.balancerName != null) {
-            // The is to handle the legacy usecase that requires balancerName from xds config.
+            // This to handle the legacy usecase that requires balancerName from xds config.
 
             String oldBalancerName = oldXdsConfig == null ? null : oldXdsConfig.balancerName;
             if (!xdsConfig.balancerName.equals(oldBalancerName)) {
