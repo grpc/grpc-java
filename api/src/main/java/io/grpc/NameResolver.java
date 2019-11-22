@@ -30,6 +30,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 
@@ -412,6 +413,7 @@ public abstract class NameResolver {
     private final ProxyDetector proxyDetector;
     private final SynchronizationContext syncContext;
     private final ServiceConfigParser serviceConfigParser;
+    @Nullable private final ScheduledExecutorService scheduledExecutorService;
     @Nullable private final ChannelLogger channelLogger;
     @Nullable private final Executor executor;
 
@@ -420,12 +422,14 @@ public abstract class NameResolver {
         ProxyDetector proxyDetector,
         SynchronizationContext syncContext,
         ServiceConfigParser serviceConfigParser,
+        @Nullable ScheduledExecutorService scheduledExecutorService,
         @Nullable ChannelLogger channelLogger,
         @Nullable Executor executor) {
       this.defaultPort = checkNotNull(defaultPort, "defaultPort not set");
       this.proxyDetector = checkNotNull(proxyDetector, "proxyDetector not set");
       this.syncContext = checkNotNull(syncContext, "syncContext not set");
       this.serviceConfigParser = checkNotNull(serviceConfigParser, "serviceConfigParser not set");
+      this.scheduledExecutorService = scheduledExecutorService;
       this.channelLogger = channelLogger;
       this.executor = executor;
     }
@@ -458,6 +462,25 @@ public abstract class NameResolver {
      */
     public SynchronizationContext getSynchronizationContext() {
       return syncContext;
+    }
+
+    /**
+     * Returns a {@link ScheduledExecutorService} for scheduling delayed tasks.
+     *
+     * <p>This service is a shared resource and is only meant for quick tasks. DO NOT block or run
+     * time-consuming tasks.
+     *
+     * <p>The returned service doesn't support {@link ScheduledExecutorService#shutdown shutdown()}
+     *  and {@link ScheduledExecutorService#shutdownNow shutdownNow()}. They will throw if called.
+     *
+     * @since 1.26.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
+    public ScheduledExecutorService getScheduledExecutorService() {
+      if (scheduledExecutorService == null) {
+        throw new IllegalStateException("ScheduledExecutorService not set in Builder");
+      }
+      return scheduledExecutorService;
     }
 
     /**
@@ -501,6 +524,7 @@ public abstract class NameResolver {
           .add("proxyDetector", proxyDetector)
           .add("syncContext", syncContext)
           .add("serviceConfigParser", serviceConfigParser)
+          .add("scheduledExecutorService", scheduledExecutorService)
           .add("channelLogger", channelLogger)
           .add("executor", executor)
           .toString();
@@ -517,6 +541,7 @@ public abstract class NameResolver {
       builder.setProxyDetector(proxyDetector);
       builder.setSynchronizationContext(syncContext);
       builder.setServiceConfigParser(serviceConfigParser);
+      builder.setScheduledExecutorService(scheduledExecutorService);
       builder.setChannelLogger(channelLogger);
       builder.setOffloadExecutor(executor);
       return builder;
@@ -541,6 +566,7 @@ public abstract class NameResolver {
       private ProxyDetector proxyDetector;
       private SynchronizationContext syncContext;
       private ServiceConfigParser serviceConfigParser;
+      private ScheduledExecutorService scheduledExecutorService;
       private ChannelLogger channelLogger;
       private Executor executor;
 
@@ -574,6 +600,16 @@ public abstract class NameResolver {
        */
       public Builder setSynchronizationContext(SynchronizationContext syncContext) {
         this.syncContext = checkNotNull(syncContext);
+        return this;
+      }
+
+      /**
+       * See {@link Args#getScheduledExecutorService}.
+       */
+      @ExperimentalApi("https://github.com/grpc/grpc-java/issues/6454")
+      public Builder setScheduledExecutorService(
+          ScheduledExecutorService scheduledExecutorService) {
+        this.scheduledExecutorService = checkNotNull(scheduledExecutorService);
         return this;
       }
 
@@ -618,7 +654,7 @@ public abstract class NameResolver {
         return
             new Args(
                 defaultPort, proxyDetector, syncContext, serviceConfigParser,
-                channelLogger, executor);
+                scheduledExecutorService, channelLogger, executor);
       }
     }
   }
