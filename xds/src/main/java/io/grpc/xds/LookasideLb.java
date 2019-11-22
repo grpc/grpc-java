@@ -290,8 +290,7 @@ final class LookasideLb extends LoadBalancer {
         if (xdsConfig.balancerName != null) {
           // This is the EDS-only legacy usecase that requires balancerName from xds config.
 
-          String oldBalancerName = oldXdsConfig == null ? null : oldXdsConfig.balancerName;
-          if (!xdsConfig.balancerName.equals(oldBalancerName)) {
+          if (oldXdsConfig == null || !xdsConfig.balancerName.equals(oldXdsConfig.balancerName)) {
             final ManagedChannel channel = initLbChannel(
                 helper, xdsConfig.balancerName, Collections.<ChannelCreds>emptyList());
             final Node node = Node.newBuilder()
