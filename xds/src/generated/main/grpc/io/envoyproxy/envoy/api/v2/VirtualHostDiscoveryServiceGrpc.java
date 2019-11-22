@@ -74,7 +74,14 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static VirtualHostDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    return new VirtualHostDiscoveryServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -82,7 +89,14 @@ public final class VirtualHostDiscoveryServiceGrpc {
    */
   public static VirtualHostDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new VirtualHostDiscoveryServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceBlockingStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -90,7 +104,14 @@ public final class VirtualHostDiscoveryServiceGrpc {
    */
   public static VirtualHostDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new VirtualHostDiscoveryServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<VirtualHostDiscoveryServiceFutureStub>() {
+        @java.lang.Override
+        public VirtualHostDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new VirtualHostDiscoveryServiceFutureStub(channel, callOptions);
+        }
+      };
+    return VirtualHostDiscoveryServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -143,19 +164,15 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceStub extends io.grpc.stub.AbstractStub<VirtualHostDiscoveryServiceStub> {
-    private VirtualHostDiscoveryServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private VirtualHostDiscoveryServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class VirtualHostDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<VirtualHostDiscoveryServiceStub> {
+    private VirtualHostDiscoveryServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected VirtualHostDiscoveryServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected VirtualHostDiscoveryServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new VirtualHostDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -182,19 +199,15 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<VirtualHostDiscoveryServiceBlockingStub> {
-    private VirtualHostDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private VirtualHostDiscoveryServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class VirtualHostDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<VirtualHostDiscoveryServiceBlockingStub> {
+    private VirtualHostDiscoveryServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected VirtualHostDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected VirtualHostDiscoveryServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new VirtualHostDiscoveryServiceBlockingStub(channel, callOptions);
     }
   }
@@ -213,19 +226,15 @@ public final class VirtualHostDiscoveryServiceGrpc {
    * from the routing table associated with the RouteConfiguration.
    * </pre>
    */
-  public static final class VirtualHostDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<VirtualHostDiscoveryServiceFutureStub> {
-    private VirtualHostDiscoveryServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private VirtualHostDiscoveryServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class VirtualHostDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<VirtualHostDiscoveryServiceFutureStub> {
+    private VirtualHostDiscoveryServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected VirtualHostDiscoveryServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected VirtualHostDiscoveryServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new VirtualHostDiscoveryServiceFutureStub(channel, callOptions);
     }
   }

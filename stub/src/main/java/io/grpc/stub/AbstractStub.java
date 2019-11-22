@@ -102,6 +102,31 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   protected abstract S build(Channel channel, CallOptions callOptions);
 
   /**
+   * Returns a new stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create a stub
+   * @param channel the channel that this stub will use to do communications
+   */
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel) {
+    return newStub(factory, channel, CallOptions.DEFAULT);
+  }
+
+  /**
+   * Returns a new stub with the given channel for the provided method configurations.
+   *
+   * @since 1.25.0
+   * @param factory the factory to create a stub
+   * @param channel the channel that this stub will use to do communications
+   * @param callOptions the runtime call options to be applied to every call on this stub
+   */
+  public static <T extends AbstractStub<T>> T newStub(
+      StubFactory<T> factory, Channel channel, CallOptions callOptions) {
+    return factory.newStub(channel, callOptions);
+  }
+
+  /**
    * Returns a new stub with an absolute deadline.
    *
    * <p>This is mostly used for propagating an existing deadline. {@link #withDeadlineAfter} is the
@@ -223,5 +248,14 @@ public abstract class AbstractStub<S extends AbstractStub<S>> {
   @ExperimentalApi("https://github.com/grpc/grpc-java/issues/2563")
   public final S withMaxOutboundMessageSize(int maxSize) {
     return build(channel, callOptions.withMaxOutboundMessageSize(maxSize));
+  }
+
+  /**
+   * A factory class for stub.
+   *
+   * @since 1.25.0
+   */
+  public interface StubFactory<T extends AbstractStub<T>> {
+    T newStub(Channel channel, CallOptions callOptions);
   }
 }
