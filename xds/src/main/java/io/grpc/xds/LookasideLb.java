@@ -267,6 +267,7 @@ final class LookasideLb extends LoadBalancer {
           return;
         }
 
+        // TODO(zdapeng): First try to get loadStatsStore from XdsAttributes.LOAD_STATS_STORE_REF.
         LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
         localityStore = localityStoreFactory.newLocalityStore(
             helper, lbRegistry, loadStatsStore);
@@ -379,6 +380,8 @@ final class LookasideLb extends LoadBalancer {
         cachedXdsClientRef = xdsClientRef;
 
         xdsClient = xdsClientRef.getObject();
+        // TODO(zdapeng): Call xdsClient.reportClientStats() and xdsClient.cancelClientStatsReport()
+        // based on if lrsServerName is null instead of using lrsClient.
         EndpointWatcher newEndpointWatcher =
             new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
         xdsClient.watchEndpointData(xdsConfig.edsServiceName, newEndpointWatcher);
