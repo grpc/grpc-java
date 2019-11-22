@@ -242,7 +242,7 @@ final class LookasideLb extends LoadBalancer {
       return new LoadBalancer() {
 
         // All fields become non-null once handleResolvedAddresses() successfully.
-        // All fields are assigned at most once .
+        // All fields are assigned at most once.
         @Nullable
         ObjectPool<XdsClient> xdsClientRef;
         @Nullable
@@ -298,6 +298,8 @@ final class LookasideLb extends LoadBalancer {
                 }
               });
             } else {
+              // The balancerName is unchanged, so the channel is unchanged.
+              // Use the cached lrsClient and xdsClientRef, which are using the existing channel.
               lrsClient = cachedLrsClient;
               xdsClientRef = cachedXdsClientRef;
             }
@@ -330,6 +332,9 @@ final class LookasideLb extends LoadBalancer {
             });
           } else {
             // This is the XdsResolver or non EDS-only usecase.
+            // XDS_CLIENT_REF attribute is available from ResolvedAddresses, and already cached.
+            // Use the cached xdsClientRef.
+            xdsClientRef = cachedXdsClientRef;
 
             // FIXME(zdapeng): Use XdsClient to do Lrs directly.
             // No-op for now.
@@ -340,9 +345,10 @@ final class LookasideLb extends LoadBalancer {
               @Override
               public void stopLoadReporting() {}
             };
-            xdsClientRef = cachedXdsClientRef;
           }
 
+          // Now the lrsClient and xdsClientRef are assigned in all usecase, cache them for later
+          // use.
           cachedLrsClient = lrsClient;
           cachedXdsClientRef = xdsClientRef;
 
