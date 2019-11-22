@@ -295,7 +295,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(), "Broken LDS response.");
+          "Broken LDS response.");
       return;
     }
 
@@ -313,7 +313,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(), "Broken LDS response.");
+          "Broken LDS response.");
       return;
     }
 
@@ -360,12 +360,11 @@ final class XdsClientImpl extends XdsClient {
     }
 
     if (errorMessage != null) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-          ldsResponse.getNonce(), errorMessage);
+      adsStream.sendNackRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName), errorMessage);
       return;
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_LDS, ImmutableList.of(ldsResourceName),
-        ldsResponse.getVersionInfo(), ldsResponse.getNonce());
+        ldsResponse.getVersionInfo());
 
     // Remove RDS cache entries for RouteConfigurations not referenced by this LDS response.
     // LDS responses represents the state of the world, RouteConfigurations not referenced
@@ -422,7 +421,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
-          rdsResponse.getNonce(), "Broken RDS response.");
+          "Broken RDS response.");
       return;
     }
 
@@ -432,7 +431,6 @@ final class XdsClientImpl extends XdsClient {
       String clusterName = processRouteConfig(routeConfig);
       if (clusterName == null) {
         adsStream.sendNackRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
-            rdsResponse.getNonce(),
             "Cannot find a valid cluster name in VirtualHost inside "
                 + "RouteConfiguration with domains matching: " + hostName + ".");
         return;
@@ -442,7 +440,7 @@ final class XdsClientImpl extends XdsClient {
     routeConfigNamesToClusterNames.putAll(clusterNames);
 
     adsStream.sendAckRequest(ADS_TYPE_URL_RDS, ImmutableList.of(adsStream.rdsResourceName),
-        rdsResponse.getVersionInfo(), rdsResponse.getNonce());
+        rdsResponse.getVersionInfo());
 
     // Notify the ConfigWatcher if this RDS response contains the most recently requested
     // RDS resource.
@@ -516,7 +514,7 @@ final class XdsClientImpl extends XdsClient {
       }
     } catch (InvalidProtocolBufferException e) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
-          edsResponse.getNonce(), "Broken EDS response");
+          "Broken EDS response");
       return;
     }
 
@@ -583,13 +581,12 @@ final class XdsClientImpl extends XdsClient {
     }
     if (errorMessage != null) {
       adsStream.sendNackRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
-          edsResponse.getNonce(),
           "ClusterLoadAssignment message contains invalid information for gRPC's usage: "
               + errorMessage);
       return;
     }
     adsStream.sendAckRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet(),
-        edsResponse.getVersionInfo(), edsResponse.getNonce());
+        edsResponse.getVersionInfo());
 
     // Update local EDS cache by inserting updated endpoint information.
     clusterNamesToEndpointUpdates.putAll(endpointUpdates);
@@ -786,14 +783,18 @@ final class XdsClientImpl extends XdsClient {
      * version for the corresponding resource type.
      */
     private void sendAckRequest(String typeUrl, Collection<String> resourceNames,
-        String versionInfo, String nonce) {
+        String versionInfo) {
       checkState(requestWriter != null, "ADS stream has not been started");
+      String nonce = "";
       if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
         ldsVersion = versionInfo;
+        nonce = ldsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
         rdsVersion = versionInfo;
+        nonce = rdsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         edsVersion = versionInfo;
+        nonce = edsRespNonce;
       }
       // TODO(chengyuanzhang): cases for CDS.
       DiscoveryRequest request =
@@ -812,16 +813,20 @@ final class XdsClientImpl extends XdsClient {
      * Sends a DiscoveryRequest with the given information as an NACK. NACK takes the previous
      * accepted version.
      */
-    private void sendNackRequest(String typeUrl, Collection<String> resourceNames, String nonce,
+    private void sendNackRequest(String typeUrl, Collection<String> resourceNames,
         String message) {
       checkState(requestWriter != null, "ADS stream has not been started");
       String versionInfo = "";
+      String nonce = "";
       if (typeUrl.equals(ADS_TYPE_URL_LDS)) {
         versionInfo = ldsVersion;
+        nonce = ldsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_RDS)) {
         versionInfo = rdsVersion;
+        nonce = rdsRespNonce;
       } else if (typeUrl.equals(ADS_TYPE_URL_EDS)) {
         versionInfo = edsVersion;
+        nonce = edsRespNonce;
       }
       // TODO(chengyuanzhang): cases for EDS.
       DiscoveryRequest request =
