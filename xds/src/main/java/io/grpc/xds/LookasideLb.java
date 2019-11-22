@@ -226,8 +226,7 @@ final class LookasideLb extends LoadBalancer {
       return 5;
     }
 
-    // A synthetic policy name identified by xds config. The implementation detail doesn't
-    // matter.
+    // A synthetic policy name identified by xds config.
     @Override
     public String getPolicyName() {
       return "xds_policy__balancer_name_" + xdsConfig.balancerName
