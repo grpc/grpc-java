@@ -39,9 +39,7 @@ final class ManagedChannelServiceConfig {
 
   private final Map<String, MethodInfo> serviceMethodMap;
   private final Map<String, MethodInfo> serviceMap;
-  // TODO(notcarl/zdapeng): use retryThrottling here
   @Nullable
-  @SuppressWarnings("unused")
   private final Throttle retryThrottling;
   @Nullable
   private final Object loadBalancingConfig;
@@ -55,6 +53,16 @@ final class ManagedChannelServiceConfig {
     this.serviceMap = Collections.unmodifiableMap(new HashMap<>(serviceMap));
     this.retryThrottling = retryThrottling;
     this.loadBalancingConfig = loadBalancingConfig;
+  }
+
+  /** Returns an empty {@link ManagedChannelServiceConfig}. */
+  static ManagedChannelServiceConfig empty() {
+    return
+        new ManagedChannelServiceConfig(
+            new HashMap<String, MethodInfo>(),
+            new HashMap<String, MethodInfo>(),
+            /* retryThrottling= */ null,
+            /* loadBalancingConfig= */ null);
   }
 
   /**
@@ -136,6 +144,11 @@ final class ManagedChannelServiceConfig {
   @Nullable
   Object getLoadBalancingConfig() {
     return loadBalancingConfig;
+  }
+
+  @Nullable
+  Throttle getRetryThrottling() {
+    return retryThrottling;
   }
 
   /**

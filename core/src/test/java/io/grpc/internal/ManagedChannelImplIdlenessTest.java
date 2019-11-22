@@ -67,7 +67,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
@@ -226,20 +225,17 @@ public class ManagedChannelImplIdlenessTest {
     verify(mockLoadBalancerProvider).newLoadBalancer(any(Helper.class));
 
     verify(mockNameResolver).start(nameResolverListenerCaptor.capture());
-    Attributes attr =
-        Attributes.newBuilder()
-            .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, new HashMap<String, Object>())
-            .build();
     // Simulate new address resolved to make sure the LoadBalancer is correctly linked to
     // the NameResolver.
     ResolutionResult resolutionResult =
         ResolutionResult.newBuilder()
             .setAddresses(servers)
-            .setAttributes(attr)
+            .setAttributes(Attributes.EMPTY)
             .build();
     nameResolverListenerCaptor.getValue().onResult(resolutionResult);
     verify(mockLoadBalancer).handleResolvedAddresses(
-        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(attr).build());
+        ResolvedAddresses.newBuilder().setAddresses(servers).setAttributes(Attributes.EMPTY)
+            .build());
   }
 
   @Test

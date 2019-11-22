@@ -24,6 +24,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -146,6 +147,8 @@ public class DnsNameResolverTest {
   private String networkaddressCacheTtlPropertyValue;
   @Mock
   private RecordFetcher recordFetcher;
+  @Mock
+  private ServiceConfigParser mockServiceConfigParser;
 
   private DnsNameResolver newResolver(String name, int defaultPort) {
     return newResolver(
@@ -176,7 +179,7 @@ public class DnsNameResolverTest {
             .setDefaultPort(defaultPort)
             .setProxyDetector(proxyDetector)
             .setSynchronizationContext(syncContext)
-            .setServiceConfigParser(mock(ServiceConfigParser.class))
+            .setServiceConfigParser(mockServiceConfigParser)
             .setChannelLogger(mock(ChannelLogger.class))
             .build();
     return newResolver(name, stopwatch, isAndroid, args);
@@ -1072,7 +1075,8 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_capturesParseError() {
-    ConfigOrError result = DnsNameResolver.parseServiceConfig(
+    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
+    ConfigOrError result = resolver.parseServiceConfig(
         Arrays.asList("grpc_config=bogus"), new Random(), "localhost");
 
     assertThat(result).isNotNull();
@@ -1082,7 +1086,8 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_capturesChoiceError() {
-    ConfigOrError result = DnsNameResolver.parseServiceConfig(
+    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
+    ConfigOrError result = resolver.parseServiceConfig(
         Arrays.asList("grpc_config=[{\"hi\":{}}]"), new Random(), "localhost");
 
     assertThat(result).isNotNull();
@@ -1092,15 +1097,20 @@ public class DnsNameResolverTest {
 
   @Test
   public void parseServiceConfig_noChoiceIsNull() {
-    ConfigOrError result = DnsNameResolver.parseServiceConfig(
+    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
+    ConfigOrError result = resolver.parseServiceConfig(
         Arrays.asList("grpc_config=[]"), new Random(), "localhost");
 
     assertThat(result).isNull();
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   public void parseServiceConfig_matches() {
-    ConfigOrError result = DnsNameResolver.parseServiceConfig(
+    DnsNameResolver resolver = newResolver("localhost", DEFAULT_PORT);
+    when(mockServiceConfigParser.parseServiceConfig(any(Map.class)))
+        .thenReturn(ConfigOrError.fromConfig(ImmutableMap.of()));
+    ConfigOrError result = resolver.parseServiceConfig(
         Arrays.asList("grpc_config=[{\"serviceConfig\":{}}]"), new Random(), "localhost");
 
     assertThat(result).isNotNull();

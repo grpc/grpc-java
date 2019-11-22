@@ -106,9 +106,12 @@ public final class AutoConfiguredLoadBalancerFactory {
     }
 
     /**
-     * Returns non-OK status if resolvedAddresses is rejected and should be considered as a
-     * name-resolution error.
+     * Returns non-OK status if resolvedAddresses is empty and delegate lb requires address ({@link
+     * LoadBalancer#canHandleEmptyAddressListFromNameResolution()} returns {@code false}).
+     * {@code AutoConfiguredLoadBalancer} doesn't expose {@code
+     * canHandleEmptyAddressListFromNameResolution} because delegate LB may not be deterministic.
      */
+    // TODO(jihuncho) migrate to use parsed config
     Status tryHandleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
       List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
       Attributes attributes = resolvedAddresses.getAttributes();
@@ -142,11 +145,14 @@ public final class AutoConfiguredLoadBalancerFactory {
             old.getClass().getSimpleName(), delegate.getClass().getSimpleName());
       }
 
+      ConfigOrError lbPolicyConfig = null;
       if (selection.config != null) {
         helper.getChannelLogger().log(
             ChannelLogLevel.DEBUG, "Load-balancing config: {0}", selection.config);
         attributes =
-            attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.config).build();
+            attributes.toBuilder().set(ATTR_LOAD_BALANCING_CONFIG, selection.rawConfig).build();
+        lbPolicyConfig = delegateProvider
+            .parseLoadBalancingPolicyConfig(selection.rawConfig);
       }
 
       LoadBalancer delegate = getDelegate();
@@ -159,6 +165,7 @@ public final class AutoConfiguredLoadBalancerFactory {
             ResolvedAddresses.newBuilder()
                 .setAddresses(selection.serverList)
                 .setAttributes(attributes)
+                .setLoadBalancingPolicyConfig(lbPolicyConfig)
                 .build());
         return Status.OK;
       }
@@ -251,6 +258,7 @@ public final class AutoConfiguredLoadBalancerFactory {
             return new PolicySelection(
                 provider,
                 policy.equals(GRPCLB_POLICY_NAME) ? servers : backendAddrs,
+                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue()),
                 lbConfig.getRawConfigValue());
           }
         }
@@ -280,9 +288,12 @@ public final class AutoConfiguredLoadBalancerFactory {
           return new PolicySelection(
               getProviderOrThrow(
                   "round_robin", "received balancer addresses but grpclb runtime is missing"),
-              backendAddrs, null);
+              backendAddrs,
+              /* config= */ null,
+              /* rawConfig= */ null);
         }
-        return new PolicySelection(grpclbProvider, servers, null);
+        return
+            new PolicySelection(grpclbProvider, servers, /* config= */ null, /* rawConfig= */ null);
       }
       // No balancer address this time.  If balancer address shows up later, we want to make sure
       // the warning is logged one more time.
@@ -290,7 +301,10 @@ public final class AutoConfiguredLoadBalancerFactory {
 
       // No config nor balancer address. Use default.
       return new PolicySelection(
-          getProviderOrThrow(defaultPolicy, "using default policy"), servers, null);
+          getProviderOrThrow(defaultPolicy, "using default policy"),
+          servers,
+          /* config= */ null,
+          /* rawConfig= */ null);
     }
   }
 
@@ -329,7 +343,8 @@ public final class AutoConfiguredLoadBalancerFactory {
           } else {
             return ConfigOrError.fromConfig(new PolicySelection(
                 provider,
-                /* serverList= */ null,
+                /* serverList= */ Collections.<EquivalentAddressGroup>emptyList(),
+                provider.parseLoadBalancingPolicyConfig(lbConfig.getRawConfigValue()),
                 lbConfig.getRawConfigValue()));
           }
         }
@@ -357,23 +372,19 @@ public final class AutoConfiguredLoadBalancerFactory {
   static final class PolicySelection {
     final LoadBalancerProvider provider;
     @Nullable final List<EquivalentAddressGroup> serverList;
-    // TODO(carl-mastrangelo): make this the non-raw service config object.
-    @Nullable final Map<String, ?> config;
-
-    PolicySelection(
-        LoadBalancerProvider provider, List<EquivalentAddressGroup> serverList,
-        @Nullable Map<String, ?> config) {
-      this.provider = checkNotNull(provider, "provider");
-      this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
-      this.config = config;
-    }
+    @Nullable final ConfigOrError config;
+    // TODO(jihuncho) remove when AutoConfiguredLoadBalancerFactory doesn't depend on the Attributes
+    @Nullable final Map<String, ?> rawConfig;
 
     PolicySelection(
         LoadBalancerProvider provider,
-        @Nullable Map<String, ?> config) {
+        List<EquivalentAddressGroup> serverList,
+        @Nullable ConfigOrError config,
+        @Nullable Map<String, ?> rawConfig) {
       this.provider = checkNotNull(provider, "provider");
-      this.serverList = null;
+      this.serverList = Collections.unmodifiableList(checkNotNull(serverList, "serverList"));
       this.config = config;
+      this.rawConfig = rawConfig;
     }
   }
 

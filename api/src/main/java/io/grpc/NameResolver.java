@@ -899,6 +899,23 @@ public abstract class NameResolver {
     }
 
     @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      ConfigOrError that = (ConfigOrError) o;
+      return Objects.equal(status, that.status) && Objects.equal(config, that.config);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(status, config);
+    }
+
+    @Override
     public String toString() {
       if (config != null) {
         return MoreObjects.toStringHelper(this)

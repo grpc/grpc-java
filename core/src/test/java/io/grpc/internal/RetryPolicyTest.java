@@ -62,10 +62,16 @@ public class RetryPolicyTest {
       @SuppressWarnings("unchecked")
       Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
-      ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
-          /* retryEnabled = */ true, /* maxRetryAttemptsLimit = */ 4,
-          /* maxHedgedAttemptsLimit = */ 3);
-      serviceConfigInterceptor.handleUpdate(serviceConfig);
+      ServiceConfigInterceptor serviceConfigInterceptor =
+          new ServiceConfigInterceptor(/* retryEnabled = */ true);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          ManagedChannelServiceConfig.fromServiceConfig(
+              serviceConfig,
+              /* retryEnabled= */ true,
+              /* maxRetryAttemptsLimit = */ 4,
+              /* maxHedgedAttemptsLimit = */34,
+              null);
+      serviceConfigInterceptor.handleUpdate(managedChannelServiceConfig);
 
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();
 
@@ -140,10 +146,16 @@ public class RetryPolicyTest {
       @SuppressWarnings("unchecked")
       Map<String, ?> serviceConfig = (Map<String, ?>) serviceConfigObj;
 
-      ServiceConfigInterceptor serviceConfigInterceptor = new ServiceConfigInterceptor(
-          /* retryEnabled = */ false, /* maxRetryAttemptsLimit = */ 4,
-          /* maxHedgedAttemptsLimit = */ 3);
-      serviceConfigInterceptor.handleUpdate(serviceConfig);
+      ServiceConfigInterceptor serviceConfigInterceptor =
+          new ServiceConfigInterceptor(/* retryEnabled = */ false);
+      ManagedChannelServiceConfig managedChannelServiceConfig =
+          ManagedChannelServiceConfig.fromServiceConfig(
+              serviceConfig,
+              /* retryEnabled= */ false,
+              /* maxRetryAttemptsLimit = */ 4,
+              /* maxHedgedAttemptsLimit = */ 3,
+              null);
+      serviceConfigInterceptor.handleUpdate(managedChannelServiceConfig);
 
       MethodDescriptor.Builder<Void, Void> builder = TestMethodDescriptors.voidMethod().toBuilder();
 

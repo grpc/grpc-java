@@ -172,7 +172,6 @@ public class ServiceConfigErrorHandlingTest {
     }
 
     assertEquals(numExpectedTasks, timer.numPendingTasks());
-
     ArgumentCaptor<Helper> helperCaptor = ArgumentCaptor.forClass(null);
     verify(mockLoadBalancerProvider).newLoadBalancer(helperCaptor.capture());
   }
@@ -226,9 +225,13 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> serviceConfig =
+    ImmutableMap<String, Object> rawServiceConfig =
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin");
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(serviceConfig));
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
 
     createChannel();
 
@@ -243,9 +246,13 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> serviceConfig =
+    ImmutableMap<String, Object> rawServiceConfig =
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(serviceConfig));
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
 
     createChannel();
 
@@ -255,16 +262,20 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
     assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(serviceConfig);
+        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
-    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
+    assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
 
     reset(mockLoadBalancer);
     ImmutableMap<String, Object> ignoredServiceConfig =
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin");
+    managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(ignoredServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextRawServiceConfig.set(ignoredServiceConfig);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
     nameResolverFactory.servers.clear();
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(ignoredServiceConfig));
 
     // 2nd resolution
     nameResolverFactory.allResolved();
@@ -272,7 +283,6 @@ public class ServiceConfigErrorHandlingTest {
     // 2nd service config without address should be ignored
     verify(mockLoadBalancer, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
-    assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
   }
 
   @Test
@@ -284,9 +294,15 @@ public class ServiceConfigErrorHandlingTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
-    ImmutableMap<String, Object> serviceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(serviceConfig));
+    String loadBalancingConfig = "{\"param1\": \"value1\", \"param2\": \"value2\"}";
+    Map<String, Object> rawServiceConfig =
+        parseJson(
+            "{\"loadBalancingConfig\": [{\"mock_lb\" : " + loadBalancingConfig + "}]}");
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
 
     createChannel();
 
@@ -295,8 +311,8 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(serviceConfig);
+    assertThat(actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG))
+        .isEqualTo(parseJson(loadBalancingConfig));
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -310,9 +326,13 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> serviceConfig =
+    ImmutableMap<String, Object> rawServiceConfig =
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(serviceConfig));
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
 
     createChannel();
 
@@ -322,7 +342,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
     assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(serviceConfig);
+        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -335,6 +355,7 @@ public class ServiceConfigErrorHandlingTest {
             .setServers(ImmutableList.of(addressGroup))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
+    nameResolverFactory.nextRawServiceConfig.set(null);
     nameResolverFactory.nextConfigOrError.set(null);
 
     createChannel();
@@ -344,7 +365,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isEmpty();
+    assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG)).isNull();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -361,6 +382,7 @@ public class ServiceConfigErrorHandlingTest {
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
+    nameResolverFactory.nextRawServiceConfig.set(null);
     nameResolverFactory.nextConfigOrError.set(null);
 
     createChannel();
@@ -411,10 +433,8 @@ public class ServiceConfigErrorHandlingTest {
     ArgumentCaptor<ResolvedAddresses> resultCaptor =
         ArgumentCaptor.forClass(ResolvedAddresses.class);
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
-    assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
-    Attributes actualAttrs = resultCaptor.getValue().getAttributes();
-    assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(defaultServiceConfig);
+    ResolvedAddresses resolvedAddress = resultCaptor.getValue();
+    assertThat(resolvedAddress.getAddresses()).containsExactly(addressGroup);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -428,9 +448,13 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> serviceConfig =
+    ImmutableMap<String, Object> rawServiceConfig =
         ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
-    nameResolverFactory.nextConfigOrError.set(ConfigOrError.fromConfig(serviceConfig));
+    nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
+    ManagedChannelServiceConfig managedChannelServiceConfig =
+        ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+    nameResolverFactory.nextConfigOrError.set(
+        ConfigOrError.fromConfig(managedChannelServiceConfig));
 
     createChannel();
 
@@ -440,7 +464,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resultCaptor.getValue().getAddresses()).containsExactly(addressGroup);
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
     assertThat(actualAttrs.get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(serviceConfig);
+        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -458,7 +482,7 @@ public class ServiceConfigErrorHandlingTest {
     // should use previous service config because new service config is invalid.
     assertThat(newResolvedAddress.getAttributes()).isNotEqualTo(Attributes.EMPTY);
     assertThat(newResolvedAddress.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
-        .isEqualTo(serviceConfig);
+        .isEqualTo(rawServiceConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
     assertThat(channel.getState(false)).isEqualTo(ConnectivityState.IDLE);
   }
@@ -500,6 +524,7 @@ public class ServiceConfigErrorHandlingTest {
     final Status error;
     final ArrayList<FakeNameResolver> resolvers = new ArrayList<>();
     final AtomicReference<ConfigOrError> nextConfigOrError = new AtomicReference<>();
+    final AtomicReference<Map<String, ?>> nextRawServiceConfig = new AtomicReference<>();
 
     FakeNameResolverFactory(
         URI expectedUri,
@@ -560,7 +585,6 @@ public class ServiceConfigErrorHandlingTest {
         resolved();
       }
 
-      @SuppressWarnings("unchecked")
       void resolved() {
         if (error != null) {
           listener.onError(error);
@@ -570,17 +594,17 @@ public class ServiceConfigErrorHandlingTest {
             ResolutionResult.newBuilder()
                 .setAddresses(servers);
         ConfigOrError configOrError = nextConfigOrError.get();
+        Map<String, ?> rawServiceConfig = nextRawServiceConfig.get();
         if (configOrError != null) {
           builder.setServiceConfig(configOrError);
-          if (configOrError.getConfig() != null) {
-            builder.setAttributes(
-                Attributes.newBuilder()
-                    .set(
-                        GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG,
-                        (Map<String, ?>) configOrError.getConfig())
-                    .build());
-          }
         }
+        if (rawServiceConfig != null) {
+          builder.setAttributes(
+              Attributes.newBuilder()
+                  .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, rawServiceConfig)
+                  .build());
+        }
+
         listener.onResult(builder.build());
       }
 
@@ -606,11 +630,6 @@ public class ServiceConfigErrorHandlingTest {
 
       Builder setServers(List<EquivalentAddressGroup> servers) {
         this.servers = servers;
-        return this;
-      }
-
-      Builder setResolvedAtStart(boolean resolvedAtStart) {
-        this.resolvedAtStart = resolvedAtStart;
         return this;
       }
 
@@ -651,5 +670,10 @@ public class ServiceConfigErrorHandlingTest {
 
     @Override
     public void shutdown() {}
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> parseJson(String json) throws Exception {
+    return (Map<String, Object>) JsonParser.parse(json);
   }
 }

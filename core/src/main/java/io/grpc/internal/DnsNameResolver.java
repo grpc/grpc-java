@@ -149,6 +149,7 @@ final class DnsNameResolver extends NameResolver {
   /** True if using an executor resource that should be released after use. */
   private final boolean usingExecutorResource;
   private final boolean enableSrv;
+  private final ServiceConfigParser serviceConfigParser;
 
   private boolean resolving;
 
@@ -164,7 +165,7 @@ final class DnsNameResolver extends NameResolver {
       Stopwatch stopwatch,
       boolean isAndroid,
       boolean enableSrv) {
-    Preconditions.checkNotNull(args, "args");
+    checkNotNull(args, "args");
     // TODO: if a DNS server is provided as nsAuthority, use it.
     // https://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java
     this.executorResource = executorResource;
@@ -180,14 +181,14 @@ final class DnsNameResolver extends NameResolver {
     } else {
       port = nameUri.getPort();
     }
-    this.proxyDetector = Preconditions.checkNotNull(args.getProxyDetector(), "proxyDetector");
+    this.proxyDetector = checkNotNull(args.getProxyDetector(), "proxyDetector");
     this.cacheTtlNanos = getNetworkAddressCacheTtlNanos(isAndroid);
-    this.stopwatch = Preconditions.checkNotNull(stopwatch, "stopwatch");
-    this.syncContext =
-        Preconditions.checkNotNull(args.getSynchronizationContext(), "syncContext");
+    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.syncContext = checkNotNull(args.getSynchronizationContext(), "syncContext");
     this.executor = args.getOffloadExecutor();
     this.usingExecutorResource = executor == null;
     this.enableSrv = enableSrv;
+    this.serviceConfigParser = checkNotNull(args.getServiceConfigParser(), "serviceConfigParser");
   }
 
   @Override
@@ -201,7 +202,7 @@ final class DnsNameResolver extends NameResolver {
     if (usingExecutorResource) {
       executor = SharedResourceHolder.get(executorResource);
     }
-    this.listener = Preconditions.checkNotNull(listener, "listener");
+    this.listener = checkNotNull(listener, "listener");
     resolve();
   }
 
@@ -215,7 +216,7 @@ final class DnsNameResolver extends NameResolver {
     private final Listener2 savedListener;
 
     Resolve(Listener2 savedListener) {
-      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
+      this.savedListener = checkNotNull(savedListener, "savedListener");
     }
 
     @Override
@@ -327,7 +328,7 @@ final class DnsNameResolver extends NameResolver {
   }
 
   @Nullable
-  static ConfigOrError parseServiceConfig(
+  ConfigOrError parseServiceConfig(
       List<String> rawTxtRecords, Random random, String localHostname) {
     List<Map<String, ?>> possibleServiceConfigChoices;
     try {
@@ -336,8 +337,8 @@ final class DnsNameResolver extends NameResolver {
       return ConfigOrError.fromError(
           Status.UNKNOWN.withDescription("failed to parse TXT records").withCause(e));
     }
-    Map<String, ?> possibleServiceConfig = null;
     for (Map<String, ?> possibleServiceConfigChoice : possibleServiceConfigChoices) {
+      Map<String, ?> possibleServiceConfig;
       try {
         possibleServiceConfig =
             maybeChooseServiceConfig(possibleServiceConfigChoice, random, localHostname);
@@ -346,13 +347,10 @@ final class DnsNameResolver extends NameResolver {
             Status.UNKNOWN.withDescription("failed to pick service config choice").withCause(e));
       }
       if (possibleServiceConfig != null) {
-        break;
+        return serviceConfigParser.parseServiceConfig(possibleServiceConfig);
       }
     }
-    if (possibleServiceConfig == null) {
-      return null;
-    }
-    return ConfigOrError.fromConfig(possibleServiceConfig);
+    return null;
   }
 
   private void resolve() {

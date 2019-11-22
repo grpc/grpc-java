@@ -23,6 +23,7 @@ import com.google.common.base.Preconditions;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.EquivalentAddressGroup;
+import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver;
 import io.grpc.Status;
 import io.grpc.internal.GrpcAttributes;
@@ -110,11 +111,14 @@ final class XdsNameResolver extends NameResolver {
             .set(XDS_NODE, bootstrapInfo.getNode())
             .set(XDS_CHANNEL_CREDS_LIST, bootstrapInfo.getChannelCredentials())
             .build();
+    ConfigOrError xdsServiceConfig =
+        XdsLoadBalancerProvider
+            .parseLoadBalancingConfigPolicy(config, LoadBalancerRegistry.getDefaultRegistry());
     ResolutionResult result =
         ResolutionResult.newBuilder()
             .setAddresses(Collections.<EquivalentAddressGroup>emptyList())
             .setAttributes(attrs)
-            .setServiceConfig(ConfigOrError.fromConfig(config))
+            .setServiceConfig(xdsServiceConfig)
             .build();
     listener.onResult(result);
   }
