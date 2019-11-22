@@ -128,9 +128,9 @@ public class SdsClientTest {
   @Test
   public void configSourceUdsTarget() {
     ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path", null);
-    String[] retArray = SdsClient.Factory.extractChannelInfo(configSource);
-    assertThat(retArray[0]).isEqualTo("unix:/tmp/uds_path");
-    assertThat(retArray[1]).isNull();
+    SdsClient.ChannelInfo channelInfo = SdsClient.Factory.extractChannelInfo(configSource);
+    assertThat(channelInfo.targetUri).isEqualTo("unix:/tmp/uds_path");
+    assertThat(channelInfo.channelType).isNull();
   }
 
   @Test

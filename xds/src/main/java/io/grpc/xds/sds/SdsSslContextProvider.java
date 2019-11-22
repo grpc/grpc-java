@@ -54,7 +54,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   private final SdsClient validationContextSdsClient;
   private final SdsSecretConfig certSdsConfig;
   private final SdsSecretConfig validationContextSdsConfig;
-  private final List<Pair> pendingCallbacks = new ArrayList<>();
+  private final List<CallbackPair> pendingCallbacks = new ArrayList<>();
   private TlsCertificate tlsCertificate;
   private CertificateValidationContext certificateValidationContext;
   private SslContext sslContext;
@@ -150,7 +150,7 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
       callPerformCallback(callback, executor, sslContextCopy);
     } else {
       synchronized (pendingCallbacks) {
-        pendingCallbacks.add(new Pair(callback, executor));
+        pendingCallbacks.add(new CallbackPair(callback, executor));
       }
     }
   }
@@ -222,13 +222,13 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
       sslContext = sslContextCopy;
       makePendingCallbacks(sslContextCopy);
     } catch (CertificateException | IOException | CertStoreException e) {
-      logger.log(Level.SEVERE, "", e);
+      logger.log(Level.SEVERE, "exception in updateSslContext", e);
     }
   }
 
   private void makePendingCallbacks(SslContext sslContextCopy) {
     synchronized (pendingCallbacks) {
-      for (Pair pair : pendingCallbacks) {
+      for (CallbackPair pair : pendingCallbacks) {
         callPerformCallback(pair.callback, pair.executor, sslContextCopy);
       }
       pendingCallbacks.clear();
@@ -238,8 +238,8 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
   @Override
   public void onError(Status error) {
     synchronized (pendingCallbacks) {
-      for (Pair pair : pendingCallbacks) {
-        pair.callback.onException(error.asException());
+      for (CallbackPair callbackPair : pendingCallbacks) {
+        callbackPair.callback.onException(error.asException());
       }
       pendingCallbacks.clear();
     }
@@ -257,11 +257,11 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
     }
   }
 
-  private static class Pair {
+  private static class CallbackPair {
     private final Callback callback;
     private final Executor executor;
 
-    private Pair(Callback callback, Executor executor) {
+    private CallbackPair(Callback callback, Executor executor) {
       this.callback = callback;
       this.executor = executor;
     }

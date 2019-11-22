@@ -94,9 +94,10 @@ final class SdsClient {
         Node node,
         Executor watcherExecutor,
         Executor channelExecutor) {
-      String[] channelInfo = extractChannelInfo(sdsSecretConfig.getSdsConfig());
-      String targetUri = channelInfo[0];
-      if (channelInfo[1] != null && channelInfo[1].startsWith("inproc")) {
+      ChannelInfo channelInfo = extractChannelInfo(sdsSecretConfig.getSdsConfig());
+      String targetUri = channelInfo.targetUri;
+      String channelType = channelInfo.channelType;
+      if (channelType != null && channelType.startsWith("inproc")) {
         ManagedChannel channel =
             InProcessChannelBuilder.forName(targetUri).executor(channelExecutor).build();
         return new SdsClient(
@@ -123,7 +124,7 @@ final class SdsClient {
     }
 
     @VisibleForTesting
-    static String[] extractChannelInfo(ConfigSource configSource) {
+    static ChannelInfo extractChannelInfo(ConfigSource configSource) {
       checkNotNull(configSource, "configSource");
       checkArgument(
           configSource.hasApiConfigSource(), "only configSource with ApiConfigSource supported");
@@ -145,15 +146,26 @@ final class SdsClient {
               && googleGrpc.getCallCredentialsCount() == 0
               && Strings.isNullOrEmpty(googleGrpc.getCredentialsFactoryName()),
           "No credentials supported in GoogleGrpc");
-      String[] retArray = new String[2];
-      retArray[0] = googleGrpc.getTargetUri();
+      String targetUri = googleGrpc.getTargetUri();
+      String channelType = null;
       if (googleGrpc.hasConfig()) {
         Struct struct = googleGrpc.getConfig();
         Value value = struct.getFieldsMap().get("channelType");
-        retArray[1] = value.getStringValue();
+        channelType = value.getStringValue();
       }
-      checkArgument(!Strings.isNullOrEmpty(retArray[0]), "targetUri in GoogleGrpc is empty!");
-      return retArray;
+      checkArgument(!Strings.isNullOrEmpty(targetUri), "targetUri in GoogleGrpc is empty!");
+      return new ChannelInfo(targetUri, channelType);
+    }
+  }
+
+  @VisibleForTesting
+  static final class ChannelInfo {
+    @VisibleForTesting final String targetUri;
+    @VisibleForTesting final String channelType;
+
+    private ChannelInfo(String targetUri, String channelType) {
+      this.targetUri = targetUri;
+      this.channelType = channelType;
     }
   }
 
