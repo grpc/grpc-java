@@ -118,12 +118,6 @@ final class LookasideLb extends LoadBalancer {
     // In the future, xdsConfig can be gotten directly by
     // resolvedAddresses.getLoadBalancingPolicyConfig().
     Attributes attributes = resolvedAddresses.getAttributes();
-    final ObjectPool<XdsClient> xdsClientRefFromResolver =
-        resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
-    if (xdsClientRefFromResolver != null) {
-      cachedXdsClientRef = xdsClientRefFromResolver;
-    }
-
     Map<String, ?> newRawLbConfig = checkNotNull(
         attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
     ConfigOrError cfg =
@@ -140,10 +134,8 @@ final class LookasideLb extends LoadBalancer {
       switchingLoadBalancer.switchTo(fixedXdsConfigBalancerProvider);
     }
 
-    resolvedAddresses = resolvedAddresses.toBuilder().setAttributes(
-            resolvedAddresses.getAttributes().toBuilder()
-                .discard(ATTR_LOAD_BALANCING_CONFIG)
-                .build())
+    resolvedAddresses = resolvedAddresses.toBuilder()
+        .setAttributes(attributes.toBuilder().discard(ATTR_LOAD_BALANCING_CONFIG).build())
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
@@ -285,8 +277,18 @@ final class LookasideLb extends LoadBalancer {
               }
             };
 
+        // There are three usecases:
+        // 1. The EDS-only legacy usecase that requires balancerName from xds config.
+        // 2. The EDS-only with bootstrap usecase:
+        //    The name resolver resolves a ResolvedAddresses with an XdsConfig without balancerName
+        //    field. Use the bootstrap information to create a channel.
+        // 3. Non EDS-only usecase:
+        //    XDS_CLIENT_REF attribute is available from ResolvedAddresses either from
+        //    XdsNameResolver or CDS policy.
+        // We assume XdsConfig switching happens only within one usecase, and there is no switching
+        // between different usecases.
         if (xdsConfig.balancerName != null) {
-          // This to handle the legacy usecase that requires balancerName from xds config.
+          // This is the EDS-only legacy usecase that requires balancerName from xds config.
 
           String oldBalancerName = oldXdsConfig == null ? null : oldXdsConfig.balancerName;
           if (!xdsConfig.balancerName.equals(oldBalancerName)) {
@@ -315,53 +317,61 @@ final class LookasideLb extends LoadBalancer {
             lrsClient = cachedLrsClient;
             xdsClientRef = cachedXdsClientRef;
           }
-        } else if (cachedXdsClientRef == null) {
-          // This is to handle EDS-only with bootstrap usecase: The name resolver resolves
-          // a ResolvedAddresses with an XdsConfig without balancerName field. Use the bootstrap
-          // information to create a channel.
-          final BootstrapInfo bootstrapInfo;
-          try {
-            bootstrapInfo = bootstrapper.readBootstrap();
-          } catch (Exception e) {
-            helper.updateBalancingState(
-                ConnectivityState.TRANSIENT_FAILURE,
-                new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
-            endpointWatcher = null;
-            return;
-          }
-          final ManagedChannel channel = initLbChannel(
-              helper, bootstrapInfo.getServerUri(),
-              bootstrapInfo.getChannelCredentials());
-          // TODO(zdapeng): Use XdsClient to do Lrs directly.
-          lrsClient = loadReportClientFactory.createLoadReportClient(
-              channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
-          xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
-            @Override
-            XdsClient createXdsClient() {
-              return new XdsComms2(
-                  channel, helper, new ExponentialBackoffPolicy.Provider(),
-                  GrpcUtil.STOPWATCH_SUPPLIER, bootstrapInfo.getNode());
-            }
-          });
         } else {
-          // This is the XdsNameResolver or non EDS-only usecase.
-          // XDS_CLIENT_REF attribute is available from ResolvedAddresses, and already cached.
-          // Use the cached xdsClientRef.
-          xdsClientRef = cachedXdsClientRef;
+          // This is either the EDS-only with bootstrap usecase or non EDS-only usecase.
+          if (cachedXdsClientRef != null) {
+            xdsClientRef = cachedXdsClientRef;
+            lrsClient = cachedLrsClient;
+          } else {
+            Attributes attributes = resolvedAddresses.getAttributes();
+            final ObjectPool<XdsClient> xdsClientRefFromResolver =
+                attributes.get(XdsAttributes.XDS_CLIENT_REF);
+            if (xdsClientRefFromResolver != null) {
+              // This is the Non EDS-only usecase.
+              xdsClientRef = xdsClientRefFromResolver;
+              // FIXME(zdapeng): Use XdsClient to do Lrs directly.
+              // No-op for now.
+              lrsClient = new LoadReportClient() {
+                @Override
+                public void startLoadReporting(LoadReportCallback callback) {
+                }
 
-          // FIXME(zdapeng): Use XdsClient to do Lrs directly.
-          // No-op for now.
-          lrsClient = new LoadReportClient() {
-            @Override
-            public void startLoadReporting(LoadReportCallback callback) {}
-
-            @Override
-            public void stopLoadReporting() {}
-          };
+                @Override
+                public void stopLoadReporting() {
+                }
+              };
+            } else {
+              // This is the EDS-only with bootstrap usecase.
+              final BootstrapInfo bootstrapInfo;
+              try {
+                bootstrapInfo = bootstrapper.readBootstrap();
+              } catch (Exception e) {
+                helper.updateBalancingState(
+                    ConnectivityState.TRANSIENT_FAILURE,
+                    new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
+                endpointWatcher = null;
+                return;
+              }
+              final ManagedChannel channel = initLbChannel(
+                  helper, bootstrapInfo.getServerUri(),
+                  bootstrapInfo.getChannelCredentials());
+              // TODO(zdapeng): Use XdsClient to do Lrs directly.
+              lrsClient = loadReportClientFactory.createLoadReportClient(
+                  channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
+              xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
+                @Override
+                XdsClient createXdsClient() {
+                  return new XdsComms2(
+                      channel, helper, new ExponentialBackoffPolicy.Provider(),
+                      GrpcUtil.STOPWATCH_SUPPLIER, bootstrapInfo.getNode());
+                }
+              });
+            }
+          }
         }
 
-        // Now the lrsClient and xdsClientRef are assigned in all usecases, cache them for later
-        // use.
+        // At this point the lrsClient and xdsClientRef are assigned in all usecases, cache them for
+        // later use.
         cachedLrsClient = lrsClient;
         cachedXdsClientRef = xdsClientRef;
 
