@@ -106,7 +106,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   @Override
   public void handleNameResolutionError(Status error) {
-    channelLogger.log(ChannelLogLevel.DEBUG, "Name resolution error: '%s'", error);
+    channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
   }
 
   @Override
@@ -219,6 +219,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onClusterChanged(ClusterUpdate newUpdate) {
+      channelLogger.log(ChannelLogLevel.DEBUG, "Received a CDS update: '%s'",  newUpdate);
       checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"),
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
@@ -249,6 +250,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
+      channelLogger.log(ChannelLogLevel.ERROR, "Received a CDS error: '%s'",  error);
+
       // Go into TRANSIENT_FAILURE if we have not yet created the child
       // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
       // we keep running with the data we had previously.

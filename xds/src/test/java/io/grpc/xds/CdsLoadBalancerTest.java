@@ -290,7 +290,7 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void clusterWatcherOnErrorBeforeAndAfteronClusterChanged() {
+  public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() {
     CdsConfig cdsConfig1 = new CdsConfig("foo.googleapis.com");
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
