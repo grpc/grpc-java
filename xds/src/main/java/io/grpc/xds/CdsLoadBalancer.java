@@ -173,7 +173,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
         @Override
         public void shutdown() {
-          if (clusterWatcher != null) {
+          if (clusterWatcher != null && clusterWatcher.edsBalancer != null) {
             clusterWatcher.edsBalancer.shutdown();
           }
         }
@@ -197,9 +197,14 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private final class ClusterWatcherImpl implements ClusterWatcher {
 
-    final LoadBalancer edsBalancer;
     final Helper helper;
     final ResolvedAddresses resolvedAddresses;
+
+    // EDS balancer for the cluster.
+    // Becomes non-null once handleResolvedAddresses() successfully.
+    // Assigned at most once.
+    @Nullable
+    LoadBalancer edsBalancer;
 
     // LoadStatsStore for the cluster.
     // Becomes non-null once handleResolvedAddresses() successfully.
@@ -210,7 +215,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
       this.helper = helper;
       this.resolvedAddresses = resolvedAddresses;
-      this.edsBalancer = lbRegistry.getProvider("xds_experimental").newLoadBalancer(helper);
     }
 
     @Override
@@ -229,6 +233,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
       if (loadStatsStore == null) {
         loadStatsStore = new LoadStatsStoreImpl();
       }
+      if (edsBalancer == null) {
+        edsBalancer = lbRegistry.getProvider("xds_experimental").newLoadBalancer(helper);
+      }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder()
               .setAttributes(
@@ -242,7 +249,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
-      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      // Go into TRANSIENT_FAILURE if we have not yet created the child
+      // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
+      // we keep running with the data we had previously.
+      if (edsBalancer == null) {
+        helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+      }
     }
   }
 

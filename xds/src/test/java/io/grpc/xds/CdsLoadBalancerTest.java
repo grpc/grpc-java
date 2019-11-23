@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -38,6 +39,7 @@ import io.grpc.LoadBalancer.ResolvedAddresses;
 import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.Status;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.CdsLoadBalancer.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
@@ -171,10 +173,6 @@ public class CdsLoadBalancerTest {
 
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
-    assertThat(edsLbHelpers).hasSize(1);
-    assertThat(edsLoadBalancers).hasSize(1);
-    Helper edsLbHelper1 = edsLbHelpers.poll();
-    LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
 
     ClusterWatcher clusterWatcher1 = clusterWatcherCaptor1.getValue();
     clusterWatcher1.onClusterChanged(
@@ -185,6 +183,10 @@ public class CdsLoadBalancerTest {
             .setEnableLrs(false)
             .build());
 
+    assertThat(edsLbHelpers).hasSize(1);
+    assertThat(edsLoadBalancers).hasSize(1);
+    Helper edsLbHelper1 = edsLbHelpers.poll();
+    LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor1 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer1).handleResolvedAddresses(resolvedAddressesCaptor1.capture());
     XdsConfig expectedXdsConfig = new XdsConfig(
@@ -220,10 +222,6 @@ public class CdsLoadBalancerTest {
     ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor2 = ArgumentCaptor.forClass(null);
     verify(xdsClient).watchClusterData(eq("bar.googleapis.com"), clusterWatcherCaptor2.capture());
     verify(xdsClient).cancelClusterDataWatch("foo.googleapis.com", clusterWatcher1);
-    assertThat(edsLbHelpers).hasSize(1);
-    assertThat(edsLoadBalancers).hasSize(1);
-    Helper edsLbHelper2 = edsLbHelpers.poll();
-    LoadBalancer edsLoadBalancer2 = edsLoadBalancers.poll();
 
     ClusterWatcher clusterWatcher2 = clusterWatcherCaptor2.getValue();
     clusterWatcher2.onClusterChanged(
@@ -235,6 +233,10 @@ public class CdsLoadBalancerTest {
             .setLrsServerName("lrsBar.googleapis.com")
             .build());
 
+    assertThat(edsLbHelpers).hasSize(1);
+    assertThat(edsLoadBalancers).hasSize(1);
+    Helper edsLbHelper2 = edsLbHelpers.poll();
+    LoadBalancer edsLoadBalancer2 = edsLoadBalancers.poll();
     ArgumentCaptor<ResolvedAddresses> resolvedAddressesCaptor2 = ArgumentCaptor.forClass(null);
     verify(edsLoadBalancer2).handleResolvedAddresses(resolvedAddressesCaptor2.capture());
     expectedXdsConfig = new XdsConfig(
@@ -285,5 +287,51 @@ public class CdsLoadBalancerTest {
         .get(XdsAttributes.LOAD_STATS_STORE_REF);
     // LoadStatsStore should be reused for the same cluster.
     assertThat(loadStatsStoreBar2).isSameInstanceAs(loadStatsStoreBar);
+  }
+
+  @Test
+  public void clusterWatcherOnErrorBeforeAndAfteronClusterChanged() {
+    CdsConfig cdsConfig1 = new CdsConfig("foo.googleapis.com");
+    ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
+        .setLoadBalancingPolicyConfig(cdsConfig1)
+        .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
+
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
+
+    ClusterWatcher clusterWatcher1 = clusterWatcherCaptor1.getValue();
+
+    // Call onError() before onClusterChanged() ever called.
+    clusterWatcher1.onError(Status.DATA_LOSS.withDescription("fake status"));
+    assertThat(edsLoadBalancers).isEmpty();
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    clusterWatcher1.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("foo.googleapis.com")
+            .setEdsServiceName("edsServiceFoo.googleapis.com")
+            .setLbPolicy("round_robin")
+            .setEnableLrs(false)
+            .build());
+
+    assertThat(edsLbHelpers).hasSize(1);
+    assertThat(edsLoadBalancers).hasSize(1);
+    Helper edsLbHelper1 = edsLbHelpers.poll();
+    LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
+    verify(edsLoadBalancer1).handleResolvedAddresses(any(ResolvedAddresses.class));
+    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+
+    edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
+    verify(helper).updateBalancingState(ConnectivityState.READY, picker1);
+
+    // Call onError() after onClusterChanged().
+    clusterWatcher1.onError(Status.DATA_LOSS.withDescription("fake status"));
+    // Verify no more TRANSIENT_FAILURE.
+    verify(helper, times(1))
+        .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 }
