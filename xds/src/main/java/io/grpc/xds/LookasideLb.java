@@ -115,6 +115,8 @@ final class LookasideLb extends LoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
+
     // In the future, xdsConfig can be gotten directly by
     // resolvedAddresses.getLoadBalancingPolicyConfig().
     Attributes attributes = resolvedAddresses.getAttributes();
@@ -431,6 +433,8 @@ final class LookasideLb extends LoadBalancer {
 
     @Override
     public void onEndpointChanged(EndpointUpdate endpointUpdate) {
+      channelLogger.log(ChannelLogLevel.DEBUG, "Received an EDS update: '%s'",  endpointUpdate);
+
       if (!firstEdsUpdateReceived) {
         firstEdsUpdateReceived = true;
         edsUpdateCallback.onWorking();
@@ -464,6 +468,7 @@ final class LookasideLb extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
+      channelLogger.log(ChannelLogLevel.ERROR, "Received an EDS error: '%s'",  error);
       edsUpdateCallback.onError();
     }
   }
