@@ -1327,85 +1327,9 @@ public class XdsClientImplTest {
   }
 
   /**
-   * (EDS response caching behavior) Adding endpoint watchers interested in some cluster that
-   * some other endpoint watcher had already been watching on will result in endpoint update
-   * notified to the newly added watcher immediately, without sending new EDS requests.
-   */
-  @Test
-  public void receivedEndpointUpdateNotifiedToWatcherImmediately() {
-    EndpointWatcher watcher1 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher1);
-
-    // Streaming RPC starts after a first watcher is added.
-    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
-    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
-
-    // Client sends an EDS request to management server.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "")));
-
-    // Management server sends back an EDS response with ClusterLoadAssignment for the requested
-    // cluster.
-    List<Any> clusterLoadAssignments = ImmutableList.of(
-        Any.pack(buildClusterLoadAssignment("cluster-foo.googleapis.com",
-            ImmutableList.of(
-                buildLocalityLbEndpoints("region1", "zone1", "subzone1",
-                    ImmutableList.of(
-                        buildLbEndpoint("192.168.0.1", 8080, HealthStatus.HEALTHY, 2),
-                        buildLbEndpoint("192.132.53.5", 80, HealthStatus.UNHEALTHY, 5)),
-                    1, 0)),
-            ImmutableList.<Policy.DropOverload>of())));
-
-    DiscoveryResponse response =
-        buildDiscoveryResponse("0", clusterLoadAssignments,
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000");
-    responseObserver.onNext(response);
-
-    // Client sent an ACK EDS request.
-    verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_EDS, "0000")));
-
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor1 = ArgumentCaptor.forClass(null);
-    verify(watcher1).onEndpointChanged(endpointUpdateCaptor1.capture());
-    EndpointUpdate endpointUpdate1 = endpointUpdateCaptor1.getValue();
-    assertThat(endpointUpdate1.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate1.getLocalityLbEndpointsMap())
-        .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
-                ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true),
-                    new LbEndpoint("192.132.53.5", 80,5, false)),
-                1, 0));
-
-    // Another endpoint watcher interested in the same cluster is added.
-    EndpointWatcher watcher2 = mock(EndpointWatcher.class);
-    xdsClient.watchEndpointData("cluster-foo.googleapis.com", watcher2);
-
-    // Since the client has received endpoint update for this cluster before, cached result is
-    // notified to the newly added watcher immediately.
-    ArgumentCaptor<EndpointUpdate> endpointUpdateCaptor2 = ArgumentCaptor.forClass(null);
-    verify(watcher2).onEndpointChanged(endpointUpdateCaptor2.capture());
-    EndpointUpdate endpointUpdate2 = endpointUpdateCaptor2.getValue();
-    assertThat(endpointUpdate2.getClusterName()).isEqualTo("cluster-foo.googleapis.com");
-    assertThat(endpointUpdate2.getLocalityLbEndpointsMap())
-        .containsExactly(
-            new Locality("region1", "zone1", "subzone1"),
-            new LocalityLbEndpoints(
-                ImmutableList.of(
-                    new LbEndpoint("192.168.0.1", 8080, 2, true),
-                    new LbEndpoint("192.132.53.5", 80,5, false)),
-                1, 0));
-
-    verifyNoMoreInteractions(requestObserver);
-  }
-
-  /**
-   * An endpoint watcher is registered for a cluster that already has some other endpoint watchers
-   * watching on. Endpoint information received previously is in local cache and notified to
-   * the new watcher immediately.
+   * (EDS response caching behavior) An endpoint watcher is registered for a cluster that already
+   * has some other endpoint watchers watching on. Endpoint information received previously is
+   * in local cache and notified to the new watcher immediately.
    */
   @Test
   public void watchEndpointsForClusterAlreadyBeingWatched() {
