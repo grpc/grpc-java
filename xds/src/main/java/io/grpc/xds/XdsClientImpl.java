@@ -534,114 +534,6 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Handles CDS response, which contains a list of Cluster messages. Each
-   * Cluster message contains information for a logical cluster. The response is NACKed if
-   * contains invalid information for gRPC's usage. Otherwise, an ACK request is sent to
-   * management server. Cluster messages are saved in local cache, in case of corresponding
-   * cluster watchers are registered later. Each CDS response represents the state of the world,
-   * a newer response always supersede previous ones. Cluster watchers interested in cluster
-   * information contained in this response are notified.
-   */
-  private void handleCdsResponse(DiscoveryResponse cdsResponse) {
-    logger.log(Level.FINE, "Received an CDS response: {0}", cdsResponse);
-    checkState(adsStream.cdsResourceNames != null,
-        "Never requested for CDS resources, management server is doing something wrong");
-    adsStream.cdsRespNonce = cdsResponse.getNonce();
-
-    // Unpack Cluster messages.
-    List<Cluster> clusters = new ArrayList<>(cdsResponse.getResourcesCount());
-    try {
-      for (com.google.protobuf.Any res : cdsResponse.getResourcesList()) {
-        clusters.add(res.unpack(Cluster.class));
-      }
-    } catch (InvalidProtocolBufferException e) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
-          "Broken CDS response");
-      return;
-    }
-
-    boolean dataInvalid = false;
-    // Full cluster information update received in this CDS response to be cached.
-    Map<String, ClusterUpdate> clusterUpdates = new HashMap<>();
-    // ClusterUpdate data to be pushed to each watcher.
-    Map<String, ClusterUpdate> desiredClusterUpdates = new HashMap<>();
-    for (Cluster cluster : clusters) {
-      String clusterName = cluster.getName();
-      ClusterUpdate.Builder updateBuilder = ClusterUpdate.newBuilder();
-      updateBuilder.setClusterName(clusterName);
-      // The type field must be set to EDS.
-      if (!cluster.getType().equals(DiscoveryType.EDS)) {
-        dataInvalid = true;
-        break;
-      }
-      // In the eds_cluster_config field, the eds_config field must be set to indicate to
-      // use EDS (must be set to use ADS).
-      EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.hasEdsConfig() || !edsClusterConfig.getEdsConfig().hasAds()) {
-        dataInvalid = true;
-        break;
-      }
-      // If the service_name field is set, that value will be used for the EDS request
-      // instead of the cluster name (default).
-      if (!edsClusterConfig.getServiceName().isEmpty()) {
-        updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
-      }
-      // The lb_policy field must be set to ROUND_ROBIN.
-      if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
-        dataInvalid = true;
-        break;
-      }
-      updateBuilder.setLbPolicy("round_robin");
-      // If the lrs_server field is set, it must have its self field set, in which case the
-      // client should use LRS for load reporting. Otherwise (the lrs_server field is not set),
-      // LRS load reporting will be disabled.
-      if (cluster.hasLrsServer()) {
-        if (!cluster.getLrsServer().hasSelf()) {
-          dataInvalid = true;
-          break;
-        }
-        updateBuilder.setEnableLrs(true);
-        updateBuilder.setLrsServerName(serverUri);
-      } else {
-        updateBuilder.setEnableLrs(false);
-      }
-      ClusterUpdate update = updateBuilder.build();
-      clusterUpdates.put(clusterName, update);
-      if (clusterWatchers.containsKey(clusterName)) {
-        desiredClusterUpdates.put(clusterName, update);
-      }
-    }
-    if (dataInvalid) {
-      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
-          "Cluster message contains invalid information for gRPC's usage");
-      return;
-    }
-    adsStream.sendAckRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
-        cdsResponse.getVersionInfo());
-
-    // Update local CDS cache with data in this response.
-    clusterNamesToClusterUpdates.clear();
-    clusterNamesToClusterUpdates.putAll(clusterUpdates);
-
-    // Notify watchers waiting for updates of cluster information received in this CDS response.
-    // Notify watchers waiting for updates of cluster information not received in this CDS
-    // response.
-    for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
-      if (desiredClusterUpdates.containsKey(entry.getKey())) {
-        for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onClusterChanged(desiredClusterUpdates.get(entry.getKey()));
-        }
-      } else {
-        for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onError(
-              Status.NOT_FOUND.withDescription(
-                  "Requested cluster [" + entry.getKey() + "] does not exist"));
-        }
-      }
-    }
-  }
-
-  /**
    * Processes RouteConfiguration message (from an resource information in an LDS or RDS
    * response), which may contain a VirtualHost with domains matching the "xds:"
    * URI hostname directly in-line. Returns the clusterName found in that VirtualHost
@@ -678,6 +570,119 @@ final class XdsClientImpl extends XdsClient {
       }
     }
     return null;
+  }
+
+  /**
+   * Handles CDS response, which contains a list of Cluster messages with information for a logical
+   * cluster. The response is NACKed if messages for requested resources contain invalid
+   * information for gRPC's usage. Otherwise, an ACK request is sent to management server.
+   * Response data for requested clusters is cached locally, in case of new cluster watchers
+   * interested in the same clusters are added later.
+   */
+  private void handleCdsResponse(DiscoveryResponse cdsResponse) {
+    logger.log(Level.FINE, "Received an CDS response: {0}", cdsResponse);
+    checkState(adsStream.cdsResourceNames != null,
+        "Never requested for CDS resources, management server is doing something wrong");
+    adsStream.cdsRespNonce = cdsResponse.getNonce();
+
+    // Unpack Cluster messages.
+    List<Cluster> clusters = new ArrayList<>(cdsResponse.getResourcesCount());
+    try {
+      for (com.google.protobuf.Any res : cdsResponse.getResourcesList()) {
+        clusters.add(res.unpack(Cluster.class));
+      }
+    } catch (InvalidProtocolBufferException e) {
+      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
+          "Broken CDS response");
+      return;
+    }
+
+    String errorMessage = null;
+    // Cluster information update for requested clusters received in this CDS response.
+    Map<String, ClusterUpdate> clusterUpdates = new HashMap<>();
+    // CDS responses represents the state of the world, EDS services not referenced by
+    // Clusters are those no longer exist.
+    Set<String> edsServices = new HashSet<>();
+    for (Cluster cluster : clusters) {
+      String clusterName = cluster.getName();
+      // Skip information for clusters not requested.
+      // Management server is required to always send newly requested resources, even if they
+      // may have been sent previously (proactively). Thus, client does not need to cache
+      // unrequested resources.
+      if (!adsStream.cdsResourceNames.contains(clusterName)) {
+        continue;
+      }
+      ClusterUpdate.Builder updateBuilder = ClusterUpdate.newBuilder();
+      updateBuilder.setClusterName(clusterName);
+      // The type field must be set to EDS.
+      if (!cluster.getType().equals(DiscoveryType.EDS)) {
+        errorMessage = "Only EDS discovery type is supported in gRPC.";
+        break;
+      }
+      // In the eds_cluster_config field, the eds_config field must be set to indicate to
+      // use EDS (must be set to use ADS).
+      EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
+      if (!edsClusterConfig.hasEdsConfig() || !edsClusterConfig.getEdsConfig().hasAds()) {
+        errorMessage = "Field eds_cluster_config must be set to indicate to use EDS over ADS.";
+        break;
+      }
+      // If the service_name field is set, that value will be used for the EDS request
+      // instead of the cluster name (default).
+      if (!edsClusterConfig.getServiceName().isEmpty()) {
+        updateBuilder.setEdsServiceName(edsClusterConfig.getServiceName());
+        edsServices.add(edsClusterConfig.getServiceName());
+      } else {
+        edsServices.add(clusterName);
+      }
+      // The lb_policy field must be set to ROUND_ROBIN.
+      if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
+        errorMessage = "Only round robin load balancing policy is supported in gRPC.";
+        break;
+      }
+      updateBuilder.setLbPolicy("round_robin");
+      // If the lrs_server field is set, it must have its self field set, in which case the
+      // client should use LRS for load reporting. Otherwise (the lrs_server field is not set),
+      // LRS load reporting will be disabled.
+      if (cluster.hasLrsServer()) {
+        if (!cluster.getLrsServer().hasSelf()) {
+          errorMessage = "Only support enabling LRS for the same management server.";
+          break;
+        }
+        updateBuilder.setEnableLrs(true);
+        updateBuilder.setLrsServerName(serverUri);
+      } else {
+        updateBuilder.setEnableLrs(false);
+      }
+      clusterUpdates.put(clusterName, updateBuilder.build());
+    }
+    if (errorMessage != null) {
+      adsStream.sendNackRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames, errorMessage);
+      return;
+    }
+    adsStream.sendAckRequest(ADS_TYPE_URL_CDS, adsStream.cdsResourceNames,
+        cdsResponse.getVersionInfo());
+
+    // Update local CDS cache with data in this response.
+    clusterNamesToClusterUpdates.clear();
+    clusterNamesToClusterUpdates.putAll(clusterUpdates);
+
+    // Remove EDS cache entries for ClusterLoadAssignments not referenced by this CDS response.
+    clusterNamesToEndpointUpdates.keySet().retainAll(edsServices);
+
+    // Notify watchers if clusters interested in present. Otherwise, notify with an error.
+    for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
+      if (clusterUpdates.containsKey(entry.getKey())) {
+        for (ClusterWatcher watcher : entry.getValue()) {
+          watcher.onClusterChanged(clusterUpdates.get(entry.getKey()));
+        }
+      } else {
+        for (ClusterWatcher watcher : entry.getValue()) {
+          watcher.onError(
+              Status.NOT_FOUND.withDescription(
+                  "Requested cluster [" + entry.getKey() + "] does not exist"));
+        }
+      }
+    }
   }
 
   /**

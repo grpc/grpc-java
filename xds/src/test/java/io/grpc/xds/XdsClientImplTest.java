@@ -1432,10 +1432,9 @@ public class XdsClientImplTest {
     // Client sent a new CDS request for all interested resources.
     verify(requestObserver)
         .onNext(
-            argThat(
-                new DiscoveryRequestMatcher("0",
-                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            eq(buildDiscoveryRequest("0",
+                ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
 
     // Management server sends back a CDS response with Cluster for all requested cluster.
     clusters = ImmutableList.of(
@@ -1488,7 +1487,9 @@ public class XdsClientImplTest {
     // Cancel the other watcher. All resources have been unsubscribed.
     xdsClient.cancelClusterDataWatch("cluster-bar.googleapis.com", watcher2);
 
-    // All endpoint watchers have been cancelled.
+    // All endpoint watchers have been cancelled. Due to protocol limitation, we do not send
+    // a CDS request for updated resource names (empty) when canceling the last resource.
+    verifyNoMoreInteractions(requestObserver);
 
     // Management server sends back a new CDS response.
     clusters = ImmutableList.of(
@@ -1499,22 +1500,36 @@ public class XdsClientImplTest {
         buildDiscoveryResponse("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0002");
     responseObserver.onNext(response);
 
-    // Client sent an ACK CDS request, with resource_names containing the last
-    // unsubscribed resource.
-    // FIXME(chengyuanzhang): this is a workaround for CDS protocol, should not verify this.
+    // Due to protocol limitation, client sent an ACK CDS request, with resource_names containing
+    // the last unsubscribed resource.
     verify(requestObserver)
         .onNext(
             argThat(
                 new DiscoveryRequestMatcher("2",
-                    ImmutableList.<String>of("cluster-bar.googleapis.com"),
+                    ImmutableList.of("cluster-bar.googleapis.com"),
                     XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
 
     // Cancelled watchers do not receive notification.
     verifyNoMoreInteractions(watcher1, watcher2);
 
-    // A new cluster watcher is added to watch an old cluster.
+    // A new cluster watcher is added to watch cluster foo again.
     ClusterWatcher watcher3 = mock(ClusterWatcher.class);
     xdsClient.watchClusterData("cluster-foo.googleapis.com", watcher3);
+
+    // A CDS request is sent to indicate subscription of "cluster-foo.googleapis.com" only.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("2", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
+
+    // Management server sends back a new CDS response for at least newly requested resources
+    // (it is required to do so).
+    clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)),
+        Any.pack(
+            buildCluster("cluster-bar.googleapis.com", null, false)));
+    response =
+        buildDiscoveryResponse("3", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0003");
+    responseObserver.onNext(response);
 
     // Notified with cached data immediately.
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor3 = ArgumentCaptor.forClass(null);
@@ -1527,10 +1542,12 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
     assertThat(clusterUpdate2.getLrsServerName()).isEqualTo(serverName);  // same management server
 
+    verifyNoMoreInteractions(watcher1, watcher2);
+
     // A CDS request is sent to re-subscribe the cluster again.
     verify(requestObserver)
-        .onNext(eq(buildDiscoveryRequest("2", "cluster-foo.googleapis.com",
-            XdsClientImpl.ADS_TYPE_URL_CDS, "0002")));
+        .onNext(eq(buildDiscoveryRequest("3", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0003")));
   }
 
   /**
