@@ -28,6 +28,11 @@ import io.grpc.internal.JsonUtil;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * The provider for the "cds" balancing policy.  This class should not be directly referenced in
+ * code.  The policy should be accessed through {@link io.grpc.LoadBalancerRegistry#getProvider}
+ * with the name "cds" (currently "experimental_cds").
+ */
 @Internal
 public class CdsLoadBalancerProvider extends LoadBalancerProvider {
 
