@@ -554,7 +554,7 @@ final class XdsClientImpl extends XdsClient {
         // Inside of it: the address field must be set.
         for (io.envoyproxy.envoy.api.v2.endpoint.LbEndpoint lbEndpoint
             : localityLbEndpoints.getLbEndpointsList()) {
-          if (!lbEndpoint.hasEndpoint() || !lbEndpoint.getEndpoint().hasAddress()) {
+          if (!lbEndpoint.getEndpoint().hasAddress()) {
             errorMessage = "Invalid endpoint address information.";
             break;
           }
