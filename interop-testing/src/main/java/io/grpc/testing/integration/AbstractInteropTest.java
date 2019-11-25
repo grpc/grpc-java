@@ -153,6 +153,8 @@ public abstract class AbstractInteropTest {
 
   private final AtomicReference<ServerCall<?, ?>> serverCallCapture =
       new AtomicReference<>();
+  private final AtomicReference<ClientCall<?, ?>> clientCallCapture =
+      new AtomicReference<>();
   private final AtomicReference<Metadata> requestHeadersCapture =
       new AtomicReference<>();
   private final AtomicReference<Context> contextCapture =
@@ -1657,6 +1659,16 @@ public abstract class AbstractInteropTest {
     }
   }
 
+  /**
+   * Verifies remote server address and local client address are available from ClientCall
+   * Attributes via ClientInterceptor.
+   */
+  @Test
+  public void getServerAddressAndLocalAddressFromClient() {
+    assertNotNull(obtainRemoteServerAddr());
+    assertNotNull(obtainLocalClientAddr());
+  }
+
   /** Sends a large unary rpc with service account credentials. */
   public void serviceAccountCreds(String jsonKey, InputStream credentialsStream, String authScope)
       throws Exception {
@@ -1829,14 +1841,36 @@ public abstract class AbstractInteropTest {
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
   }
 
+  /** Helper for getting remote address from {@link io.grpc.ClientCall#getAttributes()} */
+  protected SocketAddress obtainRemoteServerAddr() {
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture))
+        .withDeadlineAfter(5, TimeUnit.SECONDS);
+
+    stub.unaryCall(SimpleRequest.getDefaultInstance());
+
+    return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_REMOTE_ADDR);
+  }
+
   /** Helper for getting local address from {@link io.grpc.ServerCall#getAttributes()} */
-  protected SocketAddress obtainLocalClientAddr() {
+  protected SocketAddress obtainLocalServerAddr() {
     TestServiceGrpc.TestServiceBlockingStub stub =
         blockingStub.withDeadlineAfter(5, TimeUnit.SECONDS);
 
     stub.unaryCall(SimpleRequest.getDefaultInstance());
 
     return serverCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
+  }
+
+  /** Helper for getting local address from {@link io.grpc.ClientCall#getAttributes()} */
+  protected SocketAddress obtainLocalClientAddr() {
+    TestServiceGrpc.TestServiceBlockingStub stub = blockingStub
+        .withInterceptors(recordClientCallInterceptor(clientCallCapture))
+        .withDeadlineAfter(5, TimeUnit.SECONDS);
+
+    stub.unaryCall(SimpleRequest.getDefaultInstance());
+
+    return clientCallCapture.get().getAttributes().get(Grpc.TRANSPORT_ATTR_LOCAL_ADDR);
   }
 
   /** Helper for asserting TLS info in SSLSession {@link io.grpc.ServerCall#getAttributes()} */
@@ -2151,6 +2185,23 @@ public abstract class AbstractInteropTest {
           ServerCallHandler<ReqT, RespT> next) {
         serverCallCapture.set(call);
         return next.startCall(call, requestHeaders);
+      }
+    };
+  }
+
+  /**
+   * Captures the request attributes. Useful for testing ClientCalls.
+   * {@link ClientCall#getAttributes()}
+   */
+  private static ClientInterceptor recordClientCallInterceptor(
+      final AtomicReference<ClientCall<?, ?>> clientCallCapture) {
+    return new ClientInterceptor() {
+      @Override
+      public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
+          MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+        ClientCall<ReqT, RespT> clientCall = next.newCall(method,callOptions);
+        clientCallCapture.set(clientCall);
+        return clientCall;
       }
     };
   }

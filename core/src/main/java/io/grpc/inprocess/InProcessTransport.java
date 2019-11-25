@@ -122,6 +122,8 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
     this.attributes = Attributes.newBuilder()
         .set(GrpcAttributes.ATTR_SECURITY_LEVEL, SecurityLevel.PRIVACY_AND_INTEGRITY)
         .set(GrpcAttributes.ATTR_CLIENT_EAG_ATTRS, eagAttrs)
+        .set(Grpc.TRANSPORT_ATTR_REMOTE_ADDR, new InProcessSocketAddress(name))
+        .set(Grpc.TRANSPORT_ATTR_LOCAL_ADDR, new InProcessSocketAddress(name))
         .build();
     logId = InternalLogId.allocate(getClass(), name);
   }
@@ -783,7 +785,7 @@ final class InProcessTransport implements ServerTransport, ConnectionClientTrans
 
       @Override
       public Attributes getAttributes() {
-        return Attributes.EMPTY;
+        return attributes;
       }
 
       @Override
