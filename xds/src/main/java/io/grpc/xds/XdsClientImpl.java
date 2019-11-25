@@ -208,8 +208,10 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void watchClusterData(String clusterName, ClusterWatcher watcher) {
+    checkNotNull(watcher, "watcher");
     boolean needRequest = false;
     if (!clusterWatchers.containsKey(clusterName)) {
+      logger.log(Level.FINE, "Start watching cluster {0}", clusterName);
       needRequest = true;
       clusterWatchers.put(clusterName, new HashSet<ClusterWatcher>());
     }
@@ -236,13 +238,15 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
+    checkNotNull(watcher, "watcher");
     Set<ClusterWatcher> watchers = clusterWatchers.get(clusterName);
-    if (watchers == null) {
+    if (watchers == null || !watchers.contains(watcher)) {
       logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
       return;
     }
     watchers.remove(watcher);
     if (watchers.isEmpty()) {
+      logger.log(Level.FINE, "Stop watching cluster {0}", clusterName);
       clusterWatchers.remove(clusterName);
       // If unsubscribe the last resource, do NOT send a CDS request for an empty resource list.
       // This is a workaround for CDS protocol resource unsubscribe.
