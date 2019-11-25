@@ -34,12 +34,12 @@ import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.GracefulSwitchLoadBalancer;
+import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Map;
-import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -267,33 +267,4 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  static final class CdsConfig {
-
-    /**
-     * Name of cluster to query CDS for.
-     */
-    final String name;
-
-    CdsConfig(String name) {
-      checkArgument(name != null && !name.isEmpty(), "name is null or empty");
-      this.name = name;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      CdsConfig cdsConfig = (CdsConfig) o;
-      return Objects.equals(name, cdsConfig.name);
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(name);
-    }
-  }
 }
