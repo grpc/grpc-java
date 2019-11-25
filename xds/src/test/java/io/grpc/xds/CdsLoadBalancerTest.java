@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -109,7 +110,7 @@ public class CdsLoadBalancerTest {
 
       @Override
       public String getPolicyName() {
-        return "xds_experimental";
+        return XDS_POLICY_NAME;
       }
 
       @Override
