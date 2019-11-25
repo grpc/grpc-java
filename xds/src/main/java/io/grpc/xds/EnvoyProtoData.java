@@ -196,6 +196,14 @@ final class EnvoyProtoData {
     private final boolean isHealthy;
 
     @VisibleForTesting
+    LbEndpoint(String address, int port, int loadBalancingWeight, boolean isHealthy) {
+      this(
+          new EquivalentAddressGroup(
+              new InetSocketAddress(address, port)),
+          loadBalancingWeight, isHealthy);
+    }
+
+    @VisibleForTesting
     LbEndpoint(EquivalentAddressGroup eag, int loadBalancingWeight, boolean isHealthy) {
       this.eag = eag;
       this.loadBalancingWeight = loadBalancingWeight;
