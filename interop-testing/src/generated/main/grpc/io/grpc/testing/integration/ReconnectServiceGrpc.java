@@ -96,7 +96,14 @@ public final class ReconnectServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static ReconnectServiceStub newStub(io.grpc.Channel channel) {
-    return new ReconnectServiceStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceStub>() {
+        @java.lang.Override
+        public ReconnectServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceStub.newStub(factory, channel);
   }
 
   /**
@@ -104,7 +111,14 @@ public final class ReconnectServiceGrpc {
    */
   public static ReconnectServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    return new ReconnectServiceBlockingStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceBlockingStub>() {
+        @java.lang.Override
+        public ReconnectServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceBlockingStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceBlockingStub.newStub(factory, channel);
   }
 
   /**
@@ -112,7 +126,14 @@ public final class ReconnectServiceGrpc {
    */
   public static ReconnectServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    return new ReconnectServiceFutureStub(channel);
+    io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceFutureStub> factory =
+      new io.grpc.stub.AbstractStub.StubFactory<ReconnectServiceFutureStub>() {
+        @java.lang.Override
+        public ReconnectServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+          return new ReconnectServiceFutureStub(channel, callOptions);
+        }
+      };
+    return ReconnectServiceFutureStub.newStub(factory, channel);
   }
 
   /**
@@ -161,19 +182,15 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceStub extends io.grpc.stub.AbstractStub<ReconnectServiceStub> {
-    private ReconnectServiceStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReconnectServiceStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReconnectServiceStub extends io.grpc.stub.AbstractAsyncStub<ReconnectServiceStub> {
+    private ReconnectServiceStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReconnectServiceStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReconnectServiceStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReconnectServiceStub(channel, callOptions);
     }
 
@@ -199,19 +216,15 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceBlockingStub extends io.grpc.stub.AbstractStub<ReconnectServiceBlockingStub> {
-    private ReconnectServiceBlockingStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReconnectServiceBlockingStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReconnectServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ReconnectServiceBlockingStub> {
+    private ReconnectServiceBlockingStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReconnectServiceBlockingStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReconnectServiceBlockingStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReconnectServiceBlockingStub(channel, callOptions);
     }
 
@@ -235,19 +248,15 @@ public final class ReconnectServiceGrpc {
    * A service used to control reconnect server.
    * </pre>
    */
-  public static final class ReconnectServiceFutureStub extends io.grpc.stub.AbstractStub<ReconnectServiceFutureStub> {
-    private ReconnectServiceFutureStub(io.grpc.Channel channel) {
-      super(channel);
-    }
-
-    private ReconnectServiceFutureStub(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+  public static final class ReconnectServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ReconnectServiceFutureStub> {
+    private ReconnectServiceFutureStub(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ReconnectServiceFutureStub build(io.grpc.Channel channel,
-        io.grpc.CallOptions callOptions) {
+    protected ReconnectServiceFutureStub build(
+        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
       return new ReconnectServiceFutureStub(channel, callOptions);
     }
 
