@@ -17,16 +17,19 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
+import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
@@ -35,6 +38,7 @@ import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
+import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
@@ -73,25 +77,26 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
-    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
-    checkArgument(
-        lbConfig instanceof CdsConfig,
-        "Expecting a CDS LB config, but the actual LB config is '%s'",
-        lbConfig);
-
+    Attributes attributes = resolvedAddresses.getAttributes();
     if (xdsClientRef == null) {
       xdsClientRef = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
-
       if (xdsClientRef == null) {
         // TODO(zdapeng): create a new xdsClient from bootstrap if no one exists.
         throw new UnsupportedOperationException(
             "XDS_CLIENT_REF attributes not available in resolvedAddresses " + resolvedAddresses);
       }
-
       xdsClient = xdsClientRef.getObject();
     }
 
-    final CdsConfig newCdsConfig = (CdsConfig) lbConfig;
+    Map<String, ?> newRawLbConfig = checkNotNull(
+        attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
+    ConfigOrError cfg =
+        CdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig);
+    if (cfg.getError() != null) {
+      throw cfg.getError().asRuntimeException();
+    }
+    final CdsConfig newCdsConfig = (CdsConfig) cfg.getConfig();
+
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
       LoadBalancerProvider fixedCdsConfigBalancerProvider =

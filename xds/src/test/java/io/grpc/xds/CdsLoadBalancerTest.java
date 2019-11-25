@@ -18,6 +18,7 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
+import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -41,8 +42,9 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.CdsLoadBalancer.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
@@ -50,6 +52,7 @@ import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -131,44 +134,35 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void missingCdsConfig() {
+  public void invalidConfigType() throws Exception {
+    String lbConfigRaw = "{'cluster' : {}}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
 
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Expecting a CDS LB config, but the actual LB config is 'null'");
+    thrown.expect(StatusRuntimeException.class);
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
   }
 
   @Test
-  public void invalidConfigType() {
-    Object invalidConfig = new Object();
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
-        .setLoadBalancingPolicyConfig(invalidConfig)
-        .build();
-
-    thrown.expect(IllegalArgumentException.class);
-    thrown.expectMessage("Expecting a CDS LB config, but the actual LB config is '"
-        + invalidConfig + "'");
-    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
-  }
-
-  @Test
-  public void handleCdsConfigs() {
+  public void handleCdsConfigs() throws Exception {
     assertThat(xdsClient).isNull();
 
-    CdsConfig cdsConfig1 = new CdsConfig("foo.googleapis.com");
+    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
     ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
-        .setLoadBalancingPolicyConfig(cdsConfig1)
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
 
@@ -211,12 +205,15 @@ public class CdsLoadBalancerTest {
     edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
     verify(helper).updateBalancingState(ConnectivityState.READY, picker1);
 
-    CdsConfig cdsConfig2 = new CdsConfig("bar.googleapis.com");
+    String lbConfigRaw2 = "{'cluster' : 'bar.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig2 = (Map<String, ?>) JsonParser.parse(lbConfigRaw2);
     ResolvedAddresses resolvedAddresses2 = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
-        .setLoadBalancingPolicyConfig(cdsConfig2)
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig2)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses2);
 
@@ -291,27 +288,30 @@ public class CdsLoadBalancerTest {
   }
 
   @Test
-  public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() {
-    CdsConfig cdsConfig1 = new CdsConfig("foo.googleapis.com");
-    ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
+  public void clusterWatcher_onErrorCalledBeforeAndAfterOnClusterChanged() throws Exception {
+    String lbConfigRaw = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
         .setAttributes(Attributes.newBuilder()
-            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef).build())
-        .setLoadBalancingPolicyConfig(cdsConfig1)
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
-    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
 
-    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
-    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor.capture());
 
-    ClusterWatcher clusterWatcher1 = clusterWatcherCaptor1.getValue();
+    ClusterWatcher clusterWatcher = clusterWatcherCaptor.getValue();
 
     // Call onError() before onClusterChanged() ever called.
-    clusterWatcher1.onError(Status.DATA_LOSS.withDescription("fake status"));
+    clusterWatcher.onError(Status.DATA_LOSS.withDescription("fake status"));
     assertThat(edsLoadBalancers).isEmpty();
     verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
 
-    clusterWatcher1.onClusterChanged(
+    clusterWatcher.onClusterChanged(
         ClusterUpdate.newBuilder()
             .setClusterName("foo.googleapis.com")
             .setEdsServiceName("edsServiceFoo.googleapis.com")
@@ -321,16 +321,16 @@ public class CdsLoadBalancerTest {
 
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
-    Helper edsLbHelper1 = edsLbHelpers.poll();
-    LoadBalancer edsLoadBalancer1 = edsLoadBalancers.poll();
-    verify(edsLoadBalancer1).handleResolvedAddresses(any(ResolvedAddresses.class));
-    SubchannelPicker picker1 = mock(SubchannelPicker.class);
+    Helper edsLbHelper = edsLbHelpers.poll();
+    LoadBalancer edsLoadBalancer = edsLoadBalancers.poll();
+    verify(edsLoadBalancer).handleResolvedAddresses(any(ResolvedAddresses.class));
+    SubchannelPicker picker = mock(SubchannelPicker.class);
 
-    edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);
-    verify(helper).updateBalancingState(ConnectivityState.READY, picker1);
+    edsLbHelper.updateBalancingState(ConnectivityState.READY, picker);
+    verify(helper).updateBalancingState(ConnectivityState.READY, picker);
 
     // Call onError() after onClusterChanged().
-    clusterWatcher1.onError(Status.DATA_LOSS.withDescription("fake status"));
+    clusterWatcher.onError(Status.DATA_LOSS.withDescription("fake status"));
     // Verify no more TRANSIENT_FAILURE.
     verify(helper, times(1))
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
