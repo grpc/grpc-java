@@ -836,10 +836,16 @@ final class XdsClientImpl extends XdsClient {
     // Most recently requested RDS resource name, which is an intermediate resource name for
     // resolving service config.
     // LDS request always use the same resource name, which is the "xds:" URI.
-    // Resource names for CDS/EDS requests are always represented by the cluster names that
+    // Resource names for EDS requests are always represented by the cluster names that
     // watchers are interested in.
     @Nullable
     private String rdsResourceName;
+    // Most recently requested CDS resource names.
+    // Due to CDS protocol limitation, client does not send a CDS request for empty resource
+    // names when unsubscribing the last resource. Management server assumes it is still
+    // subscribing to the last resource, client also need to behave so to avoid data lose.
+    // Therefore, cluster names that watchers interested in cannot always represent resource names
+    // in most recently sent CDS requests.
     @Nullable
     private Collection<String> cdsResourceNames;
 
