@@ -678,8 +678,9 @@ final class XdsClientImpl extends XdsClient {
     // Notify watchers if clusters interested in present. Otherwise, notify with an error.
     for (Map.Entry<String, Set<ClusterWatcher>> entry : clusterWatchers.entrySet()) {
       if (clusterUpdates.containsKey(entry.getKey())) {
+        ClusterUpdate clusterUpdate = clusterUpdates.get(entry.getKey());
         for (ClusterWatcher watcher : entry.getValue()) {
-          watcher.onClusterChanged(clusterUpdates.get(entry.getKey()));
+          watcher.onClusterChanged(clusterUpdate);
         }
       } else {
         for (ClusterWatcher watcher : entry.getValue()) {
