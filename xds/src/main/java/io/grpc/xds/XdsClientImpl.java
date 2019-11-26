@@ -242,7 +242,7 @@ final class XdsClientImpl extends XdsClient {
     checkNotNull(watcher, "watcher");
     Set<ClusterWatcher> watchers = clusterWatchers.get(clusterName);
     if (watchers == null || !watchers.contains(watcher)) {
-      logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
+      logger.log(Level.FINE, "Watcher {0} was not registered", watcher);
       return;
     }
     watchers.remove(watcher);
@@ -303,7 +303,7 @@ final class XdsClientImpl extends XdsClient {
     checkNotNull(watcher, "watcher");
     Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
     if (watchers == null || !watchers.contains(watcher)) {
-      logger.log(Level.WARNING, "Watcher {0} was not registered", watcher);
+      logger.log(Level.FINE, "Watcher {0} was not registered", watcher);
       return;
     }
     watchers.remove(watcher);
