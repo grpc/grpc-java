@@ -37,14 +37,16 @@ import java.util.Map;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
 
-/** Loads configuration information to bootstrap gRPC's integration of xDS protocol. */
+/**
+ * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
+ */
 public abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";
 
   private static final Bootstrapper DEFAULT_INSTANCE = new Bootstrapper() {
     @Override
-    BootstrapInfo readBootstrap() throws IOException {
+    public BootstrapInfo readBootstrap() throws IOException {
       String filePath = System.getenv(BOOTSTRAP_PATH_SYS_ENV_VAR);
       if (filePath == null) {
         throw
@@ -55,23 +57,14 @@ public abstract class Bootstrapper {
     }
   };
 
-  static Bootstrapper getInstance() {
+  public static Bootstrapper getInstance() {
     return DEFAULT_INSTANCE;
-  }
-
-  /** Gets the current Node from the bootstrap file. */
-  public static Node getNode() {
-    try {
-      return getInstance().readBootstrap().getNode();
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 
   /**
    * Returns configurations from bootstrap.
    */
-  abstract BootstrapInfo readBootstrap() throws Exception;
+  public abstract BootstrapInfo readBootstrap() throws IOException;
 
   @VisibleForTesting
   static BootstrapInfo parseConfig(String rawData) throws IOException {
@@ -211,7 +204,7 @@ public abstract class Bootstrapper {
    * Data class containing the results of reading bootstrap.
    */
   @Immutable
-  static class BootstrapInfo {
+  public static class BootstrapInfo {
     private final String serverUri;
     private final List<ChannelCreds> channelCredsList;
     private final Node node;
@@ -233,7 +226,7 @@ public abstract class Bootstrapper {
     /**
      * Returns the node identifier to be included in xDS requests.
      */
-    Node getNode() {
+    public Node getNode() {
       return node;
     }
 
