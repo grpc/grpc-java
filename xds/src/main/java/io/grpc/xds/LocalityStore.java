@@ -76,15 +76,14 @@ interface LocalityStore {
 
   void updateOobMetricsReportInterval(long reportIntervalNano);
 
-  LoadStatsStore getLoadStatsStore();
-
   @VisibleForTesting
   abstract class LocalityStoreFactory {
     private static final LocalityStoreFactory DEFAULT_INSTANCE =
         new LocalityStoreFactory() {
           @Override
-          LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry) {
-            return new LocalityStoreImpl(helper, lbRegistry);
+          LocalityStore newLocalityStore(
+              Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
+            return new LocalityStoreImpl(helper, lbRegistry, loadStatsStore);
           }
         };
 
@@ -92,7 +91,8 @@ interface LocalityStore {
       return DEFAULT_INSTANCE;
     }
 
-    abstract LocalityStore newLocalityStore(Helper helper, LoadBalancerRegistry lbRegistry);
+    abstract LocalityStore newLocalityStore(
+        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore);
   }
 
   final class LocalityStoreImpl implements LocalityStore {
@@ -113,9 +113,10 @@ interface LocalityStore {
     private List<DropOverload> dropOverloads = ImmutableList.of();
     private long metricsReportIntervalNano = -1;
 
-    LocalityStoreImpl(Helper helper, LoadBalancerRegistry lbRegistry) {
+    LocalityStoreImpl(
+        Helper helper, LoadBalancerRegistry lbRegistry, LoadStatsStore loadStatsStore) {
       this(helper, pickerFactoryImpl, lbRegistry, ThreadSafeRandom.ThreadSafeRandomImpl.instance,
-          new LoadStatsStoreImpl(), OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
+          loadStatsStore, OrcaPerRequestUtil.getInstance(), OrcaOobUtil.getInstance());
     }
 
     @VisibleForTesting
@@ -282,11 +283,6 @@ interface LocalityStore {
       localityLbInfo.delayedDeletionTimer = helper.getSynchronizationContext().schedule(
           new DeletionTask(), DELAYED_DELETION_TIMEOUT_MINUTES,
           TimeUnit.MINUTES, helper.getScheduledExecutorService());
-    }
-
-    @Override
-    public LoadStatsStore getLoadStatsStore() {
-      return loadStatsStore;
     }
 
     @Override
