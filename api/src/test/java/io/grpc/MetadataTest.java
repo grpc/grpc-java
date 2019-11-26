@@ -504,7 +504,7 @@ public class MetadataTest {
 
     @Override
     public int hashCode() {
-      return name.hashCode();
+      return super.hashCode();
     }
 
     @Override
