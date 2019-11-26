@@ -82,4 +82,19 @@ public final class InternalMetadata {
   public static int headerCount(Metadata md) {
     return md.headerCount();
   }
+
+  @Internal
+  public static Object[] serializePartial(Metadata md) {
+    return md.serializePartial();
+  }
+
+  @Internal
+  public static <T> Metadata.LazyValue<T> parsedValue(Key<T> key, T value) {
+    return Metadata.LazyValue.create(key, value);
+  }
+
+  @Internal
+  public static Metadata newMetadataWithStreamValues(int usedNames, Object[] namesAndValues) {
+    return new Metadata(usedNames, namesAndValues);
+  }
 }
