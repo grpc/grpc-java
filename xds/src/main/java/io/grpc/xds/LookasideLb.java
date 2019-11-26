@@ -246,6 +246,8 @@ final class LookasideLb extends LoadBalancer {
       LocalityStore localityStore;
       @Nullable
       LoadReportClient lrsClient;
+      @Nullable
+      EndpointWatcher endpointWatcher;
 
       FixedXdsConfigBalancer(Helper helper) {
         this.helper = helper;
@@ -346,7 +348,7 @@ final class LookasideLb extends LoadBalancer {
                 helper.updateBalancingState(
                     ConnectivityState.TRANSIENT_FAILURE,
                     new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
-                endpointWatcher = null;
+                LookasideLb.this.endpointWatcher = null;
                 return;
               }
               final ManagedChannel channel = initLbChannel(
@@ -376,14 +378,12 @@ final class LookasideLb extends LoadBalancer {
         xdsClient = xdsClientRef.getObject();
         // TODO(zdapeng): Call xdsClient.reportClientStats() and xdsClient.cancelClientStatsReport()
         // based on if lrsServerName is null instead of using lrsClient.
-        EndpointWatcher newEndpointWatcher =
-            new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
-        xdsClient.watchEndpointData(xdsConfig.edsServiceName, newEndpointWatcher);
+        endpointWatcher = new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
+        xdsClient.watchEndpointData(xdsConfig.edsServiceName, endpointWatcher);
         if (oldEndpointWatcher != null) {
-          xdsClient.cancelEndpointDataWatch(
-              oldXdsConfig.edsServiceName, oldEndpointWatcher);
+          xdsClient.cancelEndpointDataWatch(oldXdsConfig.edsServiceName, oldEndpointWatcher);
         }
-        endpointWatcher = newEndpointWatcher;
+        LookasideLb.this.endpointWatcher = endpointWatcher;
       }
 
       @Override
@@ -391,6 +391,7 @@ final class LookasideLb extends LoadBalancer {
         if (xdsClientRef != null) {
           lrsClient.stopLoadReporting();
           localityStore.reset();
+          xdsClient.cancelEndpointDataWatch(xdsConfig.edsServiceName, endpointWatcher);
           xdsClientRef.returnObject(xdsClient);
         }
       }

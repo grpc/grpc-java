@@ -504,8 +504,11 @@ public class LookasideLbTest {
 
     assertThat(helpers).hasSize(1);
     assertThat(localityStores).hasSize(1);
+    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor =
+        ArgumentCaptor.forClass(EndpointWatcher.class);
     verify(xdsClientFromResolver).watchEndpointData(
-        eq("edsServiceName1"), any(EndpointWatcher.class));
+        eq("edsServiceName1"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
 
     Helper helper1 = helpers.peekLast();
     SubchannelPicker picker = mock(SubchannelPicker.class);
@@ -516,6 +519,7 @@ public class LookasideLbTest {
     xdsClientRef.returnObject(xdsClientFromResolver);
     verify(xdsClientFromResolver, never()).shutdown();
     lookasideLb.shutdown();
+    verify(xdsClientFromResolver).cancelEndpointDataWatch("edsServiceName1", endpointWatcher);
     verify(xdsClientFromResolver).shutdown();
   }
 
