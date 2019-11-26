@@ -19,6 +19,7 @@ package io.grpc;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.Metadata.Key;
+import java.io.InputStream;
 import java.nio.charset.Charset;
 
 /**
@@ -81,5 +82,20 @@ public final class InternalMetadata {
   @Internal
   public static int headerCount(Metadata md) {
     return md.headerCount();
+  }
+
+  @Internal
+  public static Object[] serializePartial(Metadata md) {
+    return md.serializePartial();
+  }
+
+  @Internal
+  public static <T> Metadata.LazyValue<T> parsedValue(Key<T> key, T value) {
+    return Metadata.LazyValue.create(key, value);
+  }
+
+  @Internal
+  public static Metadata newMetadataWithStreamValues(int usedNames, Object[] namesAndValues) {
+    return new Metadata(usedNames, namesAndValues);
   }
 }
