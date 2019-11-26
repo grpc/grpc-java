@@ -934,12 +934,11 @@ public final class Metadata {
         if (marshaller == this.marshaller) {
           // The marshallers match so T2 == T.
           return (T2) value;
-        } else {
+        } else if (marshaller != null) {
           return marshaller.parseStream(toStream());
         }
-      } else {
-        return key.parseBytes(toBytes());
       }
+      return key.parseBytes(toBytes());
     }
 
     @Nullable
