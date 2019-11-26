@@ -816,7 +816,9 @@ public final class Metadata {
      */
     abstract T parseBytes(byte[] serialized);
 
-    /** @return whether this key should be serialized to bytes lazily. */
+    /**
+     * @return whether this key should be serialized to bytes lazily.
+     */
     boolean serializeToStreams() {
       return false;
     }
