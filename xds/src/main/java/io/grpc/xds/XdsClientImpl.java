@@ -618,14 +618,16 @@ final class XdsClientImpl extends XdsClient {
       updateBuilder.setClusterName(clusterName);
       // The type field must be set to EDS.
       if (!cluster.getType().equals(DiscoveryType.EDS)) {
-        errorMessage = "Only EDS discovery type is supported in gRPC.";
+        errorMessage = "Cluster [" + clusterName + "]: only EDS discovery type is supported "
+            + "in gRPC.";
         break;
       }
       // In the eds_cluster_config field, the eds_config field must be set to indicate to
       // use EDS (must be set to use ADS).
       EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
       if (!edsClusterConfig.hasEdsConfig() || !edsClusterConfig.getEdsConfig().hasAds()) {
-        errorMessage = "Field eds_cluster_config must be set to indicate to use EDS over ADS.";
+        errorMessage = "Cluster [" + clusterName + "]: field eds_cluster_config must be set to "
+            + "indicate to use EDS over ADS.";
         break;
       }
       // If the service_name field is set, that value will be used for the EDS request
@@ -638,7 +640,8 @@ final class XdsClientImpl extends XdsClient {
       }
       // The lb_policy field must be set to ROUND_ROBIN.
       if (!cluster.getLbPolicy().equals(LbPolicy.ROUND_ROBIN)) {
-        errorMessage = "Only round robin load balancing policy is supported in gRPC.";
+        errorMessage = "Cluster [" + clusterName + "]: only round robin load balancing policy is "
+            + "supported in gRPC.";
         break;
       }
       updateBuilder.setLbPolicy("round_robin");
@@ -647,7 +650,8 @@ final class XdsClientImpl extends XdsClient {
       // LRS load reporting will be disabled.
       if (cluster.hasLrsServer()) {
         if (!cluster.getLrsServer().hasSelf()) {
-          errorMessage = "Only support enabling LRS for the same management server.";
+          errorMessage = "Cluster [" + clusterName + "]: only support enabling LRS for the same "
+              + "management server.";
           break;
         }
         updateBuilder.setEnableLrs(true);
