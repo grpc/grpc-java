@@ -22,8 +22,6 @@ import static java.util.logging.Level.FINEST;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
@@ -299,12 +297,6 @@ final class LookasideLb extends LoadBalancer {
           if (oldXdsConfig == null || !xdsConfig.balancerName.equals(oldXdsConfig.balancerName)) {
             final ManagedChannel channel = initLbChannel(
                 helper, xdsConfig.balancerName, Collections.<ChannelCreds>emptyList());
-            final Node node = Node.newBuilder()
-                .setMetadata(Struct.newBuilder()
-                    .putFields(
-                        "endpoints_required",
-                        Value.newBuilder().setBoolValue(true).build()))
-                .build();
             // TODO(zdapeng): Use XdsClient to do Lrs directly.
             lrsClient = loadReportClientFactory.createLoadReportClient(
                 channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
@@ -313,7 +305,7 @@ final class LookasideLb extends LoadBalancer {
               XdsClient createXdsClient() {
                 return new XdsComms2(
                     channel, helper, new ExponentialBackoffPolicy.Provider(),
-                    GrpcUtil.STOPWATCH_SUPPLIER, node);
+                    GrpcUtil.STOPWATCH_SUPPLIER, Node.getDefaultInstance());
               }
             });
           } else {
