@@ -80,7 +80,7 @@ final class XdsClientImpl extends XdsClient {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-  private final String serverUri;  // may need it to configure LRS server.
+  private final String serverUri;  // may need it to configure LRS server
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
