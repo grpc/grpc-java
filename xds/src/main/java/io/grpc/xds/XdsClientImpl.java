@@ -218,6 +218,7 @@ final class XdsClientImpl extends XdsClient {
     Set<ClusterWatcher> watchers = clusterWatchers.get(clusterName);
     if (watchers.contains(watcher)) {
       logger.log(Level.WARNING, "Watcher {0} already registered", watcher);
+      return;
     }
     watchers.add(watcher);
     // If local cache contains cluster information to be watched, notify the watcher immediately.
@@ -277,6 +278,7 @@ final class XdsClientImpl extends XdsClient {
     Set<EndpointWatcher> watchers = endpointWatchers.get(clusterName);
     if (watchers.contains(watcher)) {
       logger.log(Level.WARNING, "Watcher {0} already registered", watcher);
+      return;
     }
     watchers.add(watcher);
     // If local cache contains endpoint information for the cluster to be watched, notify
