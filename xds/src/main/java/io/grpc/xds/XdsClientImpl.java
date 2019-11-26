@@ -625,7 +625,7 @@ final class XdsClientImpl extends XdsClient {
       // In the eds_cluster_config field, the eds_config field must be set to indicate to
       // use EDS (must be set to use ADS).
       EdsClusterConfig edsClusterConfig = cluster.getEdsClusterConfig();
-      if (!edsClusterConfig.hasEdsConfig() || !edsClusterConfig.getEdsConfig().hasAds()) {
+      if (!edsClusterConfig.getEdsConfig().hasAds()) {
         errorMessage = "Cluster [" + clusterName + "]: field eds_cluster_config must be set to "
             + "indicate to use EDS over ADS.";
         break;
