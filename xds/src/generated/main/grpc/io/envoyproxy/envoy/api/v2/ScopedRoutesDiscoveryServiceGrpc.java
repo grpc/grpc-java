@@ -135,14 +135,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static ScopedRoutesDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceStub>() {
-        @java.lang.Override
-        public ScopedRoutesDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ScopedRoutesDiscoveryServiceStub(channel, callOptions);
-        }
-      };
-    return ScopedRoutesDiscoveryServiceStub.newStub(factory, channel);
+    return new ScopedRoutesDiscoveryServiceStub(channel);
   }
 
   /**
@@ -150,14 +143,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    */
   public static ScopedRoutesDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceBlockingStub>() {
-        @java.lang.Override
-        public ScopedRoutesDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ScopedRoutesDiscoveryServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return ScopedRoutesDiscoveryServiceBlockingStub.newStub(factory, channel);
+    return new ScopedRoutesDiscoveryServiceBlockingStub(channel);
   }
 
   /**
@@ -165,14 +151,7 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    */
   public static ScopedRoutesDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<ScopedRoutesDiscoveryServiceFutureStub>() {
-        @java.lang.Override
-        public ScopedRoutesDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new ScopedRoutesDiscoveryServiceFutureStub(channel, callOptions);
-        }
-      };
-    return ScopedRoutesDiscoveryServiceFutureStub.newStub(factory, channel);
+    return new ScopedRoutesDiscoveryServiceFutureStub(channel);
   }
 
   /**
@@ -251,15 +230,19 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<ScopedRoutesDiscoveryServiceStub> {
-    private ScopedRoutesDiscoveryServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ScopedRoutesDiscoveryServiceStub extends io.grpc.stub.AbstractStub<ScopedRoutesDiscoveryServiceStub> {
+    private ScopedRoutesDiscoveryServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ScopedRoutesDiscoveryServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ScopedRoutesDiscoveryServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ScopedRoutesDiscoveryServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ScopedRoutesDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -301,15 +284,19 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<ScopedRoutesDiscoveryServiceBlockingStub> {
-    private ScopedRoutesDiscoveryServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ScopedRoutesDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<ScopedRoutesDiscoveryServiceBlockingStub> {
+    private ScopedRoutesDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ScopedRoutesDiscoveryServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ScopedRoutesDiscoveryServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ScopedRoutesDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ScopedRoutesDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -334,15 +321,19 @@ public final class ScopedRoutesDiscoveryServiceGrpc {
    * HTTP request.
    * </pre>
    */
-  public static final class ScopedRoutesDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<ScopedRoutesDiscoveryServiceFutureStub> {
-    private ScopedRoutesDiscoveryServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class ScopedRoutesDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<ScopedRoutesDiscoveryServiceFutureStub> {
+    private ScopedRoutesDiscoveryServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private ScopedRoutesDiscoveryServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected ScopedRoutesDiscoveryServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected ScopedRoutesDiscoveryServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new ScopedRoutesDiscoveryServiceFutureStub(channel, callOptions);
     }
 

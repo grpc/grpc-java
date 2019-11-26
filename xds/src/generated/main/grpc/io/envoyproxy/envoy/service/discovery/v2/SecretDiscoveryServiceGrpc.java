@@ -124,14 +124,7 @@ public final class SecretDiscoveryServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static SecretDiscoveryServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceStub>() {
-        @java.lang.Override
-        public SecretDiscoveryServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SecretDiscoveryServiceStub(channel, callOptions);
-        }
-      };
-    return SecretDiscoveryServiceStub.newStub(factory, channel);
+    return new SecretDiscoveryServiceStub(channel);
   }
 
   /**
@@ -139,14 +132,7 @@ public final class SecretDiscoveryServiceGrpc {
    */
   public static SecretDiscoveryServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceBlockingStub>() {
-        @java.lang.Override
-        public SecretDiscoveryServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SecretDiscoveryServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return SecretDiscoveryServiceBlockingStub.newStub(factory, channel);
+    return new SecretDiscoveryServiceBlockingStub(channel);
   }
 
   /**
@@ -154,14 +140,7 @@ public final class SecretDiscoveryServiceGrpc {
    */
   public static SecretDiscoveryServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<SecretDiscoveryServiceFutureStub>() {
-        @java.lang.Override
-        public SecretDiscoveryServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new SecretDiscoveryServiceFutureStub(channel, callOptions);
-        }
-      };
-    return SecretDiscoveryServiceFutureStub.newStub(factory, channel);
+    return new SecretDiscoveryServiceFutureStub(channel);
   }
 
   /**
@@ -218,15 +197,19 @@ public final class SecretDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class SecretDiscoveryServiceStub extends io.grpc.stub.AbstractAsyncStub<SecretDiscoveryServiceStub> {
-    private SecretDiscoveryServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SecretDiscoveryServiceStub extends io.grpc.stub.AbstractStub<SecretDiscoveryServiceStub> {
+    private SecretDiscoveryServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SecretDiscoveryServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SecretDiscoveryServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SecretDiscoveryServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SecretDiscoveryServiceStub(channel, callOptions);
     }
 
@@ -257,15 +240,19 @@ public final class SecretDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class SecretDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<SecretDiscoveryServiceBlockingStub> {
-    private SecretDiscoveryServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SecretDiscoveryServiceBlockingStub extends io.grpc.stub.AbstractStub<SecretDiscoveryServiceBlockingStub> {
+    private SecretDiscoveryServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SecretDiscoveryServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SecretDiscoveryServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SecretDiscoveryServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SecretDiscoveryServiceBlockingStub(channel, callOptions);
     }
 
@@ -279,15 +266,19 @@ public final class SecretDiscoveryServiceGrpc {
 
   /**
    */
-  public static final class SecretDiscoveryServiceFutureStub extends io.grpc.stub.AbstractFutureStub<SecretDiscoveryServiceFutureStub> {
-    private SecretDiscoveryServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class SecretDiscoveryServiceFutureStub extends io.grpc.stub.AbstractStub<SecretDiscoveryServiceFutureStub> {
+    private SecretDiscoveryServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private SecretDiscoveryServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected SecretDiscoveryServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected SecretDiscoveryServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new SecretDiscoveryServiceFutureStub(channel, callOptions);
     }
 

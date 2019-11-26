@@ -65,14 +65,7 @@ public final class DynamicServiceGrpc {
    * Creates a new async stub that supports all call types for the service
    */
   public static DynamicServiceStub newStub(io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceStub>() {
-        @java.lang.Override
-        public DynamicServiceStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicServiceStub(channel, callOptions);
-        }
-      };
-    return DynamicServiceStub.newStub(factory, channel);
+    return new DynamicServiceStub(channel);
   }
 
   /**
@@ -80,14 +73,7 @@ public final class DynamicServiceGrpc {
    */
   public static DynamicServiceBlockingStub newBlockingStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceBlockingStub>() {
-        @java.lang.Override
-        public DynamicServiceBlockingStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicServiceBlockingStub(channel, callOptions);
-        }
-      };
-    return DynamicServiceBlockingStub.newStub(factory, channel);
+    return new DynamicServiceBlockingStub(channel);
   }
 
   /**
@@ -95,14 +81,7 @@ public final class DynamicServiceGrpc {
    */
   public static DynamicServiceFutureStub newFutureStub(
       io.grpc.Channel channel) {
-    io.grpc.stub.AbstractStub.StubFactory<DynamicServiceFutureStub> factory =
-      new io.grpc.stub.AbstractStub.StubFactory<DynamicServiceFutureStub>() {
-        @java.lang.Override
-        public DynamicServiceFutureStub newStub(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
-          return new DynamicServiceFutureStub(channel, callOptions);
-        }
-      };
-    return DynamicServiceFutureStub.newStub(factory, channel);
+    return new DynamicServiceFutureStub(channel);
   }
 
   /**
@@ -140,15 +119,19 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceStub extends io.grpc.stub.AbstractAsyncStub<DynamicServiceStub> {
-    private DynamicServiceStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class DynamicServiceStub extends io.grpc.stub.AbstractStub<DynamicServiceStub> {
+    private DynamicServiceStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private DynamicServiceStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicServiceStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected DynamicServiceStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new DynamicServiceStub(channel, callOptions);
     }
 
@@ -169,15 +152,19 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceBlockingStub extends io.grpc.stub.AbstractBlockingStub<DynamicServiceBlockingStub> {
-    private DynamicServiceBlockingStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class DynamicServiceBlockingStub extends io.grpc.stub.AbstractStub<DynamicServiceBlockingStub> {
+    private DynamicServiceBlockingStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private DynamicServiceBlockingStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicServiceBlockingStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected DynamicServiceBlockingStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new DynamicServiceBlockingStub(channel, callOptions);
     }
 
@@ -197,15 +184,19 @@ public final class DynamicServiceGrpc {
    * A DynamicService
    * </pre>
    */
-  public static final class DynamicServiceFutureStub extends io.grpc.stub.AbstractFutureStub<DynamicServiceFutureStub> {
-    private DynamicServiceFutureStub(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+  public static final class DynamicServiceFutureStub extends io.grpc.stub.AbstractStub<DynamicServiceFutureStub> {
+    private DynamicServiceFutureStub(io.grpc.Channel channel) {
+      super(channel);
+    }
+
+    private DynamicServiceFutureStub(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       super(channel, callOptions);
     }
 
     @java.lang.Override
-    protected DynamicServiceFutureStub build(
-        io.grpc.Channel channel, io.grpc.CallOptions callOptions) {
+    protected DynamicServiceFutureStub build(io.grpc.Channel channel,
+        io.grpc.CallOptions callOptions) {
       return new DynamicServiceFutureStub(channel, callOptions);
     }
 
