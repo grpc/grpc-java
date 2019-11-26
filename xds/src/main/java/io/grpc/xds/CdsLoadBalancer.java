@@ -181,6 +181,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
         public void shutdown() {
           if (clusterWatcher != null && clusterWatcher.edsBalancer != null) {
             clusterWatcher.edsBalancer.shutdown();
+            xdsClient.cancelClusterDataWatch(cdsConfig.name, clusterWatcher);
           }
         }
 

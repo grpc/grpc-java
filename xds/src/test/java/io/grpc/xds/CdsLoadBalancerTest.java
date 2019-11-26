@@ -261,10 +261,6 @@ public class CdsLoadBalancerTest {
     verify(helper).updateBalancingState(ConnectivityState.READY, picker2);
     verify(edsLoadBalancer1).shutdown();
 
-    cdsLoadBalancer.shutdown();
-    verify(edsLoadBalancer2).shutdown();
-    assertThat(xdsClientRef.xdsClient).isNull();
-
     clusterWatcher2.onClusterChanged(
         ClusterUpdate.newBuilder()
             .setClusterName("bar.googleapis.com")
@@ -285,6 +281,11 @@ public class CdsLoadBalancerTest {
         .get(XdsAttributes.LOAD_STATS_STORE_REF);
     // LoadStatsStore should be reused for the same cluster.
     assertThat(loadStatsStoreBar2).isSameInstanceAs(loadStatsStoreBar);
+
+    cdsLoadBalancer.shutdown();
+    verify(edsLoadBalancer2).shutdown();
+    verify(xdsClient).cancelClusterDataWatch("bar.googleapis.com", clusterWatcher2);
+    assertThat(xdsClientRef.xdsClient).isNull();
   }
 
   @Test
