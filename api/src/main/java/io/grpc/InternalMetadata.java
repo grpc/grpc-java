@@ -19,7 +19,6 @@ package io.grpc;
 import com.google.common.io.BaseEncoding;
 import io.grpc.Metadata.AsciiMarshaller;
 import io.grpc.Metadata.Key;
-import java.io.InputStream;
 import java.nio.charset.Charset;
 
 /**
