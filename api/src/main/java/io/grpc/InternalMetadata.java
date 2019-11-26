@@ -94,7 +94,7 @@ public final class InternalMetadata {
   }
 
   @Internal
-  public static Metadata newMetadataWithStreamValues(int usedNames, Object[] namesAndValues) {
+  public static Metadata newMetadataWithParsedValues(int usedNames, Object[] namesAndValues) {
     return new Metadata(usedNames, namesAndValues);
   }
 }
