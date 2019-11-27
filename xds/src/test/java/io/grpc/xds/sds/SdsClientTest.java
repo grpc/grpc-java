@@ -29,6 +29,8 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.ByteString;
+import com.google.protobuf.Struct;
+import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.auth.CertificateValidationContext;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
@@ -38,6 +40,7 @@ import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService;
+import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Status;
 import io.grpc.internal.testing.TestUtils;
@@ -73,16 +76,25 @@ public class SdsClientTest {
   private Node node;
   private SdsSecretConfig sdsSecretConfig;
 
-  private static ConfigSource buildConfigSource(String targetUri) {
+  /**
+   * Builds a {@link ConfigSource} for the given targetUri.
+   *
+   * @param channelType specifying "inproc" creates an Inprocess channel for testing.
+   */
+  static ConfigSource buildConfigSource(String targetUri, String channelType) {
+    GoogleGrpc.Builder googleGrpcBuilder = GoogleGrpc.newBuilder().setTargetUri(targetUri);
+    if (channelType != null) {
+      Struct.Builder structBuilder = Struct.newBuilder();
+      structBuilder.putFields(
+          "channelType", Value.newBuilder().setStringValue(channelType).build());
+      googleGrpcBuilder.setConfig(structBuilder.build());
+    }
     return ConfigSource.newBuilder()
         .setApiConfigSource(
             ApiConfigSource.newBuilder()
                 .setApiType(ApiConfigSource.ApiType.GRPC)
                 .addGrpcServices(
-                    GrpcService.newBuilder()
-                        .setGoogleGrpc(
-                            GrpcService.GoogleGrpc.newBuilder().setTargetUri(targetUri).build())
-                        .build())
+                    GrpcService.newBuilder().setGoogleGrpc(googleGrpcBuilder.build()).build())
                 .build())
         .build();
   }
@@ -97,13 +109,13 @@ public class SdsClientTest {
     serverMock = mock(TestSdsServer.ServerMock.class);
     server = new TestSdsServer(serverMock);
     server.startServer("inproc", false);
-    ConfigSource configSource = buildConfigSource("inproc");
+    ConfigSource configSource = buildConfigSource("inproc", "inproc");
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
     node = Node.newBuilder().setId("sds-client-temp-test1").build();
     sdsClient =
-        SdsClient.Factory.createWithInProcChannel(
-            sdsSecretConfig, node, MoreExecutors.directExecutor(), "inproc");
+        SdsClient.Factory.createSdsClient(
+            sdsSecretConfig, node, MoreExecutors.directExecutor(), MoreExecutors.directExecutor());
     sdsClient.start();
   }
 
@@ -115,9 +127,10 @@ public class SdsClientTest {
 
   @Test
   public void configSourceUdsTarget() {
-    ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path");
-    String targetUri = SdsClient.Factory.extractUdsTarget(configSource);
-    assertThat(targetUri).isEqualTo("unix:/tmp/uds_path");
+    ConfigSource configSource = buildConfigSource("unix:/tmp/uds_path", null);
+    SdsClient.ChannelInfo channelInfo = SdsClient.Factory.extractChannelInfo(configSource);
+    assertThat(channelInfo.targetUri).isEqualTo("unix:/tmp/uds_path");
+    assertThat(channelInfo.channelType).isNull();
   }
 
   @Test
@@ -317,7 +330,7 @@ public class SdsClientTest {
     return Secret.newBuilder().setName(name).setTlsCertificate(tlsCertificate).build();
   }
 
-  private Secret getOneCertificateValidationContextSecret(String name, String trustFileName)
+  static Secret getOneCertificateValidationContextSecret(String name, String trustFileName)
       throws IOException {
     CertificateValidationContext certificateValidationContext =
         CertificateValidationContext.newBuilder()

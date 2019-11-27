@@ -398,7 +398,7 @@ public class SecretVolumeSslContextProviderTest {
     doChecksOnSslContext(server, sslContext);
   }
 
-  private static void doChecksOnSslContext(boolean server, SslContext sslContext) {
+  static void doChecksOnSslContext(boolean server, SslContext sslContext) {
     if (server) {
       assertThat(sslContext.isServer()).isTrue();
     } else {
@@ -531,7 +531,7 @@ public class SecretVolumeSslContextProviderTest {
    * Helper method to get the value thru directExecutor callback. Because of directExecutor this is
    * a synchronous callback - so need to provide a listener.
    */
-  private static TestCallback getValueThruCallback(SslContextProvider<?> provider) {
+  static TestCallback getValueThruCallback(SslContextProvider<?> provider) {
     TestCallback testCallback = new TestCallback();
     provider.addCallback(testCallback, MoreExecutors.directExecutor());
     return testCallback;
