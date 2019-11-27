@@ -19,6 +19,7 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
@@ -27,7 +28,15 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.auth.Secret;
 import io.envoyproxy.envoy.service.discovery.v2.SecretDiscoveryServiceGrpc;
+import io.grpc.ForwardingServerCall.SimpleForwardingServerCall;
+import io.grpc.Metadata;
 import io.grpc.Server;
+import io.grpc.ServerCall;
+import io.grpc.ServerCall.Listener;
+import io.grpc.ServerCallHandler;
+import io.grpc.ServerInterceptor;
+import io.grpc.ServerInterceptors;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.netty.NettyServerBuilder;
 import io.grpc.stub.StreamObserver;
@@ -60,6 +69,8 @@ final class TestSdsServer {
   /** Used for signalling test clients that request received and processed. */
   @VisibleForTesting final Semaphore requestsCounter = new Semaphore(0);
 
+  @VisibleForTesting String lastK8sJwtTokenValue;
+
   private EventLoopGroup elg;
   private EventLoopGroup boss;
   private Server server;
@@ -87,10 +98,17 @@ final class TestSdsServer {
    *
    * @param name UDS pathname or server name for {@link InProcessServerBuilder}
    * @param useUds creates a UDS based server if true.
+   * @param useInterceptor if true, uses {@link SdsServerInterceptor} to grab & save Jwt Token.
    */
-  void startServer(String name, boolean useUds) throws IOException {
+  void startServer(String name, boolean useUds, boolean useInterceptor) throws IOException {
     checkNotNull(name, "name");
     discoveryService = new SecretDiscoveryServiceImpl();
+    ServerServiceDefinition serviceDefinition = discoveryService.bindService();
+
+    if (useInterceptor) {
+      serviceDefinition =
+          ServerInterceptors.intercept(serviceDefinition, new SdsServerInterceptor());
+    }
     if (useUds) {
       elg = new EpollEventLoopGroup();
       boss = new EpollEventLoopGroup(1);
@@ -99,14 +117,14 @@ final class TestSdsServer {
               .bossEventLoopGroup(boss)
               .workerEventLoopGroup(elg)
               .channelType(EpollServerDomainSocketChannel.class)
-              .addService(discoveryService)
+              .addService(serviceDefinition)
               .directExecutor()
               .build()
               .start();
     } else {
       server =
           InProcessServerBuilder.forName(name)
-              .addService(discoveryService)
+              .addService(serviceDefinition)
               .directExecutor()
               .build()
               .start();
@@ -283,5 +301,22 @@ final class TestSdsServer {
   private String generateAndSaveNonce() {
     lastRespondedNonce = Long.toHexString(System.currentTimeMillis());
     return lastRespondedNonce;
+  }
+
+  private class SdsServerInterceptor implements ServerInterceptor {
+
+    @Override
+    public <ReqT, RespT> Listener<ReqT> interceptCall(
+        ServerCall<ReqT, RespT> call,
+        Metadata requestHeaders,
+        ServerCallHandler<ReqT, RespT> next) {
+      lastK8sJwtTokenValue = null;
+      byte[] value =
+          requestHeaders.get(SdsClientFileBasedMetadataTest.K8S_SA_JWT_TOKEN_HEADER_METADATA_KEY);
+      if (value != null) {
+        lastK8sJwtTokenValue = new String(value, Charsets.UTF_8);
+      }
+      return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {}, requestHeaders);
+    }
   }
 }
