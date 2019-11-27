@@ -16,7 +16,6 @@
 
 package io.grpc.xds;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static java.util.logging.Level.FINEST;
 
@@ -120,12 +119,21 @@ final class LookasideLb extends LoadBalancer {
     // In the future, xdsConfig can be gotten directly by
     // resolvedAddresses.getLoadBalancingPolicyConfig().
     Attributes attributes = resolvedAddresses.getAttributes();
-    Map<String, ?> newRawLbConfig = checkNotNull(
-        attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
+    Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
+    if (newRawLbConfig == null) {
+      // This will not happen when the service config error handling is implemented.
+      // For now simply go to TRANSIENT_FAILURE.
+      lookasideLbHelper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+    }
     ConfigOrError cfg =
         XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
     if (cfg.getError() != null) {
-      throw cfg.getError().asRuntimeException();
+      // This will not happen when the service config error handling is implemented.
+      // For now simply go to TRANSIENT_FAILURE.
+      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
     }
     final XdsConfig newXdsConfig = (XdsConfig) cfg.getConfig();
 
