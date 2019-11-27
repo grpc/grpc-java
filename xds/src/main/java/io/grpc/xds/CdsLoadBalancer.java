@@ -49,6 +49,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
   private final ChannelLogger channelLogger;
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
+  private final Helper helper;
 
   // The following fields become non-null once handleResolvedAddresses() successfully.
 
@@ -69,6 +70,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   @VisibleForTesting
   CdsLoadBalancer(Helper helper, LoadBalancerRegistry lbRegistry) {
+    this.helper = helper;
     this.channelLogger = helper.getChannelLogger();
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(helper);
@@ -113,6 +115,13 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
+    // Go into TRANSIENT_FAILURE if we have not yet received any cluster resource. Otherwise,
+    // we keep running with the data we had previously.
+    if (clusterWatcher == null) {
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+    } else {
+      switchingLoadBalancer.handleNameResolutionError(error);
+    }
   }
 
   @Override
@@ -170,7 +179,13 @@ public final class CdsLoadBalancer extends LoadBalancer {
         ClusterWatcherImpl clusterWatcher;
 
         @Override
-        public void handleNameResolutionError(Status error) {}
+        public void handleNameResolutionError(Status error) {
+          if (clusterWatcher == null || clusterWatcher.edsBalancer == null) {
+            // Go into TRANSIENT_FAILURE if we have not yet received any cluster resource.
+            // Otherwise, we keep running with the data we had previously.
+            helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+          }
+        }
 
         @Override
         public boolean canHandleEmptyAddressListFromNameResolution() {

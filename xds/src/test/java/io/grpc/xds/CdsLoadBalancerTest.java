@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
+import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
@@ -148,6 +149,44 @@ public class CdsLoadBalancerTest {
 
     thrown.expect(StatusRuntimeException.class);
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+  }
+
+  @Test
+  public void handleResolutionErrorBeforeOrAfterCdsWorking() throws Exception {
+    String lbConfigRaw1 = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig1 = (Map<String, ?>) JsonParser.parse(lbConfigRaw1);
+    ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig1)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
+        .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor1 = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor1.capture());
+    ClusterWatcher clusterWatcher1 = clusterWatcherCaptor1.getValue();
+
+    // handleResolutionError() before receiving any CDS response.
+    cdsLoadBalancer.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    // CDS response received.
+    clusterWatcher1.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("foo.googleapis.com")
+            .setEdsServiceName("edsServiceFoo.googleapis.com")
+            .setLbPolicy("round_robin")
+            .setEnableLrs(false)
+            .build());
+    verify(helper).updateBalancingState(eq(CONNECTING), any(SubchannelPicker.class));
+
+    // handleResolutionError() after receiving CDS response.
+    cdsLoadBalancer.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    // No more TRANSIENT_FAILURE.
+    verify(helper, times(1)).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @Test
