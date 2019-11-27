@@ -23,6 +23,7 @@ import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.grpc.Internal;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.JsonUtil;
@@ -40,6 +41,7 @@ import javax.annotation.concurrent.Immutable;
 /**
  * Loads configuration information to bootstrap gRPC's integration of xDS protocol.
  */
+@Internal
 public abstract class Bootstrapper {
 
   private static final String BOOTSTRAP_PATH_SYS_ENV_VAR = "GRPC_XDS_BOOTSTRAP";

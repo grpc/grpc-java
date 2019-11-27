@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.annotation.Nullable;
 
 /**
  * An SslContext provider that uses SDS to fetch secrets. Used for both server and client
@@ -50,14 +51,14 @@ final class SdsSslContextProvider<K> extends SslContextProvider<K>
 
   private static final Logger logger = Logger.getLogger(SdsSslContextProvider.class.getName());
 
-  private final SdsClient certSdsClient;
-  private final SdsClient validationContextSdsClient;
-  private final SdsSecretConfig certSdsConfig;
-  private final SdsSecretConfig validationContextSdsConfig;
+  @Nullable private final SdsClient certSdsClient;
+  @Nullable private final SdsClient validationContextSdsClient;
+  @Nullable private final SdsSecretConfig certSdsConfig;
+  @Nullable private final SdsSecretConfig validationContextSdsConfig;
   private final List<CallbackPair> pendingCallbacks = new ArrayList<>();
-  private TlsCertificate tlsCertificate;
-  private CertificateValidationContext certificateValidationContext;
-  private SslContext sslContext;
+  @Nullable private TlsCertificate tlsCertificate;
+  @Nullable private CertificateValidationContext certificateValidationContext;
+  @Nullable private SslContext sslContext;
 
   private SdsSslContextProvider(
       Node node,
