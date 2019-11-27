@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static java.util.logging.Level.FINEST;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -26,7 +27,6 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.ConnectivityState;
 import io.grpc.LoadBalancer;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
@@ -69,6 +69,7 @@ final class LookasideLb extends LoadBalancer {
   private final LocalityStoreFactory localityStoreFactory;
   private final LoadReportClientFactory loadReportClientFactory;
   private final Bootstrapper bootstrapper;
+  private final Helper lookasideLbHelper;
 
   // Most recent XdsConfig.
   // Becomes non-null once handleResolvedAddresses() successfully.
@@ -102,6 +103,7 @@ final class LookasideLb extends LoadBalancer {
       LocalityStoreFactory localityStoreFactory,
       LoadReportClientFactory loadReportClientFactory,
       Bootstrapper bootstrapper) {
+    this.lookasideLbHelper = lookasideLbHelper;
     this.channelLogger = lookasideLbHelper.getChannelLogger();
     this.edsUpdateCallback = edsUpdateCallback;
     this.lbRegistry = lbRegistry;
@@ -146,7 +148,13 @@ final class LookasideLb extends LoadBalancer {
   @Override
   public void handleNameResolutionError(Status error) {
     channelLogger.log(ChannelLogLevel.ERROR, "Name resolution error: '%s'", error);
-    switchingLoadBalancer.handleNameResolutionError(error);
+    // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
+    // we keep running with the data we had previously.
+    if (endpointWatcher == null) {
+      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+    } else {
+      switchingLoadBalancer.handleNameResolutionError(error);
+    }
   }
 
   @Override
@@ -247,14 +255,20 @@ final class LookasideLb extends LoadBalancer {
       @Nullable
       LoadReportClient lrsClient;
       @Nullable
-      EndpointWatcher endpointWatcher;
+      EndpointWatcherImpl endpointWatcher;
 
       FixedXdsConfigBalancer(Helper helper) {
         this.helper = helper;
       }
 
       @Override
-      public void handleNameResolutionError(Status error) {}
+      public void handleNameResolutionError(Status error) {
+        // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
+        // we keep running with the data we had previously.
+        if (endpointWatcher == null || !endpointWatcher.firstEdsUpdateReceived) {
+          helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
+        }
+      }
 
       @Override
       public boolean canHandleEmptyAddressListFromNameResolution() {
@@ -346,7 +360,7 @@ final class LookasideLb extends LoadBalancer {
                 bootstrapInfo = bootstrapper.readBootstrap();
               } catch (Exception e) {
                 helper.updateBalancingState(
-                    ConnectivityState.TRANSIENT_FAILURE,
+                    TRANSIENT_FAILURE,
                     new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
                 return;
               }

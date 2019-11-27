@@ -19,6 +19,7 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static io.grpc.ConnectivityState.CONNECTING;
 import static io.grpc.ConnectivityState.READY;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -80,6 +81,7 @@ import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
 import io.grpc.xds.LookasideLb.EdsUpdateCallback;
+import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
@@ -262,6 +264,55 @@ public class LookasideLbTest {
   @Test
   public void canHandleEmptyAddressListFromNameResolution() {
     assertThat(lookasideLb.canHandleEmptyAddressListFromNameResolution()).isTrue();
+  }
+
+  @Test
+  public void handleNameResolutionErrorBeforeAndAfterEdsWorkding() throws Exception {
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return mock(XdsClient.class);
+      }
+    };
+    ObjectPool<XdsClient> xdsClientRef = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    XdsClient xdsClientFromResolver = xdsClientRef.getObject();
+
+    String lbConfigRaw =
+        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
+            .replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
+    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
+        .build();
+
+    lookasideLb.handleResolvedAddresses(resolvedAddresses);
+
+    assertThat(helpers).hasSize(1);
+    assertThat(localityStores).hasSize(1);
+    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor =
+        ArgumentCaptor.forClass(EndpointWatcher.class);
+    verify(xdsClientFromResolver).watchEndpointData(
+        eq("edsServiceName1"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
+
+    // handleResolutionError() before receiving any endpoint update.
+    lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    // Endpoint update received.
+    endpointWatcher.onEndpointChanged(
+        EndpointUpdate.newBuilder().setClusterName("edsServiceName1").build());
+
+    // handleResolutionError() after receiving endpoint update.
+    lookasideLb.handleNameResolutionError(Status.DATA_LOSS.withDescription("fake status"));
+    // No more TRANSIENT_FAILURE.
+    verify(helper, times(1)).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @SuppressWarnings("unchecked")
