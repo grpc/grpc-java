@@ -477,8 +477,8 @@ public final class Metadata {
    * <p>Produces serialized names and values interleaved. result[i*2] are names, while
    * result[i*2+1] are values.
    *
-   * <p>Names are byte arrays as described according to the {@link #serialize}. Valees
-   * are either byte arrays or {@link InputStream}s.
+   * <p>Names are byte arrays as described according to the {@link #serialize}
+   * method. Values are either byte arrays or {@link InputStream}s.
    *
    * <p>This method is intended for transport use only.
    */
