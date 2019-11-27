@@ -348,7 +348,6 @@ final class LookasideLb extends LoadBalancer {
                 helper.updateBalancingState(
                     ConnectivityState.TRANSIENT_FAILURE,
                     new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
-                LookasideLb.this.endpointWatcher = null;
                 return;
               }
               final ManagedChannel channel = initLbChannel(
