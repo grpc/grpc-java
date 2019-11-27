@@ -27,7 +27,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.util.ForwardingLoadBalancerHelper;
-import io.grpc.xds.LookasideLb.EdsUpdateCallback;
+import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nullable;
@@ -46,7 +46,7 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   private final Helper helper;
   private final LoadBalancer lookasideLb;
   private final LoadBalancer.Factory fallbackLbFactory;
-  private final EdsUpdateCallback edsUpdateCallback = new EdsUpdateCallback() {
+  private final EndpointUpdateCallback edsUpdateCallback = new EndpointUpdateCallback() {
     @Override
     public void onWorking() {
       if (childPolicyHasBeenReady) {
@@ -247,13 +247,13 @@ final class XdsLoadBalancer2 extends LoadBalancer {
   /** Factory of a look-aside load balancer. The interface itself is for convenience in test. */
   @VisibleForTesting
   interface LookasideLbFactory {
-    LoadBalancer newLoadBalancer(Helper helper, EdsUpdateCallback edsUpdateCallback);
+    LoadBalancer newLoadBalancer(Helper helper, EndpointUpdateCallback edsUpdateCallback);
   }
 
   private static final class LookasideLbFactoryImpl implements LookasideLbFactory {
     @Override
     public LoadBalancer newLoadBalancer(
-        Helper lookasideLbHelper, EdsUpdateCallback edsUpdateCallback) {
+        Helper lookasideLbHelper, EndpointUpdateCallback edsUpdateCallback) {
       return new LookasideLb(lookasideLbHelper, edsUpdateCallback);
     }
   }

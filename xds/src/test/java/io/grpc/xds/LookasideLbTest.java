@@ -80,7 +80,7 @@ import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import io.grpc.xds.LoadReportClientImpl.LoadReportClientFactory;
 import io.grpc.xds.LocalityStore.LocalityStoreFactory;
-import io.grpc.xds.LookasideLb.EdsUpdateCallback;
+import io.grpc.xds.LookasideLb.EndpointUpdateCallback;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
@@ -137,7 +137,7 @@ public class LookasideLbTest {
   @Mock
   private Helper helper;
   @Mock
-  private EdsUpdateCallback edsUpdateCallback;
+  private EndpointUpdateCallback edsUpdateCallback;
   @Mock
   private Bootstrapper bootstrapper;
   @Captor
@@ -475,7 +475,7 @@ public class LookasideLbTest {
   public void handleResolvedAddress_createLbChannel()
       throws Exception {
     // Test balancer created with the default real LookasideChannelLbFactory
-    lookasideLb = new LookasideLb(helper, mock(EdsUpdateCallback.class));
+    lookasideLb = new LookasideLb(helper, mock(EndpointUpdateCallback.class));
     String lbConfigRaw = "{'balancerName' : 'dns:///balancer1.example.com:8080'}"
         .replace("'", "\"");
     @SuppressWarnings("unchecked")

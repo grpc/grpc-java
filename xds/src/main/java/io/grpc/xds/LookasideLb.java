@@ -63,7 +63,7 @@ import javax.annotation.Nullable;
 final class LookasideLb extends LoadBalancer {
 
   private final ChannelLogger channelLogger;
-  private final EdsUpdateCallback edsUpdateCallback;
+  private final EndpointUpdateCallback endpointUpdateCallback;
   private final GracefulSwitchLoadBalancer switchingLoadBalancer;
   private final LoadBalancerRegistry lbRegistry;
   private final LocalityStoreFactory localityStoreFactory;
@@ -85,10 +85,10 @@ final class LookasideLb extends LoadBalancer {
   @Nullable
   private LoadReportClient cachedLrsClient; // Cached for optimization.
 
-  LookasideLb(Helper lookasideLbHelper, EdsUpdateCallback edsUpdateCallback) {
+  LookasideLb(Helper lookasideLbHelper, EndpointUpdateCallback endpointUpdateCallback) {
     this(
         lookasideLbHelper,
-        edsUpdateCallback,
+        endpointUpdateCallback,
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
         LoadReportClientFactory.getInstance(),
@@ -98,14 +98,14 @@ final class LookasideLb extends LoadBalancer {
   @VisibleForTesting
   LookasideLb(
       Helper lookasideLbHelper,
-      EdsUpdateCallback edsUpdateCallback,
+      EndpointUpdateCallback endpointUpdateCallback,
       LoadBalancerRegistry lbRegistry,
       LocalityStoreFactory localityStoreFactory,
       LoadReportClientFactory loadReportClientFactory,
       Bootstrapper bootstrapper) {
     this.lookasideLbHelper = lookasideLbHelper;
     this.channelLogger = lookasideLbHelper.getChannelLogger();
-    this.edsUpdateCallback = edsUpdateCallback;
+    this.endpointUpdateCallback = endpointUpdateCallback;
     this.lbRegistry = lbRegistry;
     this.switchingLoadBalancer = new GracefulSwitchLoadBalancer(lookasideLbHelper);
     this.localityStoreFactory = localityStoreFactory;
@@ -265,7 +265,7 @@ final class LookasideLb extends LoadBalancer {
       public void handleNameResolutionError(Status error) {
         // Go into TRANSIENT_FAILURE if we have not yet received any endpoint update. Otherwise,
         // we keep running with the data we had previously.
-        if (endpointWatcher == null || !endpointWatcher.firstEdsUpdateReceived) {
+        if (endpointWatcher == null || !endpointWatcher.firstEndpointUpdateReceived) {
           helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(error));
         }
       }
@@ -414,7 +414,7 @@ final class LookasideLb extends LoadBalancer {
   /**
    * Callbacks for the EDS-only-with-fallback usecase. Being deprecated.
    */
-  interface EdsUpdateCallback {
+  interface EndpointUpdateCallback {
 
     void onWorking();
 
@@ -428,7 +428,7 @@ final class LookasideLb extends LoadBalancer {
     final LoadReportClient lrsClient;
     final LoadReportCallback lrsCallback;
     final LocalityStore localityStore;
-    boolean firstEdsUpdateReceived;
+    boolean firstEndpointUpdateReceived;
 
     EndpointWatcherImpl(
         LoadReportClient lrsClient, LoadReportCallback lrsCallback, LocalityStore localityStore) {
@@ -439,11 +439,14 @@ final class LookasideLb extends LoadBalancer {
 
     @Override
     public void onEndpointChanged(EndpointUpdate endpointUpdate) {
-      channelLogger.log(ChannelLogLevel.DEBUG, "Received an EDS update: '%s'",  endpointUpdate);
+      channelLogger.log(
+          ChannelLogLevel.DEBUG,
+          "EDS load balancer received an endpoint update: '%s'",
+          endpointUpdate);
 
-      if (!firstEdsUpdateReceived) {
-        firstEdsUpdateReceived = true;
-        edsUpdateCallback.onWorking();
+      if (!firstEndpointUpdateReceived) {
+        firstEndpointUpdateReceived = true;
+        endpointUpdateCallback.onWorking();
         lrsClient.startLoadReporting(lrsCallback);
       }
 
@@ -452,7 +455,7 @@ final class LookasideLb extends LoadBalancer {
       for (DropOverload dropOverload : dropOverloads) {
         dropOverloadsBuilder.add(dropOverload);
         if (dropOverload.getDropsPerMillion() == 1_000_000) {
-          edsUpdateCallback.onAllDrop();
+          endpointUpdateCallback.onAllDrop();
           break;
         }
       }
@@ -474,8 +477,9 @@ final class LookasideLb extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
-      channelLogger.log(ChannelLogLevel.ERROR, "Received an EDS error: '%s'",  error);
-      edsUpdateCallback.onError();
+      channelLogger.log(
+          ChannelLogLevel.ERROR, "EDS load balancer received an error: '%s'",  error);
+      endpointUpdateCallback.onError();
     }
   }
 }
