@@ -153,7 +153,6 @@ public class XdsClientImplTest {
   @Mock
   private EndpointWatcher endpointWatcher;
 
-  private String serverName;
   private ManagedChannel channel;
   private XdsClientImpl xdsClient;
 
@@ -164,7 +163,7 @@ public class XdsClientImplTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
-    serverName = InProcessServerBuilder.generateName();
+    String serverName = InProcessServerBuilder.generateName();
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
@@ -198,7 +197,7 @@ public class XdsClientImplTest {
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
     xdsClient =
-        new XdsClientImpl(serverName, channel, NODE, syncContext,
+        new XdsClientImpl(channel, NODE, syncContext,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier().get());
     // Only the connection to management server is established, no RPC request is sent until at
@@ -1210,8 +1209,7 @@ public class XdsClientImplTest {
         .isEqualTo("eds-cluster-foo.googleapis.com");
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate.getLrsServerName())
-        .isEqualTo(serverName);  // same management server
+    assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
   }
 
   @Test
@@ -1326,8 +1324,7 @@ public class XdsClientImplTest {
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate3.getLrsServerName())
-        .isEqualTo(serverName);  // same management server
+    assertThat(clusterUpdate3.getLrsServerName()).isEqualTo("");
   }
 
   /**
@@ -1470,7 +1467,7 @@ public class XdsClientImplTest {
         .isEqualTo("eds-cluster-bar.googleapis.com");
     assertThat(clusterUpdate2.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate2.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo(serverName);  // same management server
+    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
 
     // Cancel one of the watcher.
     xdsClient.cancelClusterDataWatch("cluster-foo.googleapis.com", watcher1);
@@ -1540,7 +1537,7 @@ public class XdsClientImplTest {
         .isEqualTo("cluster-foo.googleapis.com");  // default to cluster name
     assertThat(clusterUpdate3.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate3.isEnableLrs()).isEqualTo(true);
-    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo(serverName);  // same management server
+    assertThat(clusterUpdate2.getLrsServerName()).isEqualTo("");
 
     verifyNoMoreInteractions(watcher1, watcher2);
 

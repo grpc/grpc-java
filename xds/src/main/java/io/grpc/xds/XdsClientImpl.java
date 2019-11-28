@@ -80,7 +80,6 @@ final class XdsClientImpl extends XdsClient {
   static final String ADS_TYPE_URL_EDS =
       "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
 
-  private final String serverUri;  // may need it to configure LRS server
   private final ManagedChannel channel;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
@@ -147,7 +146,6 @@ final class XdsClientImpl extends XdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
     this(
-        serverUri,
         buildChannel(checkNotNull(serverUri, "serverUri"),
             checkNotNull(channelCredsList, "channelCredsList")),
         node,
@@ -159,14 +157,12 @@ final class XdsClientImpl extends XdsClient {
 
   @VisibleForTesting
   XdsClientImpl(
-      String serverUri,
       ManagedChannel channel,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
-    this.serverUri = checkNotNull(serverUri, "serverUri");
     this.channel = checkNotNull(channel, "channel");
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
@@ -655,7 +651,7 @@ final class XdsClientImpl extends XdsClient {
           break;
         }
         updateBuilder.setEnableLrs(true);
-        updateBuilder.setLrsServerName(serverUri);
+        updateBuilder.setLrsServerName("");
       } else {
         updateBuilder.setEnableLrs(false);
       }
