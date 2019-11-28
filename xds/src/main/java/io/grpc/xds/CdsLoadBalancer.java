@@ -84,18 +84,32 @@ public final class CdsLoadBalancer extends LoadBalancer {
       xdsClientRef = resolvedAddresses.getAttributes().get(XdsAttributes.XDS_CLIENT_REF);
       if (xdsClientRef == null) {
         // TODO(zdapeng): create a new xdsClient from bootstrap if no one exists.
-        throw new UnsupportedOperationException(
-            "XDS_CLIENT_REF attributes not available in resolvedAddresses " + resolvedAddresses);
+        helper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(Status.UNAVAILABLE.withDescription(
+                "XDS_CLIENT_REF attributes not available from resolve addresses")));
+        return;
       }
       xdsClient = xdsClientRef.getObject();
     }
 
-    Map<String, ?> newRawLbConfig = checkNotNull(
-        attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
+    Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
+    if (newRawLbConfig == null) {
+      // This will not happen when the service config error handling is implemented.
+      // For now simply go to TRANSIENT_FAILURE.
+      helper.updateBalancingState(
+          TRANSIENT_FAILURE,
+          new ErrorPicker(
+              Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+      return;
+    }
     ConfigOrError cfg =
         CdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig);
     if (cfg.getError() != null) {
-      throw cfg.getError().asRuntimeException();
+      // This will not happen when the service config error handling is implemented.
+      // For now simply go to TRANSIENT_FAILURE.
+      helper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
+      return;
     }
     final CdsConfig newCdsConfig = (CdsConfig) cfg.getConfig();
 
@@ -243,7 +257,8 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onClusterChanged(ClusterUpdate newUpdate) {
-      channelLogger.log(ChannelLogLevel.DEBUG, "Received a CDS update: '%s'",  newUpdate);
+      channelLogger.log(
+          ChannelLogLevel.DEBUG, "CDS load balancer received a cluster update: '%s'",  newUpdate);
       checkArgument(
           newUpdate.getLbPolicy().equals("round_robin"),
           "The load balancing policy in ClusterUpdate '%s' is not supported", newUpdate);
@@ -274,7 +289,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     @Override
     public void onError(Status error) {
-      channelLogger.log(ChannelLogLevel.ERROR, "Received a CDS error: '%s'",  error);
+      channelLogger.log(ChannelLogLevel.ERROR, "CDS load balancer received an error: '%s'",  error);
 
       // Go into TRANSIENT_FAILURE if we have not yet created the child
       // policy (i.e., we have not yet received valid data for the cluster). Otherwise,
