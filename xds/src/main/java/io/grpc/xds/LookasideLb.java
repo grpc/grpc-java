@@ -127,6 +127,7 @@ final class LookasideLb extends LoadBalancer {
           TRANSIENT_FAILURE,
           new ErrorPicker(
               Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+      return;
     }
     ConfigOrError cfg =
         XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
@@ -134,6 +135,7 @@ final class LookasideLb extends LoadBalancer {
       // This will not happen when the service config error handling is implemented.
       // For now simply go to TRANSIENT_FAILURE.
       lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
+      return;
     }
     final XdsConfig newXdsConfig = (XdsConfig) cfg.getConfig();
 
