@@ -89,7 +89,7 @@ public final class InternalMetadata {
   }
 
   @Internal
-  public static <T> Metadata.LazyValue<T> parsedValue(Key<T> key, T value) {
+  public static <T> Object parsedValue(Key<T> key, T value) {
     return Metadata.LazyValue.create(key, value);
   }
 

@@ -391,34 +391,33 @@ public class MetadataTest {
   }
 
   @Test
-  public void getSameKeyReturnsSameInstnce() {
+  public void streamedValue() {
     Fish salmon = new Fish("salmon");
     Metadata h = new Metadata();
     h.put(KEY_STREAMED, salmon);
-    assertSame(salmon, h.get(KEY_STREAMED));
+    assertEquals(salmon, h.get(KEY_STREAMED));
   }
 
   @Test
-  public void getSameMarshallerReturnsSameInstnce() {
+  public void streamedValueDifferentKey() {
     Fish salmon = new Fish("salmon");
     Metadata h = new Metadata();
     h.put(KEY_STREAMED, salmon);
 
     // Get using a different key instance (but the same marshaller).
     Fish fish = h.get(copyKey(KEY_STREAMED, FISH_STREAM_MARSHALLER));
-    assertSame(salmon, fish);
+    assertEquals(salmon, fish);
   }
 
   @Test
-  public void getDifferentMarshallerReturnsParsedInstance() {
-    Metadata h = new Metadata();
+  public void streamedValueDifferentMarshaller() {
     Fish salmon = new Fish("salmon");
+    Metadata h = new Metadata();
     h.put(KEY_STREAMED, salmon);
 
     // Get using a different marshaller instance.
     Fish fish = h.get(copyKey(KEY_STREAMED, new FishStreamMarsaller()));
     assertEquals(salmon, fish);
-    assertNotSame(salmon, fish);
   }
 
   @Test
