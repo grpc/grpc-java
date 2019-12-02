@@ -344,6 +344,8 @@ abstract class XdsClient {
 
   /**
    * Registers a data watcher for the given cluster.
+   *
+   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchClusterData(String clusterName, ClusterWatcher watcher) {
   }
@@ -351,12 +353,16 @@ abstract class XdsClient {
   /**
    * Unregisters the given cluster watcher, which was registered to receive updates for the
    * given cluster.
+   *
+   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelClusterDataWatch(String clusterName, ClusterWatcher watcher) {
   }
 
   /**
    * Registers a data watcher for endpoints in the given cluster.
+   *
+   * <p>Adding the same watcher for the same cluster more than once is a no-op.
    */
   void watchEndpointData(String clusterName, EndpointWatcher watcher) {
   }
@@ -364,6 +370,8 @@ abstract class XdsClient {
   /**
    * Unregisters the given endpoints watcher, which was registered to receive updates for
    * endpoints information in the given cluster.
+   *
+   * <p>Cancelling a watcher that was not registered for the given cluster is a no-op.
    */
   void cancelEndpointDataWatch(String clusterName, EndpointWatcher watcher) {
   }
