@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -317,91 +318,83 @@ public class LookasideLbTest {
 
   @SuppressWarnings("unchecked")
   @Test
-  public void handleChildPolicyChangeThenBalancerNameChangeThenChildPolicyChange_swtichGracefully()
+  public void handleEdsServiceNameChangeInXdsConfig_swtichGracefully()
       throws Exception {
     assertThat(helpers).isEmpty();
     assertThat(localityStores).isEmpty();
     assertThat(loadReportClients).isEmpty();
 
     List<EquivalentAddressGroup> eags = ImmutableList.of();
-    String lbConfigRaw = "{\"balancerName\" : \"dns:///balancer1.example.com:8080\"}";
+    XdsClientFactory xdsClientFactory = new XdsClientFactory() {
+      @Override
+      XdsClient createXdsClient() {
+        return mock(XdsClient.class);
+      }
+    };
+    ObjectPool<XdsClient> xdsClientRef = new RefCountedXdsClientObjectPool(xdsClientFactory);
+    XdsClient xdsClientFromResolver = xdsClientRef.getObject();
+
+    String lbConfigRaw =
+        "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName1'}"
+            .replace("'", "\"");
+    @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(1);
     assertThat(localityStores).hasSize(1);
-    assertThat(loadReportClients).hasSize(1);
     Helper helper1 = helpers.peekLast();
     LocalityStore localityStore1 = localityStores.peekLast();
-    LoadReportClient loadReportClient1 = loadReportClients.peekLast();
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     helper1.updateBalancingState(CONNECTING, picker1);
     verify(helper).updateBalancingState(CONNECTING, picker1);
 
-    // Effectively no change to the XdsConfig because the child policy is unsupported.
-    lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer1.example.com:8080\","
-        + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}]"
-        + "}";
+    // Change edsServicename to edsServiceName2.
+    lbConfigRaw = "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName2'}"
+        .replace("'", "\"");
     lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
-        .build();
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-
-    assertThat(helpers).hasSize(1);
-    assertThat(localityStores).hasSize(1);
-    assertThat(loadReportClients).hasSize(1);
-    helper1.updateBalancingState(READY, picker1);
-    verify(helper).updateBalancingState(READY, picker1);
-
-    // Child policy is changed.
-    lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer1.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}]"
-        + "}";
-    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
     assertThat(helpers).hasSize(2);
     assertThat(localityStores).hasSize(2);
-    assertThat(loadReportClients).hasSize(1); // loadReportClient uses the existing channel
     Helper helper2 = helpers.peekLast();
     LocalityStore localityStore2 = localityStores.peekLast();
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     helper2.updateBalancingState(CONNECTING, picker2);
-    verify(helper, never()).updateBalancingState(CONNECTING, picker2);
-    verify(localityStore1, never()).reset();
-    verify(loadReportClient1, never()).stopLoadReporting();
+    verify(helper).updateBalancingState(CONNECTING, picker2);
+    verify(localityStore1).reset();
     helper2.updateBalancingState(READY, picker2);
     verify(helper).updateBalancingState(READY, picker2);
-    verify(localityStore1).reset();
-    verify(loadReportClient1).stopLoadReporting();
 
-    // change balancer name policy to balancer2.example.com
-    lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer2.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported1\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}]"
-        + "}";
+    // Change edsServiceName to edsServiceName3.
+    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName3'}"
+        .replace("'", "\"");
     lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(3);
     assertThat(localityStores).hasSize(3);
-    assertThat(loadReportClients).hasSize(2);
     Helper helper3 = helpers.peekLast();
     LocalityStore localityStore3 = localityStores.peekLast();
 
@@ -411,24 +404,25 @@ public class LookasideLbTest {
     verify(localityStore2, never()).reset();
     picker2 = mock(SubchannelPicker.class);
     helper2.updateBalancingState(CONNECTING, picker2);
-    // old balancer becomes not READY, so the new balancer will update picker immediately
+    // The old balancer becomes not READY, so the new balancer will update picker immediately.
     verify(helper).updateBalancingState(CONNECTING, picker3);
     verify(localityStore2).reset();
 
-    lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer2.example.com:8080\","
-        + "\"childPolicy\" : [{\"unsupported\" : {\"key\" : \"val\"}}, {\"unsupported_2\" : {}}]"
-        + "}";
+    // Change edsServiceName to edsServiceName4.
+    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName4'}"
+        .replace("'", "\"");
     lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(4);
     assertThat(localityStores).hasSize(4);
-    assertThat(loadReportClients).hasSize(2);
     Helper helper4 = helpers.peekLast();
     LocalityStore localityStore4 = localityStores.peekLast();
     verify(localityStore3).reset();
@@ -436,27 +430,28 @@ public class LookasideLbTest {
     helper4.updateBalancingState(READY, picker4);
     verify(helper).updateBalancingState(READY, picker4);
 
-    String lbConfigRaw3 = "{"
-        + "\"balancerName\" : \"dns:///balancer3.example.com:8080\","
-        + "\"childPolicy\" : [{\"supported1\" : {\"key\" : \"val\"}}, {\"unsupported_3\" : {}}]"
-        + "}";
-    Map<String, ?> lbConfig3 = (Map<String, ?>) JsonParser.parse(lbConfigRaw3);
+    // Change edsServiceName to edsServiceName5.
+    lbConfigRaw =  "{'childPolicy' : [{'supported1' : {}}], 'edsServiceName' : 'edsServiceName5'}"
+        .replace("'", "\"");
+    lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
     resolvedAddresses = ResolvedAddresses.newBuilder()
         .setAddresses(eags)
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig3).build())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
         .build();
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
 
     assertThat(helpers).hasSize(5);
     assertThat(localityStores).hasSize(5);
-    assertThat(loadReportClients).hasSize(3);
 
     Helper helper5 = helpers.peekLast();
     LocalityStore localityStore5 = localityStores.peekLast();
-    LoadReportClient loadReportClient5 = loadReportClients.peekLast();
     SubchannelPicker picker5 = mock(SubchannelPicker.class);
     helper5.updateBalancingState(CONNECTING, picker5);
-    // balancer2 was READY, so balancer3 will gracefully switch and not update non-READY picker
+    // The old balancer was READY, so the new balancer will gracefully switch and not update
+    // non-READY picker.
     verify(helper, never()).updateBalancingState(any(ConnectivityState.class), eq(picker5));
     verify(localityStore4, never()).reset();
 
@@ -465,12 +460,13 @@ public class LookasideLbTest {
     verify(localityStore4).reset();
 
     verify(localityStore5, never()).reset();
-    verify(loadReportClient5, never()).stopLoadReporting();
     lookasideLb.shutdown();
     verify(localityStore5).reset();
-    verify(loadReportClient5).stopLoadReporting();
+
+    xdsClientRef.returnObject(xdsClientFromResolver);
   }
 
+  @Deprecated // balancerName will be unsupported.
   @Test
   public void handleResolvedAddress_createLbChannel()
       throws Exception {
@@ -487,7 +483,8 @@ public class LookasideLbTest {
 
     verify(helper, never()).createResolvingOobChannel(anyString());
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
-    verify(helper).createResolvingOobChannel("dns:///balancer1.example.com:8080");
+    // Channel is created twice for ADS and LRS.
+    verify(helper, atLeastOnce()).createResolvingOobChannel("dns:///balancer1.example.com:8080");
 
     lookasideLb.shutdown();
   }
