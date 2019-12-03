@@ -56,4 +56,13 @@ public class NettyServerTransportTest {
     assertThat(e.getMessage()).isNull();
     assertThat(getLogLevel(e)).isEqualTo(Level.INFO);
   }
+
+  @Test
+  public void fakeNettyNativeIoException() {
+    class NativeIoException extends IOException {}
+
+    NativeIoException fakeNativeIoException = new NativeIoException();
+
+    assertThat(getLogLevel(fakeNativeIoException)).isEqualTo(Level.FINE);
+  }
 }
