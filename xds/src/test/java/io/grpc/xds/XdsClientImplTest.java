@@ -43,9 +43,15 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
+import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
+import io.envoyproxy.envoy.api.v2.core.GrpcService;
+import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
@@ -1130,8 +1136,8 @@ public class XdsClientImplTest {
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false, null)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false, null)));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
@@ -1166,9 +1172,9 @@ public class XdsClientImplTest {
 
     // Management server sends back a CDS response without Cluster for the requested resource.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false, null)),
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false, null)));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
@@ -1188,11 +1194,14 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.isEnableLrs()).isEqualTo(false);
 
     // Management server sends back another CDS response updating the requested Cluster.
+    UpstreamTlsContext testUpstreamTlsContext =
+        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false, null)),
         Any.pack(
-            buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true)),
-        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+            buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true,
+                testUpstreamTlsContext)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false, null)));
     response =
         buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
@@ -1210,6 +1219,7 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
     assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
   }
 
   @Test
@@ -1235,7 +1245,7 @@ public class XdsClientImplTest {
     // Management server sends back a CDS response contains Cluster for only one of
     // requested cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
@@ -1280,10 +1290,10 @@ public class XdsClientImplTest {
     // Management server sends back another CDS response contains Clusters for all
     // requested clusters.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)),
         Any.pack(
             buildCluster("cluster-bar.googleapis.com",
-                "eds-cluster-bar.googleapis.com", true)));
+                "eds-cluster-bar.googleapis.com", true, null)));
     response = buildDiscoveryResponse("1", clusters,
         XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
@@ -1349,7 +1359,7 @@ public class XdsClientImplTest {
     // Management server sends back an CDS response with Cluster for the requested
     // cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
@@ -1403,7 +1413,7 @@ public class XdsClientImplTest {
     // Management server sends back a CDS response with Cluster for the requested
     // cluster.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)));
     DiscoveryResponse response =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
@@ -1435,10 +1445,10 @@ public class XdsClientImplTest {
 
     // Management server sends back a CDS response with Cluster for all requested cluster.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false)),
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, false, null)),
         Any.pack(
             buildCluster("cluster-bar.googleapis.com",
-                "eds-cluster-bar.googleapis.com", true)));
+                "eds-cluster-bar.googleapis.com", true, null)));
     response = buildDiscoveryResponse("1", clusters,
         XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
     responseObserver.onNext(response);
@@ -1490,9 +1500,9 @@ public class XdsClientImplTest {
 
     // Management server sends back a new CDS response.
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)),
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true, null)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com", null, false)));
+            buildCluster("cluster-bar.googleapis.com", null, false, null)));
     response =
         buildDiscoveryResponse("2", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0002");
     responseObserver.onNext(response);
@@ -1521,9 +1531,9 @@ public class XdsClientImplTest {
     // Management server sends back a new CDS response for at least newly requested resources
     // (it is required to do so).
     clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true)),
+        Any.pack(buildCluster("cluster-foo.googleapis.com", null, true, null)),
         Any.pack(
-            buildCluster("cluster-bar.googleapis.com", null, false)));
+            buildCluster("cluster-bar.googleapis.com", null, false, null)));
     response =
         buildDiscoveryResponse("3", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0003");
     responseObserver.onNext(response);
@@ -2313,7 +2323,7 @@ public class XdsClientImplTest {
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster.googleapis.com", null, false, null)));
     DiscoveryResponse cdsResponse =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(cdsResponse);
@@ -2455,7 +2465,7 @@ public class XdsClientImplTest {
 
     // Management server sends back a CDS response.
     List<Any> clusters = ImmutableList.of(
-        Any.pack(buildCluster("cluster.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster.googleapis.com", null, false, null)));
     DiscoveryResponse cdsResponse =
         buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(cdsResponse);
@@ -2654,7 +2664,7 @@ public class XdsClientImplTest {
   }
 
   private static Cluster buildCluster(String clusterName, @Nullable String edsServiceName,
-      boolean enableLrs) {
+      boolean enableLrs, UpstreamTlsContext upstreamTlsContext) {
     Cluster.Builder clusterBuilder = Cluster.newBuilder();
     clusterBuilder.setName(clusterName);
     clusterBuilder.setType(DiscoveryType.EDS);
@@ -2669,6 +2679,9 @@ public class XdsClientImplTest {
     if (enableLrs) {
       clusterBuilder.setLrsServer(
           ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
+    }
+    if (upstreamTlsContext != null) {
+      clusterBuilder.setTlsContext(upstreamTlsContext);
     }
     return clusterBuilder.build();
   }
@@ -2726,6 +2739,37 @@ public class XdsClientImplTest {
             .setHealthStatus(healthStatus).setLoadBalancingWeight(
                 UInt32Value.newBuilder().setValue(loadbalancingWeight))
             .build();
+  }
+
+  private static UpstreamTlsContext buildUpstreamTlsContext(String secretName, String targetUri) {
+    return UpstreamTlsContext.newBuilder()
+        .setCommonTlsContext(
+            CommonTlsContext.newBuilder()
+                .setValidationContextSdsSecretConfig(
+                    SdsSecretConfig.newBuilder()
+                        .setName(secretName)
+                        .setSdsConfig(
+                            ConfigSource.newBuilder()
+                                .setApiConfigSource(
+                                    ApiConfigSource.newBuilder()
+                                        .addGrpcServices(
+                                            GrpcService.newBuilder()
+                                                .setGoogleGrpc(
+                                                    GoogleGrpc.newBuilder()
+                                                        .setTargetUri(targetUri)
+                                                        .build()
+                                                )
+                                                .build()
+                                        )
+                                        .build()
+                                )
+                                .build()
+                        )
+                        .build()
+                )
+                .build()
+        )
+        .build();
   }
 
   /**
