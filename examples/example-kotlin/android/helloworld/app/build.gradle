@@ -49,7 +49,7 @@ android {
 }
 
 protobuf {
-    protoc { artifact = 'com.google.protobuf:protoc:3.10.0' }
+    protoc { artifact = 'com.google.protobuf:protoc:3.11.0' }
     plugins {
         grpc { artifact = 'io.grpc:protoc-gen-grpc-java:1.26.0-SNAPSHOT' // CURRENT_GRPC_VERSION
         }
