@@ -205,8 +205,6 @@ final class LookasideLb extends LoadBalancer {
       xdsClient = xdsClientRef.getObject();
     }
 
-    // TODO(zdapeng): If lrsServerName in XdsConfig is changed, call xdsClient.reportClientStats()
-    //     and/or xdsClient.cancelClientStatsReport().
     // Note: balancerName change is unsupported and ignored.
     // TODO(zdapeng): Remove support for balancerName.
     // Note: childPolicy change will be handled in LocalityStore, to be implemented.
@@ -232,6 +230,9 @@ final class LookasideLb extends LoadBalancer {
         .setLoadBalancingPolicyConfig(newXdsConfig)
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    // TODO(zdapeng): If lrsServerName in XdsConfig is changed, call xdsClient.reportClientStats()
+    //     and/or xdsClient.cancelClientStatsReport().
   }
 
   @Override
@@ -374,7 +375,6 @@ final class LookasideLb extends LoadBalancer {
           return;
         }
 
-        // TODO(zdapeng): First try to get loadStatsStore from XdsAttributes.LOAD_STATS_STORE_REF.
         LoadStatsStore loadStatsStore = new LoadStatsStoreImpl();
         localityStore = localityStoreFactory.newLocalityStore(helper, lbRegistry, loadStatsStore);
         LoadReportCallback lrsCallback =
