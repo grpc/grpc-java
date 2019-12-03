@@ -186,10 +186,8 @@ class NettyServerTransport implements ServerTransport {
     if (t.getClass().equals(IOException.class)) {
       return Level.FINE;
     }
-    for (String exceptionClassName : QUIET_EXCEPTIONS) {
-      if (t.getClass().getSimpleName().equals(exceptionClassName)) {
-        return Level.FINE;
-      }
+    if (QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
+      return Level.FINE;
     }
     return Level.INFO;
   }
