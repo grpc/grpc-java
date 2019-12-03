@@ -25,7 +25,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -483,8 +482,7 @@ public class LookasideLbTest {
 
     verify(helper, never()).createResolvingOobChannel(anyString());
     lookasideLb.handleResolvedAddresses(resolvedAddresses);
-    // Channel is created twice for ADS and LRS.
-    verify(helper, atLeastOnce()).createResolvingOobChannel("dns:///balancer1.example.com:8080");
+    verify(helper).createResolvingOobChannel("dns:///balancer1.example.com:8080");
 
     lookasideLb.shutdown();
   }
