@@ -297,7 +297,7 @@ final class LookasideLb extends LoadBalancer {
 
   private final class ClusterEndpointsBalancerProvider extends LoadBalancerProvider {
     final String edsServiceName;
-    @Nullable // not null if oldEndpointWatcher is not null
+    @Nullable
     final String oldEdsServiceName;
     @Nullable
     final EndpointWatcher oldEndpointWatcher;
