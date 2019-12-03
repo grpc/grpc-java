@@ -214,7 +214,8 @@ final class LookasideLb extends LoadBalancer {
         || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
       String edsServiceName = newXdsConfig.edsServiceName;
 
-      // Just in case edsServiceName is null, in the future this shouldn't be allowed.
+      // The edsServiceName field is null in legacy gRPC client with EDS: use target authority for
+      // querying endpoints, but in the future we expect this to be explicitly given by EDS config.
       // We assume if edsServiceName is null, it will always be null in later resolver updates;
       // and if edsServiceName is not null, it will always be not null.
       if (edsServiceName == null) {
