@@ -214,8 +214,17 @@ final class LookasideLb extends LoadBalancer {
     // If edsServiceName in XdsConfig is changed, do a graceful switch.
     if (xdsConfig == null
         || !Objects.equals(newXdsConfig.edsServiceName, xdsConfig.edsServiceName)) {
+      String edsServiceName = newXdsConfig.edsServiceName;
+
+      // Just in case edsServiceName is null, in the future this shouldn't be allowed.
+      // We assume if edsServiceName is null, it will always be null in later resolver updates;
+      // and if edsServiceName is not null, it will always be not null.
+      if (edsServiceName == null) {
+        edsServiceName = lookasideLbHelper.getAuthority();
+      }
+
       LoadBalancerProvider clusterEndpointsLoadBalancer =
-          new ClusterEndpointsBalancerProvider(newXdsConfig.edsServiceName);
+          new ClusterEndpointsBalancerProvider(edsServiceName);
       switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancer);
     }
     resolvedAddresses = resolvedAddresses.toBuilder()
@@ -287,12 +296,18 @@ final class LookasideLb extends LoadBalancer {
 
   private final class ClusterEndpointsBalancerProvider extends LoadBalancerProvider {
     final String edsServiceName;
-    final XdsConfig oldXdsConfig;
+    @Nullable // not null if oldEndpointWatcher is not null
+    final String oldEdsServiceName;
+    @Nullable
     final EndpointWatcher oldEndpointWatcher;
 
     ClusterEndpointsBalancerProvider(String edsServiceName) {
       this.edsServiceName = edsServiceName;
-      oldXdsConfig = LookasideLb.this.xdsConfig;
+      if (xdsConfig != null) {
+        oldEdsServiceName = xdsConfig.edsServiceName;
+      } else {
+        oldEdsServiceName = null;
+      }
       oldEndpointWatcher = endpointWatcher;
     }
 
@@ -389,8 +404,8 @@ final class LookasideLb extends LoadBalancer {
 
         endpointWatcher = new EndpointWatcherImpl(lrsClient, lrsCallback, localityStore);
         xdsClient.watchEndpointData(edsServiceName, endpointWatcher);
-        if (oldEndpointWatcher != null) {
-          xdsClient.cancelEndpointDataWatch(oldXdsConfig.edsServiceName, oldEndpointWatcher);
+        if (oldEndpointWatcher != null && oldEdsServiceName != null) {
+          xdsClient.cancelEndpointDataWatch(oldEdsServiceName, oldEndpointWatcher);
         }
         LookasideLb.this.endpointWatcher = endpointWatcher;
         LookasideLb.this.xdsConfig = xdsConfig;
