@@ -183,10 +183,8 @@ class NettyServerTransport implements ServerTransport {
    */
   @VisibleForTesting
   static Level getLogLevel(Throwable t) {
-    if (t.getClass().equals(IOException.class)) {
-      return Level.FINE;
-    }
-    if (QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
+    if (t.getClass().equals(IOException.class)
+        || QUIET_EXCEPTIONS.contains(t.getClass().getSimpleName())) {
       return Level.FINE;
     }
     return Level.INFO;
