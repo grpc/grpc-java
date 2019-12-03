@@ -17,7 +17,6 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
@@ -244,12 +243,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
     @Nullable
     LoadBalancer edsBalancer;
 
-    // LoadStatsStore for the cluster.
-    // Becomes non-null once handleResolvedAddresses() successfully.
-    // Assigned at most once.
-    @Nullable
-    LoadStatsStore loadStatsStore;
-
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
       this.helper = helper;
       this.resolvedAddresses = resolvedAddresses;
@@ -269,10 +262,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
-
-      if (loadStatsStore == null) {
-        loadStatsStore = new LoadStatsStoreImpl();
-      }
       if (edsBalancer == null) {
         edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
@@ -281,7 +270,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
               .setAttributes(
                   resolvedAddresses.getAttributes().toBuilder()
                       .discard(ATTR_LOAD_BALANCING_CONFIG)
-                      .set(XdsAttributes.LOAD_STATS_STORE_REF, loadStatsStore)
                       .build())
               .setLoadBalancingPolicyConfig(edsConfig)
           .build());

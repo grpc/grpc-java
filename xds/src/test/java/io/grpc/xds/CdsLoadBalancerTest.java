@@ -43,7 +43,6 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
@@ -55,9 +54,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 import org.mockito.ArgumentCaptor;
@@ -69,9 +66,6 @@ import org.mockito.MockitoAnnotations;
  */
 @RunWith(JUnit4.class)
 public class CdsLoadBalancerTest {
-
-  @Rule
-  public final ExpectedException thrown = ExpectedException.none();
 
   private final RefCountedXdsClientObjectPool xdsClientRef = new RefCountedXdsClientObjectPool(
       new XdsClientFactory() {
@@ -147,8 +141,9 @@ public class CdsLoadBalancerTest {
             .build())
         .build();
 
-    thrown.expect(StatusRuntimeException.class);
     cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+
+    verify(helper).updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
   }
 
   @Test
@@ -230,13 +225,9 @@ public class CdsLoadBalancerTest {
         "edsServiceFoo.googleapis.com",
         null);
     ResolvedAddresses resolvedAddressesFoo = resolvedAddressesCaptor1.getValue();
-    LoadStatsStore loadStatsStoreFoo = resolvedAddressesFoo.getAttributes()
-        .get(XdsAttributes.LOAD_STATS_STORE_REF);
     assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
     assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
         .isSameInstanceAs(xdsClientRef);
-    assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.LOAD_STATS_STORE_REF))
-        .isNotNull();
     verify(xdsClient, never()).reportClientStats(
         anyString(), anyString(), any(LoadStatsStore.class));
 
@@ -286,9 +277,6 @@ public class CdsLoadBalancerTest {
     assertThat(resolvedAddressesBar.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
     assertThat(resolvedAddressesBar.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
         .isSameInstanceAs(xdsClientRef);
-    LoadStatsStore loadStatsStoreBar = resolvedAddressesBar.getAttributes()
-        .get(XdsAttributes.LOAD_STATS_STORE_REF);
-    assertThat(loadStatsStoreBar).isNotSameInstanceAs(loadStatsStoreFoo);
 
     SubchannelPicker picker2 = mock(SubchannelPicker.class);
     edsLbHelper2.updateBalancingState(ConnectivityState.CONNECTING, picker2);
@@ -316,10 +304,6 @@ public class CdsLoadBalancerTest {
         null);
     ResolvedAddresses resolvedAddressesBar2 = resolvedAddressesCaptor2.getValue();
     assertThat(resolvedAddressesBar2.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
-    LoadStatsStore loadStatsStoreBar2 = resolvedAddressesBar2.getAttributes()
-        .get(XdsAttributes.LOAD_STATS_STORE_REF);
-    // LoadStatsStore should be reused for the same cluster.
-    assertThat(loadStatsStoreBar2).isSameInstanceAs(loadStatsStoreBar);
 
     cdsLoadBalancer.shutdown();
     verify(edsLoadBalancer2).shutdown();
