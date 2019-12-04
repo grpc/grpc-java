@@ -51,6 +51,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -116,6 +117,9 @@ final class XdsClientImpl extends XdsClient {
   // watchers can watch endpoints in the same cluster.
   private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
 
+  // Load reporting clients, with each responsible for reporting loads of a single cluster.
+  private final Map<String, LoadReportClientImpl> lrsClients = new HashMap<>();
+
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -158,6 +162,9 @@ final class XdsClientImpl extends XdsClient {
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    for (LoadReportClientImpl lrsClient : lrsClients.values()) {
+      lrsClient.stopLoadReporting();
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -297,6 +304,39 @@ final class XdsClientImpl extends XdsClient {
         return;
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
+    }
+  }
+
+  @Override
+  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    checkArgument(serverUri.equals(""),
+        "Currently only support empty serverUri, which defaults to the same "
+            + "management server this client talks to.");
+    if (!lrsClients.containsKey(clusterName)) {
+      LoadReportClientImpl lrsClient =
+          new LoadReportClientImpl(
+              channel,
+              clusterName,
+              node,
+              syncContext,
+              timeService,
+              backoffPolicyProvider,
+              stopwatchSupplier);
+      lrsClient.startLoadReporting(
+          new LoadReportCallback() {
+            @Override
+            public void onReportResponse(long reportIntervalNano) {}
+          });
+      lrsClients.put(clusterName, lrsClient);
+    }
+    return lrsClients.get(clusterName);
+  }
+
+  @Override
+  void cancelClientStatsReport(String clusterName) {
+    LoadReportClientImpl lrsClient = lrsClients.remove(clusterName);
+    if (lrsClient != null) {
+      lrsClient.stopLoadReporting();
     }
   }
 
