@@ -16,6 +16,7 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static java.util.logging.Level.FINEST;
 
@@ -94,8 +95,8 @@ final class LookasideLb extends LoadBalancer {
 
   LookasideLb(Helper lookasideLbHelper, EndpointUpdateCallback endpointUpdateCallback) {
     this(
-        lookasideLbHelper,
-        endpointUpdateCallback,
+        checkNotNull(lookasideLbHelper, "lookasideLbHelper"),
+        checkNotNull(endpointUpdateCallback, "endpointUpdateCallback"),
         LoadBalancerRegistry.getDefaultRegistry(),
         LocalityStoreFactory.getInstance(),
         LoadReportClientFactory.getInstance(),
