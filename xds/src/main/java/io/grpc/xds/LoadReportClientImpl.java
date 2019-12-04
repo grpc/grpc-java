@@ -50,10 +50,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * Client of xDS load reporting service.
- *
- * <p>Methods in this class are expected to be called in the same synchronized context that {@link
- * XdsLoadBalancer2.Helper#getSynchronizationContext} returns.
+ * Client of xDS load reporting service based on LRS protocol.
  */
 @NotThreadSafe
 final class LoadReportClientImpl implements LoadReportClient {
@@ -131,6 +128,16 @@ final class LoadReportClientImpl implements LoadReportClient {
     }
     started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
+  }
+
+  @Override
+  public void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore) {
+    // TODO(chengyuanzhang): to be implemented.
+  }
+
+  @Override
+  public void removeLoadStatsStore(String clusterServiceName) {
+    // TODO(chengyuanzhang): to be implemented.
   }
 
   @VisibleForTesting

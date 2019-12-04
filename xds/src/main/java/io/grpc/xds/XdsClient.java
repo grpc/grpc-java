@@ -378,10 +378,8 @@ abstract class XdsClient {
 
   /**
    * Starts reporting client load stats to a remote server for the given cluster.
-   *
-   * @param loadStatsStore  a in-memory data store containing loads recorded by gRPC client.
    */
-  void reportClientStats(String clusterName, String serverUri, LoadStatsStore loadStatsStore) {
+  void reportClientStats(String clusterName, String serverUri) {
   }
 
   /**
