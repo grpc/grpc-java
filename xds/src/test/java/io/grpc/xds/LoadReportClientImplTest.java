@@ -272,6 +272,58 @@ public class LoadReportClientImplTest {
   }
 
   @Test
+  public void reportNothingIfLoadStatsSourceNotAvailable() {
+    verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
+    StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
+    assertThat(lrsRequestObservers).hasSize(1);
+    StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
+    verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
+
+    // Server asks to report load for some cluster service.
+    responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1395));
+
+    // Nothing to be reported as no load stats data is available.
+    fakeClock.forwardNanos(1395);
+    ArgumentCaptor<LoadStatsRequest> reportCaptor = ArgumentCaptor.forClass(null);
+    verify(requestObserver, times(2)).onNext(reportCaptor.capture());
+    assertThat(reportCaptor.getValue().getClusterStatsCount()).isEqualTo(0);
+
+    // Add load stats source.
+    ClusterStats clusterStats = ClusterStats.newBuilder()
+        .setClusterName("namespace-foo:service-blade")
+        .setLoadReportInterval(Durations.fromNanos(50))
+        .addUpstreamLocalityStats(UpstreamLocalityStats.newBuilder()
+            .setLocality(TEST_LOCALITY)
+            .setTotalRequestsInProgress(542)
+            .setTotalSuccessfulRequests(645)
+            .setTotalErrorRequests(85)
+            .setTotalIssuedRequests(27))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("lb")
+            .setDroppedCount(0))
+        .addDroppedRequests(DroppedRequests.newBuilder()
+            .setCategory("throttle")
+            .setDroppedCount(14))
+        .setTotalDroppedRequests(14)
+        .build();
+    when(loadStatsStore.generateLoadReport()).thenReturn(clusterStats);
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+
+    // Loads reported.
+    fakeClock.forwardNanos(1395);
+    verify(requestObserver, times(3)).onNext(reportCaptor.capture());
+    assertThat(reportCaptor.getValue().getClusterStatsCount()).isEqualTo(1);
+
+    // Delete load stats source.
+    lrsClient.removeLoadStatsStore("namespace-foo:service-blade");
+
+    // Nothing to report as load stats data is not available.
+    fakeClock.forwardNanos(1395);
+    verify(requestObserver, times(4)).onNext(reportCaptor.capture());
+    assertThat(reportCaptor.getValue().getClusterStatsCount()).isEqualTo(0);
+  }
+
+  @Test
   public void reportRecordedLoadData() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
