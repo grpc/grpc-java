@@ -1229,20 +1229,20 @@ public class XdsClientImplTest {
 
     // Management server sends back CDS response with UpstreamTlsContext.
     UpstreamTlsContext testUpstreamTlsContext =
-            buildUpstreamTlsContext("secret1", "unix:/var/uds2");
+        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
     List<Any> clusters = ImmutableList.of(
-            Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
-            Any.pack(buildSecureCluster("cluster-foo.googleapis.com",
-                  "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
-            Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildSecureCluster("cluster-foo.googleapis.com",
+            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     DiscoveryResponse response =
-            buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
     responseObserver.onNext(response);
 
     // Client sent an ACK CDS request.
     verify(requestObserver)
-            .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
-                    XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
     ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
     verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
     ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
@@ -2702,7 +2702,7 @@ public class XdsClientImplTest {
     clusterBuilder.setType(DiscoveryType.EDS);
     EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
     edsClusterConfigBuilder.setEdsConfig(
-            ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));
+        ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));
     if (edsServiceName != null) {
       edsClusterConfigBuilder.setServiceName(edsServiceName);
     }
@@ -2710,7 +2710,7 @@ public class XdsClientImplTest {
     clusterBuilder.setLbPolicy(LbPolicy.ROUND_ROBIN);
     if (enableLrs) {
       clusterBuilder.setLrsServer(
-              ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
+          ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
     }
     if (upstreamTlsContext != null) {
       clusterBuilder.setTlsContext(upstreamTlsContext);
