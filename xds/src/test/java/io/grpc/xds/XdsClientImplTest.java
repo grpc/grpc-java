@@ -1197,8 +1197,7 @@ public class XdsClientImplTest {
     clusters = ImmutableList.of(
         Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
         Any.pack(
-            buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true
-            )),
+            buildCluster("cluster-foo.googleapis.com", "eds-cluster-foo.googleapis.com", true)),
         Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
     response =
         buildDiscoveryResponse("1", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0001");
