@@ -82,7 +82,7 @@ public class SdsClientUdsTest {
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
     node = Node.newBuilder().setId("sds-client-temp-test2").build();
     sdsClient =
-        SdsClient.Factory.createWithNettyChannel(
+        SdsClient.Factory.createSdsClient(
             sdsSecretConfig, node, MoreExecutors.directExecutor(), MoreExecutors.directExecutor());
     sdsClient.start();
   }

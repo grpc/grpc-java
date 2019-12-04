@@ -2,7 +2,7 @@
 set -eu -o pipefail
 
 readonly proto_dir="$(mktemp -d --tmpdir protobuf.XXXXXX)"
-wget -O - https://github.com/google/protobuf/archive/v3.10.0.tar.gz | tar xz -C "$proto_dir"
+wget -O - https://github.com/google/protobuf/archive/v3.11.0.tar.gz | tar xz -C "$proto_dir"
 
-docker build -t protoc-artifacts "$proto_dir"/protobuf-3.10.0/protoc-artifacts
+docker build -t protoc-artifacts "$proto_dir"/protobuf-3.11.0/protoc-artifacts
 rm -r "$proto_dir"

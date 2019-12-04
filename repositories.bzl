@@ -209,9 +209,9 @@ def com_google_code_findbugs_jsr305():
 def com_google_code_gson():
     jvm_maven_import_external(
         name = "com_google_code_gson_gson",
-        artifact = "com.google.code.gson:gson:jar:2.8.5",
+        artifact = "com.google.code.gson:gson:jar:2.8.6",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "233a0149fc365c9f6edbd683cfe266b19bdc773be98eabdaf6b3c924b48e7d81",
+        artifact_sha256 = "c8fb4839054d280b3033f800d1f5a97de2f028eb8ba2eb458ad287e536f3f25f",
         licenses = ["notice"],  # Apache 2.0
     )
 
@@ -258,18 +258,18 @@ def com_google_protobuf():
     # This statement defines the @com_google_protobuf repo.
     http_archive(
         name = "com_google_protobuf",
-        sha256 = "33cba8b89be6c81b1461f1c438424f7a1aa4e31998dbe9ed6f8319583daac8c7",
-        strip_prefix = "protobuf-3.10.0",
-        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.10.0.zip"],
+        sha256 = "60d2012e3922e429294d3a4ac31f336016514a91e5a63fd33f35743ccfe1bd7d",
+        strip_prefix = "protobuf-3.11.0",
+        urls = ["https://github.com/protocolbuffers/protobuf/archive/v3.11.0.zip"],
     )
 
 def com_google_protobuf_javalite():
     # java_lite_proto_library rules implicitly depend on @com_google_protobuf_javalite
     http_archive(
         name = "com_google_protobuf_javalite",
-        sha256 = "79d102c61e2a479a0b7e5fc167bcfaa4832a0c6aad4a75fa7da0480564931bcc",
-        strip_prefix = "protobuf-384989534b2246d413dbcd750744faab2607b516",
-        urls = ["https://github.com/google/protobuf/archive/384989534b2246d413dbcd750744faab2607b516.zip"],
+        sha256 = "e60211a40473f6be95b53f64559f82a3b2971672b11710db2fc9081708e25699",
+        strip_prefix = "protobuf-0425fa932ce95a32bb9f88b2c09b995e9ff8207b",
+        urls = ["https://github.com/google/protobuf/archive/0425fa932ce95a32bb9f88b2c09b995e9ff8207b.zip"],  # Commit with fixed javalite on 3.11.x branch
     )
 
 def com_google_truth_truth():

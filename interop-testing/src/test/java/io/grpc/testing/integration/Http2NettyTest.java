@@ -89,7 +89,7 @@ public class Http2NettyTest extends AbstractInteropTest {
 
   @Test
   public void localAddr() throws Exception {
-    InetSocketAddress isa = (InetSocketAddress) obtainLocalClientAddr();
+    InetSocketAddress isa = (InetSocketAddress) obtainLocalServerAddr();
     assertEquals(InetAddress.getLoopbackAddress(), isa.getAddress());
     assertEquals(((InetSocketAddress) getListenAddress()).getPort(), isa.getPort());
   }

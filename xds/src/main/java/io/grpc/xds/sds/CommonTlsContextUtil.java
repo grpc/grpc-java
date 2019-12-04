@@ -32,4 +32,12 @@ final class CommonTlsContextUtil {
     return (commonTlsContext.getTlsCertificateSdsSecretConfigsCount() == 0)
         && !commonTlsContext.hasValidationContextSdsSecretConfig();
   }
+
+  /** Returns true only if given CommonTlsContext uses only SdsSecretConfigs. */
+  static boolean hasAllSecretsUsingSds(CommonTlsContext commonTlsContext) {
+    checkNotNull(commonTlsContext, "commonTlsContext");
+    // return true if it has only SdsSecretConfig(s)
+    return (commonTlsContext.getTlsCertificatesCount() == 0)
+        && !commonTlsContext.hasValidationContext();
+  }
 }
