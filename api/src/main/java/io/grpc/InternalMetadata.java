@@ -83,16 +83,43 @@ public final class InternalMetadata {
     return md.headerCount();
   }
 
+  /**
+   * Serializes all metadata entries, leaving some values as {@link InputStream}s.
+   *
+   * <p>Produces serialized names and values interleaved. result[i*2] are names, while
+   * result[i*2+1] are values.
+   *
+   * <p>Names are byte arrays as described according to the {@link Metadata#serialize}
+   * method. Values are either byte arrays or {@link InputStream}s.
+   */
   @Internal
   public static Object[] serializePartial(Metadata md) {
     return md.serializePartial();
   }
 
+  /**
+   * Creates a holder for a pre-parsed value read by the transport.
+   *
+   * @param key The key associated with this value.
+   * @param value The value to store.
+   * @return an object holding the pre-parsed value for this key.
+   */
   @Internal
   public static <T> Object parsedValue(Key<T> key, T value) {
     return Metadata.LazyValue.create(key, value);
   }
 
+  /**
+   * Creates a new {@link Metadata} instance from serialized data,
+   * with some values pre-parsed. Metadata will mutate the passed in array.
+   *
+   * @param usedNames The number of names used.
+   * @param namesAndValues An array of iterleaved names and values,
+   * with each name (at even indices) represented as a byte array,
+   * and each value (at odd indices) represented as either a byte
+   * array or an object returned by the {@link #parsedValue}
+   * method.
+   */
   @Internal
   public static Metadata newMetadataWithParsedValues(int usedNames, Object[] namesAndValues) {
     return new Metadata(usedNames, namesAndValues);

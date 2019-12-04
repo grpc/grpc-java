@@ -125,9 +125,7 @@ public final class Metadata {
    * @param usedNames the number of names
    */
   Metadata(int usedNames, byte[]... binaryValues) {
-    assert (binaryValues.length & 1) == 0 : "Odd number of key-value pairs " + binaryValues.length;
-    size = usedNames;
-    namesAndValues = binaryValues;
+    this(usedNames, (Object[]) binaryValues);
   }
 
   /**
@@ -338,7 +336,7 @@ public final class Metadata {
     Preconditions.checkNotNull(value, "value");
     maybeExpand();
     name(size, key.asciiName());
-    if (key.serializeToStreams()) {
+    if (key.serializesToStreams()) {
       value(size, LazyValue.create(key, value));
     } else {
       value(size, key.toBytes(value));
@@ -472,7 +470,7 @@ public final class Metadata {
   }
 
   /**
-   * Serialize all metadata entries, leaving some values as {@link InputStream}s.
+   * Serializes all metadata entries, leaving some values as {@link InputStream}s.
    *
    * <p>Produces serialized names and values interleaved. result[i*2] are names, while
    * result[i*2+1] are values.
@@ -613,7 +611,7 @@ public final class Metadata {
   /** Marshaller for metadata values that are serialized to an InputStream. */
   public interface BinaryStreamMarshaller<T> {
     /**
-     * Serialize a metadata value to an {@link InputStream}.
+     * Serializes a metadata value to an {@link InputStream}.
      *
      * @param value to serialize
      * @return serialized version of value
@@ -621,7 +619,7 @@ public final class Metadata {
     InputStream toStream(T value);
 
     /**
-     * Parse a serialized metadata value from an {@link InputStream}.
+     * Parses a serialized metadata value from an {@link InputStream}.
      *
      * @param stream of metadata to parse
      * @return a parsed instance of type T
@@ -817,15 +815,15 @@ public final class Metadata {
     abstract T parseBytes(byte[] serialized);
 
     /**
-     * @return whether this key should be serialized to bytes lazily.
+     * @return whether this key will be serialized to bytes lazily.
      */
-    boolean serializeToStreams() {
+    boolean serializesToStreams() {
       return false;
     }
 
     /**
-     * Get this keys (implementation-specific) marshaller, or null if the
-     * marshaller is not of the given time.
+     * Gets this keys (implementation-specific) marshaller, or null if the
+     * marshaller is not of the given type.
      *
      * @param marshallerClass The type we expect the marshaller to be.
      * @return the marshaller object for this key, or null.
@@ -893,7 +891,7 @@ public final class Metadata {
     }
 
     @Override
-    boolean serializeToStreams() {
+    boolean serializesToStreams() {
       return true;
     }
   }
@@ -931,7 +929,7 @@ public final class Metadata {
 
     @SuppressWarnings({"unchecked", "ReferenceEquality"})
     <T2> T2 toObject(Key<T2> key) {
-      if (key.serializeToStreams()) {
+      if (key.serializesToStreams()) {
         BinaryStreamMarshaller<T2> marshaller = getBinaryStreamMarshaller(key);
         if (marshaller == this.marshaller) {
           // The marshallers match so T2 == T.
