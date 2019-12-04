@@ -115,10 +115,10 @@ public final class InternalMetadata {
    *
    * @param usedNames The number of names used.
    * @param namesAndValues An array of iterleaved names and values,
-   * with each name (at even indices) represented as a byte array,
-   * and each value (at odd indices) represented as either a byte
-   * array or an object returned by the {@link #parsedValue}
-   * method.
+   *     with each name (at even indices) represented as a byte array,
+   *     and each value (at odd indices) represented as either a byte
+   *     array or an object returned by the {@link #parsedValue}
+   *     method.
    */
   @Internal
   public static Metadata newMetadataWithParsedValues(int usedNames, Object[] namesAndValues) {
