@@ -329,15 +329,28 @@ final class LookasideLb extends LoadBalancer {
       return 5;
     }
 
-    // A synthetic policy name identified by edsServiceName in XdsConfig.
     @Override
     public String getPolicyName() {
-      return "xds_policy__edsServiceName_" + edsServiceName;
+      return "cluster_endpoints_balancer";
     }
 
     @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       return new ClusterEndpointsBalancer(helper);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof ClusterEndpointsBalancerProvider)) {
+        return false;
+      }
+      ClusterEndpointsBalancerProvider that = (ClusterEndpointsBalancerProvider) o;
+      return edsServiceName.equals(that.edsServiceName);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(super.hashCode(), edsServiceName);
     }
 
     /**

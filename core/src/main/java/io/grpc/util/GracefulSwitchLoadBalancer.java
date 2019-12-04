@@ -30,9 +30,10 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
- * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
- * will keep using the old policy until the new policy reports READY or the old policy exits READY.
+ * A load balancer that gracefully swaps to a new type, typically with new policy. If the channel is
+ * currently in a state other than READY, the new balancer type will be swapped into place
+ * immediately. Otherwise, the channel will keep using the old balancer type until the balancer of
+ * the new type reports READY or the old balancer exits READY.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
@@ -64,9 +65,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   // resolver, and the currentLb is updating channel state and picker for the given helper.
   // The current fields are guaranteed to be set after the initial swapTo().
   // The pending fields are cleared when it becomes current.
-  @Nullable private String currentPolicyName;
+  @Nullable private LoadBalancerProvider currentBalancerProvider;
   private LoadBalancer currentLb = NOOP_BALANCER;
-  @Nullable private String pendingPolicyName;
+  @Nullable private LoadBalancerProvider pendingBalancerProvider;
   private LoadBalancer pendingLb = NOOP_BALANCER;
   private ConnectivityState pendingState;
   private SubchannelPicker pendingPicker;
@@ -77,21 +78,23 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     this.helper = checkNotNull(helper, "helper");
   }
 
-  /** Gracefully switch to a new load balancing policy. */
+  /**
+   * Gracefully switch to a new balancer type. Two {@link LoadBalancerProvider}s are considered of
+   * the same type if and only if one {@code equals()} to another.
+   */
   public void switchTo(LoadBalancerProvider newLbProvider) {
     checkNotNull(newLbProvider, "newLbProvider");
 
-    String newPolicyName = newLbProvider.getPolicyName();
-    if (newPolicyName.equals(pendingPolicyName)) {
+    if (newLbProvider.equals(pendingBalancerProvider)) {
       return;
     }
     pendingLb.shutdown();
     pendingLb = NOOP_BALANCER;
-    pendingPolicyName = null;
+    pendingBalancerProvider = null;
     pendingState = ConnectivityState.CONNECTING;
     pendingPicker = BUFFER_PICKER;
 
-    if (newPolicyName.equals(currentPolicyName)) {
+    if (newLbProvider.equals(currentBalancerProvider)) {
       return;
     }
 
@@ -126,7 +129,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     PendingHelper pendingHelper = new PendingHelper();
     pendingHelper.lb = newLbProvider.newLoadBalancer(pendingHelper);
     pendingLb = pendingHelper.lb;
-    pendingPolicyName = newPolicyName;
+    pendingBalancerProvider = newLbProvider;
     if (!currentLbIsReady) {
       swap(); // the old policy is not READY at the moment, so swap to the new one right now
     }
@@ -136,9 +139,9 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     helper.updateBalancingState(pendingState, pendingPicker);
     currentLb.shutdown();
     currentLb = pendingLb;
-    currentPolicyName = pendingPolicyName;
+    currentBalancerProvider = pendingBalancerProvider;
     pendingLb = NOOP_BALANCER;
-    pendingPolicyName = null;
+    pendingBalancerProvider = null;
   }
 
   @Override

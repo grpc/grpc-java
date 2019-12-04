@@ -86,15 +86,16 @@ public abstract class LoadBalancerProvider extends LoadBalancer.Factory {
   }
 
   /**
-   * Uses identity equality.
+   * Equal provider instances must be of the same class, have the same policy name, priority and
+   * availability, and parse lb configs in the same way.
    */
   @Override
-  public final boolean equals(Object other) {
+  public boolean equals(Object other) {
     return this == other;
   }
 
   @Override
-  public final int hashCode() {
+  public int hashCode() {
     return super.hashCode();
   }
 
