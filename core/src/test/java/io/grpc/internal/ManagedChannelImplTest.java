@@ -2765,7 +2765,7 @@ public class ManagedChannelImplTest {
         .setAttributes(Attributes.EMPTY)
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult1);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize);
 
     prevSize = getStats(channel).channelTrace.events.size();
     nameResolverFactory.resolvers.get(0).listener.onError(Status.INTERNAL);
@@ -2783,7 +2783,7 @@ public class ManagedChannelImplTest {
         .setAttributes(Attributes.EMPTY)
         .build();
     nameResolverFactory.resolvers.get(0).listener.onResult(resolutionResult2);
-    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 2);
+    assertThat(getStats(channel).channelTrace.events).hasSize(prevSize + 1);
   }
 
   @Test
@@ -3407,6 +3407,8 @@ public class ManagedChannelImplTest {
 
   @Test
   public void badServiceConfigIsRecoverable() throws Exception {
+    final Map<String, Object> invalidServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [{\"kaboom\": {}}]}");
     final List<EquivalentAddressGroup> addresses =
         ImmutableList.of(new EquivalentAddressGroup(new SocketAddress() {}));
     final class FakeNameResolver extends NameResolver {
@@ -3420,17 +3422,15 @@ public class ManagedChannelImplTest {
       @Override
       public void start(Listener2 listener) {
         this.listener = listener;
-        ImmutableMap<String, Object> rawServiceConfig =
-            ImmutableMap.<String, Object>of("loadBalancingPolicy", "kaboom");
         ManagedChannelServiceConfig managedChannelServiceConfig =
-            ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
+            ManagedChannelServiceConfig.fromServiceConfig(invalidServiceConfig, true, 3, 3, null);
         listener.onResult(
             ResolutionResult.newBuilder()
                 .setAddresses(addresses)
                 .setAttributes(
                     Attributes.newBuilder()
                         .set(
-                            GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, rawServiceConfig)
+                            GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, invalidServiceConfig)
                         .build())
                 .setServiceConfig(ConfigOrError.fromConfig(managedChannelServiceConfig))
                 .build());
@@ -3485,8 +3485,8 @@ public class ManagedChannelImplTest {
 
     // ok the service config is bad, let's fix it.
 
-    ImmutableMap<String, Object> rawServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin");
+    Map<String, Object> rawServiceConfig =
+        parseConfig("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
     factory.resolver.listener.onResult(

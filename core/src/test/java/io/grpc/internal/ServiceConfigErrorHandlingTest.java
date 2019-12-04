@@ -18,6 +18,7 @@ package io.grpc.internal;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalAnswers.delegatesTo;
@@ -29,7 +30,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import io.grpc.Attributes;
 import io.grpc.ClientInterceptor;
@@ -225,8 +225,8 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> rawServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin");
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
@@ -236,6 +236,9 @@ public class ServiceConfigErrorHandlingTest {
     createChannel();
 
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.TRANSIENT_FAILURE);
+    assertWithMessage("Empty address should schedule NameResolver retry")
+        .that(getNameResolverRefresh())
+        .isNotNull();
   }
 
   @Test
@@ -246,8 +249,8 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> rawServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
@@ -268,8 +271,8 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(channel.getState(true)).isEqualTo(ConnectivityState.IDLE);
 
     reset(mockLoadBalancer);
-    ImmutableMap<String, Object> ignoredServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "round_robin");
+    Map<String, Object> ignoredServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"round_robin\": {}}]}");
     managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(ignoredServiceConfig, true, 3, 3, null);
     nameResolverFactory.nextRawServiceConfig.set(ignoredServiceConfig);
@@ -283,6 +286,9 @@ public class ServiceConfigErrorHandlingTest {
     // 2nd service config without address should be ignored
     verify(mockLoadBalancer, never()).handleResolvedAddresses(any(ResolvedAddresses.class));
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
+    assertWithMessage("Empty address should schedule NameResolver retry")
+        .that(getNameResolverRefresh())
+        .isNotNull();
   }
 
   @Test
@@ -294,10 +300,11 @@ public class ServiceConfigErrorHandlingTest {
     channelBuilder.nameResolverFactory(nameResolverFactory);
     when(mockLoadBalancer.canHandleEmptyAddressListFromNameResolution()).thenReturn(true);
 
-    String loadBalancingConfig = "{\"param1\": \"value1\", \"param2\": \"value2\"}";
+    String rawLoadBalancingConfig = "{\"param1\": \"value1\", \"param2\": \"value2\"}";
+    Map<String, Object> loadBalancingConfig = parseJson(rawLoadBalancingConfig);
     Map<String, Object> rawServiceConfig =
         parseJson(
-            "{\"loadBalancingConfig\": [{\"mock_lb\" : " + loadBalancingConfig + "}]}");
+            "{\"loadBalancingConfig\": [{\"mock_lb\" : " + rawLoadBalancingConfig + "}]}");
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
@@ -312,7 +319,7 @@ public class ServiceConfigErrorHandlingTest {
     assertThat(resultCaptor.getValue().getAddresses()).isEmpty();
     Attributes actualAttrs = resultCaptor.getValue().getAttributes();
     assertThat(actualAttrs.get(LoadBalancer.ATTR_LOAD_BALANCING_CONFIG))
-        .isEqualTo(parseJson(loadBalancingConfig));
+        .isEqualTo(loadBalancingConfig);
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
 
     assertThat(channel.getState(false)).isNotEqualTo(ConnectivityState.TRANSIENT_FAILURE);
@@ -326,8 +333,8 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> rawServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);
@@ -378,8 +385,8 @@ public class ServiceConfigErrorHandlingTest {
             .setServers(ImmutableList.of(addressGroup))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    ImmutableMap<String, Object> defaultServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    Map<String, Object> defaultServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
     nameResolverFactory.nextRawServiceConfig.set(null);
@@ -424,8 +431,8 @@ public class ServiceConfigErrorHandlingTest {
             .setServers(ImmutableList.of(addressGroup))
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
-    ImmutableMap<String, Object> defaultServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    Map<String, Object> defaultServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
     channelBuilder.defaultServiceConfig(defaultServiceConfig);
 
     createChannel();
@@ -448,8 +455,8 @@ public class ServiceConfigErrorHandlingTest {
             .build();
     channelBuilder.nameResolverFactory(nameResolverFactory);
 
-    ImmutableMap<String, Object> rawServiceConfig =
-        ImmutableMap.<String, Object>of("loadBalancingPolicy", "mock_lb");
+    Map<String, Object> rawServiceConfig =
+        parseJson("{\"loadBalancingConfig\": [{\"mock_lb\": {}}]}");
     nameResolverFactory.nextRawServiceConfig.set(rawServiceConfig);
     ManagedChannelServiceConfig managedChannelServiceConfig =
         ManagedChannelServiceConfig.fromServiceConfig(rawServiceConfig, true, 3, 3, null);

@@ -1381,15 +1381,14 @@ final class ManagedChannelImpl extends ManagedChannel implements
               }
             } else {
               effectiveServiceConfig = EMPTY_SERVICE_CONFIG;
-              channelLogger.log(
-                  ChannelLogLevel.INFO,
-                  "Received no service config and default service config is not provided. "
-                      + "Falling back to empty service config");
             }
             // FIXME(notcarl): reference equality is not right (although not harmful) right now.
             //                 Name resolver should return the same config if txt record is the same
             if (effectiveServiceConfig != lastServiceConfig) {
-              channelLogger.log(ChannelLogLevel.INFO, "Service config changed");
+              channelLogger.log(
+                  ChannelLogLevel.INFO,
+                  "Service config changed{0}",
+                  effectiveServiceConfig == EMPTY_SERVICE_CONFIG ? " to empty" : "");
               lastServiceConfig = effectiveServiceConfig;
             }
 
