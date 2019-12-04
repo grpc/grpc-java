@@ -23,21 +23,17 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.BackoffPolicy.Provider;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
 import java.util.HashMap;
@@ -235,6 +231,7 @@ final class LoadReportClientImpl implements LoadReportClient {
     private void sendLoadReport() {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
+      LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
       if (loadStatsStoreMap.containsKey(clusterServiceName)) {
         LoadStatsStore loadStatsStore = loadStatsStoreMap.get(clusterServiceName);
         ClusterStats report =
@@ -243,11 +240,9 @@ final class LoadReportClientImpl implements LoadReportClient {
                 .setClusterName(clusterServiceName)
                 .setLoadReportInterval(Durations.fromNanos(interval))
                 .build();
-        lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
-            .setNode(node)
-            .addClusterStats(report)
-            .build());
+        requestBuilder.addClusterStats(report);
       }
+      lrsRequestWriter.onNext(requestBuilder.build());
       scheduleNextLoadReport();
     }
 
@@ -351,6 +346,8 @@ final class LoadReportClientImpl implements LoadReportClient {
   /**
    * Factory class for creating {@link LoadReportClient} instances.
    */
+  // TODO(chengyuanzhang): eliminate this factory after migrating EDS load balancer to
+  //  use XdsClient.
   abstract static class LoadReportClientFactory {
 
     private static final LoadReportClientFactory DEFAULT_INSTANCE =
@@ -358,11 +355,14 @@ final class LoadReportClientImpl implements LoadReportClient {
           @Override
           LoadReportClient createLoadReportClient(
               ManagedChannel channel,
-              Helper helper,
-              Provider backoffPolicyProvider,
-              LoadStatsStore loadStatsStore) {
-            return new LoadReportClientImpl(channel, helper, backoffPolicyProvider,
-                loadStatsStore);
+              String clusterName,
+              Node node,
+              SynchronizationContext syncContext,
+              ScheduledExecutorService timeService,
+              BackoffPolicy.Provider backoffPolicyProvider,
+              Supplier<Stopwatch> stopwatchSupplier) {
+            return new LoadReportClientImpl(channel, clusterName, node, syncContext, timeService,
+                backoffPolicyProvider, stopwatchSupplier);
           }
         };
 
@@ -370,7 +370,8 @@ final class LoadReportClientImpl implements LoadReportClient {
       return DEFAULT_INSTANCE;
     }
 
-    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-        BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
+    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, String clusterName,
+        Node node, SynchronizationContext syncContext, ScheduledExecutorService timeService,
+        BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier);
   }
 }

@@ -421,8 +421,15 @@ final class LookasideLb extends LoadBalancer {
         // TODO(zdapeng): Use XdsClient to do Lrs directly.
         // For now create an LRS Client.
         if (xdsConfig.balancerName != null) {
-          lrsClient = loadReportClientFactory.createLoadReportClient(
-              channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
+          lrsClient =
+              loadReportClientFactory.createLoadReportClient(
+                  channel,
+                  helper.getAuthority(),
+                  Node.getDefaultInstance(),
+                  helper.getSynchronizationContext(),
+                  helper.getScheduledExecutorService(),
+                  new ExponentialBackoffPolicy.Provider(),
+                  GrpcUtil.STOPWATCH_SUPPLIER);
         } else {
           lrsClient = new LoadReportClient() {
             @Override

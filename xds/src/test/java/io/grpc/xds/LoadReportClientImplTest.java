@@ -31,8 +31,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
@@ -42,8 +40,6 @@ import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
-import io.grpc.ChannelLogger;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -54,7 +50,6 @@ import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.LoadReportClient.LoadReportCallback;
-import java.text.MessageFormat;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -79,8 +74,7 @@ import org.mockito.stubbing.Answer;
 public class LoadReportClientImplTest {
 
   private static final String CLUSTER_NAME = "foo.blade.googleapis.com";
-  private static final io.envoyproxy.envoy.api.v2.core.Node NODE =
-      io.envoyproxy.envoy.api.v2.core.Node.newBuilder().setId("LRS test").build();
+  private static final Node NODE = Node.newBuilder().setId("LRS test").build();
   private static final FakeClock.TaskFilter LOAD_REPORTING_TASK_FILTER =
       new FakeClock.TaskFilter() {
         @Override
@@ -224,6 +218,9 @@ public class LoadReportClientImplTest {
     assertThat(lrsRequestObservers).hasSize(2);
   }
 
+  // Currently we expect each gRPC client talks to a single service per cluster, so we test LRS
+  // client reporting load for a single cluster service only.
+
   @Test
   public void loadReportActualIntervalAsSpecified() {
     verify(mockLoadReportingService).streamLoadStats(lrsResponseObserverCaptor.capture());
@@ -239,7 +236,8 @@ public class LoadReportClientImplTest {
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1453));
-    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats("namespace-foo:service-blade", 1453));
+    assertNextReport(inOrder, requestObserver,
+        buildEmptyClusterStats("namespace-foo:service-blade", 1453));
     verify(callback).onReportResponse(1453);
   }
 
@@ -258,12 +256,14 @@ public class LoadReportClientImplTest {
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1362));
-    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats("namespace-foo:service-blade", 1362));
+    assertNextReport(inOrder, requestObserver,
+        buildEmptyClusterStats("namespace-foo:service-blade", 1362));
     verify(callback).onReportResponse(1362);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 2183345));
     // Updated load reporting interval becomes effective immediately.
-    assertNextReport(inOrder, requestObserver, buildEmptyClusterStats("namespace-foo:service-blade", 2183345));
+    assertNextReport(inOrder, requestObserver,
+        buildEmptyClusterStats("namespace-foo:service-blade", 2183345));
     verify(callback).onReportResponse(2183345);
   }
 
@@ -314,7 +314,7 @@ public class LoadReportClientImplTest {
         .build();
 
     // Add load stats source for some cluster service.
-    when(loadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
+    when(loadStatsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
     lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
 
     InOrder inOrder = inOrder(requestObserver, loadStatsStore);
