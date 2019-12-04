@@ -235,6 +235,7 @@ final class LookasideLb extends LoadBalancer {
         .setLoadBalancingPolicyConfig(newXdsConfig)
         .build();
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
+    this.xdsConfig = newXdsConfig;
 
     // TODO(zdapeng): If lrsServerName in XdsConfig is changed, call xdsClient.reportClientStats()
     //     and/or xdsClient.cancelClientStatsReport().
@@ -411,7 +412,6 @@ final class LookasideLb extends LoadBalancer {
           xdsClient.cancelEndpointDataWatch(oldEdsServiceName, oldEndpointWatcher);
         }
         LookasideLb.this.endpointWatcher = endpointWatcher;
-        LookasideLb.this.xdsConfig = xdsConfig;
       }
 
       @Override
