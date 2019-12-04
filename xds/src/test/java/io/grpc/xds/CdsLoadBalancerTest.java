@@ -24,6 +24,7 @@ import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -43,10 +44,14 @@ import io.grpc.LoadBalancer.SubchannelPicker;
 import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
+import io.grpc.SynchronizationContext;
+import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
+import io.grpc.xds.XdsClient.EndpointUpdate;
+import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
@@ -76,8 +81,44 @@ public class CdsLoadBalancerTest {
         }
       }
   );
-  private Deque<LoadBalancer> edsLoadBalancers = new ArrayDeque<>();
-  private Deque<Helper> edsLbHelpers = new ArrayDeque<>();
+
+  private final LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
+  private final LoadBalancerProvider fakeXdsLoadBlancerProvider = new LoadBalancerProvider() {
+    @Override
+    public boolean isAvailable() {
+      return true;
+    }
+
+    @Override
+    public int getPriority() {
+      return 5;
+    }
+
+    @Override
+    public String getPolicyName() {
+      return XDS_POLICY_NAME;
+    }
+
+    @Override
+    public LoadBalancer newLoadBalancer(Helper helper) {
+      edsLbHelpers.add(helper);
+      LoadBalancer edsLoadBalancer = mock(LoadBalancer.class);
+      edsLoadBalancers.add(edsLoadBalancer);
+      return edsLoadBalancer;
+    }
+  };
+
+  private final SynchronizationContext syncContext = new SynchronizationContext(
+      new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread t, Throwable e) {
+          throw new AssertionError(e);
+        }
+      });
+
+  private final FakeClock fakeClock = new FakeClock();
+  private final Deque<LoadBalancer> edsLoadBalancers = new ArrayDeque<>();
+  private final Deque<Helper> edsLbHelpers = new ArrayDeque<>();
 
   @Mock
   private Helper helper;
@@ -93,33 +134,9 @@ public class CdsLoadBalancerTest {
     MockitoAnnotations.initMocks(this);
 
     doReturn(channelLogger).when(helper).getChannelLogger();
-
-    LoadBalancerRegistry lbRegistry = new LoadBalancerRegistry();
-    lbRegistry.register(new LoadBalancerProvider() {
-      @Override
-      public boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      public int getPriority() {
-        return 5;
-      }
-
-      @Override
-      public String getPolicyName() {
-        return XDS_POLICY_NAME;
-      }
-
-      @Override
-      public LoadBalancer newLoadBalancer(Helper helper) {
-        edsLbHelpers.add(helper);
-        LoadBalancer edsLoadBalancer = mock(LoadBalancer.class);
-        edsLoadBalancers.add(edsLoadBalancer);
-        return edsLoadBalancer;
-      }
-    });
-
+    doReturn(syncContext).when(helper).getSynchronizationContext();
+    doReturn(fakeClock.getScheduledExecutorService()).when(helper).getScheduledExecutorService();
+    lbRegistry.register(fakeXdsLoadBlancerProvider);
     cdsLoadBalancer = new CdsLoadBalancer(helper, lbRegistry);
   }
 
@@ -358,5 +375,57 @@ public class CdsLoadBalancerTest {
     // Verify no more TRANSIENT_FAILURE.
     verify(helper, times(1))
         .updateBalancingState(eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+  }
+
+  @Test
+  public void cdsBalancerIntegrateWithEdsBalancer() throws Exception {
+    lbRegistry.deregister(fakeXdsLoadBlancerProvider);
+    lbRegistry.register(new XdsLoadBalancerProvider());
+
+    String lbConfigRaw = "{'cluster' : 'foo.googleapis.com'}".replace("'", "\"");
+    @SuppressWarnings("unchecked")
+    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
+    ResolvedAddresses resolvedAddresses1 = ResolvedAddresses.newBuilder()
+        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
+        .setAttributes(Attributes.newBuilder()
+            .set(ATTR_LOAD_BALANCING_CONFIG, lbConfig)
+            .set(XdsAttributes.XDS_CLIENT_REF, xdsClientRef)
+            .build())
+        .build();
+    cdsLoadBalancer.handleResolvedAddresses(resolvedAddresses1);
+    ArgumentCaptor<ClusterWatcher> clusterWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchClusterData(eq("foo.googleapis.com"), clusterWatcherCaptor.capture());
+    ClusterWatcher clusterWatcher = clusterWatcherCaptor.getValue();
+    clusterWatcher.onClusterChanged(
+        ClusterUpdate.newBuilder()
+            .setClusterName("foo.googleapis.com")
+            .setEdsServiceName("edsServiceFoo.googleapis.com")
+            .setLbPolicy("round_robin")
+            .setEnableLrs(false)
+            .build());
+
+    ArgumentCaptor<EndpointWatcher> endpointWatcherCaptor = ArgumentCaptor.forClass(null);
+    verify(xdsClient).watchEndpointData(
+        eq("edsServiceFoo.googleapis.com"), endpointWatcherCaptor.capture());
+    EndpointWatcher endpointWatcher = endpointWatcherCaptor.getValue();
+
+    verify(helper, never()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+    // Update endpoints with all backends unhealthy, the EDS will update channel state to
+    // TRANSIENT_FAILURE.
+    // Not able to test with healthy endpoints because the real EDS balancer is using real
+    // round-robin balancer to balance endpoints.
+    endpointWatcher.onEndpointChanged(EndpointUpdate.newBuilder()
+        .setClusterName("edsServiceFoo.googleapis.com")
+        .addLocalityLbEndpoints(
+            new EnvoyProtoData.Locality("region", "zone", "subzone"),
+            new EnvoyProtoData.LocalityLbEndpoints(
+                // All unhealthy.
+                ImmutableList.of(new EnvoyProtoData.LbEndpoint("127.0.0.1", 8080, 1, false)), 1, 0))
+        .build());
+    verify(helper, atLeastOnce()).updateBalancingState(
+        eq(TRANSIENT_FAILURE), any(SubchannelPicker.class));
+
+    cdsLoadBalancer.shutdown();
   }
 }

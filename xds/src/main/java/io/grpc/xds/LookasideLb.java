@@ -125,28 +125,41 @@ final class LookasideLb extends LoadBalancer {
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
     channelLogger.log(ChannelLogLevel.DEBUG, "Received ResolvedAddresses '%s'", resolvedAddresses);
 
-    // In the future, xdsConfig can be gotten directly by
-    // resolvedAddresses.getLoadBalancingPolicyConfig().
     Attributes attributes = resolvedAddresses.getAttributes();
-    Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
-    if (newRawLbConfig == null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
-      lookasideLbHelper.updateBalancingState(
-          TRANSIENT_FAILURE,
-          new ErrorPicker(
-              Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
-      return;
+    XdsConfig newXdsConfig;
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (lbConfig != null) {
+      if (!(lbConfig instanceof XdsConfig)) {
+        lookasideLbHelper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(Status.UNAVAILABLE.withDescription(
+                "Load balancing config '" + lbConfig + "' is not an XdsConfig")));
+        return;
+      }
+      newXdsConfig = (XdsConfig) lbConfig;
+    } else {
+      // In the future, in all cases xdsConfig can be gotten directly by
+      // resolvedAddresses.getLoadBalancingPolicyConfig().
+      Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
+      if (newRawLbConfig == null) {
+        // This will not happen when the service config error handling is implemented.
+        // For now simply go to TRANSIENT_FAILURE.
+        lookasideLbHelper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(
+                Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+        return;
+      }
+      ConfigOrError cfg =
+          XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
+      if (cfg.getError() != null) {
+        // This will not happen when the service config error handling is implemented.
+        // For now simply go to TRANSIENT_FAILURE.
+        lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
+        return;
+      }
+      newXdsConfig = (XdsConfig) cfg.getConfig();
     }
-    ConfigOrError cfg =
-        XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
-    if (cfg.getError() != null) {
-      // This will not happen when the service config error handling is implemented.
-      // For now simply go to TRANSIENT_FAILURE.
-      lookasideLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
-      return;
-    }
-    XdsConfig newXdsConfig = (XdsConfig) cfg.getConfig();
     ObjectPool<XdsClient> xdsClientRefFromResolver = attributes.get(XdsAttributes.XDS_CLIENT_REF);
     ObjectPool<XdsClient> xdsClientRef;
 
