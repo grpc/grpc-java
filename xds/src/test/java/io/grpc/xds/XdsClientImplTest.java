@@ -2692,22 +2692,7 @@ public class XdsClientImplTest {
 
   private static Cluster buildCluster(String clusterName, @Nullable String edsServiceName,
       boolean enableLrs) {
-    Cluster.Builder clusterBuilder = Cluster.newBuilder();
-    clusterBuilder.setName(clusterName);
-    clusterBuilder.setType(DiscoveryType.EDS);
-    EdsClusterConfig.Builder edsClusterConfigBuilder = EdsClusterConfig.newBuilder();
-    edsClusterConfigBuilder.setEdsConfig(
-        ConfigSource.newBuilder().setAds(AggregatedConfigSource.getDefaultInstance()));
-    if (edsServiceName != null) {
-      edsClusterConfigBuilder.setServiceName(edsServiceName);
-    }
-    clusterBuilder.setEdsClusterConfig(edsClusterConfigBuilder);
-    clusterBuilder.setLbPolicy(LbPolicy.ROUND_ROBIN);
-    if (enableLrs) {
-      clusterBuilder.setLrsServer(
-          ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
-    }
-    return clusterBuilder.build();
+    return buildSecureCluster(clusterName, edsServiceName, enableLrs, null);
   }
 
   private static Cluster buildSecureCluster(String clusterName, @Nullable String edsServiceName,
@@ -2790,23 +2775,23 @@ public class XdsClientImplTest {
 
   private static UpstreamTlsContext buildUpstreamTlsContext(String secretName, String targetUri) {
     GrpcService grpcService =
-            GrpcService.newBuilder()
-                    .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
-                    .build();
-    ConfigSource sdsConfig =
-            ConfigSource.newBuilder()
-                    .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
-                    .build();
-    SdsSecretConfig validationContextSdsSecretConfig =
-            SdsSecretConfig.newBuilder()
-                    .setName(secretName)
-                    .setSdsConfig(sdsConfig)
-                    .build();
-    return UpstreamTlsContext.newBuilder()
-            .setCommonTlsContext(
-                    CommonTlsContext.newBuilder()
-                            .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+        GrpcService.newBuilder()
+            .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
             .build();
+    ConfigSource sdsConfig =
+        ConfigSource.newBuilder()
+            .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
+            .build();
+    SdsSecretConfig validationContextSdsSecretConfig =
+        SdsSecretConfig.newBuilder()
+            .setName(secretName)
+            .setSdsConfig(sdsConfig)
+            .build();
+    return UpstreamTlsContext.newBuilder()
+        .setCommonTlsContext(
+            CommonTlsContext.newBuilder()
+                .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+        .build();
   }
 
   /**
