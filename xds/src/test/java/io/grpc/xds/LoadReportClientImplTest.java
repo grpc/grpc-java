@@ -21,7 +21,6 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -31,6 +30,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Iterables;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
@@ -40,6 +40,8 @@ import io.envoyproxy.envoy.api.v2.endpoint.UpstreamLocalityStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
+import io.grpc.Context;
+import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
@@ -53,6 +55,7 @@ import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -64,8 +67,6 @@ import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 /**
  * Unit tests for {@link LoadReportClientImpl}.
@@ -115,6 +116,7 @@ public class LoadReportClientImplTest {
   private final FakeClock fakeClock = new FakeClock();
   private final ArrayDeque<StreamObserver<LoadStatsRequest>> lrsRequestObservers =
       new ArrayDeque<>();
+  private final AtomicBoolean callEnded = new AtomicBoolean(true);
 
   @Mock
   private BackoffPolicy.Provider backoffPolicyProvider;
@@ -143,16 +145,17 @@ public class LoadReportClientImplTest {
               @Override
               public StreamObserver<LoadStatsRequest> streamLoadStats(
                   final StreamObserver<LoadStatsResponse> responseObserver) {
+                assertThat(callEnded.get()).isTrue();  // ensure previous call was ended
+                callEnded.set(false);
+                Context.current().addListener(
+                    new CancellationListener() {
+                      @Override
+                      public void cancelled(Context context) {
+                        callEnded.set(true);
+                      }
+                    }, MoreExecutors.directExecutor());
                 StreamObserver<LoadStatsRequest> requestObserver =
                     mock(StreamObserver.class);
-                Answer<Void> closeRpc = new Answer<Void>() {
-                  @Override
-                  public Void answer(InvocationOnMock invocation) {
-                    responseObserver.onCompleted();
-                    return null;
-                  }
-                };
-                doAnswer(closeRpc).when(requestObserver).onCompleted();
                 lrsRequestObservers.add(requestObserver);
                 return requestObserver;
               }
@@ -181,6 +184,7 @@ public class LoadReportClientImplTest {
   @After
   public void tearDown() {
     lrsClient.stopLoadReporting();
+    assertThat(callEnded.get()).isTrue();
   }
 
   @Test
@@ -208,10 +212,10 @@ public class LoadReportClientImplTest {
     verifyNoMoreInteractions(requestObserver);
 
     lrsClient.stopLoadReporting();
-    verify(requestObserver).onCompleted();
+    assertThat(callEnded.get()).isTrue();
     assertThat(fakeClock.getPendingTasks(LRS_RPC_RETRY_TASK_FILTER)).isEmpty();
     lrsClient.stopLoadReporting();
-    verifyNoMoreInteractions(requestObserver);
+    assertThat(callEnded.get()).isTrue();
 
     lrsClient.startLoadReporting(callback);
     verify(mockLoadReportingService, times(2)).streamLoadStats(lrsResponseObserverCaptor.capture());
@@ -504,7 +508,7 @@ public class LoadReportClientImplTest {
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
-    // Simulate receiving LB response
+    // Simulate receiving a response from traffic director.
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1983));
     // Load reporting task is scheduled
@@ -513,8 +517,8 @@ public class LoadReportClientImplTest {
         Iterables.getOnlyElement(fakeClock.getPendingTasks(LOAD_REPORTING_TASK_FILTER));
     assertEquals(1983, scheduledTask.getDelay(TimeUnit.NANOSECONDS));
 
-    // Close lbStream
-    requestObserver.onCompleted();
+    // Close RPC stream.
+    responseObserver.onCompleted();
 
     // Reporting task cancelled
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));

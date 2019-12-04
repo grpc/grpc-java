@@ -114,7 +114,7 @@ final class LoadReportClientImpl implements LoadReportClient {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
-      lrsStream.close(null);
+      lrsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
     }
     started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
@@ -122,12 +122,12 @@ final class LoadReportClientImpl implements LoadReportClient {
 
   @Override
   public void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore) {
-    // TODO(chengyuanzhang): to be implemented.
+    loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
   }
 
   @Override
   public void removeLoadStatsStore(String clusterServiceName) {
-    // TODO(chengyuanzhang): to be implemented.
+    loadStatsStoreMap.remove(clusterServiceName);
   }
 
   @VisibleForTesting
