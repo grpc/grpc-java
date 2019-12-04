@@ -379,7 +379,8 @@ abstract class XdsClient {
   /**
    * Starts reporting client load stats to a remote server for the given cluster.
    */
-  void reportClientStats(String clusterName, String serverUri) {
+  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    throw new UnsupportedOperationException();
   }
 
   /**
