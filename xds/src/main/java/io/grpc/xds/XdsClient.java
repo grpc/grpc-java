@@ -20,6 +20,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+// TODO(sanjaypujare): remove dependency on envoy data types.
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
@@ -92,14 +94,17 @@ abstract class XdsClient {
     private final String lbPolicy;
     private final boolean enableLrs;
     private final String lrsServerName;
+    private final UpstreamTlsContext upstreamTlsContext;
 
     private ClusterUpdate(String clusterName, String edsServiceName, String lbPolicy,
-        boolean enableLrs, @Nullable String lrsServerName) {
+        boolean enableLrs, @Nullable String lrsServerName,
+        @Nullable UpstreamTlsContext upstreamTlsContext) {
       this.clusterName = clusterName;
       this.edsServiceName = edsServiceName;
       this.lbPolicy = lbPolicy;
       this.enableLrs = enableLrs;
       this.lrsServerName = lrsServerName;
+      this.upstreamTlsContext = upstreamTlsContext;
     }
 
     String getClusterName() {
@@ -137,6 +142,12 @@ abstract class XdsClient {
       return lrsServerName;
     }
 
+    /** Returns the {@link UpstreamTlsContext} for this cluster if present, else null. */
+    @Nullable
+    UpstreamTlsContext getUpstreamTlsContext() {
+      return upstreamTlsContext;
+    }
+
     static Builder newBuilder() {
       return new Builder();
     }
@@ -148,6 +159,8 @@ abstract class XdsClient {
       private boolean enableLrs;
       @Nullable
       private String lrsServerName;
+      @Nullable
+      private UpstreamTlsContext upstreamTlsContext;
 
       // Use ClusterUpdate.newBuilder().
       private Builder() {
@@ -178,6 +191,11 @@ abstract class XdsClient {
         return this;
       }
 
+      Builder setUpstreamTlsContext(UpstreamTlsContext upstreamTlsContext) {
+        this.upstreamTlsContext = upstreamTlsContext;
+        return this;
+      }
+
       ClusterUpdate build() {
         Preconditions.checkState(clusterName != null, "clusterName is not set");
         Preconditions.checkState(lbPolicy != null, "lbPolicy is not set");
@@ -187,7 +205,7 @@ abstract class XdsClient {
                 + "OR lrsServerName is set while LRS is not enabled");
         return
             new ClusterUpdate(clusterName, edsServiceName == null ? clusterName : edsServiceName,
-                lbPolicy, enableLrs, lrsServerName);
+                lbPolicy, enableLrs, lrsServerName, upstreamTlsContext);
       }
     }
   }
