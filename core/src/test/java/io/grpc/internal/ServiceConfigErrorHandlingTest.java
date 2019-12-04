@@ -375,7 +375,7 @@ public class ServiceConfigErrorHandlingTest {
     verify(mockLoadBalancer).handleResolvedAddresses(resultCaptor.capture());
     ResolvedAddresses resolvedAddresses = resultCaptor.getValue();
     assertThat(resolvedAddresses.getAddresses()).containsExactly(addressGroup);
-    assertThat(getLbPolicyConfig(resolvedAddresses)).isNotNull();
+    assertThat(getLbPolicyConfig(resolvedAddresses)).isNull();
     assertThat(resolvedAddresses.getAttributes().get(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG))
         .isNull();
     verify(mockLoadBalancer, never()).handleNameResolutionError(any(Status.class));
@@ -700,6 +700,6 @@ public class ServiceConfigErrorHandlingTest {
   private static Object getLbPolicyConfig(ResolvedAddresses resolvedAddresses) {
     ConfigOrError loadBalancingPolicyConfig =
         (ConfigOrError) resolvedAddresses.getLoadBalancingPolicyConfig();
-    return loadBalancingPolicyConfig.getConfig();
+    return loadBalancingPolicyConfig == null ? null : loadBalancingPolicyConfig.getConfig();
   }
 }
