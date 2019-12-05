@@ -20,7 +20,7 @@ dependencies {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
         // prefer 3.0.2 from libraries instead of 3.0.1
         exclude group: 'com.google.code.findbugs', module: 'jsr305'
-        // prefer 1.17 from libraries instead of 1.14
+        // prefer our own version from libraries instead of Guava's dependency
         exclude group: 'org.codehaus.mojo', module: 'animal-sniffer-annotations'
     }
 
