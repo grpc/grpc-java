@@ -473,8 +473,8 @@ def org_apache_commons_lang3():
 def org_codehaus_mojo_animal_sniffer_annotations():
     jvm_maven_import_external(
         name = "org_codehaus_mojo_animal_sniffer_annotations",
-        artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.17",
+        artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.18",
         server_urls = ["http://central.maven.org/maven2"],
-        artifact_sha256 = "92654f493ecfec52082e76354f0ebf87648dc3d5cec2e3c3cdb947c016747a53",
+        artifact_sha256 = "47f05852b48ee9baefef80fa3d8cea60efa4753c0013121dd7fe5eef2e5c729d",
         licenses = ["notice"],  # MIT
     )

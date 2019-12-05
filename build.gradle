@@ -112,7 +112,7 @@ subprojects {
 
         libraries = [
             android_annotations: "com.google.android:annotations:4.1.1.4",
-            animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.17",
+            animalsniffer_annotations: "org.codehaus.mojo:animal-sniffer-annotations:1.18",
             errorprone: "com.google.errorprone:error_prone_annotations:2.3.3",
             gson: "com.google.code.gson:gson:2.8.6",
             guava: "com.google.guava:guava:${guavaVersion}",
