@@ -224,6 +224,9 @@ public class LoadReportClientImplTest {
 
   // Currently we expect each gRPC client talks to a single service per cluster, so we test LRS
   // client reporting load for a single cluster service only.
+  // TODO(chengyuanzhang): Existing test suites for LRS client implementation have poor behavior
+  //  coverage and are not robust. Should improve once its usage is finalized without too much
+  //  assumption.
 
   @Test
   public void loadReportActualIntervalAsSpecified() {
