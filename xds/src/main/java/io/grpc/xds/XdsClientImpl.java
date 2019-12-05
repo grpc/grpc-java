@@ -49,6 +49,7 @@ import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -135,19 +136,14 @@ final class XdsClientImpl extends XdsClient {
   private String ldsResourceName;
 
   XdsClientImpl(
-      // URI of the management server to be connected to.
-      String serverUri,
+      List<ServerInfo> servers,  // list of management servers
       Node node,
-      // List of channel credential configurations for the channel to management server.
-      // Should pick the first supported one.
-      List<ChannelCreds> channelCredsList,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
     this(
-        buildChannel(checkNotNull(serverUri, "serverUri"),
-            checkNotNull(channelCredsList, "channelCredsList")),
+        buildChannel(checkNotNull(servers, "servers")),
         node,
         syncContext,
         timeService,
@@ -319,9 +315,15 @@ final class XdsClientImpl extends XdsClient {
   }
 
   /**
-   * Builds a channel to the given server URI with the first supported channel creds config.
+   * Builds a channel to one of the provided management servers.
+   *
+   * <p>Note: currently we only support using the first server.
    */
-  private static ManagedChannel buildChannel(String serverUri,List<ChannelCreds> channelCredsList) {
+  private static ManagedChannel buildChannel(List<ServerInfo> servers) {
+    checkArgument(!servers.isEmpty(), "No management server provided.");
+    ServerInfo serverInfo = servers.get(0);
+    String serverUri = serverInfo.getServerUri();
+    List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
     ManagedChannel ch = null;
     // Use the first supported channel credentials configuration.
     // Currently, only "google_default" is supported.
