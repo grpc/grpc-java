@@ -22,9 +22,8 @@ dependencies {
             libraries.protobuf,
             libraries.conscrypt
     compile (libraries.google_auth_oauth2_http) {
-        // prefer 26.0-android from libraries instead of 25.1-android
+        // prefer our own versions instead of google-auth-oauth2-http's dependency
         exclude group: 'com.google.guava', module: 'guava'
-        // prefer 0.19.2 from libraries instead of 0.18.0
         exclude group: 'io.opencensus', module: 'opencensus-api'
     }
     compileOnly libraries.javax_annotation
