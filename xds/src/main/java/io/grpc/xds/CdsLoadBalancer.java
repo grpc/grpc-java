@@ -225,8 +225,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
             }
             CdsLoadBalancer.this.clusterWatcher = clusterWatcher;
           }
-          // Else handleResolvedAddresses() already called, so no-op here because the config is
-          // fixed in this balancer.
         }
       };
     }
