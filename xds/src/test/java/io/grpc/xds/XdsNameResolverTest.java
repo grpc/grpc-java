@@ -147,6 +147,24 @@ public class XdsNameResolverTest {
   }
 
   @Test
+  public void resolve_bootstrapProvidesNoTrafficDirectorInfo() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      public BootstrapInfo readBootstrap() {
+        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE);
+      }
+    };
+
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("No traffic director provided by bootstrap");
+  }
+
+  @Test
   public void resolve_failToBootstrap() {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
