@@ -100,13 +100,16 @@ final class XdsNameResolver extends NameResolver {
     // Currently we only support using the first server from bootstrap.
     ServerInfo serverInfo = serverList.get(0);
 
-    String serviceConfig = "{"
-        + "\"loadBalancingConfig\": ["
-        + "{\"xds_experimental\" : {"
-        + "\"balancerName\" : \"" + serverInfo.getServerUri() + "\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}]"
-        + "}}"
-        + "]}";
+    String serviceConfig = "{\n"
+        + "  \"loadBalancingConfig\": [\n"
+        + "    {\n"
+        + "      \"xds_experimental\": {\n"
+        + "        \"balancerName\": \"" + serverInfo.getServerUri() + "\",\n"
+        + "        \"childPolicy\": [ {\"round_robin\": {} } ]\n"
+        + "      }\n"
+        + "    }"
+        + "  ]\n"
+        + "}";
     Map<String, ?> config;
     try {
       config = (Map<String, ?>) JsonParser.parse(serviceConfig);
