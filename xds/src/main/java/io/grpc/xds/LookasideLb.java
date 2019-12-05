@@ -430,6 +430,7 @@ final class LookasideLb extends LoadBalancer {
                   helper.getScheduledExecutorService(),
                   new ExponentialBackoffPolicy.Provider(),
                   GrpcUtil.STOPWATCH_SUPPLIER);
+          lrsClient.addLoadStatsStore(edsServiceName, loadStatsStore);
         } else {
           lrsClient = new LoadReportClient() {
             @Override
