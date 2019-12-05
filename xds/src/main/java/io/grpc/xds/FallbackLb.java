@@ -17,6 +17,7 @@
 package io.grpc.xds;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -32,21 +33,25 @@ import io.grpc.internal.ServiceConfigUtil.LbConfig;
 import io.grpc.util.ForwardingLoadBalancer;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
+import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.List;
 import java.util.Map;
 
 /** Fallback load balancer. Handles fallback policy changes. */
 final class FallbackLb extends ForwardingLoadBalancer {
 
+  private final Helper fallbackLbHelper;
   private final LoadBalancerRegistry lbRegistry;
   private final GracefulSwitchLoadBalancer fallbackPolicyLb;
 
   FallbackLb(Helper fallbackLbHelper) {
-    this(fallbackLbHelper, LoadBalancerRegistry.getDefaultRegistry());
+    this(checkNotNull(fallbackLbHelper, "fallbackLbHelper"),
+        LoadBalancerRegistry.getDefaultRegistry());
   }
 
   @VisibleForTesting
   FallbackLb(Helper fallbackLbHelper, LoadBalancerRegistry lbRegistry) {
+    this.fallbackLbHelper = fallbackLbHelper;
     this.lbRegistry = lbRegistry;
     fallbackPolicyLb = new GracefulSwitchLoadBalancer(fallbackLbHelper);
   }
@@ -58,17 +63,41 @@ final class FallbackLb extends ForwardingLoadBalancer {
 
   @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
-    // In the future, xdsConfig can be gotten directly by
-    // resolvedAddresses.getLoadBalancingPolicyConfig()
     Attributes attributes = resolvedAddresses.getAttributes();
-    Map<String, ?> newRawLbConfig = checkNotNull(
-        attributes.get(ATTR_LOAD_BALANCING_CONFIG), "ATTR_LOAD_BALANCING_CONFIG not available");
-    ConfigOrError cfg =
-        XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
-    if (cfg.getError() != null) {
-      throw cfg.getError().asRuntimeException();
+    XdsConfig xdsConfig;
+    Object lbConfig = resolvedAddresses.getLoadBalancingPolicyConfig();
+    if (lbConfig != null) {
+      if (!(lbConfig instanceof XdsConfig)) {
+        fallbackLbHelper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(Status.UNAVAILABLE.withDescription(
+                "Load balancing config '" + lbConfig + "' is not an XdsConfig")));
+        return;
+      }
+      xdsConfig = (XdsConfig) lbConfig;
+    } else {
+      // In the future, in all cases xdsConfig can be obtained directly by
+      // resolvedAddresses.getLoadBalancingPolicyConfig().
+      Map<String, ?> newRawLbConfig = attributes.get(ATTR_LOAD_BALANCING_CONFIG);
+      if (newRawLbConfig == null) {
+        // This will not happen when the service config error handling is implemented.
+        // For now simply go to TRANSIENT_FAILURE.
+        fallbackLbHelper.updateBalancingState(
+            TRANSIENT_FAILURE,
+            new ErrorPicker(
+                Status.UNAVAILABLE.withDescription("ATTR_LOAD_BALANCING_CONFIG not available")));
+        return;
+      }
+      ConfigOrError cfg =
+          XdsLoadBalancerProvider.parseLoadBalancingConfigPolicy(newRawLbConfig, lbRegistry);
+      if (cfg.getError() != null) {
+        // This will not happen when the service config error handling is implemented.
+        // For now simply go to TRANSIENT_FAILURE.
+        fallbackLbHelper.updateBalancingState(TRANSIENT_FAILURE, new ErrorPicker(cfg.getError()));
+        return;
+      }
+      xdsConfig = (XdsConfig) cfg.getConfig();
     }
-    XdsConfig xdsConfig = (XdsConfig) cfg.getConfig();
 
     LbConfig fallbackPolicy = xdsConfig.fallbackPolicy;
     String newFallbackPolicyName = fallbackPolicy.getPolicyName();
