@@ -43,9 +43,15 @@ import io.envoyproxy.envoy.api.v2.DiscoveryRequest;
 import io.envoyproxy.envoy.api.v2.DiscoveryResponse;
 import io.envoyproxy.envoy.api.v2.Listener;
 import io.envoyproxy.envoy.api.v2.RouteConfiguration;
+import io.envoyproxy.envoy.api.v2.auth.CommonTlsContext;
+import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.envoyproxy.envoy.api.v2.core.Address;
 import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
+import io.envoyproxy.envoy.api.v2.core.ApiConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
+import io.envoyproxy.envoy.api.v2.core.GrpcService;
+import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.core.SelfConfigSource;
@@ -1210,6 +1216,37 @@ public class XdsClientImplTest {
     assertThat(clusterUpdate.getLbPolicy()).isEqualTo("round_robin");
     assertThat(clusterUpdate.isEnableLrs()).isEqualTo(true);
     assertThat(clusterUpdate.getLrsServerName()).isEqualTo("");
+  }
+
+  /**
+   * CDS response containing UpstreamTlsContext for a cluster.
+   */
+  @Test
+  public void cdsResponseWithUpstreamTlsContext() {
+    xdsClient.watchClusterData("cluster-foo.googleapis.com", clusterWatcher);
+    StreamObserver<DiscoveryResponse> responseObserver = responseObservers.poll();
+    StreamObserver<DiscoveryRequest> requestObserver = requestObservers.poll();
+
+    // Management server sends back CDS response with UpstreamTlsContext.
+    UpstreamTlsContext testUpstreamTlsContext =
+        buildUpstreamTlsContext("secret1", "unix:/var/uds2");
+    List<Any> clusters = ImmutableList.of(
+        Any.pack(buildCluster("cluster-bar.googleapis.com", null, false)),
+        Any.pack(buildSecureCluster("cluster-foo.googleapis.com",
+            "eds-cluster-foo.googleapis.com", true, testUpstreamTlsContext)),
+        Any.pack(buildCluster("cluster-baz.googleapis.com", null, false)));
+    DiscoveryResponse response =
+        buildDiscoveryResponse("0", clusters, XdsClientImpl.ADS_TYPE_URL_CDS, "0000");
+    responseObserver.onNext(response);
+
+    // Client sent an ACK CDS request.
+    verify(requestObserver)
+        .onNext(eq(buildDiscoveryRequest("0", "cluster-foo.googleapis.com",
+            XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+    ArgumentCaptor<ClusterUpdate> clusterUpdateCaptor = ArgumentCaptor.forClass(null);
+    verify(clusterWatcher, times(1)).onClusterChanged(clusterUpdateCaptor.capture());
+    ClusterUpdate clusterUpdate = clusterUpdateCaptor.getValue();
+    assertThat(clusterUpdate.getUpstreamTlsContext()).isEqualTo(testUpstreamTlsContext);
   }
 
   @Test
@@ -2655,6 +2692,11 @@ public class XdsClientImplTest {
 
   private static Cluster buildCluster(String clusterName, @Nullable String edsServiceName,
       boolean enableLrs) {
+    return buildSecureCluster(clusterName, edsServiceName, enableLrs, null);
+  }
+
+  private static Cluster buildSecureCluster(String clusterName, @Nullable String edsServiceName,
+      boolean enableLrs, @Nullable UpstreamTlsContext upstreamTlsContext) {
     Cluster.Builder clusterBuilder = Cluster.newBuilder();
     clusterBuilder.setName(clusterName);
     clusterBuilder.setType(DiscoveryType.EDS);
@@ -2669,6 +2711,9 @@ public class XdsClientImplTest {
     if (enableLrs) {
       clusterBuilder.setLrsServer(
           ConfigSource.newBuilder().setSelf(SelfConfigSource.getDefaultInstance()));
+    }
+    if (upstreamTlsContext != null) {
+      clusterBuilder.setTlsContext(upstreamTlsContext);
     }
     return clusterBuilder.build();
   }
@@ -2726,6 +2771,27 @@ public class XdsClientImplTest {
             .setHealthStatus(healthStatus).setLoadBalancingWeight(
                 UInt32Value.newBuilder().setValue(loadbalancingWeight))
             .build();
+  }
+
+  private static UpstreamTlsContext buildUpstreamTlsContext(String secretName, String targetUri) {
+    GrpcService grpcService =
+        GrpcService.newBuilder()
+            .setGoogleGrpc(GoogleGrpc.newBuilder().setTargetUri(targetUri))
+            .build();
+    ConfigSource sdsConfig =
+        ConfigSource.newBuilder()
+            .setApiConfigSource(ApiConfigSource.newBuilder().addGrpcServices(grpcService))
+            .build();
+    SdsSecretConfig validationContextSdsSecretConfig =
+        SdsSecretConfig.newBuilder()
+            .setName(secretName)
+            .setSdsConfig(sdsConfig)
+            .build();
+    return UpstreamTlsContext.newBuilder()
+        .setCommonTlsContext(
+            CommonTlsContext.newBuilder()
+                .setValidationContextSdsSecretConfig(validationContextSdsSecretConfig))
+        .build();
   }
 
   /**

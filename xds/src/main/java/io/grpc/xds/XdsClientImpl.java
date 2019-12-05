@@ -655,6 +655,9 @@ final class XdsClientImpl extends XdsClient {
       } else {
         updateBuilder.setEnableLrs(false);
       }
+      if (cluster.hasTlsContext()) {
+        updateBuilder.setUpstreamTlsContext(cluster.getTlsContext());
+      }
       clusterUpdates.put(clusterName, updateBuilder.build());
     }
     if (errorMessage != null) {
