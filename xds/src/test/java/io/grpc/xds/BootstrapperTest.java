@@ -41,23 +41,28 @@ public class BootstrapperTest {
 
   @Test
   public void parseBootstrap_validData() throws IOException {
-    String rawData = "{"
-        + "\"node\": {"
-        + "\"id\": \"ENVOY_NODE_ID\","
-        + "\"cluster\": \"ENVOY_CLUSTER\","
-        + "\"locality\": {"
-        + "\"region\": \"ENVOY_REGION\", \"zone\": \"ENVOY_ZONE\", \"sub_zone\": \"ENVOY_SUBZONE\""
-        + "},"
-        + "\"metadata\": {"
-        + "\"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\", "
-        + "\"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\""
-        + "}"
-        + "},"
-        + "\"xds_servers\": [ {"
-        + "\"server_uri\": \"trafficdirector.googleapis.com:443\","
-        + "\"channel_creds\": "
-        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"} ]"
-        + "} ]"
+    String rawData = "{\n"
+        + "  \"node\": {\n"
+        + "    \"id\": \"ENVOY_NODE_ID\",\n"
+        + "    \"cluster\": \"ENVOY_CLUSTER\",\n"
+        + "    \"locality\": {\n"
+        + "      \"region\": \"ENVOY_REGION\",\n"
+        + "      \"zone\": \"ENVOY_ZONE\",\n"
+        + "      \"sub_zone\": \"ENVOY_SUBZONE\"\n"
+        + "    },\n"
+        + "    \"metadata\": {\n"
+        + "      \"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\",\n"
+        + "      \"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\",\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n"
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
@@ -99,10 +104,12 @@ public class BootstrapperTest {
 
   @Test
   public void parseBootstrap_minimumRequiredFields() throws IOException {
-    String rawData = "{"
-        + "\"xds_servers\": [ {"
-        + "\"server_uri\": \"trafficdirector.googleapis.com:443\""
-        + "} ]"
+    String rawData = "{\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"server_uri\": \"trafficdirector.googleapis.com:443\"\n"
+        + "    }\n"
+        + "  ]\n"
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
@@ -120,18 +127,20 @@ public class BootstrapperTest {
 
   @Test
   public void parseBootstrap_noXdsServers() throws IOException {
-    String rawData = "{"
-        + "\"node\": {"
-        + "\"id\": \"ENVOY_NODE_ID\","
-        + "\"cluster\": \"ENVOY_CLUSTER\","
-        + "\"locality\": {"
-        + "\"region\": \"ENVOY_REGION\", \"zone\": \"ENVOY_ZONE\", \"sub_zone\": \"ENVOY_SUBZONE\""
-        + "},"
-        + "\"metadata\": {"
-        + "\"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\", "
-        + "\"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\""
-        + "}"
-        + "}"
+    String rawData = "{\n"
+        + "  \"node\": {\n"
+        + "    \"id\": \"ENVOY_NODE_ID\",\n"
+        + "    \"cluster\": \"ENVOY_CLUSTER\",\n"
+        + "    \"locality\": {\n"
+        + "      \"region\": \"ENVOY_REGION\",\n"
+        + "      \"zone\": \"ENVOY_ZONE\",\n"
+        + "      \"sub_zone\": \"ENVOY_SUBZONE\"\n"
+        + "    },\n"
+        + "    \"metadata\": {\n"
+        + "      \"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\",\n"
+        + "      \"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\"\n"
+        + "    }\n"
+        + "  }\n"
         + "}";
 
     thrown.expect(IOException.class);
@@ -142,21 +151,26 @@ public class BootstrapperTest {
   @Test
   public void parseBootstrap_serverWithoutServerUri() throws IOException {
     String rawData = "{"
-        + "\"node\": {"
-        + "\"id\": \"ENVOY_NODE_ID\","
-        + "\"cluster\": \"ENVOY_CLUSTER\","
-        + "\"locality\": {"
-        + "\"region\": \"ENVOY_REGION\", \"zone\": \"ENVOY_ZONE\", \"sub_zone\": \"ENVOY_SUBZONE\""
-        + "},"
-        + "\"metadata\": {"
-        + "\"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\", "
-        + "\"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\""
-        + "}"
-        + "},"
-        + "\"xds_servers\": [ {"
-        + "\"channel_creds\": "
-        + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"} ]"
-        + "} ] "
+        + "  \"node\": {\n"
+        + "    \"id\": \"ENVOY_NODE_ID\",\n"
+        + "    \"cluster\": \"ENVOY_CLUSTER\",\n"
+        + "    \"locality\": {\n"
+        + "      \"region\": \"ENVOY_REGION\",\n"
+        + "      \"zone\": \"ENVOY_ZONE\",\n"
+        + "      \"sub_zone\": \"ENVOY_SUBZONE\"\n"
+        + "    },\n"
+        + "    \"metadata\": {\n"
+        + "      \"TRAFFICDIRECTOR_INTERCEPTION_PORT\": \"ENVOY_PORT\",\n"
+        + "      \"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\"\n"
+        + "    }\n"
+        + "  },\n"
+        + "  \"xds_servers\": [\n"
+        + "    {\n"
+        + "      \"channel_creds\": [\n"
+        + "        {\"type\": \"tls\"}, {\"type\": \"loas\"}\n"
+        + "      ]\n"
+        + "    }\n"
+        + "  ]\n "
         + "}";
 
     thrown.expect(IOException.class);
