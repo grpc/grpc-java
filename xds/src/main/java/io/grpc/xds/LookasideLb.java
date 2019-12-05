@@ -417,6 +417,15 @@ final class LookasideLb extends LoadBalancer {
 
             @Override
             public void stopLoadReporting() {}
+
+            @Override
+            public void addLoadStatsStore(
+                String clusterServiceName, LoadStatsStore loadStatsStore) {
+            }
+
+            @Override
+            public void removeLoadStatsStore(String clusterServiceName) {
+            }
           };
         }
 

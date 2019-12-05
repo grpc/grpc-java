@@ -22,7 +22,6 @@ import static io.grpc.ConnectivityState.TRANSIENT_FAILURE;
 import static io.grpc.LoadBalancer.ATTR_LOAD_BALANCING_CONFIG;
 import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doReturn;
@@ -245,8 +244,6 @@ public class CdsLoadBalancerTest {
     assertThat(resolvedAddressesFoo.getLoadBalancingPolicyConfig()).isEqualTo(expectedXdsConfig);
     assertThat(resolvedAddressesFoo.getAttributes().get(XdsAttributes.XDS_CLIENT_REF))
         .isSameInstanceAs(xdsClientRef);
-    verify(xdsClient, never()).reportClientStats(
-        anyString(), anyString(), any(LoadStatsStore.class));
 
     SubchannelPicker picker1 = mock(SubchannelPicker.class);
     edsLbHelper1.updateBalancingState(ConnectivityState.READY, picker1);

@@ -19,39 +19,50 @@ package io.grpc.xds;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * An {@link LoadReportClient} is the gRPC client's load reporting agent that establishes
+ * A {@link LoadReportClient} is the gRPC client's load reporting agent that establishes
  * connections to traffic director for reporting load stats from gRPC client's perspective.
  *
- * <p>Its operations should be self-contained and running independently along with xDS load
- * balancer's load balancing protocol, although it shares the same channel to traffic director with
- * xDS load balancer's load balancing protocol.
- *
- * <p>Its lifecycle is managed by the high-level xDS load balancer.
+ * <p>Each {@link LoadReportClient} instance is responsible for reporting loads for a single
+ * <b>cluster</b>.
  */
 @NotThreadSafe
 interface LoadReportClient {
 
   /**
-   * Establishes load reporting communication and negotiates with the remote balancer to report load
+   * Establishes load reporting communication and negotiates with traffic director to report load
    * stats periodically. Calling this method on an already started {@link LoadReportClient} is
    * no-op.
-   *
-   * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    *
    * @param callback containing methods to be invoked for passing information received from load
    *                 reporting responses to xDS load balancer.
    */
+  // TODO(chengyuanzhang): do not expose this method.
   void startLoadReporting(LoadReportCallback callback);
 
   /**
    * Terminates load reporting. Calling this method on an already stopped
    * {@link LoadReportClient} is no-op.
    *
-   * <p>This method is not thread-safe and should be called from the same synchronized context
-   * returned by {@link XdsLoadBalancer2.Helper#getSynchronizationContext}.
    */
+  // TODO(chengyuanzhang): do not expose this method.
   void stopLoadReporting();
+
+  /**
+   * Provides this LoadReportClient source of load stats data for the given cluster service.
+   * If requested, data from the given {@code loadStatsStore} is periodically queried and
+   * sent to traffic director by this LoadReportClient.
+   *
+   * @param clusterServiceName name of the cluster service.
+   * @param loadStatsStore storage of load stats.
+   */
+  void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore);
+
+  /**
+   * Stops providing load stats data for the given cluster service.
+   *
+   * @param clusterServiceName name of the cluster service.
+   */
+  void removeLoadStatsStore(String clusterServiceName);
 
   /**
    * Callbacks for passing information received from client load reporting responses to xDS load
