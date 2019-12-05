@@ -18,12 +18,14 @@ package io.grpc.xds;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.Iterables;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 import io.envoyproxy.envoy.api.v2.core.Locality;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.internal.GrpcUtil;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import java.io.IOException;
 import org.junit.Rule;
 import org.junit.Test;
@@ -51,22 +53,24 @@ public class BootstrapperTest {
         + "\"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\""
         + "}"
         + "},"
-        + "\"xds_server\": {"
+        + "\"xds_servers\": [ {"
         + "\"server_uri\": \"trafficdirector.googleapis.com:443\","
         + "\"channel_creds\": "
         + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"}, {\"type\": \"google_default\"} ]"
-        + "} "
+        + "} ]"
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
-    assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
-    assertThat(info.getChannelCredentials()).hasSize(3);
-    assertThat(info.getChannelCredentials().get(0).getType()).isEqualTo("tls");
-    assertThat(info.getChannelCredentials().get(0).getConfig()).isNull();
-    assertThat(info.getChannelCredentials().get(1).getType()).isEqualTo("loas");
-    assertThat(info.getChannelCredentials().get(1).getConfig()).isNull();
-    assertThat(info.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
-    assertThat(info.getChannelCredentials().get(2).getConfig()).isNull();
+    assertThat(info.getServers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
+    assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(serverInfo.getChannelCredentials()).hasSize(3);
+    assertThat(serverInfo.getChannelCredentials().get(0).getType()).isEqualTo("tls");
+    assertThat(serverInfo.getChannelCredentials().get(0).getConfig()).isNull();
+    assertThat(serverInfo.getChannelCredentials().get(1).getType()).isEqualTo("loas");
+    assertThat(serverInfo.getChannelCredentials().get(1).getConfig()).isNull();
+    assertThat(serverInfo.getChannelCredentials().get(2).getType()).isEqualTo("google_default");
+    assertThat(serverInfo.getChannelCredentials().get(2).getConfig()).isNull();
     assertThat(info.getNode()).isEqualTo(
         Node.newBuilder()
             .setId("ENVOY_NODE_ID")
@@ -96,13 +100,16 @@ public class BootstrapperTest {
   @Test
   public void parseBootstrap_minimumRequiredFields() throws IOException {
     String rawData = "{"
-        + "\"xds_server\": {"
+        + "\"xds_servers\": [ {"
         + "\"server_uri\": \"trafficdirector.googleapis.com:443\""
-        + "}"
+        + "} ]"
         + "}";
 
     BootstrapInfo info = Bootstrapper.parseConfig(rawData);
-    assertThat(info.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(info.getServers()).hasSize(1);
+    ServerInfo serverInfo = Iterables.getOnlyElement(info.getServers());
+    assertThat(serverInfo.getServerUri()).isEqualTo("trafficdirector.googleapis.com:443");
+    assertThat(serverInfo.getChannelCredentials()).isEmpty();
     assertThat(info.getNode())
         .isEqualTo(
             Node.newBuilder()
@@ -112,7 +119,7 @@ public class BootstrapperTest {
   }
 
   @Test
-  public void parseBootstrap_noXdsServer() throws IOException {
+  public void parseBootstrap_noXdsServers() throws IOException {
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -128,12 +135,12 @@ public class BootstrapperTest {
         + "}";
 
     thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_server' does not exist.");
+    thrown.expectMessage("Invalid bootstrap: 'xds_servers' does not exist.");
     Bootstrapper.parseConfig(rawData);
   }
 
   @Test
-  public void parseBootstrap_noServerUri() throws IOException {
+  public void parseBootstrap_serverWithoutServerUri() throws IOException {
     String rawData = "{"
         + "\"node\": {"
         + "\"id\": \"ENVOY_NODE_ID\","
@@ -146,14 +153,14 @@ public class BootstrapperTest {
         + "\"TRAFFICDIRECTOR_NETWORK_NAME\": \"VPC_NETWORK_NAME\""
         + "}"
         + "},"
-        + "\"xds_server\": {"
+        + "\"xds_servers\": [ {"
         + "\"channel_creds\": "
         + "[ {\"type\": \"tls\"}, {\"type\": \"loas\"} ]"
-        + "} "
+        + "} ] "
         + "}";
 
     thrown.expect(IOException.class);
-    thrown.expectMessage("Invalid bootstrap: 'xds_server : server_uri' does not exist.");
+    thrown.expectMessage("Invalid bootstrap: 'xds_servers' contains unknown server.");
     Bootstrapper.parseConfig(rawData);
   }
 }

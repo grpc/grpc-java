@@ -111,8 +111,11 @@ public class XdsNameResolverTest {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo("trafficdirector.googleapis.com",
-            ImmutableList.of(loasCreds, googleDefaultCreds), FAKE_BOOTSTRAP_NODE);
+        List<ServerInfo> serverList =
+            ImmutableList.of(
+                new ServerInfo("trafficdirector.googleapis.com",
+                    ImmutableList.of(loasCreds, googleDefaultCreds)));
+        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
