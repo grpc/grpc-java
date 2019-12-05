@@ -15,7 +15,7 @@ dependencies {
             libraries.okio
 
     compile (libraries.okhttp) {
-        // prefer 1.13.0 from libraries instead of 1.6.0
+        // prefer our own versions instead of okhttp's dependency
         exclude group: 'com.squareup.okio', module: 'okio'
     }
 

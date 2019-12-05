@@ -16,9 +16,8 @@ dependencies {
             project(':grpc-stub'),
             libraries.protobuf
     compile (libraries.protobuf_util) {
-        // prefer 26.0-android from libraries instead of 20.0
+        // prefer our own versions instead of protobuf-util's dependency
         exclude group: 'com.google.guava', module: 'guava'
-        // prefer 2.3.3 from libraries instead of 2.3.2
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
     compileOnly libraries.javax_annotation
