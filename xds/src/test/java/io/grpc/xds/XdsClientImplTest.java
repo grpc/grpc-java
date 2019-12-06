@@ -211,7 +211,7 @@ public class XdsClientImplTest {
         ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
     XdsChannelFactory channelFactory = new XdsChannelFactory() {
       @Override
-      ManagedChannel create(List<ServerInfo> servers) {
+      ManagedChannel createChannel(List<ServerInfo> servers) {
         assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
         assertThat(Iterables.getOnlyElement(servers).getChannelCredentials()).isEmpty();
         return channel;

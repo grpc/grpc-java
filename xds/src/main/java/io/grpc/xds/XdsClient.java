@@ -483,10 +483,10 @@ abstract class XdsClient {
     private static XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
 
       /**
-       * Create a channel to the first server in the given list.
+       * Creates a channel to the first server in the given list.
        */
       @Override
-      ManagedChannel create(List<ServerInfo> servers) {
+      ManagedChannel createChannel(List<ServerInfo> servers) {
         checkArgument(!servers.isEmpty(), "No management server provided.");
         ServerInfo serverInfo = servers.get(0);
         String serverUri = serverInfo.getServerUri();
@@ -514,6 +514,6 @@ abstract class XdsClient {
     /**
      * Creates a channel to one of the provided management servers.
      */
-    abstract ManagedChannel create(List<ServerInfo> servers);
+    abstract ManagedChannel createChannel(List<ServerInfo> servers);
   }
 }

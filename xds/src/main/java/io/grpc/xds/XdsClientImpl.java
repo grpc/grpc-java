@@ -141,7 +141,8 @@ final class XdsClientImpl extends XdsClient {
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
     this.channel =
-        checkNotNull(channelFactory, "channelFactory").create(checkNotNull(servers, "servers"));
+        checkNotNull(channelFactory, "channelFactory")
+            .createChannel(checkNotNull(servers, "servers"));
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
