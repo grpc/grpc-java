@@ -83,8 +83,6 @@ public class SdsClientFileBasedMetadataTest {
           ChannelCredentials.newBuilder()
               .setLocalCredentials(GoogleLocalCredentials.newBuilder())
               .build());
-      MetadataCredentialsFromPlugin.Builder metadataCredBuilder =
-          MetadataCredentialsFromPlugin.newBuilder().setName(pluginName);
 
       Struct.Builder configStructBuilder =
           Struct.newBuilder()
@@ -107,6 +105,8 @@ public class SdsClientFileBasedMetadataTest {
             Value.newBuilder().setStringValue(headerPrefix).build());
       }
 
+      MetadataCredentialsFromPlugin.Builder metadataCredBuilder =
+              MetadataCredentialsFromPlugin.newBuilder().setName(pluginName);
       metadataCredBuilder.setConfig(configStructBuilder);
 
       CallCredentials.Builder callCredBuilder =
@@ -174,7 +174,7 @@ public class SdsClientFileBasedMetadataTest {
     FileBasedPluginCredential fileBasedPluginCredential =
         (FileBasedPluginCredential) channelInfo.callCredentials;
     assertThat(fileBasedPluginCredential.headerKey).isEqualTo(K8S_SA_JWT_TOKEN_HEADER_KEYNAME);
-    assertThat(fileBasedPluginCredential.headerPrefix).isEqualTo("");
+    assertThat(fileBasedPluginCredential.headerPrefix).isEmpty();
   }
 
   @Test

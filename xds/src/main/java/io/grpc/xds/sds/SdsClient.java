@@ -153,7 +153,7 @@ final class SdsClient {
           grpcService.hasGoogleGrpc() && !grpcService.hasEnvoyGrpc(),
           "only GoogleGrpc expected in GrpcService");
       GoogleGrpc googleGrpc = grpcService.getGoogleGrpc();
-      CallCredentials callCredentials = checkGoogleGrpcCredentials(googleGrpc);
+      CallCredentials callCredentials = getVerifiedCredentials(googleGrpc);
       String targetUri = googleGrpc.getTargetUri();
       String channelType = null;
       if (googleGrpc.hasConfig()) {
@@ -165,18 +165,19 @@ final class SdsClient {
       return new ChannelInfo(targetUri, channelType, callCredentials);
     }
 
-    private static CallCredentials checkGoogleGrpcCredentials(GoogleGrpc googleGrpc) {
+    private static CallCredentials getVerifiedCredentials(GoogleGrpc googleGrpc) {
       final String credentialsFactoryName = googleGrpc.getCredentialsFactoryName();
-      if (Strings.isNullOrEmpty(credentialsFactoryName)) {
+      if (credentialsFactoryName.isEmpty()) {
         // without factory name, no creds expected
         checkArgument(
             !googleGrpc.hasChannelCredentials() && googleGrpc.getCallCredentialsCount() == 0,
             "No credentials supported in GoogleGrpc");
+        logger.warning("No CallCredentials specified.");
         return null;
       }
       checkArgument(
           credentialsFactoryName.equals(FileBasedPluginCredential.PLUGIN_NAME),
-          "factory name should be " + FileBasedPluginCredential.PLUGIN_NAME);
+          "factory name should be %s", FileBasedPluginCredential.PLUGIN_NAME);
       if (googleGrpc.hasChannelCredentials()) {
         checkArgument(
             googleGrpc.getChannelCredentials().hasLocalCredentials(),
@@ -190,6 +191,7 @@ final class SdsClient {
         checkArgument(callCreds.hasFromPlugin(), "only plugin credential supported");
         return new FileBasedPluginCredential(callCreds.getFromPlugin());
       }
+      logger.warning("No CallCredentials specified.");
       return null;
     }
   }

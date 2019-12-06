@@ -25,10 +25,13 @@ import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
+// TODO(sanjaypujare): remove dependency on envoy data types.
 import io.envoyproxy.envoy.api.v2.core.DataSource;
 import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.CallCredentials.MetadataCredentialsFromPlugin;
 import io.grpc.CallCredentials;
 import io.grpc.Metadata;
+import io.grpc.Status;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Executor;
@@ -51,29 +54,28 @@ final class FileBasedPluginCredential extends CallCredentials {
   FileBasedPluginCredential(MetadataCredentialsFromPlugin metadataCredentialsFromPlugin) {
     checkNotNull(metadataCredentialsFromPlugin, "metadataCredentialsFromPlugin");
     checkArgument(
-        PLUGIN_NAME.equals(metadataCredentialsFromPlugin.getName()),
-        "plugin name should be " + PLUGIN_NAME);
-    if (metadataCredentialsFromPlugin.hasConfig()) {
-      Struct configStruct = metadataCredentialsFromPlugin.getConfig();
+            PLUGIN_NAME.equals(metadataCredentialsFromPlugin.getName()),
+            "plugin name should be %s", PLUGIN_NAME);
+    checkArgument(metadataCredentialsFromPlugin.hasConfig(),
+            "typed_config not supported");
 
-      if (configStruct.containsFields(HEADER_KEY)) {
-        Value value = configStruct.getFieldsOrThrow(HEADER_KEY);
-        headerKey = value.getStringValue();
-      } else {
-        headerKey = DEFAULT_HEADER_KEY;
-      }
-      if (configStruct.containsFields(HEADER_PREFIX)) {
-        Value value = configStruct.getFieldsOrThrow(HEADER_PREFIX);
-        headerPrefix = value.getStringValue();
-      } else {
-        headerPrefix = "";
-      }
-      Value value = configStruct.getFieldsOrThrow(SECRET_DATA);
-      checkState(value.hasStructValue(), "expected struct value");
-      secretData = buildDataSourceFromConfigStruct(value.getStructValue());
+    Struct configStruct = metadataCredentialsFromPlugin.getConfig();
+
+    if (configStruct.containsFields(HEADER_KEY)) {
+      Value value = configStruct.getFieldsOrThrow(HEADER_KEY);
+      headerKey = value.getStringValue();
     } else {
-      throw new IllegalArgumentException("Unsupported type in metadataCredentialsFromPlugin");
+      headerKey = DEFAULT_HEADER_KEY;
     }
+    if (configStruct.containsFields(HEADER_PREFIX)) {
+      Value value = configStruct.getFieldsOrThrow(HEADER_PREFIX);
+      headerPrefix = value.getStringValue();
+    } else {
+      headerPrefix = "";
+    }
+    Value value = configStruct.getFieldsOrThrow(SECRET_DATA);
+    checkState(value.hasStructValue(), "expected struct value for %s", SECRET_DATA);
+    secretData = buildDataSourceFromConfigStruct(value.getStructValue());
   }
 
   private static DataSource buildDataSourceFromConfigStruct(Struct secretValueStruct) {
@@ -95,7 +97,7 @@ final class FileBasedPluginCredential extends CallCredentials {
           public void run() {
             try {
               Metadata headers = new Metadata();
-              final String headerValue =
+              String headerValue =
                   headerPrefix
                       + Files.asCharSource(new File(secretData.getFilename()), Charsets.UTF_8)
                           .read();
@@ -111,7 +113,7 @@ final class FileBasedPluginCredential extends CallCredentials {
               }
               applier.apply(headers);
             } catch (IOException e) {
-              throw new RuntimeException(e);
+              applier.fail(Status.fromThrowable(e));
             }
           }
         });
