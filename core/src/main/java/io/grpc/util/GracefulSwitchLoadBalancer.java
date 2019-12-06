@@ -29,10 +29,9 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * A load balancer that gracefully swaps to a new policy. If the channel is
- * currently in a state other than READY, the new balancer type will be swapped into place
- * immediately. Otherwise, the channel will keep using the old balancer type until the balancer of
- * the new type reports READY or the old balancer exits READY.
+ * A load balancer that gracefully swaps to a new lb policy. If the channel is currently in a state
+ * other than READY, the new policy will be swapped into place immediately.  Otherwise, the channel
+ * will keep using the old policy until the new policy reports READY or the old policy exits READY.
  */
 @ExperimentalApi("https://github.com/grpc/grpc-java/issues/5999")
 @NotThreadSafe // Must be accessed in SynchronizationContext
@@ -79,7 +78,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
   /**
    * Gracefully switch to a new policy defined by the given factory. Two factories are considered to
-   * define the same policy if and only if one {@code equals()} to the other.
+   * define the same policy if and only if one {@code equals()} the other.
    */
   public void switchTo(LoadBalancer.Factory newBalancerFactory) {
     checkNotNull(newBalancerFactory, "newBalancerFactory");
