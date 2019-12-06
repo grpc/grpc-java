@@ -22,6 +22,7 @@ import static io.grpc.xds.XdsLoadBalancerProvider.XDS_POLICY_NAME;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -31,6 +32,7 @@ import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
 import io.grpc.internal.ObjectPool;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
+import io.grpc.util.ForwardingLoadBalancerHelper;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.CdsLoadBalancerProvider.CdsConfig;
 import io.grpc.xds.XdsClient.ClusterUpdate;
@@ -228,6 +230,34 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
+  @VisibleForTesting
+  static class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
+    private final Helper delegate;
+    private final UpstreamTlsContext upstreamTlsContext;
+
+    EdsLoadBalancingHelper(Helper helper, UpstreamTlsContext upstreamTlsContext) {
+      this.delegate = helper;
+      this.upstreamTlsContext = upstreamTlsContext;
+    }
+
+    @Override
+    public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
+      createSubchannelArgs =
+          createSubchannelArgs.toBuilder()
+              .setAttributes(
+                  createSubchannelArgs.getAttributes().toBuilder()
+                      .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
+                      .build())
+              .build();
+      return delegate.createSubchannel(createSubchannelArgs);
+    }
+
+    @Override
+    protected Helper delegate() {
+      return delegate;
+    }
+  }
+
   private final class ClusterWatcherImpl implements ClusterWatcher {
 
     final Helper helper;
@@ -259,7 +289,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
       if (edsBalancer == null) {
-        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
+        Helper localHelper = helper;
+        UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
+        if (upstreamTlsContext != null) {
+          localHelper = new EdsLoadBalancingHelper(helper, upstreamTlsContext);
+        }
+        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(localHelper);
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder()
