@@ -5,10 +5,10 @@ set -evux -o pipefail
 
 PROTOBUF_VERSION=3.11.0
 
-# ARCH is 64 bit unless otherwise specified.
-ARCH="${ARCH:-64}"
+# ARCH is x86_64 bit unless otherwise specified.
+ARCH="${ARCH:-x86_64}"
 DOWNLOAD_DIR=/tmp/source
-INSTALL_DIR="/tmp/protobuf-cache/$PROTOBUF_VERSION/$(uname -s)-$(uname -p)-x86_$ARCH"
+INSTALL_DIR="/tmp/protobuf-cache/$PROTOBUF_VERSION/$(uname -s)-$ARCH"
 mkdir -p $DOWNLOAD_DIR
 
 # Start with a sane default
@@ -31,8 +31,12 @@ else
   fi
   pushd $DOWNLOAD_DIR/protobuf-${PROTOBUF_VERSION}
   # install here so we don't need sudo
-  ./configure CFLAGS=-m"$ARCH" CXXFLAGS=-m"$ARCH" --disable-shared \
-    --prefix="$INSTALL_DIR"
+  if [[ "$ARCH" == x86* ]]; then
+    ./configure CFLAGS=-m${ARCH#*_} CXXFLAGS=-m${ARCH#*_} --disable-shared \
+      --prefix="$INSTALL_DIR"
+  elif [[ "$ARCH" == aarch* ]]; then
+    ./configure --disable-shared --host=aarch64-linux-gnu --prefix="$INSTALL_DIR"
+  fi
   # the same source dir is used for 32 and 64 bit builds, so we need to clean stale data first
   make clean
   make V=0 -j$NUM_CPU
