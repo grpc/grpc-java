@@ -92,7 +92,7 @@ import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
-import io.grpc.xds.XdsClientUtil.XdsChannelFactory;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.HashSet;

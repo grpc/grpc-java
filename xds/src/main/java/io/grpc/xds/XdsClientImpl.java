@@ -50,7 +50,6 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
-import io.grpc.xds.XdsClientUtil.XdsChannelFactory;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
