@@ -29,7 +29,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 /**
- * A load balancer that gracefully swaps to a new type, typically with new policy. If the channel is
+ * A load balancer that gracefully swaps to a new policy. If the channel is
  * currently in a state other than READY, the new balancer type will be swapped into place
  * immediately. Otherwise, the channel will keep using the old balancer type until the balancer of
  * the new type reports READY or the old balancer exits READY.
@@ -60,7 +60,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
 
   private final Helper helper;
 
-  // While the new factory is not fully switched on, the pendingLb is handling new updates from name
+  // While the new policy is not fully switched on, the pendingLb is handling new updates from name
   // resolver, and the currentLb is updating channel state and picker for the given helper.
   // The current fields are guaranteed to be set after the initial swapTo().
   // The pending fields are cleared when it becomes current.
@@ -78,7 +78,8 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
   }
 
   /**
-   * Gracefully switch to a new balancer with the given factory.
+   * Gracefully switch to a new policy defined by the given factory. Two factories are considered to
+   * define the same policy if and only if one {@code equals()} to the other.
    */
   public void switchTo(LoadBalancer.Factory newBalancerFactory) {
     checkNotNull(newBalancerFactory, "newBalancerFactory");
@@ -116,7 +117,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
         } else if (lb == currentLb) {
           currentLbIsReady = newState == ConnectivityState.READY;
           if (!currentLbIsReady && pendingLb != NOOP_BALANCER) {
-            swap(); // current balancer exits READY, so swap
+            swap(); // current policy exits READY, so swap
           } else {
             helper.updateBalancingState(newState, newPicker);
           }
@@ -129,7 +130,7 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     pendingLb = pendingHelper.lb;
     pendingBalancerFactory = newBalancerFactory;
     if (!currentLbIsReady) {
-      swap(); // the old balancer is not READY at the moment, so swap to the new one right now
+      swap(); // the old policy is not READY at the moment, so swap to the new one right now
     }
   }
 
