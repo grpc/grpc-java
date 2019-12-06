@@ -136,8 +136,6 @@ public class XdsNameResolverTest {
     Map<String, ?> rawConfigValues = (Map<String, ?>) xdsLbConfig.get("xds_experimental");
     assertThat(rawConfigValues)
         .containsExactly(
-            "balancerName",
-            "trafficdirector.googleapis.com",
             "childPolicy",
             Collections.singletonList(
                 Collections.singletonMap("round_robin", Collections.EMPTY_MAP)));

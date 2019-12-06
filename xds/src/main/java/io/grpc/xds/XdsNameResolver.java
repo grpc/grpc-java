@@ -104,7 +104,6 @@ final class XdsNameResolver extends NameResolver {
         + "  \"loadBalancingConfig\": [\n"
         + "    {\n"
         + "      \"xds_experimental\": {\n"
-        + "        \"balancerName\": \"" + serverInfo.getServerUri() + "\",\n"
         + "        \"childPolicy\": [ {\"round_robin\": {} } ]\n"
         + "      }\n"
         + "    }"
