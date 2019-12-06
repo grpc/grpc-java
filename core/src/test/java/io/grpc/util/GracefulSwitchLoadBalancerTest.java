@@ -424,29 +424,14 @@ public class GracefulSwitchLoadBalancerTest {
 
 
   @Test
-  public void newProviderEqualToOldOneShouldHaveNoEffect() {
+  public void newLbFactoryEqualToOldOneShouldHaveNoEffect() {
     final List<LoadBalancer> balancers = new ArrayList<>();
 
-    final class LoadBalancerProviderWithId extends LoadBalancerProvider {
+    final class LoadBalancerFactoryWithId extends LoadBalancer.Factory {
       final int id;
 
-      LoadBalancerProviderWithId(int id) {
+      LoadBalancerFactoryWithId(int id) {
         this.id = id;
-      }
-
-      @Override
-      public boolean isAvailable() {
-        return true;
-      }
-
-      @Override
-      public int getPriority() {
-        return 5;
-      }
-
-      @Override
-      public String getPolicyName() {
-        return "fake_name";
       }
 
       @Override
@@ -458,10 +443,10 @@ public class GracefulSwitchLoadBalancerTest {
 
       @Override
       public boolean equals(Object o) {
-        if (!(o instanceof LoadBalancerProviderWithId)) {
+        if (!(o instanceof LoadBalancerFactoryWithId)) {
           return false;
         }
-        LoadBalancerProviderWithId that = (LoadBalancerProviderWithId) o;
+        LoadBalancerFactoryWithId that = (LoadBalancerFactoryWithId) o;
         return id == that.id;
       }
 
@@ -471,14 +456,14 @@ public class GracefulSwitchLoadBalancerTest {
       }
     }
 
-    gracefulSwitchLb.switchTo(new LoadBalancerProviderWithId(0));
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(0));
     assertThat(balancers).hasSize(1);
     LoadBalancer lb0 = balancers.get(0);
 
-    gracefulSwitchLb.switchTo(new LoadBalancerProviderWithId(0));
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(0));
     assertThat(balancers).hasSize(1);
 
-    gracefulSwitchLb.switchTo(new LoadBalancerProviderWithId(1));
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(1));
     assertThat(balancers).hasSize(2);
     LoadBalancer lb1 = balancers.get(1);
     verify(lb0).shutdown();

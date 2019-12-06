@@ -28,7 +28,6 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -240,9 +239,9 @@ final class LookasideLb extends LoadBalancer {
         edsServiceName = lookasideLbHelper.getAuthority();
       }
 
-      LoadBalancerProvider clusterEndpointsLoadBalancer =
-          new ClusterEndpointsBalancerProvider(edsServiceName);
-      switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancer);
+      LoadBalancer.Factory clusterEndpointsLoadBalancerFactory =
+          new ClusterEndpointsBalancerFactory(edsServiceName);
+      switchingLoadBalancer.switchTo(clusterEndpointsLoadBalancerFactory);
     }
     resolvedAddresses = resolvedAddresses.toBuilder()
         .setAttributes(attributes.toBuilder().discard(ATTR_LOAD_BALANCING_CONFIG).build())
@@ -315,14 +314,17 @@ final class LookasideLb extends LoadBalancer {
     return channel;
   }
 
-  private final class ClusterEndpointsBalancerProvider extends LoadBalancerProvider {
+  /**
+   * A load balancer factory that provides a load balancer for a given cluster.
+   */
+  private final class ClusterEndpointsBalancerFactory extends LoadBalancer.Factory {
     final String edsServiceName;
     @Nullable
     final String oldEdsServiceName;
     @Nullable
     final EndpointWatcher oldEndpointWatcher;
 
-    ClusterEndpointsBalancerProvider(String edsServiceName) {
+    ClusterEndpointsBalancerFactory(String edsServiceName) {
       this.edsServiceName = edsServiceName;
       if (xdsConfig != null) {
         oldEdsServiceName = xdsConfig.edsServiceName;
@@ -333,31 +335,16 @@ final class LookasideLb extends LoadBalancer {
     }
 
     @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return "cluster_endpoints_balancer";
-    }
-
-    @Override
     public LoadBalancer newLoadBalancer(Helper helper) {
       return new ClusterEndpointsBalancer(helper);
     }
 
     @Override
     public boolean equals(Object o) {
-      if (!(o instanceof ClusterEndpointsBalancerProvider)) {
+      if (!(o instanceof ClusterEndpointsBalancerFactory)) {
         return false;
       }
-      ClusterEndpointsBalancerProvider that = (ClusterEndpointsBalancerProvider) o;
+      ClusterEndpointsBalancerFactory that = (ClusterEndpointsBalancerFactory) o;
       return edsServiceName.equals(that.edsServiceName);
     }
 

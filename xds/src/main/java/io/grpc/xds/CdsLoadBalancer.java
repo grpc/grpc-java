@@ -26,7 +26,6 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
@@ -115,9 +114,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
-      LoadBalancerProvider fixedCdsConfigBalancerProvider =
-          new FixedCdsConfigBalancerProvider(newCdsConfig);
-      switchingLoadBalancer.switchTo(fixedCdsConfigBalancerProvider);
+      LoadBalancer.Factory fixedCdsConfigBalancerFactory =
+          new FixedCdsConfigBalancerFactory(newCdsConfig);
+      switchingLoadBalancer.switchTo(fixedCdsConfigBalancerFactory);
     }
 
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
@@ -154,41 +153,26 @@ public final class CdsLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * A LoadBalancerProvider that provides a load balancer with a fixed CdsConfig.
+   * A load balancer factory that provides a load balancer for a given CdsConfig.
    */
-  private final class FixedCdsConfigBalancerProvider extends LoadBalancerProvider {
+  private final class FixedCdsConfigBalancerFactory extends LoadBalancer.Factory {
 
     final CdsConfig cdsConfig;
     final CdsConfig oldCdsConfig;
     final ClusterWatcher oldClusterWatcher;
 
-    FixedCdsConfigBalancerProvider(CdsConfig cdsConfig) {
+    FixedCdsConfigBalancerFactory(CdsConfig cdsConfig) {
       this.cdsConfig = cdsConfig;
       oldCdsConfig = CdsLoadBalancer.this.cdsConfig;
       oldClusterWatcher = CdsLoadBalancer.this.clusterWatcher;
     }
 
     @Override
-    public boolean isAvailable() {
-      return true;
-    }
-
-    @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    @Override
-    public String getPolicyName() {
-      return "fixed_cds_config_balancer";
-    }
-
-    @Override
     public boolean equals(Object o) {
-      if (!(o instanceof FixedCdsConfigBalancerProvider)) {
+      if (!(o instanceof FixedCdsConfigBalancerFactory)) {
         return false;
       }
-      FixedCdsConfigBalancerProvider that = (FixedCdsConfigBalancerProvider) o;
+      FixedCdsConfigBalancerFactory that = (FixedCdsConfigBalancerFactory) o;
       return cdsConfig.equals(that.cdsConfig);
     }
 
