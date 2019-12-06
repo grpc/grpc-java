@@ -74,6 +74,7 @@ import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -489,9 +490,10 @@ public class LookasideLbTest {
 
   @Test
   public void handleResolvedAddress_withBootstrap() throws Exception {
-    BootstrapInfo bootstrapInfo = new BootstrapInfo(
-        "trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of(),
-        Node.getDefaultInstance());
+    List<ServerInfo> serverList =
+        ImmutableList.of(
+            new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
+    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
     doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
 
     String lbConfigRaw =

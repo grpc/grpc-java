@@ -29,6 +29,7 @@ import io.grpc.internal.GrpcAttributes;
 import io.grpc.internal.JsonParser;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Collections;
@@ -89,13 +90,26 @@ final class XdsNameResolver extends NameResolver {
       return;
     }
 
-    String serviceConfig = "{"
-        + "\"loadBalancingConfig\": ["
-        + "{\"xds_experimental\" : {"
-        + "\"balancerName\" : \"" + bootstrapInfo.getServerUri() + "\","
-        + "\"childPolicy\" : [{\"round_robin\" : {}}]"
-        + "}}"
-        + "]}";
+    List<ServerInfo> serverList = bootstrapInfo.getServers();
+    if (serverList.isEmpty()) {
+      listener.onError(
+          Status.UNAVAILABLE.withDescription("No traffic director provided by bootstrap"));
+      return;
+    }
+
+    // Currently we only support using the first server from bootstrap.
+    ServerInfo serverInfo = serverList.get(0);
+
+    String serviceConfig = "{\n"
+        + "  \"loadBalancingConfig\": [\n"
+        + "    {\n"
+        + "      \"xds_experimental\": {\n"
+        + "        \"balancerName\": \"" + serverInfo.getServerUri() + "\",\n"
+        + "        \"childPolicy\": [ {\"round_robin\": {} } ]\n"
+        + "      }\n"
+        + "    }"
+        + "  ]\n"
+        + "}";
     Map<String, ?> config;
     try {
       config = (Map<String, ?>) JsonParser.parse(serviceConfig);
@@ -108,7 +122,7 @@ final class XdsNameResolver extends NameResolver {
         Attributes.newBuilder()
             .set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config)
             .set(XDS_NODE, bootstrapInfo.getNode())
-            .set(XDS_CHANNEL_CREDS_LIST, bootstrapInfo.getChannelCredentials())
+            .set(XDS_CHANNEL_CREDS_LIST, serverInfo.getChannelCredentials())
             .build();
     ResolutionResult result =
         ResolutionResult.newBuilder()

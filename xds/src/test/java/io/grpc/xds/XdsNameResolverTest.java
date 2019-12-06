@@ -111,8 +111,11 @@ public class XdsNameResolverTest {
     Bootstrapper bootstrapper = new Bootstrapper() {
       @Override
       public BootstrapInfo readBootstrap() {
-        return new BootstrapInfo("trafficdirector.googleapis.com",
-            ImmutableList.of(loasCreds, googleDefaultCreds), FAKE_BOOTSTRAP_NODE);
+        List<ServerInfo> serverList =
+            ImmutableList.of(
+                new ServerInfo("trafficdirector.googleapis.com",
+                    ImmutableList.of(loasCreds, googleDefaultCreds)));
+        return new BootstrapInfo(serverList, FAKE_BOOTSTRAP_NODE);
       }
     };
     XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
@@ -141,6 +144,24 @@ public class XdsNameResolverTest {
     assertThat(result.getAttributes().get(XdsNameResolver.XDS_NODE)).isEqualTo(FAKE_BOOTSTRAP_NODE);
     assertThat(result.getAttributes().get(XdsNameResolver.XDS_CHANNEL_CREDS_LIST))
         .containsExactly(loasCreds, googleDefaultCreds);
+  }
+
+  @Test
+  public void resolve_bootstrapProvidesNoTrafficDirectorInfo() {
+    Bootstrapper bootstrapper = new Bootstrapper() {
+      @Override
+      public BootstrapInfo readBootstrap() {
+        return new BootstrapInfo(ImmutableList.<ServerInfo>of(), FAKE_BOOTSTRAP_NODE);
+      }
+    };
+
+    XdsNameResolver resolver = new XdsNameResolver("foo.googleapis.com", bootstrapper);
+    resolver.start(mockListener);
+    ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(null);
+    verify(mockListener).onError(statusCaptor.capture());
+    assertThat(statusCaptor.getValue().getCode()).isEqualTo(Code.UNAVAILABLE);
+    assertThat(statusCaptor.getValue().getDescription())
+        .isEqualTo("No traffic director provided by bootstrap");
   }
 
   @Test

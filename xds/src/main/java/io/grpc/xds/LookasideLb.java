@@ -41,6 +41,7 @@ import io.grpc.internal.ObjectPool;
 import io.grpc.util.GracefulSwitchLoadBalancer;
 import io.grpc.xds.Bootstrapper.BootstrapInfo;
 import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -204,9 +205,21 @@ final class LookasideLb extends LoadBalancer {
               new ErrorPicker(Status.UNAVAILABLE.withCause(e)));
           return;
         }
+
+        List<ServerInfo> serverList = bootstrapInfo.getServers();
+        if (serverList.isEmpty()) {
+          lookasideLbHelper.updateBalancingState(
+              TRANSIENT_FAILURE,
+              new ErrorPicker(
+                  Status.UNAVAILABLE
+                      .withDescription("No traffic director provided by bootstrap")));
+          return;
+        }
+        // Currently we only support using the first server from bootstrap.
+        ServerInfo serverInfo = serverList.get(0);
         channel = initLbChannel(
-            lookasideLbHelper, bootstrapInfo.getServerUri(),
-            bootstrapInfo.getChannelCredentials());
+            lookasideLbHelper, serverInfo.getServerUri(),
+            serverInfo.getChannelCredentials());
         xdsClientRef = new RefCountedXdsClientObjectPool(new XdsClientFactory() {
           @Override
           XdsClient createXdsClient() {
