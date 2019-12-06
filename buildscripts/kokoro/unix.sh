@@ -72,6 +72,11 @@ fi
 LOCAL_MVN_TEMP=$(mktemp -d)
 # Note that this disables parallel=true from GRADLE_FLAGS
 if [[ -z "${ALL_ARTIFACTS:-}" ]]; then
+  if [[ $ARCH == "aarch_64" ]]; then
+    GRADLE_FLAGS+=" -x grpc-compiler:generateTestProto -x grpc-compiler:generateTestLiteProto"
+    GRADLE_FLAGS+=" -x grpc-compiler:testGolden -x grpc-compiler:testLiteGolden"
+    GRADLE_FLAGS+=" -x grpc-compiler:testDeprecatedGolden -x grpc-compiler:testDeprecatedLiteGolden"
+  fi
   ./gradlew grpc-compiler:build grpc-compiler:publish $GRADLE_FLAGS \
     -Dorg.gradle.parallel=false -PrepositoryDir=$LOCAL_MVN_TEMP
 else
