@@ -80,7 +80,6 @@ public abstract class Bootstrapper {
     }
     List<Map<String, ?>> serverConfigList = JsonUtil.checkObjectList(rawServerConfigs);
     for (Map<String, ?> serverConfig : serverConfigList) {
-      // Field "server_uri" is required.
       String serverUri = JsonUtil.getString(serverConfig, "server_uri");
       if (serverUri == null) {
         throw new IOException("Invalid bootstrap: 'xds_servers' contains unknown server.");
@@ -247,7 +246,7 @@ public abstract class Bootstrapper {
     }
 
     /**
-     * Returns the list of connection configurations for traffic directors to be connected to.
+     * Returns the list of xDS servers to be connected to.
      */
     List<ServerInfo> getServers() {
       return Collections.unmodifiableList(servers);
