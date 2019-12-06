@@ -76,7 +76,7 @@ public class SdsClientUdsTest {
     Assume.assumeTrue(Epoll.isAvailable());
     serverMock = mock(TestSdsServer.ServerMock.class);
     server = new TestSdsServer(serverMock);
-    server.startServer(SDSCLIENT_TEST_SOCKET, true);
+    server.startServer(SDSCLIENT_TEST_SOCKET, /* useUds= */ true, /* useInterceptor= */ false);
     ConfigSource configSource = buildConfigSource("unix:" + SDSCLIENT_TEST_SOCKET);
     sdsSecretConfig =
         SdsSecretConfig.newBuilder().setSdsConfig(configSource).setName("name1").build();
