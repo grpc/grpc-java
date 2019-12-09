@@ -2594,7 +2594,7 @@ public class XdsClientImplTest {
   }
 
   /**
-   * Sends a streaming LRS RPC for each cluster to report loads for.
+   * Tests sending a streaming LRS RPC for each cluster to report loads for.
    */
   @Test
   public void reportLoadStatsToServer() {

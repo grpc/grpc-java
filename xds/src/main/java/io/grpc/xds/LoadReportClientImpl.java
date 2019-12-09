@@ -174,7 +174,7 @@ final class LoadReportClientImpl implements LoadReportClient {
 
     // Name of cluster service to report loads for, instructed by LRS responses.
     // Currently we expect a gRPC client only talks to a single service per cluster. But we
-    // could support switching clusters and services, for which loads for a cluster may
+    // could support switching cluster services, for which loads for a cluster may
     // spread to multiple services.
     @Nullable
     String clusterServiceName;
