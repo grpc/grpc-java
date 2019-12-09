@@ -389,8 +389,20 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     return DEADLINE_EXCEEDED.augmentDescription(buf.toString());
   }
 
-  private void delayedCancelOnDeadlineExceeded(Status status, Listener<RespT> observer) {
-    deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
+  private void delayedCancelOnDeadlineExceeded(final Status status, Listener<RespT> observer) {
+    class DeadlineExceededSendCancelToServerTimer implements Runnable {
+      @Override
+      public void run() {
+        // DelayedStream.cancel() is safe to call from a thread that is different from where the
+        // stream is created.
+        stream.cancel(status);
+      }
+    }
+
+    deadlineCancellationSendToServerFuture =  deadlineCancellationExecutor.schedule(
+        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
+        DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
+        TimeUnit.NANOSECONDS);
     executeCloseObserverInContext(observer, status);
   }
 
@@ -414,23 +426,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       observerClosed = true;
       observer.onClose(status, trailers);
     }
-  }
-
-  private ScheduledFuture<?> startDeadlineSendCancelToServerTimer(final Status status) {
-
-    class DeadlineExceededSendCancelToServerTimer implements Runnable {
-      @Override
-      public void run() {
-        // DelayedStream.cancel() is safe to call from a thread that is different from where the
-        // stream is created.
-        stream.cancel(status);
-      }
-    }
-
-    return deadlineCancellationExecutor.schedule(
-        new LogExceptionRunnable(new DeadlineExceededSendCancelToServerTimer()),
-        DEADLINE_EXPIRATION_CANCEL_DELAY_NANOS,
-        TimeUnit.NANOSECONDS);
   }
 
   @Nullable
