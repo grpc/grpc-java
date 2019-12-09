@@ -19,11 +19,9 @@ package io.grpc.xds;
 import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.AdditionalAnswers.delegatesTo;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -557,10 +555,9 @@ public class LoadReportClientImplTest {
     StreamObserver<LoadStatsResponse> responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver);
 
     // First balancer RPC
-    inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
+    verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
     assertEquals(0, fakeClock.numPendingTasks(LRS_RPC_RETRY_TASK_FILTER));
 
     // Simulate receiving a response from traffic director.
@@ -582,7 +579,7 @@ public class LoadReportClientImplTest {
     scheduledTask.command.run();
 
     // No report sent. No new task scheduled
-    inOrder.verify(requestObserver, never()).onNext(any(LoadStatsRequest.class));
+    verifyNoMoreInteractions(requestObserver);
     assertEquals(0, fakeClock.numPendingTasks(LOAD_REPORTING_TASK_FILTER));
   }
 
