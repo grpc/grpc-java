@@ -55,7 +55,7 @@ import javax.annotation.Nullable;
 /**
  * Helper methods for building protobuf messages with custom data for xDS protocols.
  */
-class XdsClientTestUtil {
+class XdsClientTestHelper {
   static DiscoveryResponse buildDiscoveryResponse(String versionInfo,
       List<Any> resources, String typeUrl, String nonce) {
     return
