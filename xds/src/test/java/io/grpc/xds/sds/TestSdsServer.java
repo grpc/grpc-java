@@ -19,7 +19,6 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.base.Strings;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
@@ -45,6 +44,7 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollServerDomainSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -314,7 +314,7 @@ final class TestSdsServer {
       byte[] value =
           requestHeaders.get(SdsClientFileBasedMetadataTest.K8S_SA_JWT_TOKEN_HEADER_METADATA_KEY);
       if (value != null) {
-        lastK8sJwtTokenValue = new String(value, Charsets.UTF_8);
+        lastK8sJwtTokenValue = new String(value, StandardCharsets.UTF_8);
       }
       return next.startCall(new SimpleForwardingServerCall<ReqT, RespT>(call) {}, requestHeaders);
     }

@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.google.common.util.concurrent.MoreExecutors;
 import io.envoyproxy.envoy.api.v2.auth.SdsSecretConfig;
@@ -29,6 +28,7 @@ import io.envoyproxy.envoy.api.v2.core.Node;
 import io.netty.channel.epoll.Epoll;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 import org.junit.After;
 import org.junit.Assume;
@@ -62,7 +62,7 @@ public class SdsClientUdsFileBasedMetadataTest {
     server.startServer(SDSCLIENT_TEST_SOCKET, /* useUds= */ true, /* useInterceptor= */ true);
 
     tempTokenFile = tempFolder.newFile(TOKEN_FILE_NAME);
-    Files.write("test-token-content".getBytes(Charsets.UTF_8), tempTokenFile);
+    Files.write("test-token-content".getBytes(StandardCharsets.UTF_8), tempTokenFile);
 
     ConfigSource configSource =
         SdsClientFileBasedMetadataTest.buildConfigSourceWithCreds(
