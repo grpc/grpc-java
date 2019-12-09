@@ -26,7 +26,6 @@ import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
 import io.grpc.LoadBalancer;
-import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.NameResolver.ConfigOrError;
 import io.grpc.Status;
@@ -39,6 +38,7 @@ import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Map;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /**
@@ -114,9 +114,9 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
     // If CdsConfig is changed, do a graceful switch.
     if (!newCdsConfig.equals(cdsConfig)) {
-      LoadBalancerProvider fixedCdsConfigBalancerProvider =
-          new FixedCdsConfigBalancerProvider(newCdsConfig);
-      switchingLoadBalancer.switchTo(fixedCdsConfigBalancerProvider);
+      LoadBalancer.Factory fixedCdsConfigBalancerFactory =
+          new FixedCdsConfigBalancerFactory(newCdsConfig);
+      switchingLoadBalancer.switchTo(fixedCdsConfigBalancerFactory);
     }
 
     switchingLoadBalancer.handleResolvedAddresses(resolvedAddresses);
@@ -153,34 +153,32 @@ public final class CdsLoadBalancer extends LoadBalancer {
   }
 
   /**
-   * A LoadBalancerProvider that provides a load balancer with a fixed CdsConfig.
+   * A load balancer factory that provides a load balancer for a given CdsConfig.
    */
-  private final class FixedCdsConfigBalancerProvider extends LoadBalancerProvider {
+  private final class FixedCdsConfigBalancerFactory extends LoadBalancer.Factory {
 
     final CdsConfig cdsConfig;
     final CdsConfig oldCdsConfig;
     final ClusterWatcher oldClusterWatcher;
 
-    FixedCdsConfigBalancerProvider(CdsConfig cdsConfig) {
+    FixedCdsConfigBalancerFactory(CdsConfig cdsConfig) {
       this.cdsConfig = cdsConfig;
       oldCdsConfig = CdsLoadBalancer.this.cdsConfig;
       oldClusterWatcher = CdsLoadBalancer.this.clusterWatcher;
     }
 
     @Override
-    public boolean isAvailable() {
-      return true;
+    public boolean equals(Object o) {
+      if (!(o instanceof FixedCdsConfigBalancerFactory)) {
+        return false;
+      }
+      FixedCdsConfigBalancerFactory that = (FixedCdsConfigBalancerFactory) o;
+      return cdsConfig.equals(that.cdsConfig);
     }
 
     @Override
-    public int getPriority() {
-      return 5;
-    }
-
-    // A synthetic policy name identified by CDS config.
-    @Override
-    public String getPolicyName() {
-      return "cds_policy__cluster_name_" + cdsConfig.name;
+    public int hashCode() {
+      return Objects.hash(super.hashCode(), cdsConfig);
     }
 
     @Override

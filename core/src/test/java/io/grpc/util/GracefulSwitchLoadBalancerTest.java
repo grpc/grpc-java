@@ -40,8 +40,10 @@ import io.grpc.LoadBalancerProvider;
 import io.grpc.LoadBalancerRegistry;
 import io.grpc.Status;
 import java.net.SocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Rule;
@@ -416,6 +418,55 @@ public class GracefulSwitchLoadBalancerTest {
     gracefulSwitchLb.switchTo(lbProviders.get(lbPolicies[0]));
     verify(lb1).shutdown();
     assertThat(balancers.get(lbPolicies[0])).isSameInstanceAs(lb0);
+
+    verifyNoMoreInteractions(lb0, lb1);
+  }
+
+
+  @Test
+  public void newLbFactoryEqualToOldOneShouldHaveNoEffect() {
+    final List<LoadBalancer> balancers = new ArrayList<>();
+
+    final class LoadBalancerFactoryWithId extends LoadBalancer.Factory {
+      final int id;
+
+      LoadBalancerFactoryWithId(int id) {
+        this.id = id;
+      }
+
+      @Override
+      public LoadBalancer newLoadBalancer(Helper helper) {
+        LoadBalancer balancer = mock(LoadBalancer.class);
+        balancers.add(balancer);
+        return balancer;
+      }
+
+      @Override
+      public boolean equals(Object o) {
+        if (!(o instanceof LoadBalancerFactoryWithId)) {
+          return false;
+        }
+        LoadBalancerFactoryWithId that = (LoadBalancerFactoryWithId) o;
+        return id == that.id;
+      }
+
+      @Override
+      public int hashCode() {
+        return id;
+      }
+    }
+
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(0));
+    assertThat(balancers).hasSize(1);
+    LoadBalancer lb0 = balancers.get(0);
+
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(0));
+    assertThat(balancers).hasSize(1);
+
+    gracefulSwitchLb.switchTo(new LoadBalancerFactoryWithId(1));
+    assertThat(balancers).hasSize(2);
+    LoadBalancer lb1 = balancers.get(1);
+    verify(lb0).shutdown();
 
     verifyNoMoreInteractions(lb0, lb1);
   }
