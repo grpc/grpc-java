@@ -76,7 +76,10 @@ public final class GracefulSwitchLoadBalancer extends ForwardingLoadBalancer {
     this.helper = checkNotNull(helper, "helper");
   }
 
-  /** Gracefully switch to a new policy defined by the given factory. */
+  /**
+   * Gracefully switch to a new policy defined by the given factory, if the given factory isn't
+   * equal to the current one.
+   */
   public void switchTo(LoadBalancer.Factory newBalancerFactory) {
     checkNotNull(newBalancerFactory, "newBalancerFactory");
 
