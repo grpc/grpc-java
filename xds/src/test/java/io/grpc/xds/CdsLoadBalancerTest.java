@@ -396,7 +396,7 @@ public class CdsLoadBalancerTest {
     ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor1 =
         ArgumentCaptor.forClass(null);
     verify(helper, never())
-        .createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class)); // remove
+        .createSubchannel(any(LoadBalancer.CreateSubchannelArgs.class));
     edsLbHelper1.createSubchannel(createSubchannelArgs);
     verify(helper, times(1)).createSubchannel(createSubchannelArgsCaptor1.capture());
     LoadBalancer.CreateSubchannelArgs capturedValue = createSubchannelArgsCaptor1.getValue();
