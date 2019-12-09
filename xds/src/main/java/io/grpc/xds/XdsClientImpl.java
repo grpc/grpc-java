@@ -309,6 +309,7 @@ final class XdsClientImpl extends XdsClient {
 
   @Override
   LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    checkNotNull(serverUri, "serverUri");
     checkArgument(serverUri.equals(""),
         "Currently only support empty serverUri, which defaults to the same "
             + "management server this client talks to.");
