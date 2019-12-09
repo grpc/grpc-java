@@ -125,7 +125,7 @@ public class LoadReportClientImplTest {
   @Mock
   private BackoffPolicy backoffPolicy2;
   @Mock
-  private LoadStatsStore loadStatsStore;
+  private LoadStatsStore mockLoadStatsStore;
   @Mock
   private LoadReportCallback callback;
   @Captor
@@ -236,14 +236,14 @@ public class LoadReportClientImplTest {
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
     // Add load stats source for some cluster service.
-    when(loadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
-    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+    when(mockLoadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", mockLoadStatsStore);
 
-    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
+    InOrder inOrder = inOrder(requestObserver, mockLoadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1453));
-    assertNextReport(inOrder, requestObserver,
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore,
         buildEmptyClusterStats("namespace-foo:service-blade", 1453));
     verify(callback).onReportResponse(1453);
   }
@@ -256,20 +256,20 @@ public class LoadReportClientImplTest {
     StreamObserver<LoadStatsRequest> requestObserver = lrsRequestObservers.poll();
 
     // Add load stats source for some cluster service.
-    when(loadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
-    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+    when(mockLoadStatsStore.generateLoadReport()).thenReturn(ClusterStats.newBuilder().build());
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", mockLoadStatsStore);
 
-    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
+    InOrder inOrder = inOrder(requestObserver, mockLoadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1362));
-    assertNextReport(inOrder, requestObserver,
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore,
         buildEmptyClusterStats("namespace-foo:service-blade", 1362));
     verify(callback).onReportResponse(1362);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 2183345));
     // Updated load reporting interval becomes effective immediately.
-    assertNextReport(inOrder, requestObserver,
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore,
         buildEmptyClusterStats("namespace-foo:service-blade", 2183345));
     verify(callback).onReportResponse(2183345);
   }
@@ -309,8 +309,8 @@ public class LoadReportClientImplTest {
             .setDroppedCount(14))
         .setTotalDroppedRequests(14)
         .build();
-    when(loadStatsStore.generateLoadReport()).thenReturn(clusterStats);
-    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+    when(mockLoadStatsStore.generateLoadReport()).thenReturn(clusterStats);
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", mockLoadStatsStore);
 
     // Loads reported.
     fakeClock.forwardNanos(1395);
@@ -373,16 +373,16 @@ public class LoadReportClientImplTest {
         .build();
 
     // Add load stats source for some cluster service.
-    when(loadStatsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
-    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+    when(mockLoadStatsStore.generateLoadReport()).thenReturn(expectedStats1, expectedStats2);
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", mockLoadStatsStore);
 
-    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
+    InOrder inOrder = inOrder(requestObserver, mockLoadStatsStore);
     inOrder.verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
 
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 1362));
-    assertNextReport(inOrder, requestObserver, expectedStats1);
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore, expectedStats1);
 
-    assertNextReport(inOrder, requestObserver, expectedStats2);
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore, expectedStats2);
   }
 
   @Test
@@ -515,8 +515,8 @@ public class LoadReportClientImplTest {
             .setDroppedCount(0))
         .setTotalDroppedRequests(0)
         .build();
-    when(loadStatsStore.generateLoadReport()).thenReturn(stats1, stats2);
-    lrsClient.addLoadStatsStore("namespace-foo:service-blade", loadStatsStore);
+    when(mockLoadStatsStore.generateLoadReport()).thenReturn(stats1, stats2);
+    lrsClient.addLoadStatsStore("namespace-foo:service-blade", mockLoadStatsStore);
 
     // First LRS request sent.
     verify(requestObserver).onNext(EXPECTED_INITIAL_REQ);
@@ -540,15 +540,15 @@ public class LoadReportClientImplTest {
     responseObserver = lrsResponseObserverCaptor.getValue();
     assertThat(lrsRequestObservers).hasSize(1);
     requestObserver = lrsRequestObservers.poll();
-    InOrder inOrder = inOrder(requestObserver, loadStatsStore);
+    InOrder inOrder = inOrder(requestObserver, mockLoadStatsStore);
     inOrder.verify(requestObserver).onNext(eq(EXPECTED_INITIAL_REQ));
 
     // Balancer sends another response with a different report interval.
     responseObserver.onNext(buildLrsResponse("namespace-foo:service-blade", 50));
 
     // Load reporting runs normally.
-    assertNextReport(inOrder, requestObserver, stats1);
-    assertNextReport(inOrder, requestObserver, stats2);
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore, stats1);
+    assertNextReport(inOrder, requestObserver, mockLoadStatsStore, stats2);
   }
 
   @Test
@@ -601,7 +601,7 @@ public class LoadReportClientImplTest {
   }
 
   private void assertNextReport(InOrder inOrder, StreamObserver<LoadStatsRequest> requestObserver,
-      ClusterStats expectedStats) {
+      LoadStatsStore loadStatsStore, ClusterStats expectedStats) {
     long loadReportIntervalNanos = Durations.toNanos(expectedStats.getLoadReportInterval());
     assertEquals(0, fakeClock.forwardTime(loadReportIntervalNanos - 1, TimeUnit.NANOSECONDS));
     inOrder.verifyNoMoreInteractions();
