@@ -19,9 +19,9 @@ package io.grpc.xds.sds;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -99,13 +99,13 @@ final class FileBasedPluginCredential extends CallCredentials {
               Metadata headers = new Metadata();
               String headerValue =
                   headerPrefix
-                      + Files.asCharSource(new File(secretData.getFilename()), Charsets.UTF_8)
+                      + Files.asCharSource(new File(secretData.getFilename()), UTF_8)
                           .read();
 
               if (headerKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
                 Metadata.Key<byte[]> metadataHeaderKey =
                     Metadata.Key.of(headerKey, Metadata.BINARY_BYTE_MARSHALLER);
-                headers.put(metadataHeaderKey, headerValue.getBytes(Charsets.UTF_8));
+                headers.put(metadataHeaderKey, headerValue.getBytes(UTF_8));
               } else {
                 Metadata.Key<String> metadataHeaderKey =
                     Metadata.Key.of(headerKey, Metadata.ASCII_STRING_MARSHALLER);
