@@ -89,7 +89,8 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   private boolean cancelCalled;
   private boolean halfCloseCalled;
   private final ClientTransportProvider clientTransportProvider;
-  private final CancellationListener cancellationListener = new ContextCancellationListener();
+  private final ContextCancellationListener cancellationListener
+      = new ContextCancellationListener();
   private final ScheduledExecutorService deadlineCancellationExecutor;
   private boolean fullStreamDecompression;
   private DecompressorRegistry decompressorRegistry = DecompressorRegistry.getDefaultInstance();
@@ -126,7 +127,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
   }
 
   private final class ContextCancellationListener implements CancellationListener {
-    private Listener<RespT> observer;
+    // This is NOT null only if the stream cancellation need to be delayed in the case of
+    // deadline-exceeded.
+    @Nullable private Listener<RespT> observer;
 
     private void setObserver(Listener<RespT> observer) {
       this.observer = observer;
@@ -139,8 +142,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       } else {
         if (observer != null) {
           Status status = statusFromCancelled(context);
-          deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
-          executeCloseObserverInContext(observer, status);
+          delayedCancelOnDeadlineExceeded(status, observer);
         }
       }
     }
@@ -227,18 +229,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       // Context is already cancelled so no need to create a real stream, just notify the observer
       // of cancellation via callback on the executor
       stream = NoopClientStream.INSTANCE;
-      class ClosedByContext extends ContextRunnable {
-        ClosedByContext() {
-          super(context);
-        }
-
-        @Override
-        public void runInContext() {
-          closeObserver(observer, statusFromCancelled(context), new Metadata());
-        }
-      }
-
-      callExecutor.execute(new ClosedByContext());
+      executeCloseObserverInContext(observer, statusFromCancelled(context));
       return;
     }
     final String compressorName = callOptions.getCompressor();
@@ -247,22 +238,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       compressor = compressorRegistry.lookupCompressor(compressorName);
       if (compressor == null) {
         stream = NoopClientStream.INSTANCE;
-        class ClosedByNotFoundCompressor extends ContextRunnable {
-          ClosedByNotFoundCompressor() {
-            super(context);
-          }
-
-          @Override
-          public void runInContext() {
-            closeObserver(
-                observer,
-                Status.INTERNAL.withDescription(
-                    String.format("Unable to find compressor by name %s", compressorName)),
-                new Metadata());
-          }
-        }
-
-        callExecutor.execute(new ClosedByNotFoundCompressor());
+        Status status = Status.INTERNAL.withDescription(
+            String.format("Unable to find compressor by name %s", compressorName));
+        executeCloseObserverInContext(observer, status);
         return;
       }
     } else {
@@ -317,7 +295,6 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     // they receive cancel before start. Issue #1343 has more details
 
     // Propagate later Context cancellation to the remote side.
-    context.addListener(cancellationListener, directExecutor());
     if (effectiveDeadline != null
         // If the context has the effective deadline, we don't need to schedule an extra task.
         && !effectiveDeadline.equals(context.getDeadline())
@@ -328,10 +305,9 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       deadlineCancellationNotifyApplicationFuture =
           startDeadlineNotifyApplicationTimer(effectiveDeadline, observer);
     } else {
-      if (cancellationListener instanceof ClientCallImpl.ContextCancellationListener) {
-        ((ContextCancellationListener) cancellationListener).setObserver(observer);
-      }
+      cancellationListener.setObserver(observer);
     }
+    context.addListener(cancellationListener, directExecutor());
     if (cancelListenersShouldBeRemoved) {
       // Race detected! ClientStreamListener.closed may have been called before
       // deadlineCancellationFuture was set / context listener added, thereby preventing the future
@@ -383,8 +359,7 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
       @Override
       public void run() {
         Status status = buildDeadlineExceededStatusWithRemainingNanos(remainingNanos);
-        deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
-        executeCloseObserverInContext(observer, status);
+        delayedCancelOnDeadlineExceeded(status, observer);
       }
     }
 
@@ -412,6 +387,11 @@ final class ClientCallImpl<ReqT, RespT> extends ClientCall<ReqT, RespT> {
     buf.append(insight);
 
     return DEADLINE_EXCEEDED.augmentDescription(buf.toString());
+  }
+
+  private void delayedCancelOnDeadlineExceeded(Status status, Listener<RespT> observer) {
+    deadlineCancellationSendToServerFuture = startDeadlineSendCancelToServerTimer(status);
+    executeCloseObserverInContext(observer, status);
   }
 
   private void executeCloseObserverInContext(final Listener<RespT> observer, final Status status) {
