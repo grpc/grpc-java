@@ -30,6 +30,7 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.protobuf.Any;
 import com.google.protobuf.UInt32Value;
@@ -79,6 +80,8 @@ import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.stub.StreamObserver;
 import io.grpc.testing.GrpcCleanupRule;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.LbEndpoint;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -89,6 +92,7 @@ import io.grpc.xds.XdsClient.ConfigUpdate;
 import io.grpc.xds.XdsClient.ConfigWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
 import io.grpc.xds.XdsClient.EndpointWatcher;
+import io.grpc.xds.XdsClient.XdsChannelFactory;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -169,7 +173,7 @@ public class XdsClientImplTest {
     when(backoffPolicy1.nextBackoffNanos()).thenReturn(10L, 100L);
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
-    String serverName = InProcessServerBuilder.generateName();
+    final String serverName = InProcessServerBuilder.generateName();
     AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
@@ -202,8 +206,20 @@ public class XdsClientImplTest {
             .start());
     channel =
         cleanupRule.register(InProcessChannelBuilder.forName(serverName).directExecutor().build());
+
+    List<ServerInfo> servers =
+        ImmutableList.of(new ServerInfo(serverName, ImmutableList.<ChannelCreds>of()));
+    XdsChannelFactory channelFactory = new XdsChannelFactory() {
+      @Override
+      ManagedChannel createChannel(List<ServerInfo> servers) {
+        assertThat(Iterables.getOnlyElement(servers).getServerUri()).isEqualTo(serverName);
+        assertThat(Iterables.getOnlyElement(servers).getChannelCredentials()).isEmpty();
+        return channel;
+      }
+    };
+
     xdsClient =
-        new XdsClientImpl(channel, NODE, syncContext,
+        new XdsClientImpl(servers, channelFactory, NODE, syncContext,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
             fakeClock.getStopwatchSupplier().get());
     // Only the connection to management server is established, no RPC request is sent until at

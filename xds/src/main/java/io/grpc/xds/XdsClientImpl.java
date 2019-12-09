@@ -41,14 +41,11 @@ import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Http
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
-import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.BackoffPolicy;
 import io.grpc.stub.StreamObserver;
-import io.grpc.xds.Bootstrapper.ChannelCreds;
 import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
@@ -137,29 +134,15 @@ final class XdsClientImpl extends XdsClient {
 
   XdsClientImpl(
       List<ServerInfo> servers,  // list of management servers
+      XdsChannelFactory channelFactory,
       Node node,
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
       Stopwatch stopwatch) {
-    this(
-        buildChannel(checkNotNull(servers, "servers")),
-        node,
-        syncContext,
-        timeService,
-        backoffPolicyProvider,
-        stopwatch);
-  }
-
-  @VisibleForTesting
-  XdsClientImpl(
-      ManagedChannel channel,
-      Node node,
-      SynchronizationContext syncContext,
-      ScheduledExecutorService timeService,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
-    this.channel = checkNotNull(channel, "channel");
+    this.channel =
+        checkNotNull(channelFactory, "channelFactory")
+            .createChannel(checkNotNull(servers, "servers"));
     this.node = checkNotNull(node, "node");
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
@@ -312,31 +295,6 @@ final class XdsClientImpl extends XdsClient {
       }
       adsStream.sendXdsRequest(ADS_TYPE_URL_EDS, endpointWatchers.keySet());
     }
-  }
-
-  /**
-   * Builds a channel to one of the provided management servers.
-   *
-   * <p>Note: currently we only support using the first server.
-   */
-  private static ManagedChannel buildChannel(List<ServerInfo> servers) {
-    checkArgument(!servers.isEmpty(), "No management server provided.");
-    ServerInfo serverInfo = servers.get(0);
-    String serverUri = serverInfo.getServerUri();
-    List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
-    ManagedChannel ch = null;
-    // Use the first supported channel credentials configuration.
-    // Currently, only "google_default" is supported.
-    for (ChannelCreds creds : channelCredsList) {
-      if (creds.getType().equals("google_default")) {
-        ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
-        break;
-      }
-    }
-    if (ch == null) {
-      ch = ManagedChannelBuilder.forTarget(serverUri).build();
-    }
-    return ch;
   }
 
   /**

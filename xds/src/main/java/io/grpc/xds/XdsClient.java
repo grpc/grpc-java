@@ -16,14 +16,21 @@
 
 package io.grpc.xds;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 // TODO(sanjaypujare): remove dependency on envoy data types.
 import io.envoyproxy.envoy.api.v2.auth.UpstreamTlsContext;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
+import io.grpc.alts.GoogleDefaultChannelBuilder;
 import io.grpc.internal.ObjectPool;
+import io.grpc.xds.Bootstrapper.ChannelCreds;
+import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
@@ -467,5 +474,46 @@ abstract class XdsClient {
 
       return null;
     }
+  }
+
+  /**
+   * Factory for creating channels to xDS severs.
+   */
+  abstract static class XdsChannelFactory {
+    private static XdsChannelFactory DEFAULT_INSTANCE = new XdsChannelFactory() {
+
+      /**
+       * Creates a channel to the first server in the given list.
+       */
+      @Override
+      ManagedChannel createChannel(List<ServerInfo> servers) {
+        checkArgument(!servers.isEmpty(), "No management server provided.");
+        ServerInfo serverInfo = servers.get(0);
+        String serverUri = serverInfo.getServerUri();
+        List<ChannelCreds> channelCredsList = serverInfo.getChannelCredentials();
+        ManagedChannel ch = null;
+        // Use the first supported channel credentials configuration.
+        // Currently, only "google_default" is supported.
+        for (ChannelCreds creds : channelCredsList) {
+          if (creds.getType().equals("google_default")) {
+            ch = GoogleDefaultChannelBuilder.forTarget(serverUri).build();
+            break;
+          }
+        }
+        if (ch == null) {
+          ch = ManagedChannelBuilder.forTarget(serverUri).build();
+        }
+        return ch;
+      }
+    };
+
+    static XdsChannelFactory getInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    /**
+     * Creates a channel to one of the provided management servers.
+     */
+    abstract ManagedChannel createChannel(List<ServerInfo> servers);
   }
 }
