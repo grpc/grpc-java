@@ -114,7 +114,7 @@ final class LoadReportClientImpl implements LoadReportClient {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
-      lrsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+      lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
     }
     started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
