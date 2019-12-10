@@ -21,7 +21,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
@@ -31,9 +30,9 @@ import io.envoyproxy.envoy.api.v2.core.GrpcService.GoogleGrpc.CallCredentials.Me
 import io.grpc.CallCredentials;
 import io.grpc.Metadata;
 import io.grpc.Status;
-
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.Executor;
 import javax.annotation.Nullable;
 
@@ -99,13 +98,14 @@ final class FileBasedPluginCredential extends CallCredentials {
               Metadata headers = new Metadata();
               String headerValue =
                   headerPrefix
-                      + Files.asCharSource(new File(secretData.getFilename()), Charsets.UTF_8)
+                      + Files.asCharSource(
+                              new File(secretData.getFilename()), StandardCharsets.UTF_8)
                           .read();
 
               if (headerKey.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
                 Metadata.Key<byte[]> metadataHeaderKey =
                     Metadata.Key.of(headerKey, Metadata.BINARY_BYTE_MARSHALLER);
-                headers.put(metadataHeaderKey, headerValue.getBytes(Charsets.UTF_8));
+                headers.put(metadataHeaderKey, headerValue.getBytes(StandardCharsets.UTF_8));
               } else {
                 Metadata.Key<String> metadataHeaderKey =
                     Metadata.Key.of(headerKey, Metadata.ASCII_STRING_MARSHALLER);
