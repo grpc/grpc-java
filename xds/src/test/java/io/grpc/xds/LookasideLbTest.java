@@ -252,11 +252,17 @@ public class LookasideLbTest {
       }
     });
 
+    List<ServerInfo> serverList =
+        ImmutableList.of(
+            new ServerInfo("trafficdirector.googleapis.com", ImmutableList.<ChannelCreds>of()));
+    BootstrapInfo bootstrapInfo = new BootstrapInfo(serverList, Node.getDefaultInstance());
+    doReturn(bootstrapInfo).when(bootstrapper).readBootstrap();
+
     lookasideLb = new LookasideLb(
         helper, edsUpdateCallback, lbRegistry, localityStoreFactory, loadReportClientFactory,
         bootstrapper);
 
-    String lbConfigRaw11 = "{\"balancerName\" : \"dns:///balancer1.example.com:8080\"}";
+    String lbConfigRaw11 = "{}";
     @SuppressWarnings("unchecked")
     Map<String, ?> lbConfig11 = (Map<String, ?>) JsonParser.parse(lbConfigRaw11);
     defaultResolvedAddress = ResolvedAddresses.newBuilder()
@@ -467,28 +473,6 @@ public class LookasideLbTest {
     verify(localityStore5).reset();
 
     xdsClientRef.returnObject(xdsClientFromResolver);
-  }
-
-  @Deprecated // balancerName will be unsupported.
-  @Test
-  public void handleResolvedAddress_createLbChannel()
-      throws Exception {
-    // Test balancer created with the default real LookasideChannelLbFactory
-    lookasideLb = new LookasideLb(helper, mock(EndpointUpdateCallback.class));
-    String lbConfigRaw = "{'balancerName' : 'dns:///balancer1.example.com:8080'}"
-        .replace("'", "\"");
-    @SuppressWarnings("unchecked")
-    Map<String, ?> lbConfig = (Map<String, ?>) JsonParser.parse(lbConfigRaw);
-    ResolvedAddresses resolvedAddresses = ResolvedAddresses.newBuilder()
-        .setAddresses(ImmutableList.<EquivalentAddressGroup>of())
-        .setAttributes(Attributes.newBuilder().set(ATTR_LOAD_BALANCING_CONFIG, lbConfig).build())
-        .build();
-
-    verify(helper, never()).createResolvingOobChannel(anyString());
-    lookasideLb.handleResolvedAddresses(resolvedAddresses);
-    verify(helper).createResolvingOobChannel("dns:///balancer1.example.com:8080");
-
-    lookasideLb.shutdown();
   }
 
   @Test
