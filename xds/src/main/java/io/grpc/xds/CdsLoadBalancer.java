@@ -249,7 +249,6 @@ public final class CdsLoadBalancer extends LoadBalancer {
         createSubchannelArgs =
             createSubchannelArgs
                 .toBuilder()
-                .setAttributes(createSubchannelArgs.getAttributes())
                 .setAddresses(
                     addUpstreamTlsContext(createSubchannelArgs.getAddresses(),
                         upstreamTlsContext.get()))
