@@ -234,7 +234,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     }
   }
 
-  private static class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
+  private static final class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
     private final AtomicReference<UpstreamTlsContext> upstreamTlsContext;
 
