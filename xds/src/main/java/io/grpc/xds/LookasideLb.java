@@ -72,22 +72,16 @@ final class LookasideLb extends LoadBalancer {
   private final Helper lookasideLbHelper;
 
   // Most recent XdsConfig.
-  // Becomes non-null once handleResolvedAddresses() successfully.
   @Nullable
   private XdsConfig xdsConfig;
   // Most recent EndpointWatcher.
-  // Becomes non-null once handleResolvedAddresses() successfully.
   @Nullable
   private EndpointWatcher endpointWatcher;
-
-  // Becomes non-null and calls getObject() once handleResolvedAddresses() successfully.
-  // Will call returnObject() at balancer shutdown.
   @Nullable
   private ObjectPool<XdsClient> xdsClientRef;
-  // Becomes non-null once handleResolvedAddresses() successfully.
   @Nullable
   XdsClient xdsClient;
-  // Becomes non-null for EDS-only case once handleResolvedAddresses() successfully.
+  // Only for EDS-only case.
   // TODO(zdapeng): Stop using it once XdsClientImpl is used.
   @Nullable
   ManagedChannel channel;
@@ -159,11 +153,9 @@ final class LookasideLb extends LoadBalancer {
       }
       newXdsConfig = (XdsConfig) cfg.getConfig();
     }
-    ObjectPool<XdsClient> xdsClientRefFromResolver = attributes.get(XdsAttributes.XDS_CLIENT_REF);
-    ObjectPool<XdsClient> xdsClientRef;
 
-    // Init XdsClient.
-    if (xdsClient == null) {
+    if (xdsClientRef == null) {
+      // Init xdsClientRef and xdsClient.
       // There are two usecases:
       // 1. The EDS-only:
       //    The name resolver resolves a ResolvedAddresses with an XdsConfig. Use the bootstrap
@@ -174,11 +166,9 @@ final class LookasideLb extends LoadBalancer {
       //
       // We assume XdsConfig switching happens only within one usecase, and there is no switching
       // between different usecases.
-      if (xdsClientRefFromResolver != null) {
-        // This is the Non EDS-only usecase.
-        xdsClientRef = xdsClientRefFromResolver;
-      } else {
-        // This is the EDS-only usecase.
+
+      xdsClientRef = attributes.get(XdsAttributes.XDS_CLIENT_REF);
+      if (xdsClientRef == null) { // This is the EDS-only usecase.
         final BootstrapInfo bootstrapInfo;
         try {
           bootstrapInfo = bootstrapper.readBootstrap();
@@ -213,9 +203,6 @@ final class LookasideLb extends LoadBalancer {
           }
         });
       }
-
-      // At this point the xdsClientRef is assigned in both usecases, cache them for later use.
-      this.xdsClientRef = xdsClientRef;
       xdsClient = xdsClientRef.getObject();
     }
 
