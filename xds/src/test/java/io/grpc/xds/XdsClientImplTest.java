@@ -1474,9 +1474,10 @@ public class XdsClientImplTest {
     // Client sent a new CDS request for all interested resources.
     verify(requestObserver)
         .onNext(
-            eq(buildDiscoveryRequest(NODE, "0",
-                ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
-                XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
+            argThat(
+                new DiscoveryRequestMatcher("0",
+                    ImmutableList.of("cluster-foo.googleapis.com", "cluster-bar.googleapis.com"),
+                    XdsClientImpl.ADS_TYPE_URL_CDS, "0000")));
 
     // Management server sends back a CDS response with Cluster for all requested cluster.
     clusters = ImmutableList.of(
