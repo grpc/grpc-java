@@ -31,8 +31,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
@@ -65,7 +66,7 @@ import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
-import io.grpc.internal.BackoffPolicy.Provider;
+import io.grpc.internal.BackoffPolicy;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ObjectPool;
@@ -90,6 +91,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -218,8 +220,9 @@ public class LookasideLbTest {
 
     LoadReportClientFactory loadReportClientFactory = new LoadReportClientFactory() {
       @Override
-      LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-          Provider backoffPolicyProvider, LoadStatsStore loadStatsStore) {
+      LoadReportClient createLoadReportClient(ManagedChannel channel, String clusterName,
+          Node node, SynchronizationContext syncContext, ScheduledExecutorService timeService,
+          BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier) {
         LoadReportClient loadReportClient = mock(LoadReportClient.class);
         loadReportClients.add(loadReportClient);
         return loadReportClient;
@@ -818,51 +821,5 @@ public class LookasideLbTest {
     verify(localityStore).reset();
     verify(loadReportClient).stopLoadReporting();
     assertThat(channel.isShutdown()).isTrue();
-  }
-
-  /**
-   * Tests load reporting is initiated after receiving the first valid EDS response from the traffic
-   * director, then its operation is independent of load balancing until xDS load balancer is
-   * shutdown.
-   */
-  @Test
-  public void reportLoadAfterReceivingFirstEdsResponseUntilShutdown() {
-    lookasideLb.handleResolvedAddresses(defaultResolvedAddress);
-
-    // Simulates a syntactically incorrect EDS response.
-    serverResponseWriter.onNext(DiscoveryResponse.getDefaultInstance());
-    LoadReportClient loadReportClient = Iterables.getOnlyElement(loadReportClients);
-    verify(loadReportClient, never()).startLoadReporting(any(LoadReportCallback.class));
-    verify(edsUpdateCallback, never()).onWorking();
-    verify(edsUpdateCallback, never()).onError();
-
-    // Simulate a syntactically correct EDS response.
-    DiscoveryResponse edsResponse =
-        DiscoveryResponse.newBuilder()
-            .addResources(Any.pack(ClusterLoadAssignment.getDefaultInstance()))
-            .setTypeUrl("type.googleapis.com/envoy.api.v2.ClusterLoadAssignment")
-            .build();
-    serverResponseWriter.onNext(edsResponse);
-
-    verify(edsUpdateCallback).onWorking();
-
-    ArgumentCaptor<LoadReportCallback> lrsCallbackCaptor = ArgumentCaptor.forClass(null);
-    verify(loadReportClient).startLoadReporting(lrsCallbackCaptor.capture());
-    lrsCallbackCaptor.getValue().onReportResponse(19543);
-    LocalityStore localityStore = Iterables.getOnlyElement(localityStores);
-    verify(localityStore).updateOobMetricsReportInterval(19543);
-
-    // Simulate another EDS response from the same remote balancer.
-    serverResponseWriter.onNext(edsResponse);
-    verifyNoMoreInteractions(edsUpdateCallback, loadReportClient);
-
-    // Simulate an EDS error response.
-    serverResponseWriter.onError(Status.ABORTED.asException());
-    verify(edsUpdateCallback).onError();
-
-    verifyNoMoreInteractions(edsUpdateCallback, loadReportClient);
-    verify(localityStore, times(1)).updateOobMetricsReportInterval(anyLong()); // only once
-
-    lookasideLb.shutdown();
   }
 }

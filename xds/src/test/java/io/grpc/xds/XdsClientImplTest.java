@@ -55,12 +55,16 @@ import io.envoyproxy.envoy.api.v2.core.AggregatedConfigSource;
 import io.envoyproxy.envoy.api.v2.core.ConfigSource;
 import io.envoyproxy.envoy.api.v2.core.HealthStatus;
 import io.envoyproxy.envoy.api.v2.core.Node;
+import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.api.v2.route.RedirectAction;
 import io.envoyproxy.envoy.api.v2.route.Route;
 import io.envoyproxy.envoy.api.v2.route.VirtualHost;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager;
 import io.envoyproxy.envoy.config.filter.network.http_connection_manager.v2.Rds;
 import io.envoyproxy.envoy.service.discovery.v2.AggregatedDiscoveryServiceGrpc.AggregatedDiscoveryServiceImplBase;
+import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc.LoadReportingServiceImplBase;
+import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
+import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
 import io.grpc.Context;
 import io.grpc.Context.CancellationListener;
 import io.grpc.ManagedChannel;
@@ -93,6 +97,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -140,6 +145,9 @@ public class XdsClientImplTest {
   private final Queue<StreamObserver<DiscoveryRequest>> requestObservers = new ArrayDeque<>();
   private final AtomicBoolean callEnded = new AtomicBoolean(true);
 
+  private final Queue<LoadReportCall> loadReportCalls = new ArrayDeque<>();
+  private final AtomicInteger runningLrsCalls = new AtomicInteger();
+
   @Mock
   private AggregatedDiscoveryServiceImplBase mockedDiscoveryService;
   @Mock
@@ -166,7 +174,7 @@ public class XdsClientImplTest {
     when(backoffPolicy2.nextBackoffNanos()).thenReturn(20L, 200L);
 
     final String serverName = InProcessServerBuilder.generateName();
-    AggregatedDiscoveryServiceImplBase serviceImpl = new AggregatedDiscoveryServiceImplBase() {
+    AggregatedDiscoveryServiceImplBase adsServiceImpl = new AggregatedDiscoveryServiceImplBase() {
       @Override
       public StreamObserver<DiscoveryRequest> streamAggregatedResources(
           final StreamObserver<DiscoveryResponse> responseObserver) {
@@ -187,12 +195,34 @@ public class XdsClientImplTest {
       }
     };
     mockedDiscoveryService =
-        mock(AggregatedDiscoveryServiceImplBase.class, delegatesTo(serviceImpl));
+        mock(AggregatedDiscoveryServiceImplBase.class, delegatesTo(adsServiceImpl));
+
+    LoadReportingServiceImplBase lrsServiceImpl = new LoadReportingServiceImplBase() {
+      @Override
+      public StreamObserver<LoadStatsRequest> streamLoadStats(
+          StreamObserver<LoadStatsResponse> responseObserver) {
+        runningLrsCalls.getAndIncrement();
+        @SuppressWarnings("unchecked")
+        StreamObserver<LoadStatsRequest> requestObserver = mock(StreamObserver.class);
+        final LoadReportCall call = new LoadReportCall(requestObserver, responseObserver);
+        Context.current().addListener(
+            new CancellationListener() {
+              @Override
+              public void cancelled(Context context) {
+                call.cancelled = true;
+                runningLrsCalls.getAndDecrement();
+              }
+            }, MoreExecutors.directExecutor());
+        loadReportCalls.offer(call);
+        return requestObserver;
+      }
+    };
 
     cleanupRule.register(
         InProcessServerBuilder
             .forName(serverName)
             .addService(mockedDiscoveryService)
+            .addService(lrsServiceImpl)
             .directExecutor()
             .build()
             .start());
@@ -213,17 +243,22 @@ public class XdsClientImplTest {
     xdsClient =
         new XdsClientImpl(servers, channelFactory, NODE, syncContext,
             fakeClock.getScheduledExecutorService(), backoffPolicyProvider,
-            fakeClock.getStopwatchSupplier().get());
+            fakeClock.getStopwatchSupplier());
     // Only the connection to management server is established, no RPC request is sent until at
     // least one watcher is registered.
     assertThat(responseObservers).isEmpty();
     assertThat(requestObservers).isEmpty();
+
+    // Load reporting is not initiated until being invoked to do so.
+    assertThat(loadReportCalls).isEmpty();
+    assertThat(runningLrsCalls.get()).isEqualTo(0);
   }
 
   @After
   public void tearDown() {
     xdsClient.shutdown();
     assertThat(callEnded.get()).isTrue();
+    assertThat(runningLrsCalls.get()).isEqualTo(0);
     assertThat(channel.isShutdown()).isTrue();
     assertThat(fakeClock.getPendingTasks()).isEmpty();
   }
@@ -2559,6 +2594,28 @@ public class XdsClientImplTest {
         backoffPolicy2);
   }
 
+  /**
+   * Tests sending a streaming LRS RPC for each cluster to report loads for.
+   */
+  @Test
+  public void reportLoadStatsToServer() {
+    xdsClient.reportClientStats("cluster-foo.googleapis.com", "");
+    LoadReportCall lrsCall1 = loadReportCalls.poll();
+    verify(lrsCall1.requestObserver)
+        .onNext(eq(buildInitialLoadStatsRequest("cluster-foo.googleapis.com")));
+    assertThat(lrsCall1.cancelled).isFalse();
+
+    xdsClient.reportClientStats("cluster-bar.googleapis.com", "");
+    LoadReportCall lrsCall2 = loadReportCalls.poll();
+    verify(lrsCall2.requestObserver)
+        .onNext(eq(buildInitialLoadStatsRequest("cluster-bar.googleapis.com")));
+    assertThat(lrsCall2.cancelled).isFalse();
+
+    xdsClient.cancelClientStatsReport("cluster-bar.googleapis.com");
+    assertThat(lrsCall2.cancelled).isTrue();
+    assertThat(runningLrsCalls.get()).isEqualTo(1);
+  }
+
   // Simulates the use case of watching clusters/endpoints based on service config resolved by
   // LDS/RDS.
   private void waitUntilConfigResolved(StreamObserver<DiscoveryResponse> responseObserver) {
@@ -2640,6 +2697,14 @@ public class XdsClientImplTest {
 
 
 
+  private static LoadStatsRequest buildInitialLoadStatsRequest(String clusterName) {
+    return
+        LoadStatsRequest.newBuilder()
+            .setNode(NODE)
+            .addClusterStats(ClusterStats.newBuilder().setClusterName(clusterName))
+            .build();
+  }
+
   /**
    * Matcher for DiscoveryRequest without the comparison of error_details field, which is used for
    * management server debugging purposes.
@@ -2682,6 +2747,19 @@ public class XdsClientImplTest {
         return false;
       }
       return NODE.equals(argument.getNode());
+    }
+  }
+
+  private static class LoadReportCall {
+    private final StreamObserver<LoadStatsRequest> requestObserver;
+    @SuppressWarnings("unused")
+    private final StreamObserver<LoadStatsResponse> responseObserver;
+    private boolean cancelled;
+
+    LoadReportCall(StreamObserver<LoadStatsRequest> requestObserver,
+        StreamObserver<LoadStatsResponse> responseObserver) {
+      this.requestObserver = requestObserver;
+      this.responseObserver = responseObserver;
     }
   }
 }
