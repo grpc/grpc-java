@@ -23,6 +23,7 @@ import static java.util.logging.Level.FINEST;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import io.envoyproxy.envoy.api.v2.core.Node;
 import io.grpc.Attributes;
 import io.grpc.ChannelLogger;
 import io.grpc.ChannelLogger.ChannelLogLevel;
@@ -399,8 +400,16 @@ final class LookasideLb extends LoadBalancer {
         // TODO(zdapeng): Use XdsClient to do Lrs directly.
         // For now create an LRS Client.
         if (channel != null) {
-          lrsClient = loadReportClientFactory.createLoadReportClient(
-              channel, helper, new ExponentialBackoffPolicy.Provider(), loadStatsStore);
+          lrsClient =
+              loadReportClientFactory.createLoadReportClient(
+                  channel,
+                  helper.getAuthority(),
+                  Node.getDefaultInstance(),
+                  helper.getSynchronizationContext(),
+                  helper.getScheduledExecutorService(),
+                  new ExponentialBackoffPolicy.Provider(),
+                  GrpcUtil.STOPWATCH_SUPPLIER);
+          lrsClient.addLoadStatsStore(edsServiceName, loadStatsStore);
         } else {
           lrsClient = new LoadReportClient() {
             @Override

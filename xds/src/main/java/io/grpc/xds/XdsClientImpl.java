@@ -22,6 +22,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.rpc.Code;
@@ -50,6 +51,7 @@ import io.grpc.xds.Bootstrapper.ServerInfo;
 import io.grpc.xds.EnvoyProtoData.DropOverload;
 import io.grpc.xds.EnvoyProtoData.Locality;
 import io.grpc.xds.EnvoyProtoData.LocalityLbEndpoints;
+import io.grpc.xds.LoadReportClient.LoadReportCallback;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -82,7 +84,8 @@ final class XdsClientImpl extends XdsClient {
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timeService;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final Stopwatch stopwatch;
+  private final Supplier<Stopwatch> stopwatchSupplier;
+  private final Stopwatch adsStreamRetryStopwatch;
   // The node identifier to be included in xDS requests. Management server only requires the
   // first request to carry the node identifier on a stream. It should be identical if present
   // more than once.
@@ -114,6 +117,9 @@ final class XdsClientImpl extends XdsClient {
   // watchers can watch endpoints in the same cluster.
   private final Map<String, Set<EndpointWatcher>> endpointWatchers = new HashMap<>();
 
+  // Load reporting clients, with each responsible for reporting loads of a single cluster.
+  private final Map<String, LoadReportClientImpl> lrsClients = new HashMap<>();
+
   @Nullable
   private AdsStream adsStream;
   @Nullable
@@ -139,7 +145,7 @@ final class XdsClientImpl extends XdsClient {
       SynchronizationContext syncContext,
       ScheduledExecutorService timeService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      Stopwatch stopwatch) {
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.channel =
         checkNotNull(channelFactory, "channelFactory")
             .createChannel(checkNotNull(servers, "servers"));
@@ -147,7 +153,8 @@ final class XdsClientImpl extends XdsClient {
     this.syncContext = checkNotNull(syncContext, "syncContext");
     this.timeService = checkNotNull(timeService, "timeService");
     this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.stopwatch = checkNotNull(stopwatch, "stopwatch");
+    this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatch");
+    adsStreamRetryStopwatch = stopwatchSupplier.get();
   }
 
   @Override
@@ -155,6 +162,9 @@ final class XdsClientImpl extends XdsClient {
     channel.shutdown();
     if (adsStream != null) {
       adsStream.close(Status.CANCELLED.withDescription("shutdown").asException());
+    }
+    for (LoadReportClientImpl lrsClient : lrsClients.values()) {
+      lrsClient.stopLoadReporting();
     }
     if (rpcRetryTimer != null) {
       rpcRetryTimer.cancel();
@@ -297,6 +307,40 @@ final class XdsClientImpl extends XdsClient {
     }
   }
 
+  @Override
+  LoadReportClient reportClientStats(String clusterName, String serverUri) {
+    checkNotNull(serverUri, "serverUri");
+    checkArgument(serverUri.equals(""),
+        "Currently only support empty serverUri, which defaults to the same "
+            + "management server this client talks to.");
+    if (!lrsClients.containsKey(clusterName)) {
+      LoadReportClientImpl lrsClient =
+          new LoadReportClientImpl(
+              channel,
+              clusterName,
+              node,
+              syncContext,
+              timeService,
+              backoffPolicyProvider,
+              stopwatchSupplier);
+      lrsClient.startLoadReporting(
+          new LoadReportCallback() {
+            @Override
+            public void onReportResponse(long reportIntervalNano) {}
+          });
+      lrsClients.put(clusterName, lrsClient);
+    }
+    return lrsClients.get(clusterName);
+  }
+
+  @Override
+  void cancelClientStatsReport(String clusterName) {
+    LoadReportClientImpl lrsClient = lrsClients.remove(clusterName);
+    if (lrsClient != null) {
+      lrsClient.stopLoadReporting();
+    }
+  }
+
   /**
    * Establishes the RPC connection by creating a new RPC stream on the given channel for
    * xDS protocol communication.
@@ -307,7 +351,7 @@ final class XdsClientImpl extends XdsClient {
         AggregatedDiscoveryServiceGrpc.newStub(channel);
     adsStream = new AdsStream(stub);
     adsStream.start();
-    stopwatch.reset().start();
+    adsStreamRetryStopwatch.reset().start();
   }
 
   /**
@@ -894,7 +938,8 @@ final class XdsClientImpl extends XdsClient {
         delayNanos =
             Math.max(
                 0,
-                retryBackoffPolicy.nextBackoffNanos() - stopwatch.elapsed(TimeUnit.NANOSECONDS));
+                retryBackoffPolicy.nextBackoffNanos()
+                    - adsStreamRetryStopwatch.elapsed(TimeUnit.NANOSECONDS));
       }
       logger.log(Level.FINE, "{0} stream closed, retry in {1} ns", new Object[]{this, delayNanos});
       rpcRetryTimer =

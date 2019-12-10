@@ -23,29 +23,26 @@ import static com.google.common.base.Preconditions.checkState;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Supplier;
-import com.google.protobuf.Struct;
-import com.google.protobuf.Value;
 import com.google.protobuf.util.Durations;
 import io.envoyproxy.envoy.api.v2.core.Node;
 import io.envoyproxy.envoy.api.v2.endpoint.ClusterStats;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadReportingServiceGrpc;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsRequest;
 import io.envoyproxy.envoy.service.load_stats.v2.LoadStatsResponse;
-import io.grpc.ChannelLogger;
-import io.grpc.ChannelLogger.ChannelLogLevel;
-import io.grpc.LoadBalancer.Helper;
 import io.grpc.ManagedChannel;
 import io.grpc.Status;
 import io.grpc.SynchronizationContext;
 import io.grpc.SynchronizationContext.ScheduledHandle;
 import io.grpc.internal.BackoffPolicy;
-import io.grpc.internal.BackoffPolicy.Provider;
-import io.grpc.internal.GrpcUtil;
 import io.grpc.stub.StreamObserver;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
@@ -55,20 +52,20 @@ import javax.annotation.concurrent.NotThreadSafe;
 @NotThreadSafe
 final class LoadReportClientImpl implements LoadReportClient {
 
-  @VisibleForTesting
-  static final String TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD
-      = "com.googleapis.trafficdirector.grpc_hostname";
+  // TODO(chengyuanzhang): use channel logger once XdsClientImpl migrates to use channel logger.
+  private static final Logger logger = Logger.getLogger(XdsClientImpl.class.getName());
 
-  // The name of load-balanced service.
-  private final String serviceName;
+  private final String clusterName;
   private final ManagedChannel channel;
+  private final Node node;
   private final SynchronizationContext syncContext;
   private final ScheduledExecutorService timerService;
   private final Supplier<Stopwatch> stopwatchSupplier;
   private final Stopwatch retryStopwatch;
-  private final ChannelLogger logger;
   private final BackoffPolicy.Provider backoffPolicyProvider;
-  private final LoadStatsStore loadStatsStore;
+
+  // Sources of load stats data for each service in cluster.
+  private final Map<String, LoadStatsStore> loadStatsStoreMap = new HashMap<>();
   private boolean started;
 
   @Nullable
@@ -80,28 +77,21 @@ final class LoadReportClientImpl implements LoadReportClient {
   @Nullable
   private LoadReportCallback callback;
 
-  private LoadReportClientImpl(ManagedChannel channel,
-      Helper helper,
-      BackoffPolicy.Provider backoffPolicyProvider,
-      LoadStatsStore loadStatsStore) {
-    this(channel, helper, GrpcUtil.STOPWATCH_SUPPLIER, backoffPolicyProvider, loadStatsStore);
-  }
-
-  @VisibleForTesting
   LoadReportClientImpl(ManagedChannel channel,
-      Helper helper,
-      Supplier<Stopwatch> stopwatchSupplier,
+      String clusterName,
+      Node node,
+      SynchronizationContext syncContext,
+      ScheduledExecutorService scheduledExecutorService,
       BackoffPolicy.Provider backoffPolicyProvider,
-      LoadStatsStore loadStatsStore) {
+      Supplier<Stopwatch> stopwatchSupplier) {
     this.channel = checkNotNull(channel, "channel");
-    this.serviceName = checkNotNull(helper.getAuthority(), "serviceName");
-    this.syncContext = checkNotNull(helper.getSynchronizationContext(), "syncContext");
+    this.clusterName = checkNotNull(clusterName, "clusterName");
+    this.node = checkNotNull(node, "node");
+    this.syncContext = checkNotNull(syncContext, "syncContext");
+    this.timerService = checkNotNull(scheduledExecutorService, "timeService");
+    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
     this.stopwatchSupplier = checkNotNull(stopwatchSupplier, "stopwatchSupplier");
     this.retryStopwatch = stopwatchSupplier.get();
-    this.logger = checkNotNull(helper.getChannelLogger(), "logger");
-    this.timerService = checkNotNull(helper.getScheduledExecutorService(), "timeService");
-    this.backoffPolicyProvider = checkNotNull(backoffPolicyProvider, "backoffPolicyProvider");
-    this.loadStatsStore = checkNotNull(loadStatsStore, "loadStatsStore");
     started = false;
   }
 
@@ -124,7 +114,7 @@ final class LoadReportClientImpl implements LoadReportClient {
       lrsRpcRetryTimer.cancel();
     }
     if (lrsStream != null) {
-      lrsStream.close(null);
+      lrsStream.close(Status.CANCELLED.withDescription("stop load reporting").asException());
     }
     started = false;
     // Do not shutdown channel as it is not owned by LrsClient.
@@ -132,12 +122,12 @@ final class LoadReportClientImpl implements LoadReportClient {
 
   @Override
   public void addLoadStatsStore(String clusterServiceName, LoadStatsStore loadStatsStore) {
-    // TODO(chengyuanzhang): to be implemented.
+    loadStatsStoreMap.put(clusterServiceName, loadStatsStore);
   }
 
   @Override
   public void removeLoadStatsStore(String clusterServiceName) {
-    // TODO(chengyuanzhang): to be implemented.
+    loadStatsStoreMap.remove(clusterServiceName);
   }
 
   @VisibleForTesting
@@ -182,9 +172,12 @@ final class LoadReportClientImpl implements LoadReportClient {
     long loadReportIntervalNano = -1;
     ScheduledHandle loadReportTimer;
 
-    // The name for the google service the client talks to. Received on LRS responses.
+    // Name of cluster service to report loads for, instructed by LRS responses.
+    // Currently we expect a gRPC client only talks to a single service per cluster. But we
+    // could support switching cluster services, for which loads for a cluster may
+    // spread to multiple services.
     @Nullable
-    String clusterName;
+    String clusterServiceName;
 
     LrsStream(LoadReportingServiceGrpc.LoadReportingServiceStub stub, Stopwatch stopwatch) {
       this.stub = checkNotNull(stub, "stub");
@@ -196,14 +189,11 @@ final class LoadReportClientImpl implements LoadReportClient {
       reportStopwatch.reset().start();
       LoadStatsRequest initRequest =
           LoadStatsRequest.newBuilder()
-              .setNode(Node.newBuilder()
-                  .setMetadata(Struct.newBuilder()
-                      .putFields(
-                          TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
-                          Value.newBuilder().setStringValue(serviceName).build())))
+              .setNode(node)
+              .addClusterStats(ClusterStats.newBuilder().setClusterName(clusterName))
               .build();
       lrsRequestWriter.onNext(initRequest);
-      logger.log(ChannelLogLevel.DEBUG, "Initial LRS request sent: {0}", initRequest);
+      logger.log(Level.FINE, "Initial LRS request sent: {0}", initRequest);
     }
 
     @Override
@@ -241,20 +231,18 @@ final class LoadReportClientImpl implements LoadReportClient {
     private void sendLoadReport() {
       long interval = reportStopwatch.elapsed(TimeUnit.NANOSECONDS);
       reportStopwatch.reset().start();
-      ClusterStats report =
-          loadStatsStore.generateLoadReport()
-              .toBuilder()
-              .setClusterName(clusterName)
-              .setLoadReportInterval(Durations.fromNanos(interval))
-              .build();
-      lrsRequestWriter.onNext(LoadStatsRequest.newBuilder()
-          .setNode(Node.newBuilder()
-              .setMetadata(Struct.newBuilder()
-                  .putFields(
-                      TRAFFICDIRECTOR_GRPC_HOSTNAME_FIELD,
-                      Value.newBuilder().setStringValue(serviceName).build())))
-          .addClusterStats(report)
-          .build());
+      LoadStatsRequest.Builder requestBuilder = LoadStatsRequest.newBuilder().setNode(node);
+      if (loadStatsStoreMap.containsKey(clusterServiceName)) {
+        LoadStatsStore loadStatsStore = loadStatsStoreMap.get(clusterServiceName);
+        ClusterStats report =
+            loadStatsStore.generateLoadReport()
+                .toBuilder()
+                .setClusterName(clusterServiceName)
+                .setLoadReportInterval(Durations.fromNanos(interval))
+                .build();
+        requestBuilder.addClusterStats(report);
+      }
+      lrsRequestWriter.onNext(requestBuilder.build());
       scheduleNextLoadReport();
     }
 
@@ -277,22 +265,24 @@ final class LoadReportClientImpl implements LoadReportClient {
       }
 
       if (!initialResponseReceived) {
-        logger.log(ChannelLogLevel.DEBUG, "Received LRS initial response: {0}", response);
+        logger.log(Level.FINE, "Received LRS initial response: {0}", response);
         initialResponseReceived = true;
       } else {
-        logger.log(ChannelLogLevel.DEBUG, "Received an LRS response: {0}", response);
+        logger.log(Level.FINE, "Received an LRS response: {0}", response);
       }
       loadReportIntervalNano = Durations.toNanos(response.getLoadReportingInterval());
       callback.onReportResponse(loadReportIntervalNano);
       List<String> serviceList = Collections.unmodifiableList(response.getClustersList());
-      // For gRPC use case, LRS response will only contain one cluster, which is the same as in
-      // the EDS response.
+      // For current gRPC use case, we expect traffic director only request client to report
+      // loads for a single service per cluster (which is the cluster service gRPC client talks
+      // to). We could support reporting loads for multiple services per cluster that gRPC
+      // client sends loads to due to service switching.
       if (serviceList.size() != 1) {
-        logger.log(ChannelLogLevel.ERROR, "Received clusters: {0}, expect exactly one",
+        logger.log(Level.FINE, "Received clusters: {0}, expect exactly one",
             serviceList);
         return;
       }
-      clusterName = serviceList.get(0);
+      clusterServiceName = serviceList.get(0);
       scheduleNextLoadReport();
     }
 
@@ -318,7 +308,7 @@ final class LoadReportClientImpl implements LoadReportClient {
         delayNanos =
             lrsRpcRetryPolicy.nextBackoffNanos() - retryStopwatch.elapsed(TimeUnit.NANOSECONDS);
       }
-      logger.log(ChannelLogLevel.DEBUG, "LRS stream closed, backoff in {0} second(s)",
+      logger.log(Level.FINE, "LRS stream closed, backoff in {0} second(s)",
           TimeUnit.NANOSECONDS.toSeconds(delayNanos <= 0 ? 0 : delayNanos));
       if (delayNanos <= 0) {
         startLrsRpc();
@@ -356,6 +346,8 @@ final class LoadReportClientImpl implements LoadReportClient {
   /**
    * Factory class for creating {@link LoadReportClient} instances.
    */
+  // TODO(chengyuanzhang): eliminate this factory after migrating EDS load balancer to
+  //  use XdsClient.
   abstract static class LoadReportClientFactory {
 
     private static final LoadReportClientFactory DEFAULT_INSTANCE =
@@ -363,11 +355,14 @@ final class LoadReportClientImpl implements LoadReportClient {
           @Override
           LoadReportClient createLoadReportClient(
               ManagedChannel channel,
-              Helper helper,
-              Provider backoffPolicyProvider,
-              LoadStatsStore loadStatsStore) {
-            return new LoadReportClientImpl(channel, helper, backoffPolicyProvider,
-                loadStatsStore);
+              String clusterName,
+              Node node,
+              SynchronizationContext syncContext,
+              ScheduledExecutorService timeService,
+              BackoffPolicy.Provider backoffPolicyProvider,
+              Supplier<Stopwatch> stopwatchSupplier) {
+            return new LoadReportClientImpl(channel, clusterName, node, syncContext, timeService,
+                backoffPolicyProvider, stopwatchSupplier);
           }
         };
 
@@ -375,7 +370,8 @@ final class LoadReportClientImpl implements LoadReportClient {
       return DEFAULT_INSTANCE;
     }
 
-    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, Helper helper,
-        BackoffPolicy.Provider backoffPolicyProvider, LoadStatsStore loadStatsStore);
+    abstract LoadReportClient createLoadReportClient(ManagedChannel channel, String clusterName,
+        Node node, SynchronizationContext syncContext, ScheduledExecutorService timeService,
+        BackoffPolicy.Provider backoffPolicyProvider, Supplier<Stopwatch> stopwatchSupplier);
   }
 }
