@@ -133,7 +133,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag112 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags11 = ImmutableList.of(eag111, eag112);
     String lbConfigRaw11 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -160,7 +159,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag121 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags12 = ImmutableList.of(eag121);
     String lbConfigRaw12 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"no\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -185,7 +183,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag212 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags21 = ImmutableList.of(eag211, eag212);
     String lbConfigRaw21 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -221,7 +218,6 @@ public class FallbackLbTest {
     EquivalentAddressGroup eag221 = new EquivalentAddressGroup(mock(SocketAddress.class));
     List<EquivalentAddressGroup> eags22 = ImmutableList.of(eag221);
     String lbConfigRaw22 = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_2\" : { \"fallback_2_option\" : \"no\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -263,7 +259,6 @@ public class FallbackLbTest {
     List<EquivalentAddressGroup> eags = ImmutableList.of(eag0, eag1, eag2);
 
     String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -296,7 +291,6 @@ public class FallbackLbTest {
         ImmutableList.<SocketAddress>of(new InetSocketAddress(8082)), attributes);
     List<EquivalentAddressGroup> eags = ImmutableList.of(eag1, eag2);
     String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"fallback_1\" : { \"fallback_1_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")
@@ -354,7 +348,6 @@ public class FallbackLbTest {
     List<EquivalentAddressGroup> eags = ImmutableList.of(eag0, eag1, eag2);
 
     String lbConfigRaw = "{"
-        + "\"balancerName\" : \"dns:///balancer.example.com:8080\","
         + "\"fallbackPolicy\" : [{\"grpclb\" : { \"grpclb_option\" : \"yes\"}}]"
         + "}";
     @SuppressWarnings("unchecked")

@@ -361,7 +361,6 @@ public final class ServiceConfigUtil {
       "loadBalancingConfig": [
         {"xds" :
           {
-            "balancerName": "balancer1",
             "childPolicy": [...],
             "fallbackPolicy": [...],
           }
