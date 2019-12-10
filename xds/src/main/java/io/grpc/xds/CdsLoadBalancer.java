@@ -41,6 +41,7 @@ import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
 import io.grpc.xds.XdsSubchannelPickers.ErrorPicker;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import javax.annotation.Nullable;
 
 /**
@@ -233,22 +234,27 @@ public final class CdsLoadBalancer extends LoadBalancer {
   @VisibleForTesting
   static class EdsLoadBalancingHelper extends ForwardingLoadBalancerHelper {
     private final Helper delegate;
-    private final UpstreamTlsContext upstreamTlsContext;
+    private final AtomicReference<UpstreamTlsContext> upstreamTlsContext;
 
-    EdsLoadBalancingHelper(Helper helper, UpstreamTlsContext upstreamTlsContext) {
+    EdsLoadBalancingHelper(Helper helper, AtomicReference<UpstreamTlsContext> upstreamTlsContext) {
       this.delegate = helper;
       this.upstreamTlsContext = upstreamTlsContext;
     }
 
     @Override
     public Subchannel createSubchannel(CreateSubchannelArgs createSubchannelArgs) {
-      createSubchannelArgs =
-          createSubchannelArgs.toBuilder()
-              .setAttributes(
-                  createSubchannelArgs.getAttributes().toBuilder()
-                      .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext)
-                      .build())
-              .build();
+      if (upstreamTlsContext.get() != null) {
+        createSubchannelArgs =
+            createSubchannelArgs
+                .toBuilder()
+                .setAttributes(
+                    createSubchannelArgs
+                        .getAttributes()
+                        .toBuilder()
+                        .set(XdsAttributes.ATTR_UPSTREAM_TLS_CONTEXT, upstreamTlsContext.get())
+                        .build())
+                .build();
+      }
       return delegate.createSubchannel(createSubchannelArgs);
     }
 
@@ -260,7 +266,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
 
   private final class ClusterWatcherImpl implements ClusterWatcher {
 
-    final Helper helper;
+    final EdsLoadBalancingHelper helper;
     final ResolvedAddresses resolvedAddresses;
 
     // EDS balancer for the cluster.
@@ -270,7 +276,7 @@ public final class CdsLoadBalancer extends LoadBalancer {
     LoadBalancer edsBalancer;
 
     ClusterWatcherImpl(Helper helper, ResolvedAddresses resolvedAddresses) {
-      this.helper = helper;
+      this.helper = new EdsLoadBalancingHelper(helper, new AtomicReference<UpstreamTlsContext>());
       this.resolvedAddresses = resolvedAddresses;
     }
 
@@ -288,13 +294,12 @@ public final class CdsLoadBalancer extends LoadBalancer {
           /* fallbackPolicy = */ null,
           /* edsServiceName = */ newUpdate.getEdsServiceName(),
           /* lrsServerName = */ newUpdate.getLrsServerName());
+      UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
+      if (upstreamTlsContext != null) {
+        helper.upstreamTlsContext.set(upstreamTlsContext);
+      }
       if (edsBalancer == null) {
-        Helper localHelper = helper;
-        UpstreamTlsContext upstreamTlsContext = newUpdate.getUpstreamTlsContext();
-        if (upstreamTlsContext != null) {
-          localHelper = new EdsLoadBalancingHelper(helper, upstreamTlsContext);
-        }
-        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(localHelper);
+        edsBalancer = lbRegistry.getProvider(XDS_POLICY_NAME).newLoadBalancer(helper);
       }
       edsBalancer.handleResolvedAddresses(
           resolvedAddresses.toBuilder()

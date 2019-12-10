@@ -50,7 +50,6 @@ import io.grpc.SynchronizationContext;
 import io.grpc.internal.FakeClock;
 import io.grpc.internal.JsonParser;
 import io.grpc.internal.ServiceConfigUtil.LbConfig;
-import io.grpc.xds.CdsLoadBalancer.EdsLoadBalancingHelper;
 import io.grpc.xds.XdsClient.ClusterUpdate;
 import io.grpc.xds.XdsClient.ClusterWatcher;
 import io.grpc.xds.XdsClient.EndpointUpdate;
@@ -58,7 +57,7 @@ import io.grpc.xds.XdsClient.EndpointWatcher;
 import io.grpc.xds.XdsClient.RefCountedXdsClientObjectPool;
 import io.grpc.xds.XdsClient.XdsClientFactory;
 import io.grpc.xds.XdsLoadBalancerProvider.XdsConfig;
-import java.net.SocketAddress;
+import java.net.InetSocketAddress;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
@@ -330,19 +329,6 @@ public class CdsLoadBalancerTest {
     assertThat(xdsClientRef.xdsClient).isNull();
   }
 
-  private static class FakeSocketAddress extends SocketAddress {
-    final String name;
-
-    FakeSocketAddress(String name) {
-      this.name = name;
-    }
-
-    @Override
-    public String toString() {
-      return "FakeSocketAddress-" + name;
-    }
-  }
-
   @Test
   public void handleCdsConfigs_withUpstreamTlsContext() throws Exception {
     assertThat(xdsClient).isNull();
@@ -387,11 +373,10 @@ public class CdsLoadBalancerTest {
     assertThat(edsLbHelpers).hasSize(1);
     assertThat(edsLoadBalancers).hasSize(1);
     Helper edsLbHelper1 = edsLbHelpers.poll();
-    assertThat(edsLbHelper1).isInstanceOf(EdsLoadBalancingHelper.class);
 
     LoadBalancer.CreateSubchannelArgs createSubchannelArgs =
         LoadBalancer.CreateSubchannelArgs.newBuilder()
-            .setAddresses(new EquivalentAddressGroup(new FakeSocketAddress("fake")))
+            .setAddresses(new EquivalentAddressGroup(new InetSocketAddress("foo.com", 8080)))
             .build();
     ArgumentCaptor<LoadBalancer.CreateSubchannelArgs> createSubchannelArgsCaptor1 =
         ArgumentCaptor.forClass(null);
